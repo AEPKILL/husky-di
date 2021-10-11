@@ -1,0 +1,68 @@
+/**
+ * @overview
+ * @author AEPKILL
+ * @created 2021-10-03 16:16:33
+ */
+
+import { ProviderBase } from '../classes/base/provider.base';
+import { Middleware } from '../classes/middleware-manager';
+import { IContainer } from '../interfaces/container.interface';
+import { ProviderOptions } from '../interfaces/provider.interface';
+import { getParametersMetadata } from '../shared/helpers/reflection.helper';
+import { Constructor } from '../types/constructor.type';
+import { ResolveContext } from '../types/resolve-context.type';
+
+export type ClassMiddlewareArgs = {};
+export type ClassMiddleware = Middleware<ClassMiddlewareArgs, any>;
+
+export interface ClassProviderOptions<T> extends ProviderOptions {
+  useClass: Constructor<T>;
+}
+
+export class ClassProvider<T> extends ProviderBase<T> {
+  private readonly _constructor: Constructor<T>;
+
+  constructor(options: ClassProviderOptions<T>) {
+    super(options);
+    const { useClass } = options;
+
+    this._constructor = useClass;
+  }
+
+  clone(): this {
+    return this._setRealRoot(
+      new ClassProvider({
+        lifecycle: this.lifecycle,
+        useClass: this._constructor,
+      }) as this
+    );
+  }
+
+  resolve(container: IContainer, resolveContext: ResolveContext): T {
+    const length = this._constructor.length;
+    if (length === 0) {
+      return new this._constructor();
+    } else {
+      const parametersMetadata = getParametersMetadata(this._constructor);
+
+      if (parametersMetadata.length !== length) {
+        throw resolveContext.resolveLogger.getResolveException(
+          `${this._constructor.name} parameters metadata mismatch`
+        );
+      }
+
+      const parameters = parametersMetadata.map((it, index) => {
+        try {
+          resolveContext.resolveLogger.pushMessage(
+            `resolve parameter #${index} of constructor ${this._constructor.name}`
+          );
+          return container.resolve(it.serviceIdentifier, it);
+        } finally {
+          resolveContext.resolveLogger.popMessage();
+        }
+      });
+
+      return new this._constructor(...parameters);
+    }
+  }
+}
