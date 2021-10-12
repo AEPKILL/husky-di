@@ -19,7 +19,7 @@ export class ValueProvider<T> extends ProviderBase<T> {
     const { useValue } = options;
 
     this._value = useValue;
-    this._instance = useValue;
+    this.setInstance(useValue);
   }
 
   clone(): this {
