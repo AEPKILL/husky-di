@@ -8,10 +8,10 @@ import {
   ClassProvider,
   CompilerMetadata,
   createContainer,
-  createServiceIdentifier,
   Inject,
   LifecycleEnum,
   Ref,
+  ServiceIdentifierManager,
 } from '..';
 import { getMessage } from './shared/utils';
 
@@ -40,9 +40,10 @@ describe('class provider test', () => {
   });
 
   test('constructor resolve exception', () => {
-    const IA = createServiceIdentifier<A>('IA');
-    const IB = createServiceIdentifier<A>('IB');
-    const IC = createServiceIdentifier<A>('IC');
+    const serviceIdentifierManager = new ServiceIdentifierManager();
+    const IA = serviceIdentifierManager.createServiceIdentifier<A>('IA');
+    const IB = serviceIdentifierManager.createServiceIdentifier<B>('IB');
+    const IC = serviceIdentifierManager.createServiceIdentifier<C>('IC');
 
     class A {}
     class B {}
@@ -67,8 +68,9 @@ describe('class provider test', () => {
   });
 
   test('circle reference', () => {
-    const IA = createServiceIdentifier<A>('IA');
-    const IB = createServiceIdentifier<B>('IB');
+    const serviceIdentifierManager = new ServiceIdentifierManager();
+    const IA = serviceIdentifierManager.createServiceIdentifier<A>('IA');
+    const IB = serviceIdentifierManager.createServiceIdentifier<B>('IB');
 
     class A {
       constructor(@Inject(IB, { ref: true }) readonly b: Ref<B>) {}
@@ -100,10 +102,11 @@ describe('class provider test', () => {
   });
 
   test('circle reference exception', () => {
-    const IA = createServiceIdentifier<A>('IA');
-    const IB = createServiceIdentifier<B>('IB');
-    const IC = createServiceIdentifier<C>('IC');
-    const ID = createServiceIdentifier<D>('ID');
+    const serviceIdentifierManager = new ServiceIdentifierManager();
+    const IA = serviceIdentifierManager.createServiceIdentifier<A>('IA');
+    const IB = serviceIdentifierManager.createServiceIdentifier<B>('IB');
+    const IC = serviceIdentifierManager.createServiceIdentifier<C>('IC');
+    const ID = serviceIdentifierManager.createServiceIdentifier<D>('ID');
 
     class A {
       constructor(@Inject(IB, { ref: true }) readonly b: Ref<B>) {}

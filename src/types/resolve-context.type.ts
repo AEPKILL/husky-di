@@ -7,6 +7,6 @@
 import { ResolveRecord } from '../classes/resolve-record';
 import { ServiceIdentifier } from './service-identifier.type';
 
-export type ResolveContext = Map<ServiceIdentifier<any>, any> & {
+export type ResolveContext = Map<ServiceIdentifier<any>, Map<string, any>> & {
   readonly resolveRecord: ResolveRecord;
 };

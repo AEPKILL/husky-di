@@ -5,7 +5,6 @@
  */
 
 import { ProviderBase } from '../classes/base/provider.base';
-import { LifecycleEnum } from '../enums/lifecycle.enum';
 import { IContainer } from '../interfaces/container.interface';
 import { ProviderOptions } from '../interfaces/provider.interface';
 import { ResolveContext } from '../types/resolve-context.type';
@@ -38,16 +37,8 @@ export class FactoryProvider<T> extends ProviderBase<T> {
   }
 
   resolve(container: IContainer, resolveContext: ResolveContext): T {
-    if (this._instance !== void 0) {
-      return this._instance;
-    }
-
     try {
-      const value = this._factory(container, resolveContext);
-      if (this.lifecycle === LifecycleEnum.singleton) {
-        this._instance = value;
-      }
-      return value;
+      return this._factory(container, resolveContext);
     } catch (error) {
       throw resolveContext.resolveRecord.getResolveException(
         `factory function execute exception: ${(error as Error)?.message}`

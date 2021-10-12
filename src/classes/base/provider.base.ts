@@ -15,11 +15,16 @@ import { ResolveContext } from '../../types/resolve-context.type';
 export abstract class ProviderBase<T> implements IProvider<T> {
   readonly lifecycle: LifecycleEnum;
 
-  protected _instance: T | undefined;
   private _root: this;
+  private _resolved: boolean;
+  private _instance: T | undefined;
 
   get root(): this {
     return this._root;
+  }
+
+  get resolved(): boolean {
+    return this._resolved;
   }
 
   get instance(): T | undefined {
@@ -30,6 +35,7 @@ export abstract class ProviderBase<T> implements IProvider<T> {
     const { lifecycle = LifecycleEnum.transient } = options;
 
     this._root = this;
+    this._resolved = false;
     this.lifecycle = lifecycle;
   }
 
@@ -41,12 +47,12 @@ export abstract class ProviderBase<T> implements IProvider<T> {
     return this.root === provider.root;
   }
 
-  clearInstance() {
-    this._instance = void 0;
-  }
-
   setInstance(instance?: T) {
     this._instance = instance;
+  }
+
+  setWasResolved(): void {
+    this._resolved = true;
   }
 
   protected _setRealRoot(provider: this): this {

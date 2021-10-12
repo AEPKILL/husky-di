@@ -23,6 +23,8 @@ export class ServiceIdentifierManager {
       );
     }
 
+    this._serviceIdentifiers.add(id);
+
     return id as ServiceIdentifier<T>;
   }
 }

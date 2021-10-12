@@ -112,6 +112,34 @@ describe('lifecycle test', () => {
     expect(test.d.current).toBe(0);
   });
 
+  test('resolutionScoped for factory', () => {
+    const IA = serviceIdentifierManager.createServiceIdentifier<number>('IA');
+    const IB = serviceIdentifierManager.createServiceIdentifier<number>('IB');
+
+    let count = 0;
+
+    const container = createContainer(container => {
+      container.register(
+        IA,
+        new FactoryProvider({
+          lifecycle: LifecycleEnum.resolutionScoped,
+          useFactory() {
+            return count++;
+          },
+        })
+      );
+      container.register(
+        IB,
+        new FactoryProvider({
+          useFactory(container) {
+            return container.resolve(IA) + container.resolve(IA);
+          },
+        })
+      );
+    });
+    expect(container.resolve(IB)).toBe(0);
+  });
+
   test('resolutionScoped ref for class', () => {
     class A {
       constructor(
@@ -150,5 +178,84 @@ describe('lifecycle test', () => {
     const IA = serviceIdentifierManager.createServiceIdentifier<A>('a');
     const a = container.resolve(IA);
     expect(a.b).toBe(a.c.current.b);
+  });
+
+  test('resolutionScoped ref for class with multiple', () => {
+    const serviceIdentifierManager = new ServiceIdentifierManager();
+    const IA = serviceIdentifierManager.createServiceIdentifier<A>('IA');
+    const IB = serviceIdentifierManager.createServiceIdentifier<B>('IB');
+
+    class A {
+      constructor(
+        @Inject(IB) readonly b: B,
+        @Inject(IB, { ref: true }) readonly b2: Ref<B>,
+
+        @Inject(IB, { multiple: true }) readonly b3: B[],
+        @Inject(IB) readonly b4: B
+      ) {}
+    }
+    class B {
+      constructor() {}
+    }
+
+    const container = createContainer(container => {
+      container.register(
+        IA,
+        new ClassProvider({
+          useClass: A,
+        })
+      );
+      container.register(
+        IB,
+        new ClassProvider({
+          lifecycle: LifecycleEnum.resolutionScoped,
+          useClass: B,
+        })
+      );
+    });
+
+    const a = container.resolve(IA);
+
+    expect(a.b).not.toBe(a.b2);
+    expect(a.b).not.toBe(a.b3);
+    expect(a.b).toBe(a.b4);
+    expect(a.b).toBe(a.b2.current);
+    expect(a.b).toBe(a.b3[0]);
+  });
+
+  test('resolutionScoped ref for class with multiple', () => {
+    const serviceIdentifierManager = new ServiceIdentifierManager();
+    const IA = serviceIdentifierManager.createServiceIdentifier<A>('IA333333');
+    const IB = serviceIdentifierManager.createServiceIdentifier<B>('IB333333');
+
+    class A {
+      constructor(
+        @Inject(IB, { multiple: true }) readonly b: B[],
+        @Inject(IB) readonly b2: B
+      ) {}
+    }
+    class B {
+      constructor() {}
+    }
+
+    const container = createContainer(container => {
+      container.register(
+        IA,
+        new ClassProvider({
+          useClass: A,
+        })
+      );
+      container.register(
+        IB,
+        new ClassProvider({
+          lifecycle: LifecycleEnum.resolutionScoped,
+          useClass: B,
+        })
+      );
+    });
+
+    const a = container.resolve(IA);
+
+    expect(a.b[0]).toBe(a.b2);
   });
 });

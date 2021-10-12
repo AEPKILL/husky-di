@@ -15,12 +15,13 @@ export interface ProviderOptions {
 export interface IProvider<T> {
   readonly lifecycle: LifecycleEnum;
   readonly instance: T | undefined;
-  root: IProvider<T>;
+  readonly resolved: boolean;
+  readonly root: IProvider<T>;
   clone(): IProvider<T>;
   resolve(container: IContainer, resolveContext: ResolveContext): T;
 
-  clearInstance(): void;
   setInstance(instance?: T): void;
+  setWasResolved(): void;
 
   /**
    * 同一个 provider 的不同 clone 备份，视为相等

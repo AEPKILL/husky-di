@@ -10,6 +10,7 @@ import {
   ContainerMiddlewareArgs,
   ContainerMiddlewareNext,
 } from '../interfaces/container.interface';
+import { metadataKeyExtractor } from '../shared/key-extractors';
 
 export const resolutionScopedMiddleware: ContainerMiddlewareNext = (<T>(
   next: ContainerMiddleware<T>
@@ -20,7 +21,19 @@ export const resolutionScopedMiddleware: ContainerMiddlewareNext = (<T>(
   // 不用判断生命周期是否是 resolutionScoped
   // resolveContext 中只要有一定是 resolutionScoped
   if (resolveContext.has(serviceIdentifier)) {
-    return resolveContext.get(serviceIdentifier);
+    const cache = resolveContext.get(serviceIdentifier)!;
+    const key = metadataKeyExtractor(metadata);
+    if (cache.has(key)) {
+      return cache.get(key);
+    }
+
+    // 尝试从 multiple 中解析值
+    if (!metadata.multiple) {
+      const key = metadataKeyExtractor({ ...metadata, multiple: true });
+      if (cache.has(key)) {
+        return cache.get(key)![0];
+      }
+    }
   }
 
   const result = next(middlewareArgs);
@@ -30,7 +43,9 @@ export const resolutionScopedMiddleware: ContainerMiddlewareNext = (<T>(
     container.getProvider(serviceIdentifier)?.lifecycle ===
       LifecycleEnum.resolutionScoped;
   if (shouldCacheResultToContext) {
-    resolveContext.set(serviceIdentifier, result);
+    const cache = resolveContext.get(serviceIdentifier) || new Map();
+    cache.set(metadataKeyExtractor(metadata), result);
+    resolveContext.set(serviceIdentifier, cache);
   }
 
   return result;
