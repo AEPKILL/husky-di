@@ -49,7 +49,7 @@ export class FactoryProvider<T> extends ProviderBase<T> {
       }
       return value;
     } catch (error) {
-      throw resolveContext.resolveLogger.getResolveException(
+      throw resolveContext.resolveRecord.getResolveException(
         `factory function execute exception: ${(error as Error)?.message}`
       );
     }

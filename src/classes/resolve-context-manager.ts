@@ -5,7 +5,7 @@
  */
 
 import { ResolveContext } from '../types/resolve-context.type';
-import { ResolveLogger } from './resolve-logger';
+import { ResolveRecord } from './resolve-record';
 
 export class ResolveContextManager {
   private _resolveContext?: ResolveContext;
@@ -22,7 +22,7 @@ export class ResolveContextManager {
       }
 
       const resolveContext = (new Map() as unknown) as Writable<ResolveContext>;
-      resolveContext.resolveLogger = new ResolveLogger();
+      resolveContext.resolveRecord = new ResolveRecord();
       this._resolveContext = resolveContext as ResolveContext;
     }
 

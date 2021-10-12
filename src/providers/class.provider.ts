@@ -39,6 +39,7 @@ export class ClassProvider<T> extends ProviderBase<T> {
   }
 
   resolve(container: IContainer, resolveContext: ResolveContext): T {
+    const { resolveRecord } = resolveContext;
     const length = this._constructor.length;
     if (length === 0) {
       return new this._constructor();
@@ -46,19 +47,19 @@ export class ClassProvider<T> extends ProviderBase<T> {
       const parametersMetadata = getParametersMetadata(this._constructor);
 
       if (parametersMetadata.length !== length) {
-        throw resolveContext.resolveLogger.getResolveException(
+        throw resolveRecord.getResolveException(
           `${this._constructor.name} parameters metadata mismatch`
         );
       }
 
       const parameters = parametersMetadata.map((it, index) => {
         try {
-          resolveContext.resolveLogger.pushMessage(
+          resolveRecord.pushMessage(
             `resolve parameter #${index} of constructor ${this._constructor.name}`
           );
           return container.resolve(it.serviceIdentifier, it);
         } finally {
-          resolveContext.resolveLogger.popMessage();
+          resolveRecord.popMessage();
         }
       });
 

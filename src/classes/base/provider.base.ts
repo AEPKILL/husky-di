@@ -45,6 +45,10 @@ export abstract class ProviderBase<T> implements IProvider<T> {
     this._instance = void 0;
   }
 
+  setInstance(instance?: T) {
+    this._instance = instance;
+  }
+
   protected _setRealRoot(provider: this): this {
     provider._root = this._root;
 

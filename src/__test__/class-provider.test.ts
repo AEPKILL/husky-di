@@ -4,7 +4,16 @@
  * @created 2021-10-11 13:44:41
  */
 
-import { CompilerMetadata, createContainer, Inject } from '..';
+import {
+  ClassProvider,
+  CompilerMetadata,
+  createContainer,
+  createServiceIdentifier,
+  Inject,
+  LifecycleEnum,
+  Ref,
+} from '..';
+import { getMessage } from './shared/utils';
 
 describe('class provider test', () => {
   test('constructor can be inject', () => {
@@ -28,5 +37,131 @@ describe('class provider test', () => {
 
     expect(c.a).toStrictEqual(new A());
     expect(c.b).toStrictEqual(container.resolve(B));
+  });
+
+  test('constructor resolve exception', () => {
+    const IA = createServiceIdentifier<A>('IA');
+    const IB = createServiceIdentifier<A>('IB');
+    const IC = createServiceIdentifier<A>('IC');
+
+    class A {}
+    class B {}
+    class C {
+      constructor(@Inject(IA) readonly a: A, @Inject(IB) readonly b: B) {}
+    }
+
+    const container = createContainer(container => {
+      container.register(IA, new ClassProvider({ useClass: A }));
+      container.register(IC, new ClassProvider({ useClass: C }));
+    });
+
+    expect(() => container.resolve(IC)).toThrow(
+      'IC->IB\n' +
+        getMessage([
+          'resolve service identifier "IC"',
+          'resolve parameter #1 of constructor C',
+          'resolve service identifier "IB"',
+          'attempted to resolve unregistered dependency service identifier: "IB"',
+        ])
+    );
+  });
+
+  test('circle reference', () => {
+    const IA = createServiceIdentifier<A>('IA');
+    const IB = createServiceIdentifier<B>('IB');
+
+    class A {
+      constructor(@Inject(IB, { ref: true }) readonly b: Ref<B>) {}
+    }
+    class B {
+      constructor(@Inject(IA) readonly a: A) {}
+    }
+
+    const container = createContainer(container => {
+      container.register(
+        IA,
+        new ClassProvider({
+          lifecycle: LifecycleEnum.resolutionScoped,
+          useClass: A,
+        })
+      );
+      container.register(
+        IB,
+        new ClassProvider({
+          lifecycle: LifecycleEnum.resolutionScoped,
+          useClass: B,
+        })
+      );
+    });
+
+    const b = container.resolve(IB);
+
+    expect(b.a.b.current).toBe(b);
+  });
+
+  test('circle reference exception', () => {
+    const IA = createServiceIdentifier<A>('IA');
+    const IB = createServiceIdentifier<B>('IB');
+    const IC = createServiceIdentifier<C>('IC');
+    const ID = createServiceIdentifier<D>('ID');
+
+    class A {
+      constructor(@Inject(IB, { ref: true }) readonly b: Ref<B>) {}
+    }
+    class B {
+      constructor(@Inject(IC) readonly c: C) {}
+    }
+
+    class C {
+      constructor(@Inject(ID) readonly d: D) {}
+    }
+
+    class D {
+      constructor(@Inject(IB) readonly b: B) {}
+    }
+
+    const container = createContainer(container => {
+      container.register(
+        IA,
+        new ClassProvider({
+          useClass: A,
+        })
+      );
+      container.register(
+        IB,
+        new ClassProvider({
+          useClass: B,
+        })
+      );
+      container.register(
+        IC,
+        new ClassProvider({
+          useClass: C,
+        })
+      );
+      container.register(
+        ID,
+        new ClassProvider({
+          useClass: D,
+        })
+      );
+    });
+    expect(() => container.resolve(IA).b.current).toThrow(
+      'IA->IB(Ref)->[IB]->IC->ID->[IB]\n' +
+        getMessage([
+          'resolve service identifier "IA"',
+          'resolve parameter #0 of constructor A',
+          'resolve service identifier "IB"',
+          '"IB" is a ref value, wait for use',
+          'resolve service identifier "IB"',
+          'resolve parameter #0 of constructor B',
+          'resolve service identifier "IC"',
+          'resolve parameter #0 of constructor C',
+          'resolve service identifier "ID"',
+          'resolve parameter #0 of constructor D',
+          'resolve service identifier "IB"',
+          'circular dependency detected! try use ref.',
+        ])
+    );
   });
 });

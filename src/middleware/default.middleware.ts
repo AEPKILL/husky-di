@@ -17,7 +17,7 @@ export const defaultMiddleware: ContainerMiddleware<any> = <T>(
   const { serviceIdentifier, multiple } = metadata;
 
   if (!container.isRegistered(serviceIdentifier)) {
-    throw resolveContext.resolveLogger.getResolveException(
+    throw resolveContext.resolveRecord.getResolveException(
       `attempted to resolve unregistered dependency service identifier: "${getServiceIdentifierName(
         serviceIdentifier
       )}"`

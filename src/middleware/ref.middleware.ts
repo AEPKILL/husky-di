@@ -27,11 +27,11 @@ export const refMiddleware: ContainerMiddlewareNext = (<T>(
 
   let resolveContextManager: ResolveContextManager = (container as any)
     ._resolveContextManager;
-  let resolveLogger = resolveContext.resolveLogger.clone();
-  resolveLogger.pushMessage(
+  let resolveRecord = resolveContext.resolveRecord.clone();
+  resolveRecord.pushMessage(
     `"${getServiceIdentifierName(
       serviceIdentifier
-    )}"" is a ref value, wait for use`
+    )}" is a ref value, wait for use`
   );
 
   let resolved = false;
@@ -52,7 +52,7 @@ export const refMiddleware: ContainerMiddlewareNext = (<T>(
         // restore resolve logger
         (currentResolveContext as Writable<
           ResolveContext
-        >).resolveLogger = resolveLogger;
+        >).resolveRecord = resolveRecord;
 
         instance = container.resolve(serviceIdentifier, {
           ...metadata,
@@ -71,7 +71,7 @@ export const refMiddleware: ContainerMiddlewareNext = (<T>(
           const NULL = null as any;
           resolveContextManager = NULL;
           resolveContext = NULL;
-          resolveLogger = NULL;
+          resolveRecord = NULL;
           container = NULL;
           metadata = NULL;
           serviceIdentifier = NULL;

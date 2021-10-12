@@ -20,6 +20,7 @@ export interface IProvider<T> {
   resolve(container: IContainer, resolveContext: ResolveContext): T;
 
   clearInstance(): void;
+  setInstance(instance?: T): void;
 
   /**
    * 同一个 provider 的不同 clone 备份，视为相等

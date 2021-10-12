@@ -117,12 +117,24 @@ export class Container implements IContainer {
     ? Ref<T>
     : T {
     const resolveContext = this._resolveContextManager.getResolveContext();
+    const resolveRecord = resolveContext.resolveRecord;
 
-    resolveContext.resolveLogger.pushMessage(
+    resolveRecord.pushServiceIdentifier({
+      serviceIdentifier,
+      ref: options?.ref,
+    });
+
+    resolveRecord.pushMessage(
       `resolve service identifier "${getServiceIdentifierName(
         serviceIdentifier
-      )}""`
+      )}"`
     );
+
+    if (resolveContext.resolveRecord.hasCycle()) {
+      throw resolveRecord.getResolveException(
+        `circular dependency detected! try use ref.`
+      );
+    }
 
     try {
       return this._middlewareManager.invoke!({
@@ -140,7 +152,8 @@ export class Container implements IContainer {
         ? Ref<T>
         : T;
     } finally {
-      resolveContext.resolveLogger.popMessage();
+      resolveRecord.popMessage();
+      resolveRecord.popServiceIdentifier();
       this._resolveContextManager.popResolveContext();
     }
   }
