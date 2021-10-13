@@ -30,12 +30,10 @@ export class ClassProvider<T> extends ProviderBase<T> {
   }
 
   clone(): this {
-    return this._setRealRoot(
-      new ClassProvider({
-        lifecycle: this.lifecycle,
-        useClass: this._constructor,
-      }) as this
-    );
+    return new ClassProvider({
+      lifecycle: this.lifecycle,
+      useClass: this._constructor,
+    }) as this;
   }
 
   resolve(container: IContainer, resolveContext: ResolveContext): T {

@@ -61,9 +61,9 @@ export class Container implements IContainer {
       }
     }
 
-    const cloneProvider = provider.clone();
+    const cloneProvider = provider.derivation();
 
-    if (!cloneProvider.equal(provider)) {
+    if (!cloneProvider.equal(provider) || cloneProvider === provider) {
       throw new Error(`this provider "clone" method incorrect`);
     }
 

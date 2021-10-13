@@ -23,12 +23,10 @@ export class ValueProvider<T> extends ProviderBase<T> {
   }
 
   clone(): this {
-    return this._setRealRoot(
-      new ValueProvider({
-        lifecycle: this.lifecycle,
-        useValue: this._value,
-      }) as this
-    );
+    return new ValueProvider({
+      lifecycle: this.lifecycle,
+      useValue: this._value,
+    }) as this;
   }
 
   resolve(): T {

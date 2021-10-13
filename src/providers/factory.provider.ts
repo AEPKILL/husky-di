@@ -28,12 +28,10 @@ export class FactoryProvider<T> extends ProviderBase<T> {
   }
 
   clone(): this {
-    return this._setRealRoot(
-      new FactoryProvider({
-        lifecycle: this.lifecycle,
-        useFactory: this._factory,
-      }) as this
-    );
+    return new FactoryProvider({
+      lifecycle: this.lifecycle,
+      useFactory: this._factory,
+    }) as this;
   }
 
   resolve(container: IContainer, resolveContext: ResolveContext): T {

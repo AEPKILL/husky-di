@@ -11,17 +11,14 @@ import {
   ProviderOptions,
 } from '../../interfaces/provider.interface';
 import { ResolveContext } from '../../types/resolve-context.type';
+import { DerivationBase } from './derivation.base';
 
-export abstract class ProviderBase<T> implements IProvider<T> {
+export abstract class ProviderBase<T> extends DerivationBase
+  implements IProvider<T> {
   readonly lifecycle: LifecycleEnum;
 
-  private _root: this;
   private _resolved: boolean;
   private _instance: T | undefined;
-
-  get root(): this {
-    return this._root;
-  }
 
   get resolved(): boolean {
     return this._resolved;
@@ -32,9 +29,9 @@ export abstract class ProviderBase<T> implements IProvider<T> {
   }
 
   constructor(options: ProviderOptions) {
+    super();
     const { lifecycle = LifecycleEnum.transient } = options;
 
-    this._root = this;
     this._resolved = false;
     this.lifecycle = lifecycle;
   }
@@ -43,21 +40,11 @@ export abstract class ProviderBase<T> implements IProvider<T> {
 
   abstract clone(): this;
 
-  equal(provider: this): boolean {
-    return this.root === provider.root;
-  }
-
   setInstance(instance?: T) {
     this._instance = instance;
   }
 
   setWasResolved(): void {
     this._resolved = true;
-  }
-
-  protected _setRealRoot(provider: this): this {
-    provider._root = this._root;
-
-    return provider;
   }
 }

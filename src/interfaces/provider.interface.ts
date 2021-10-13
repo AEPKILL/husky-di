@@ -4,6 +4,7 @@
  * @created 2021-10-02 09:20:39
  */
 
+import { DerivationBase } from '../classes/base/derivation.base';
 import { LifecycleEnum } from '../enums/lifecycle.enum';
 import { ResolveContext } from '../types/resolve-context.type';
 import { IContainer } from './container.interface';
@@ -12,19 +13,12 @@ export interface ProviderOptions {
   lifecycle?: LifecycleEnum;
 }
 
-export interface IProvider<T> {
+export interface IProvider<T> extends DerivationBase {
   readonly lifecycle: LifecycleEnum;
   readonly instance: T | undefined;
   readonly resolved: boolean;
-  readonly root: IProvider<T>;
-  clone(): IProvider<T>;
+  
   resolve(container: IContainer, resolveContext: ResolveContext): T;
-
   setInstance(instance?: T): void;
   setWasResolved(): void;
-
-  /**
-   * 同一个 provider 的不同 clone 备份，视为相等
-   */
-  equal(provider: IProvider<T>): boolean;
 }

@@ -7,3 +7,7 @@
 import { Constructor } from './constructor.type';
 
 export type ServiceIdentifier<T> = Constructor<T> | string | symbol;
+
+export type TypeForServiceIdentifier<
+  T extends ServiceIdentifier<any>
+> = T extends ServiceIdentifier<infer P> ? P : never;
