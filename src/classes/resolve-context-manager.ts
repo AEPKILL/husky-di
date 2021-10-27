@@ -16,6 +16,8 @@ export class ResolveContextManager {
   }
 
   getResolveContext(context?: ResolveContext): ResolveContext {
+    this._resolveContextRefCount++;
+
     if (this._resolveContext === undefined) {
       if (context) {
         return (this._resolveContext = context);
@@ -26,15 +28,20 @@ export class ResolveContextManager {
       this._resolveContext = resolveContext as ResolveContext;
     }
 
-    this._resolveContextRefCount++;
-
     return this._resolveContext;
   }
 
   popResolveContext(): void {
     this._resolveContextRefCount--;
+
+    if (this._resolveContextRefCount < 0) {
+      throw new Error(`resolve context has zero refs.`);
+    }
+
     if (this._resolveContextRefCount === 0) {
       this._resolveContext = undefined;
     }
   }
 }
+
+export const resolveContextManager = new ResolveContextManager();

@@ -6,6 +6,7 @@
 import {
   ContainerMiddlewareArgs,
   IContainer,
+  ResolveReturnType,
   UnRegister,
 } from '../interfaces/container.interface';
 import { IProvider } from '../interfaces/provider.interface';
@@ -22,13 +23,12 @@ import {
   RemoveMiddleware,
 } from './middleware-manager';
 import { Registry } from './registry';
-import { ResolveContextManager } from './resolve-context-manager';
+import { resolveContextManager } from './resolve-context-manager';
 import { Ref } from '../types/ref.type';
 import { Module } from './module';
 
 export class Container implements IContainer {
   private _registry = new Registry<IProvider<any>>();
-  private _resolveContextManager = new ResolveContextManager();
   private readonly _middlewareManager = new MiddlewareManager<
     ContainerMiddlewareArgs<any>,
     any
@@ -109,14 +109,8 @@ export class Container implements IContainer {
   resolve<T, Options extends HuskyDi.ResolveOptions<T>>(
     serviceIdentifier: ServiceIdentifier<T>,
     options?: Options
-  ): Options extends { multiple: true }
-    ? Options extends { ref: true }
-      ? Ref<T[]>
-      : T[]
-    : Options extends { ref: true }
-    ? Ref<T>
-    : T {
-    const resolveContext = this._resolveContextManager.getResolveContext();
+  ): ResolveReturnType<T, Options> {
+    const resolveContext = resolveContextManager.getResolveContext();
     const resolveRecord = resolveContext.resolveRecord;
 
     resolveRecord.pushServiceIdentifier({
@@ -130,13 +124,13 @@ export class Container implements IContainer {
       )}"`
     );
 
-    if (resolveContext.resolveRecord.hasCycle()) {
-      throw resolveRecord.getResolveException(
-        `circular dependency detected! try use ref.`
-      );
-    }
-
     try {
+      if (resolveContext.resolveRecord.hasCycle()) {
+        throw resolveRecord.getResolveException(
+          `circular dependency detected! try use ref.`
+        );
+      }
+
       return this._middlewareManager.invoke!({
         resolveContext,
         container: this,
@@ -154,7 +148,7 @@ export class Container implements IContainer {
     } finally {
       resolveRecord.popMessage();
       resolveRecord.popServiceIdentifier();
-      this._resolveContextManager.popResolveContext();
+      resolveContextManager.popResolveContext();
     }
   }
 

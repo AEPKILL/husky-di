@@ -21,6 +21,17 @@ export type ContainerMiddlewareArgs<T> = {
 
 export type ContainerMiddleware<T> = Middleware<ContainerMiddlewareArgs<T>, T>;
 
+export type ResolveReturnType<
+  T,
+  Options extends HuskyDi.ResolveOptions<T>
+> = Options extends { multiple: true }
+  ? Options extends { ref: true }
+    ? Ref<T[]>
+    : T[]
+  : Options extends { ref: true }
+  ? Ref<T>
+  : T;
+
 export type ContainerMiddlewareNext = <T>(
   next: ContainerMiddleware<T>
 ) => ContainerMiddleware<T>;
@@ -49,13 +60,7 @@ export interface IContainer {
   resolve<T, Options extends HuskyDi.ResolveOptions<T>>(
     serviceIdentifier: ServiceIdentifier<T>,
     options?: Options
-  ): Options extends { multiple: true }
-    ? Options extends { ref: true }
-      ? Ref<T[]>
-      : T[]
-    : Options extends { ref: true }
-    ? Ref<T>
-    : T;
+  ): ResolveReturnType<T, Options>;
 
   addMiddleware(middleware: ContainerMiddlewareNext): RemoveMiddleware;
 
