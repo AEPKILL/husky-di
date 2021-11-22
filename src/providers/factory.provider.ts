@@ -38,9 +38,10 @@ export class FactoryProvider<T> extends ProviderBase<T> {
     try {
       return this._factory(container, resolveContext);
     } catch (error) {
-      throw resolveContext.resolveRecord.getResolveException(
-        `factory function execute exception: ${(error as Error)?.message}`
-      );
+      throw new Error(`invoke message`);
+      // throw resolveContext.resolveRecord.getResolveException(
+      //   `factory function execute exception: ${(error as Error)?.message}`
+      // );
     }
   }
 }

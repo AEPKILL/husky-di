@@ -22,4 +22,6 @@ export { Ref } from './types/ref.type';
 export { createContainer } from './factory/create-container.factory';
 export { createServiceIdentifier } from './factory/create-service-identifier.factory';
 
-export { Module } from './classes/module';
+/**
+ * # 代表 container
+ */

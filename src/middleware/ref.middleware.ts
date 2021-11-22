@@ -5,15 +5,13 @@
  *
  */
 
-import { resolveContextManager } from '../classes/resolve-context-manager';
+import { Container } from '../classes/container';
 import {
   ContainerMiddleware,
   ContainerMiddlewareArgs,
   ContainerMiddlewareNext,
 } from '../interfaces/container.interface';
-import { getServiceIdentifierName } from '../shared/helpers/service-identifier.helper';
 import { Ref } from '../types/ref.type';
-import { ResolveContext } from '../types/resolve-context.type';
 
 export const refMiddleware: ContainerMiddlewareNext = (<T>(
   next: ContainerMiddleware<T>
@@ -25,12 +23,12 @@ export const refMiddleware: ContainerMiddlewareNext = (<T>(
     return next(middlewareArgs);
   }
 
-  let resolveRecord = resolveContext.resolveRecord.clone();
-  resolveRecord.pushMessage(
-    `"${getServiceIdentifierName(
-      serviceIdentifier
-    )}" is a ref value, wait for use`
-  );
+  // let resolveRecord = resolveContext.resolveRecord.clone();
+  // resolveRecord.pushMessage(
+  //   `"${getServiceIdentifierName(
+  //     serviceIdentifier
+  //   )}" is a ref value, wait for use`
+  // );
 
   let resolved = false;
   let instance: T | T[];
@@ -41,16 +39,18 @@ export const refMiddleware: ContainerMiddlewareNext = (<T>(
         return instance;
       }
 
+      const resolveContextManager = Container.getResolveContextManager(
+        container
+      );
+
       try {
         // restore resolve context
-        let currentResolveContext = resolveContextManager.getResolveContext(
-          resolveContext
-        );
+        resolveContextManager.getInstance(resolveContext);
 
         // restore resolve logger
-        (currentResolveContext as Writable<
-          ResolveContext
-        >).resolveRecord = resolveRecord;
+        // (currentResolveContext as Writable<
+        //   ResolveContext
+        // >).resolveRecord = resolveRecord;
 
         instance = container.resolve(serviceIdentifier, {
           ...metadata,
@@ -61,14 +61,13 @@ export const refMiddleware: ContainerMiddlewareNext = (<T>(
 
         return instance;
       } finally {
-        resolveContextManager.popResolveContext();
+        resolveContextManager.releaseInstance();
 
         // 解析完成后释放对所有资源
         // 这个 getter 闭包内一直保存着引用关系可能导致内存泄漏
         if (resolved) {
           const NULL = null as any;
           resolveContext = NULL;
-          resolveRecord = NULL;
           container = NULL;
           metadata = NULL;
           serviceIdentifier = NULL;

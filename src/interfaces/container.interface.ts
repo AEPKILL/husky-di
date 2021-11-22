@@ -5,7 +5,6 @@
  */
 
 import { Middleware, RemoveMiddleware } from '../classes/middleware-manager';
-import { Module } from '../classes/module';
 import { Ref } from '../types/ref.type';
 import { ResolveContext } from '../types/resolve-context.type';
 import { ServiceIdentifier } from '../types/service-identifier.type';
@@ -37,6 +36,8 @@ export type ContainerMiddlewareNext = <T>(
 ) => ContainerMiddleware<T>;
 
 export interface IContainer {
+  readonly name: string;
+
   register<T>(
     serviceIdentifier: ServiceIdentifier<T>,
     provider: IProvider<T>
@@ -63,7 +64,4 @@ export interface IContainer {
   ): ResolveReturnType<T, Options>;
 
   addMiddleware(middleware: ContainerMiddlewareNext): RemoveMiddleware;
-
-  load(module: Module): void;
-  unload(module: Module): void;
 }

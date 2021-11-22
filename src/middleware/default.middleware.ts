@@ -18,13 +18,13 @@ export const defaultMiddleware: ContainerMiddleware<any> = <T>(
   const { container, resolveContext, metadata } = middlewareArgs;
   const { serviceIdentifier, multiple } = metadata;
 
-  if (!container.isRegistered(serviceIdentifier)) {
-    throw resolveContext.resolveRecord.getResolveException(
-      `attempted to resolve unregistered dependency service identifier: "${getServiceIdentifierName(
-        serviceIdentifier
-      )}"`
-    );
-  }
+  // if (!container.isRegistered(serviceIdentifier)) {
+  //   throw resolveContext.resolveRecord.getResolveException(
+  //     `attempted to resolve unregistered dependency service identifier: "${getServiceIdentifierName(
+  //       serviceIdentifier
+  //     )}"`
+  //   );
+  // }
 
   let instance: T | T[];
 
