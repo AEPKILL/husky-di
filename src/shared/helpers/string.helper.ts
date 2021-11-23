@@ -4,12 +4,12 @@
  * @created 2021-11-22 17:04:53
  */
 
-export function generateIndentMessages(
-  messages: string[],
+export function generateStringsIndent(
+  strings: string[],
   indent: number = 1
 ): string {
-  return messages.reduce((result, it, index) => {
-    const shouldBreak = index < messages.length - 1;
+  return strings.reduce((result, it, index) => {
+    const shouldBreak = index < strings.length - 1;
     result = `${' '.repeat(index * indent)}${it}`;
 
     if (shouldBreak) {

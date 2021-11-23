@@ -9,6 +9,7 @@ import { Middleware } from '../classes/middleware-manager';
 import { IContainer } from '../interfaces/container.interface';
 import { ProviderOptions } from '../interfaces/provider.interface';
 import { getParametersMetadata } from '../shared/helpers/reflection.helper';
+import { runResolveZone } from '../shared/resolve-zone';
 import { Constructor } from '../types/constructor.type';
 import { ResolveContext } from '../types/resolve-context.type';
 
@@ -37,30 +38,37 @@ export class ClassProvider<T> extends ProviderBase<T> {
   }
 
   resolve(container: IContainer, resolveContext: ResolveContext): T {
-    const length = this._constructor.length;
-    if (length === 0) {
-      return new this._constructor();
-    } else {
-      const parametersMetadata = getParametersMetadata(this._constructor);
+    return runResolveZone({
+      container,
+      resolveContext,
+      callback: ({ container, resolveRecordManager }) => {
+        const length = this._constructor.length;
 
-      // if (parametersMetadata.length !== length) {
-      //   throw resolveRecord.getResolveException(
-      //     `${this._constructor.name} parameters metadata mismatch`
-      //   );
-      // }
+        if (length === 0) {
+          return new this._constructor();
+        } else {
+          const parametersMetadata = getParametersMetadata(this._constructor);
 
-      const parameters = parametersMetadata.map((it, index) => {
-        try {
-          // resolveRecord.pushMessage(
-          //   `resolve parameter #${index} of constructor ${this._constructor.name}`
-          // );
-          return container.resolve(it.serviceIdentifier, it);
-        } finally {
-          // resolveRecord.popMessage();
+          if (parametersMetadata.length !== length) {
+            throw resolveRecordManager.getResolveException(
+              `${this._constructor.name} parameters metadata mismatch`
+            );
+          }
+
+          const parameters = parametersMetadata.map((it, index) => {
+            try {
+              resolveRecordManager.pushResolveRecord({
+                message: `resolve parameter #${index} of constructor ${this._constructor.name}`,
+              });
+              return container.resolve(it.serviceIdentifier, it);
+            } finally {
+              resolveRecordManager.popResolveRecord();
+            }
+          });
+
+          return new this._constructor(...parameters);
         }
-      });
-
-      return new this._constructor(...parameters);
-    }
+      },
+    });
   }
 }

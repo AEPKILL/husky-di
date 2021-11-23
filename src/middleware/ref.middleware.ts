@@ -5,12 +5,12 @@
  *
  */
 
-import { Container } from '../classes/container';
 import {
   ContainerMiddleware,
   ContainerMiddlewareArgs,
   ContainerMiddlewareNext,
 } from '../interfaces/container.interface';
+import { getResolveContextRef } from '../shared/helpers/container.helper';
 import { Ref } from '../types/ref.type';
 
 export const refMiddleware: ContainerMiddlewareNext = (<T>(
@@ -23,7 +23,6 @@ export const refMiddleware: ContainerMiddlewareNext = (<T>(
     return next(middlewareArgs);
   }
 
-  // let resolveRecord = resolveContext.resolveRecord.clone();
   // resolveRecord.pushMessage(
   //   `"${getServiceIdentifierName(
   //     serviceIdentifier
@@ -39,9 +38,7 @@ export const refMiddleware: ContainerMiddlewareNext = (<T>(
         return instance;
       }
 
-      const resolveContextManager = Container.getResolveContextManager(
-        container
-      );
+      const resolveContextManager = getResolveContextRef(container);
 
       try {
         // restore resolve context

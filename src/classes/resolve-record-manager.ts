@@ -8,15 +8,20 @@ import {
   IResolveIdentifierRecord,
   IResolveRecord,
 } from '../interfaces/resolve-record.interface';
-import { generateIndentMessages } from '../shared/helpers/string.helper';
+import { generateStringsIndent } from '../shared/helpers/string.helper';
 import {
   getResolveIdentifierRecordName,
   isEqualResolveRecord,
   isResolveIdentifierRecord,
 } from '../shared/helpers/resolve-record.helper';
+import { DerivationBase } from './base/derivation.base';
 
-export class ResolveRecordManager {
+export class ResolveRecordManager extends DerivationBase {
   private _recordStack: IResolveRecord<any>[] = [];
+
+  get recordCount() {
+    return this._recordStack.length;
+  }
 
   pushResolveRecord(resolveRecord: IResolveRecord<any>) {
     this._recordStack.push(resolveRecord);
@@ -26,15 +31,37 @@ export class ResolveRecordManager {
     this._recordStack.pop();
   }
 
-  getResolveException(message?: string) {
+  getResolveException(
+    message?: string,
+    cycleResolveIdentifierRecord?: IResolveIdentifierRecord<any> | null
+  ) {
     if (message) {
       this.pushResolveRecord({ message });
     }
-    return new Error(this.getResolveMessage());
+    return new Error(this.getResolveMessage(cycleResolveIdentifierRecord));
   }
 
-  getResolveMessage(): string {
-    return '';
+  getResolveMessage(
+    cycleResolveIdentifierRecord?: IResolveIdentifierRecord<any> | null
+  ): string {
+    const resolveIdentifierRecordMessage = this.getResolveIdentifierRecords()
+      .map(it => {
+        let message = getResolveIdentifierRecordName(it);
+
+        if (
+          cycleResolveIdentifierRecord &&
+          isEqualResolveRecord(it, cycleResolveIdentifierRecord)
+        ) {
+          message = `(( ${message} ))`;
+        }
+
+        return message;
+      })
+      .join(' -> ');
+
+    return `${resolveIdentifierRecordMessage}\n${generateStringsIndent(
+      this.getResolveMessages()
+    )}`;
   }
 
   getCycleResolveIdentifierRecord(): null | IResolveIdentifierRecord<any> {
@@ -82,5 +109,11 @@ export class ResolveRecordManager {
         return it.message;
       }
     });
+  }
+
+  clone(): this {
+    const resolveRecordManager = new ResolveRecordManager();
+    resolveRecordManager._recordStack = this._recordStack.slice();
+    return resolveRecordManager as this;
   }
 }

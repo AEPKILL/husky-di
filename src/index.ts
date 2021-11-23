@@ -11,7 +11,7 @@ export { ValueProvider } from './providers/value.provider';
 export { Tagged } from './decorators/tagged.decorator';
 export { Inject } from './decorators/inject.decorator';
 export { InjectRef } from './decorators/inject-ref.decorator';
-export { CompilerMetadata } from './decorators/CompilerMetadata.decorator';
+export { CompilerMetadata } from './decorators/compiler-metadata.decorator';
 
 export { LifecycleEnum } from './enums/lifecycle.enum';
 

@@ -22,15 +22,12 @@ import {
   RemoveMiddleware,
 } from './middleware-manager';
 import { Registry } from './registry';
-import { Ref } from '../types/ref.type';
 import { InstanceRefCount } from './instance-ref-count';
 import { createResolveContext } from '../factory/create-resolve-context.factory';
-import { ResolveContext } from '../types/resolve-context.type';
+import { runResolveZone } from '../shared/resolve-zone';
 
 export class Container implements IContainer {
-  private readonly _resolveContextManager = new InstanceRefCount(
-    createResolveContext
-  );
+  $internal_resolveContextRef = new InstanceRefCount(createResolveContext);
   private readonly _registry = new Registry<IProvider<any>>();
   private readonly _name: string;
   private readonly _middlewareManager = new MiddlewareManager<
@@ -120,60 +117,26 @@ export class Container implements IContainer {
     serviceIdentifier: ServiceIdentifier<T>,
     options?: Options
   ): ResolveReturnType<T, Options> {
-    const isRootRequest = this._resolveContextManager.refsCount === 0;
-    const resolveContext = this._resolveContextManager.getInstance();
-
-    // const resolveRecord = resolveContext.resolveRecord;
-
-    // resolveRecord.pushServiceIdentifier({
-    //   serviceIdentifier,
-    //   ref: options?.ref,
-    // });
-
-    // resolveRecord.pushMessage(
-    //   `resolve service identifier "${getServiceIdentifierName(
-    //     serviceIdentifier
-    //   )}"`
-    // );
-
-    try {
-      // if (resolveContext.resolveRecord.hasCycle()) {
-      //   throw resolveRecord.getResolveException(
-      //     `circular dependency detected! try use ref.`
-      //   );
-      // }
-
-      return this._middlewareManager.invoke!({
-        resolveContext,
-        container: this,
-        metadata: {
-          ...options,
-          serviceIdentifier,
-        },
-      }) as Options extends { multiple: true }
-        ? Options extends { ref: true }
-          ? Ref<T[]>
-          : T[]
-        : Options extends { ref: true }
-        ? Ref<T>
-        : T;
-    } finally {
-      // resolveRecord.popMessage();
-      // resolveRecord.popServiceIdentifier();
-      this._resolveContextManager.releaseInstance();
-
-      if (isRootRequest) {
-        if (this._resolveContextManager.refsCount !== 0) {
-          console.warn(`resolve context manager not release.`);
-          this._resolveContextManager.reset();
+    return runResolveZone({
+      container: this,
+      callback: ({ resolveContext, resolveRecordManager }) => {
+        const cycleResolveIdentifierRecord = resolveRecordManager.getCycleResolveIdentifierRecord();
+        if (cycleResolveIdentifierRecord) {
+          throw resolveRecordManager.getResolveException(
+            `circular dependency detected! try use ref.`,
+            cycleResolveIdentifierRecord
+          );
         }
-      }
-    }
-  }
 
-  static getResolveContextManager(
-    container: IContainer
-  ): InstanceRefCount<ResolveContext> {
-    return (container as Container)._resolveContextManager;
+        return this._middlewareManager.invoke!({
+          resolveContext,
+          container: this,
+          metadata: {
+            ...options,
+            serviceIdentifier,
+          },
+        }) as ResolveReturnType<T, Options>;
+      },
+    });
   }
 }

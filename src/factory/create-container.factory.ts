@@ -10,7 +10,7 @@ import { IContainer } from '../interfaces/container.interface';
 export function createContainer(
   register?: (container: IContainer) => void
 ): IContainer {
-  const container = new Container();
+  const container = new Container('test');
 
   if (register) {
     register(container);

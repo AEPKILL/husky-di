@@ -63,4 +63,8 @@ export class InstanceRefCount<T> {
       this.reset();
     }
   }
+
+  $internal_setInstance(instance: T) {
+    this._instance = instance;
+  }
 }

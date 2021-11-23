@@ -9,7 +9,6 @@ import {
   ContainerMiddleware,
   ContainerMiddlewareArgs,
 } from '../interfaces/container.interface';
-import { getServiceIdentifierName } from '../shared/helpers/service-identifier.helper';
 import { metadataKeyExtractor } from '../shared/key-extractors';
 
 export const defaultMiddleware: ContainerMiddleware<any> = <T>(
