@@ -12,6 +12,10 @@ export class InstanceRefCount<T> {
   private _resolved: boolean;
   private _factory: CreateInstanceFactory<T>;
 
+  get isRoot(): boolean {
+    return this._refsCount === 0;
+  }
+
   get refsCount() {
     return this._refsCount;
   }
@@ -28,10 +32,10 @@ export class InstanceRefCount<T> {
 
   getInstanceWithoutRef(instance?: T): T {
     if (!this._resolved) {
-      if (arguments.length) {
-        this._instance = instance;
-      } else {
+      if (instance === undefined) {
         this._instance = this._factory();
+      } else {
+        this._instance = instance;
       }
       this._resolved = true;
     }

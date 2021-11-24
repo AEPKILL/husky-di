@@ -28,7 +28,7 @@ describe('lifecycle test', () => {
   }
 
   test('transient lifecycle', () => {
-    const container = createContainer();
+    const container = createContainer('Transient');
     let count = 0;
 
     container.register(
@@ -56,7 +56,7 @@ describe('lifecycle test', () => {
   });
 
   test('singleton lifecycle', () => {
-    const container = createContainer();
+    const container = createContainer('Singleton');
     let count = 0;
 
     container.register(
@@ -84,7 +84,7 @@ describe('lifecycle test', () => {
   });
 
   test('resolutionScoped lifecycle', () => {
-    const container = createContainer();
+    const container = createContainer('ResolutionScoped');
     let count = 0;
 
     container.register(
@@ -118,7 +118,7 @@ describe('lifecycle test', () => {
 
     let count = 0;
 
-    const container = createContainer(container => {
+    const container = createContainer('FactoryResolutionScoped', container => {
       container.register(
         IA,
         new FactoryProvider({
@@ -153,7 +153,7 @@ describe('lifecycle test', () => {
     class C {
       constructor(@Inject('b') readonly b: B) {}
     }
-    const container = createContainer();
+    const container = createContainer('ResolutionScopedRefForClass');
     container.register(
       'a',
       new ClassProvider({
@@ -198,21 +198,24 @@ describe('lifecycle test', () => {
       constructor() {}
     }
 
-    const container = createContainer(container => {
-      container.register(
-        IA,
-        new ClassProvider({
-          useClass: A,
-        })
-      );
-      container.register(
-        IB,
-        new ClassProvider({
-          lifecycle: LifecycleEnum.resolutionScoped,
-          useClass: B,
-        })
-      );
-    });
+    const container = createContainer(
+      'ResolutionScopedMultipleRefForClass',
+      container => {
+        container.register(
+          IA,
+          new ClassProvider({
+            useClass: A,
+          })
+        );
+        container.register(
+          IB,
+          new ClassProvider({
+            lifecycle: LifecycleEnum.resolutionScoped,
+            useClass: B,
+          })
+        );
+      }
+    );
 
     const a = container.resolve(IA);
 
@@ -238,21 +241,24 @@ describe('lifecycle test', () => {
       constructor() {}
     }
 
-    const container = createContainer(container => {
-      container.register(
-        IA,
-        new ClassProvider({
-          useClass: A,
-        })
-      );
-      container.register(
-        IB,
-        new ClassProvider({
-          lifecycle: LifecycleEnum.resolutionScoped,
-          useClass: B,
-        })
-      );
-    });
+    const container = createContainer(
+      'ResolutionScopedMultipleRefForClass2',
+      container => {
+        container.register(
+          IA,
+          new ClassProvider({
+            useClass: A,
+          })
+        );
+        container.register(
+          IB,
+          new ClassProvider({
+            lifecycle: LifecycleEnum.resolutionScoped,
+            useClass: B,
+          })
+        );
+      }
+    );
 
     const a = container.resolve(IA);
 

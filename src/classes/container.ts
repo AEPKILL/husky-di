@@ -24,7 +24,9 @@ import {
 import { Registry } from './registry';
 import { InstanceRefCount } from './instance-ref-count';
 import { createResolveContext } from '../factory/create-resolve-context.factory';
-import { runResolveZone } from '../shared/resolve-zone';
+import { using } from '../shared/using';
+import { UsingResolveContext } from './usings/using-resolve-context';
+import { UsingResolveRecordManager } from './usings/using-resolve-record-manager';
 
 export class Container implements IContainer {
   $internal_resolveContextRef = new InstanceRefCount(createResolveContext);
@@ -117,26 +119,32 @@ export class Container implements IContainer {
     serviceIdentifier: ServiceIdentifier<T>,
     options?: Options
   ): ResolveReturnType<T, Options> {
-    return runResolveZone({
-      container: this,
-      callback: ({ resolveContext, resolveRecordManager }) => {
-        const cycleResolveIdentifierRecord = resolveRecordManager.getCycleResolveIdentifierRecord();
-        if (cycleResolveIdentifierRecord) {
-          throw resolveRecordManager.getResolveException(
-            `circular dependency detected! try use ref.`,
-            cycleResolveIdentifierRecord
-          );
-        }
+    return using(
+      new UsingResolveContext(this),
+      new UsingResolveRecordManager()
+    )((resolveContext, resolveRecordManager) => {
+      resolveRecordManager.pushResolveRecord({
+        container: this,
+        serviceIdentifier,
+        resolveOptions: options,
+      });
+      
+      const cycleResolveIdentifierRecord = resolveRecordManager.getCycleResolveIdentifierRecord();
+      if (cycleResolveIdentifierRecord) {
+        throw resolveRecordManager.getResolveException(
+          `circular dependency detected! try use ref.`,
+          cycleResolveIdentifierRecord
+        );
+      }
 
-        return this._middlewareManager.invoke!({
-          resolveContext,
-          container: this,
-          metadata: {
-            ...options,
-            serviceIdentifier,
-          },
-        }) as ResolveReturnType<T, Options>;
-      },
+      return this._middlewareManager.invoke!({
+        resolveContext,
+        container: this,
+        metadata: {
+          ...options,
+          serviceIdentifier,
+        },
+      }) as ResolveReturnType<T, Options>;
     });
   }
 }

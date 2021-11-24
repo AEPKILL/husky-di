@@ -4,12 +4,15 @@
  * @created 2021-10-03 16:06:19
  */
 
+import { UsingResolveRecordManager } from '../classes/usings/using-resolve-record-manager';
 import { LifecycleEnum } from '../enums/lifecycle.enum';
 import {
   ContainerMiddleware,
   ContainerMiddlewareArgs,
 } from '../interfaces/container.interface';
+import { getServiceIdentifierName } from '../shared/helpers/service-identifier.helper';
 import { metadataKeyExtractor } from '../shared/key-extractors';
+import { using } from '../shared/using';
 
 export const defaultMiddleware: ContainerMiddleware<any> = <T>(
   middlewareArgs: ContainerMiddlewareArgs<T>
@@ -17,13 +20,15 @@ export const defaultMiddleware: ContainerMiddleware<any> = <T>(
   const { container, resolveContext, metadata } = middlewareArgs;
   const { serviceIdentifier, multiple } = metadata;
 
-  // if (!container.isRegistered(serviceIdentifier)) {
-  //   throw resolveContext.resolveRecord.getResolveException(
-  //     `attempted to resolve unregistered dependency service identifier: "${getServiceIdentifierName(
-  //       serviceIdentifier
-  //     )}"`
-  //   );
-  // }
+  if (!container.isRegistered(serviceIdentifier)) {
+    throw using(new UsingResolveRecordManager())(resolveRecordManager => {
+      return resolveRecordManager.getResolveException(
+        `attempted to resolve unregistered dependency service identifier: "${getServiceIdentifierName(
+          serviceIdentifier
+        )}"`
+      );
+    });
+  }
 
   let instance: T | T[];
 

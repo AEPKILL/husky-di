@@ -8,9 +8,10 @@ import { Container } from '../classes/container';
 import { IContainer } from '../interfaces/container.interface';
 
 export function createContainer(
+  name: string,
   register?: (container: IContainer) => void
 ): IContainer {
-  const container = new Container('test');
+  const container = new Container(name);
 
   if (register) {
     register(container);

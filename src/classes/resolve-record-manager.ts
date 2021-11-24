@@ -59,6 +59,8 @@ export class ResolveRecordManager extends DerivationBase {
       })
       .join(' -> ');
 
+    console.log(this.getResolveMessages());
+
     return `${resolveIdentifierRecordMessage}\n${generateStringsIndent(
       this.getResolveMessages()
     )}`;
@@ -104,7 +106,7 @@ export class ResolveRecordManager extends DerivationBase {
   getResolveMessages(): string[] {
     return this._recordStack.map(it => {
       if (isResolveIdentifierRecord(it)) {
-        return `resolve ${getResolveIdentifierRecordName(it)}`;
+        return `resolve service identifier ${getResolveIdentifierRecordName(it)}`;
       } else {
         return it.message;
       }

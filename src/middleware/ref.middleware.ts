@@ -5,12 +5,16 @@
  *
  */
 
+import { ResolveRecordManager } from '../classes/resolve-record-manager';
+import { UsingResolveContext } from '../classes/usings/using-resolve-context';
+import { UsingResolveRecordManager } from '../classes/usings/using-resolve-record-manager';
 import {
   ContainerMiddleware,
   ContainerMiddlewareArgs,
   ContainerMiddlewareNext,
 } from '../interfaces/container.interface';
-import { getResolveContextRef } from '../shared/helpers/container.helper';
+import { getServiceIdentifierName } from '../shared/helpers/service-identifier.helper';
+import { using } from '../shared/using';
 import { Ref } from '../types/ref.type';
 
 export const refMiddleware: ContainerMiddlewareNext = (<T>(
@@ -23,11 +27,17 @@ export const refMiddleware: ContainerMiddlewareNext = (<T>(
     return next(middlewareArgs);
   }
 
-  // resolveRecord.pushMessage(
-  //   `"${getServiceIdentifierName(
-  //     serviceIdentifier
-  //   )}" is a ref value, wait for use`
-  // );
+  let resolveRecordManagerSnapshoot: ResolveRecordManager;
+
+  using(new UsingResolveRecordManager())(it => {
+    resolveRecordManagerSnapshoot = it.clone();
+
+    resolveRecordManagerSnapshoot.pushResolveRecord({
+      message: `"${getServiceIdentifierName(
+        serviceIdentifier
+      )}" is a ref value, wait for use`,
+    });
+  });
 
   let resolved = false;
   let instance: T | T[];
@@ -35,41 +45,22 @@ export const refMiddleware: ContainerMiddlewareNext = (<T>(
   return {
     get current() {
       if (resolved) {
-        return instance;
+        return instance!;
       }
 
-      const resolveContextManager = getResolveContextRef(container);
-
-      try {
-        // restore resolve context
-        resolveContextManager.getInstance(resolveContext);
-
-        // restore resolve logger
-        // (currentResolveContext as Writable<
-        //   ResolveContext
-        // >).resolveRecord = resolveRecord;
-
-        instance = container.resolve(serviceIdentifier, {
+      instance = using(
+        new UsingResolveContext(container, resolveContext),
+        new UsingResolveRecordManager(resolveRecordManagerSnapshoot)
+      )(() => {
+        return container.resolve(serviceIdentifier, {
           ...metadata,
           ref: false,
         });
+      });
 
-        resolved = true;
+      resolved = true;
 
-        return instance;
-      } finally {
-        resolveContextManager.releaseInstance();
-
-        // 解析完成后释放对所有资源
-        // 这个 getter 闭包内一直保存着引用关系可能导致内存泄漏
-        if (resolved) {
-          const NULL = null as any;
-          resolveContext = NULL;
-          container = NULL;
-          metadata = NULL;
-          serviceIdentifier = NULL;
-        }
-      }
+      return instance;
     },
   };
 }) as ContainerMiddlewareNext;

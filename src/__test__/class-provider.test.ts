@@ -29,7 +29,7 @@ describe('class provider test', () => {
       constructor(@Inject(B) readonly b: B, readonly a: A) {}
     }
 
-    const container = createContainer();
+    const container = createContainer('Container1');
 
     expect(container.resolve(B).a).toStrictEqual(new A());
 
@@ -51,7 +51,7 @@ describe('class provider test', () => {
       constructor(@Inject(IA) readonly a: A, @Inject(IB) readonly b: B) {}
     }
 
-    const container = createContainer(container => {
+    const container = createContainer('Container2', container => {
       container.register(IA, new ClassProvider({ useClass: A }));
       container.register(IC, new ClassProvider({ useClass: C }));
     });
@@ -79,7 +79,7 @@ describe('class provider test', () => {
       constructor(@Inject(IA) readonly a: A) {}
     }
 
-    const container = createContainer(container => {
+    const container = createContainer('Container3', container => {
       container.register(
         IA,
         new ClassProvider({
@@ -123,7 +123,7 @@ describe('class provider test', () => {
       constructor(@Inject(IB) readonly b: B) {}
     }
 
-    const container = createContainer(container => {
+    const container = createContainer('Container4', container => {
       container.register(
         IA,
         new ClassProvider({

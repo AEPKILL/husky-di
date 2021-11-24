@@ -8,7 +8,7 @@ import { createContainer, createServiceIdentifier, ValueProvider } from '..';
 
 describe('container test', () => {
   test('container resolve', () => {
-    const container = createContainer();
+    const container = createContainer('Resolve');
     expect(() => {
       container.resolve('unknown');
     }).toThrow(
@@ -17,7 +17,7 @@ describe('container test', () => {
   });
 
   test('container resolve optional', () => {
-    const container = createContainer();
+    const container = createContainer('OptionalResolve');
     expect(container.resolve('unknown', { optional: true })).toBe(null);
     expect(
       container.resolve('unknown', { optional: true, defaultValue: 0 })
@@ -25,7 +25,7 @@ describe('container test', () => {
   });
 
   test('container register multiple', () => {
-    const container = createContainer(container => {
+    const container = createContainer('MultipleResolve',container => {
       container.register('value', new ValueProvider({ useValue: 0 }));
       container.register('value', new ValueProvider({ useValue: 0 }));
     });
@@ -42,7 +42,7 @@ describe('container test', () => {
       useValue: 2,
     });
 
-    const container = createContainer(container => {
+    const container = createContainer('ContainerAPI',container => {
       container.register(IA, provider);
     });
 

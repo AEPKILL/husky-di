@@ -8,7 +8,7 @@ import { createContainer, FactoryProvider, LifecycleEnum } from '..';
 
 describe('factory provider', () => {
   test('factory provider basic', () => {
-    const container = createContainer();
+    const container = createContainer('factoryBasicTest');
     let count = 0;
     let count2 = 0;
 

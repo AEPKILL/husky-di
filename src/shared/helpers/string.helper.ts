@@ -10,7 +10,7 @@ export function generateStringsIndent(
 ): string {
   return strings.reduce((result, it, index) => {
     const shouldBreak = index < strings.length - 1;
-    result = `${' '.repeat(index * indent)}${it}`;
+    result += `${' '.repeat(index * indent)}${it}`;
 
     if (shouldBreak) {
       result += '\n';
