@@ -61,7 +61,7 @@ export class UsingResolveRecordManager extends UsingBase<ResolveRecordManager>
 
         resolveRecordManagerRef.reset();
 
-        throw new Error(
+        throw this._current!.getResolveException(
           `resolveRecordManagerRef is dirty${rootContainerDisplayName}`
         );
       }

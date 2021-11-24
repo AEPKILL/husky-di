@@ -138,6 +138,14 @@ export class Container implements IContainer {
         resolveOptions: options,
       });
 
+      const { ref, dynamic } = options || {};
+
+      if (ref && dynamic) {
+        throw resolveRecordManager.getResolveException(
+          '`dynamic` and `ref` cannot be used together'
+        );
+      }
+
       // check is private
       if (this.isRegistered(serviceIdentifier)) {
         const provider = this.getProvider(serviceIdentifier)!;

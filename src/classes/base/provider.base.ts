@@ -53,4 +53,8 @@ export abstract class ProviderBase<T> extends DerivationBase
   setWasResolved(): void {
     this._resolved = true;
   }
+
+  setIsPrivate(isPrivate: boolean) {
+    this._isPrivate = isPrivate;
+  }
 }

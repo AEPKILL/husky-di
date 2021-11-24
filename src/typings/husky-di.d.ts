@@ -9,6 +9,7 @@ import { ServiceIdentifier } from '../types/service-identifier.type';
 declare global {
   namespace HuskyDi {
     interface ResolveOptions<T> {
+      dynamic?: boolean;
       multiple?: boolean;
       ref?: boolean;
       optional?: boolean;

@@ -24,9 +24,13 @@ export type ResolveReturnType<
   T,
   Options extends HuskyDi.ResolveOptions<T>
 > = Options extends { multiple: true }
-  ? Options extends { ref: true }
+  ? Options extends { dynamic: true }
+    ? Ref<T[]>
+    : Options extends { ref: true }
     ? Ref<T[]>
     : T[]
+  : Options extends { dynamic: true }
+  ? Ref<T>
   : Options extends { ref: true }
   ? Ref<T>
   : T;
