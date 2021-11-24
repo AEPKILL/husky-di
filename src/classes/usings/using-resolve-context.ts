@@ -20,6 +20,7 @@ export class UsingResolveContext extends UsingBase<ResolveContext>
 
   constructor(container: IContainer, resolveContext?: ResolveContext) {
     super();
+    
     this._container = container;
     this._resolveContext = resolveContext;
     this._isContainerRootRequest = false;
@@ -37,9 +38,7 @@ export class UsingResolveContext extends UsingBase<ResolveContext>
     }
 
     this._resolveContextRef = getResolveContextRef(this._container);
-
     this._isContainerRootRequest = this._resolveContextRef.isRoot;
-
     this._current = this._resolveContextRef.getInstance(this._resolveContext);
     this._resolved = true;
 
@@ -52,6 +51,7 @@ export class UsingResolveContext extends UsingBase<ResolveContext>
 
       const isResolveContextRefDirty =
         this._isContainerRootRequest && !this._resolveContextRef!.isRoot;
+
       if (isResolveContextRefDirty) {
         this._resolveContextRef!.reset();
         throw new Error(

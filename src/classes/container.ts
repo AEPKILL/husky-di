@@ -29,6 +29,9 @@ import { UsingResolveContext } from './usings/using-resolve-context';
 import { UsingResolveRecordManager } from './usings/using-resolve-record-manager';
 
 export class Container implements IContainer {
+  /**
+   * @deprecated internal use, don't access it
+   */
   $internal_resolveContextRef = new InstanceRefCount(createResolveContext);
   private readonly _registry = new Registry<IProvider<any>>();
   private readonly _name: string;
@@ -128,7 +131,8 @@ export class Container implements IContainer {
         serviceIdentifier,
         resolveOptions: options,
       });
-      
+
+      // check cycle reference
       const cycleResolveIdentifierRecord = resolveRecordManager.getCycleResolveIdentifierRecord();
       if (cycleResolveIdentifierRecord) {
         throw resolveRecordManager.getResolveException(

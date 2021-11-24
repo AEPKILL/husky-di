@@ -20,27 +20,25 @@ import { Ref } from '../types/ref.type';
 export const refMiddleware: ContainerMiddlewareNext = (<T>(
   next: ContainerMiddleware<T>
 ) => (middlewareArgs: ContainerMiddlewareArgs<T>): T | T[] | Ref<T | T[]> => {
-  let { container, resolveContext, metadata } = middlewareArgs;
-  let { serviceIdentifier, ref = false } = metadata;
+  const { container, resolveContext, metadata } = middlewareArgs;
+  const { serviceIdentifier, ref = false } = metadata;
 
   if (ref === false) {
     return next(middlewareArgs);
   }
 
   let resolveRecordManagerSnapshoot: ResolveRecordManager;
+  let resolved = false;
+  let instance: T | T[];
 
   using(new UsingResolveRecordManager())(it => {
     resolveRecordManagerSnapshoot = it.clone();
-
     resolveRecordManagerSnapshoot.pushResolveRecord({
       message: `"${getServiceIdentifierName(
         serviceIdentifier
       )}" is a ref value, wait for use`,
     });
   });
-
-  let resolved = false;
-  let instance: T | T[];
 
   return {
     get current() {

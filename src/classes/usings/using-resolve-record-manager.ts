@@ -14,11 +14,14 @@ export class UsingResolveRecordManager extends UsingBase<ResolveRecordManager>
   private _resolveRecordManager?: ResolveRecordManager;
   private _backup?: ResolveRecordManager;
   private _isRootRequest: boolean;
+  
   constructor(resolveRecordManager?: ResolveRecordManager) {
     super();
+
     this._resolveRecordManager = resolveRecordManager;
     this._isRootRequest = false;
   }
+
   get(): ResolveRecordManager {
     if (this._disposed) {
       throw new Error(`UsingResolveRecordManager was already disposed`);
@@ -31,17 +34,16 @@ export class UsingResolveRecordManager extends UsingBase<ResolveRecordManager>
     this._current = resolveRecordManagerRef.getInstance(
       this._resolveRecordManager
     );
-
     this._isRootRequest = resolveRecordManagerRef.isRoot;
     this._backup = this._current.clone();
     this._resolved = true;
 
     return this._current;
   }
+  
   dispose(): void {
     if (this._resolved && !this._disposed) {
       resolveRecordManagerRef.releaseInstance();
-
       resolveRecordManagerRef.$internal_setInstance(this._backup!);
 
       const isResolveManagerDirty =
