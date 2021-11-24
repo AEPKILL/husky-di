@@ -33,6 +33,7 @@ export class ClassProvider<T> extends ProviderBase<T> {
   clone(): this {
     return new ClassProvider({
       lifecycle: this.lifecycle,
+      isPrivate: this.isPrivate,
       useClass: this._constructor,
     }) as this;
   }

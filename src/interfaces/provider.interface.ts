@@ -11,13 +11,15 @@ import { IContainer } from './container.interface';
 
 export interface ProviderOptions {
   lifecycle?: LifecycleEnum;
+  isPrivate?: boolean;
 }
 
 export interface IProvider<T> extends DerivationBase {
+  readonly isPrivate: boolean;
   readonly lifecycle: LifecycleEnum;
   readonly instance: T | undefined;
   readonly resolved: boolean;
-  
+
   resolve(container: IContainer, resolveContext: ResolveContext): T;
   setInstance(instance?: T): void;
   setWasResolved(): void;

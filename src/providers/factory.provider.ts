@@ -32,6 +32,7 @@ export class FactoryProvider<T> extends ProviderBase<T> {
   clone(): this {
     return new FactoryProvider({
       lifecycle: this.lifecycle,
+      isPrivate: this.isPrivate,
       useFactory: this._factory,
     }) as this;
   }

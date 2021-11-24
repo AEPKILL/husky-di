@@ -16,6 +16,7 @@ import {
 } from '../shared/helpers/resolve-record.helper';
 import { DerivationBase } from './base/derivation.base';
 import { ResolveException } from '../exceptions/resolve.exception';
+import { IContainer } from '../interfaces/container.interface';
 
 export interface GetResolveExceptionOptions {
   exception?: Error;
@@ -82,6 +83,26 @@ export class ResolveRecordManager extends DerivationBase {
     return `${resolveIdentifierRecordMessage}\n${generateStringsIndent(
       this.getResolveMessages()
     )}`;
+  }
+
+  getParentRequestContainer(): IContainer | null {
+    if (!this._recordStack.length) {
+      return null;
+    }
+
+    const containers: IContainer[] = [];
+
+    for (let i = this._recordStack.length - 1; i >= 0; i--) {
+      const it = this._recordStack[i];
+      if (isResolveIdentifierRecord(it)) {
+        containers.push(it.container);
+      }
+      if (containers.length === 2) {
+        break;
+      }
+    }
+
+    return containers[1] || null;
   }
 
   getCycleResolveIdentifierRecord(): null | IResolveIdentifierRecord<any> {

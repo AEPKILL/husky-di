@@ -27,6 +27,7 @@ import { createResolveContext } from '../factory/create-resolve-context.factory'
 import { using } from '../shared/using';
 import { UsingResolveContext } from './usings/using-resolve-context';
 import { UsingResolveRecordManager } from './usings/using-resolve-record-manager';
+import { getServiceIdentifierName } from '../shared/helpers/service-identifier.helper';
 
 export class Container implements IContainer {
   /**
@@ -69,6 +70,11 @@ export class Container implements IContainer {
       if (it.lifecycle !== provider.lifecycle) {
         throw new Error(
           `${serviceIdentifier.toString()} all provider must have consistent lifecycle`
+        );
+      }
+      if (it.isPrivate !== provider.isPrivate) {
+        throw new Error(
+          `${serviceIdentifier.toString()} all provider must have consistent accessibility`
         );
       }
     }
@@ -131,6 +137,21 @@ export class Container implements IContainer {
         serviceIdentifier,
         resolveOptions: options,
       });
+
+      // check is private
+      if (this.isRegistered(serviceIdentifier)) {
+        const provider = this.getProvider(serviceIdentifier)!;
+        if (provider.isPrivate) {
+          const parentRequestContainer = resolveRecordManager.getParentRequestContainer();
+          if (parentRequestContainer !== this) {
+            throw resolveRecordManager.getResolveException(
+              `service identifier: "${getServiceIdentifierName(
+                serviceIdentifier
+              )}" is private`
+            );
+          }
+        }
+      }
 
       // check cycle reference
       const cycleResolveIdentifierRecord = resolveRecordManager.getCycleResolveIdentifierRecord();

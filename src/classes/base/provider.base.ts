@@ -19,9 +19,14 @@ export abstract class ProviderBase<T> extends DerivationBase
 
   private _resolved: boolean;
   private _instance: T | undefined;
+  private _isPrivate: boolean;
 
   get resolved(): boolean {
     return this._resolved;
+  }
+
+  get isPrivate() {
+    return this._isPrivate;
   }
 
   get instance(): T | undefined {
@@ -30,9 +35,10 @@ export abstract class ProviderBase<T> extends DerivationBase
 
   constructor(options: ProviderOptions) {
     super();
-    const { lifecycle = LifecycleEnum.transient } = options;
+    const { lifecycle = LifecycleEnum.transient, isPrivate = false } = options;
 
     this._resolved = false;
+    this._isPrivate = isPrivate;
     this.lifecycle = lifecycle;
   }
 

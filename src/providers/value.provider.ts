@@ -25,6 +25,7 @@ export class ValueProvider<T> extends ProviderBase<T> {
   clone(): this {
     return new ValueProvider({
       lifecycle: this.lifecycle,
+      isPrivate: this.isPrivate,
       useValue: this._value,
     }) as this;
   }
