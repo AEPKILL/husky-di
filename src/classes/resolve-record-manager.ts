@@ -15,6 +15,12 @@ import {
   isResolveIdentifierRecord,
 } from '../shared/helpers/resolve-record.helper';
 import { DerivationBase } from './base/derivation.base';
+import { ResolveException } from '../exceptions/resolve.exception';
+
+export interface GetResolveExceptionOptions {
+  exception?: Error;
+  cycleResolveIdentifierRecord?: IResolveIdentifierRecord<any> | null;
+}
 
 export class ResolveRecordManager extends DerivationBase {
   private _recordStack: IResolveRecord<any>[] = [];
@@ -33,12 +39,24 @@ export class ResolveRecordManager extends DerivationBase {
 
   getResolveException(
     message?: string,
-    cycleResolveIdentifierRecord?: IResolveIdentifierRecord<any> | null
+    options: GetResolveExceptionOptions = {}
   ) {
+    const { cycleResolveIdentifierRecord, exception } = options;
+
+    /**
+     * when exception is ResolveException, keep origin exception instance
+     */
+    if (ResolveException.isResolveException(exception)) {
+      return exception;
+    }
+
     if (message) {
       this.pushResolveRecord({ message });
     }
-    return new Error(this.getResolveMessage(cycleResolveIdentifierRecord));
+
+    return new ResolveException(
+      this.getResolveMessage(cycleResolveIdentifierRecord)
+    );
   }
 
   getResolveMessage(
@@ -59,7 +77,7 @@ export class ResolveRecordManager extends DerivationBase {
       })
       .join(' -> ');
 
-    console.log(this.getResolveMessages());
+    // console.log(this.getResolveMessages());
 
     return `${resolveIdentifierRecordMessage}\n${generateStringsIndent(
       this.getResolveMessages()
@@ -106,7 +124,9 @@ export class ResolveRecordManager extends DerivationBase {
   getResolveMessages(): string[] {
     return this._recordStack.map(it => {
       if (isResolveIdentifierRecord(it)) {
-        return `resolve service identifier ${getResolveIdentifierRecordName(it)}`;
+        return `resolve service identifier ${getResolveIdentifierRecordName(
+          it
+        )}`;
       } else {
         return it.message;
       }

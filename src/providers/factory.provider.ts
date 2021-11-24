@@ -5,8 +5,10 @@
  */
 
 import { ProviderBase } from '../classes/base/provider.base';
+import { UsingResolveRecordManager } from '../classes/usings/using-resolve-record-manager';
 import { IContainer } from '../interfaces/container.interface';
 import { ProviderOptions } from '../interfaces/provider.interface';
+import { using } from '../shared/using';
 import { ResolveContext } from '../types/resolve-context.type';
 
 export type Factory<T> = (
@@ -35,13 +37,18 @@ export class FactoryProvider<T> extends ProviderBase<T> {
   }
 
   resolve(container: IContainer, resolveContext: ResolveContext): T {
-    try {
-      return this._factory(container, resolveContext);
-    } catch (error) {
-      throw new Error(`invoke message`);
-      // throw resolveContext.resolveRecord.getResolveException(
-      //   `factory function execute exception: ${(error as Error)?.message}`
-      // );
-    }
+    return using(new UsingResolveRecordManager())(resolveRecordManager => {
+      try {
+        return this._factory(container, resolveContext);
+      } catch (error) {
+        throw resolveRecordManager.getResolveException(
+          `factory function execute exception: ${(error as Error)?.message ||
+            'unknown'}.`,
+          {
+            exception: error as Error,
+          }
+        );
+      }
+    });
   }
 }

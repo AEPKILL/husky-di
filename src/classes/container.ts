@@ -137,7 +137,9 @@ export class Container implements IContainer {
       if (cycleResolveIdentifierRecord) {
         throw resolveRecordManager.getResolveException(
           `circular dependency detected! try use ref.`,
-          cycleResolveIdentifierRecord
+          {
+            cycleResolveIdentifierRecord,
+          }
         );
       }
 

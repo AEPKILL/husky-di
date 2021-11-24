@@ -13,7 +13,7 @@ import {
   Ref,
   ServiceIdentifierManager,
 } from '..';
-import { getMessage } from './shared/utils';
+import { generateStringsIndent } from '../shared/helpers/string.helper';
 
 describe('class provider test', () => {
   test('constructor can be inject', () => {
@@ -57,11 +57,11 @@ describe('class provider test', () => {
     });
 
     expect(() => container.resolve(IC)).toThrow(
-      'IC->IB\n' +
-        getMessage([
-          'resolve service identifier "IC"',
-          'resolve parameter #1 of constructor C',
-          'resolve service identifier "IB"',
+      'IC[#Container2] -> IB[#Container2]\n' +
+        generateStringsIndent([
+          'resolve service identifier IC[#Container2]',
+          'resolve parameter #0 of constructor C',
+          'resolve service identifier IB[#Container2]',
           'attempted to resolve unregistered dependency service identifier: "IB"',
         ])
     );
@@ -150,19 +150,19 @@ describe('class provider test', () => {
       );
     });
     expect(() => container.resolve(IA).b.current).toThrow(
-      'IA->IB(Ref)->[IB]->IC->ID->[IB]\n' +
-        getMessage([
-          'resolve service identifier "IA"',
+      'IA[#Container4] -> IB[#Container4,Ref] -> (( IB[#Container4] )) -> IC[#Container4] -> ID[#Container4] -> (( IB[#Container4] ))\n' +
+        generateStringsIndent([
+          'resolve service identifier IA[#Container4]',
           'resolve parameter #0 of constructor A',
-          'resolve service identifier "IB"',
+          'resolve service identifier IB[#Container4,Ref]',
           '"IB" is a ref value, wait for use',
-          'resolve service identifier "IB"',
+          'resolve service identifier IB[#Container4]',
           'resolve parameter #0 of constructor B',
-          'resolve service identifier "IC"',
+          'resolve service identifier IC[#Container4]',
           'resolve parameter #0 of constructor C',
-          'resolve service identifier "ID"',
+          'resolve service identifier ID[#Container4]',
           'resolve parameter #0 of constructor D',
-          'resolve service identifier "IB"',
+          'resolve service identifier IB[#Container4]',
           'circular dependency detected! try use ref.',
         ])
     );
