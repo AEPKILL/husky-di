@@ -28,6 +28,7 @@ import { using } from '../shared/using';
 import { UsingResolveContext } from './usings/using-resolve-context';
 import { UsingResolveRecordManager } from './usings/using-resolve-record-manager';
 import { getServiceIdentifierName } from '../shared/helpers/service-identifier.helper';
+import { dynamicMiddleware } from '../middleware/dynamic.middleware';
 
 export class Container implements IContainer {
   /**
@@ -50,6 +51,7 @@ export class Container implements IContainer {
 
     this.addMiddleware(constructorMiddleware);
     this.addMiddleware(refMiddleware);
+    this.addMiddleware(dynamicMiddleware);
     this.addMiddleware(optionalMiddleware);
     this.addMiddleware(resolutionScopedMiddleware);
   }
@@ -132,17 +134,18 @@ export class Container implements IContainer {
       new UsingResolveContext(this),
       new UsingResolveRecordManager()
     )((resolveContext, resolveRecordManager) => {
+      // append resolve record
       resolveRecordManager.pushResolveRecord({
         container: this,
         serviceIdentifier,
         resolveOptions: options,
       });
 
+      // check options
       const { ref, dynamic } = options || {};
-
       if (ref && dynamic) {
         throw resolveRecordManager.getResolveException(
-          '`dynamic` and `ref` cannot be used together'
+          "`dynamic` and `ref` can't be used together"
         );
       }
 

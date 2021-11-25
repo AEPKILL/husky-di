@@ -16,11 +16,11 @@ export class InstanceRefCount<T> {
     return this._refsCount === 0;
   }
 
-  get refsCount() {
+  get refsCount(): number {
     return this._refsCount;
   }
 
-  get resolved() {
+  get resolved(): boolean {
     return this._resolved;
   }
 
@@ -58,8 +58,10 @@ export class InstanceRefCount<T> {
     this._refsCount--;
 
     if (this._refsCount < 0) {
-      throw new Error(
-        "instance has zero refs, don't call `releaseInstance` method."
+      this._refsCount = 0;
+
+      console.warn(
+        "instance not has refs, you don't need call `releaseInstance` method."
       );
     }
 

@@ -53,10 +53,9 @@ export class UsingResolveRecordManager extends UsingBase<ResolveRecordManager>
         this._isRootRequest && !resolveRecordManagerRef.isRoot;
 
       if (isResolveManagerDirty) {
-        const rootContainer = this._current!.getResolveIdentifierRecords()[0]
-          ?.container;
-        const rootContainerDisplayName = rootContainer
-          ? `(#${rootContainer.name})`
+        const rootRequestContainer = this._current!.getRootRequestContainer();
+        const rootContainerDisplayName = rootRequestContainer
+          ? `(#${rootRequestContainer.name})`
           : '';
 
         resolveRecordManagerRef.reset();

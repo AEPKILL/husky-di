@@ -6,4 +6,16 @@
 
 import { ServiceIdentifier } from './service-identifier.type';
 
+/**
+ * ResolveContext
+ * @example
+ * ```
+ * {
+ *   serviceIdentifier: {
+ *     metadataKeyExtractor(metadata): instance
+ *   }
+ * }
+ *
+ * ```
+ */
 export type ResolveContext = Map<ServiceIdentifier<any>, Map<string, any>>;

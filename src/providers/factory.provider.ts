@@ -5,6 +5,7 @@
  */
 
 import { ProviderBase } from '../classes/base/provider.base';
+import { UsingResolveContext } from '../classes/usings/using-resolve-context';
 import { UsingResolveRecordManager } from '../classes/usings/using-resolve-record-manager';
 import { IContainer } from '../interfaces/container.interface';
 import { ProviderOptions } from '../interfaces/provider.interface';
@@ -38,7 +39,10 @@ export class FactoryProvider<T> extends ProviderBase<T> {
   }
 
   resolve(container: IContainer, resolveContext: ResolveContext): T {
-    return using(new UsingResolveRecordManager())(resolveRecordManager => {
+    return using(
+      new UsingResolveContext(container, resolveContext),
+      new UsingResolveRecordManager()
+    )((_resolveContext, resolveRecordManager) => {
       try {
         return this._factory(container, resolveContext);
       } catch (error) {

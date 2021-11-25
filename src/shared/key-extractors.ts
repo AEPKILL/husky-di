@@ -5,7 +5,7 @@
  */
 
 export function metadataKeyExtractor(metadata: HuskyDi.InjectionMetadata<any>) {
-  const { ref = false, multiple = false } = metadata;
+  const { ref = false, multiple = false, dynamic = false } = metadata;
 
-  return [ref ? 1 : 0, multiple ? 1 : 0].join('-');
+  return [ref, multiple, dynamic].map(it => (it ? 1 : 0)).join('-');
 }

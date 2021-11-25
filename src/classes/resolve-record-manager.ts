@@ -90,6 +90,8 @@ export class ResolveRecordManager extends DerivationBase {
       return null;
     }
 
+    // containers[0] is current container
+    // containers[1] is parent container
     const containers: IContainer[] = [];
 
     for (let i = this._recordStack.length - 1; i >= 0; i--) {
@@ -105,11 +107,23 @@ export class ResolveRecordManager extends DerivationBase {
     return containers[1] || null;
   }
 
+  getRootRequestContainer(): IContainer | null {
+    for (let i = 0; i < this._recordStack.length; i++) {
+      const it = this._recordStack[i];
+
+      if (isResolveIdentifierRecord(it)) {
+        return it.container;
+      }
+    }
+    return null;
+  }
+
   getCycleResolveIdentifierRecord(): null | IResolveIdentifierRecord<any> {
     if (this._recordStack.length < 2) {
       return null;
     }
 
+    // only check latest resolve record
     const latestResolveRecord = this._recordStack[this._recordStack.length - 1];
 
     if (!isResolveIdentifierRecord(latestResolveRecord)) {

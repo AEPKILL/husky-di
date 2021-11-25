@@ -19,13 +19,13 @@ export function using<A, B, C>(
   usingA: IUsing<A>,
   usingB: IUsing<B>,
   usingC: IUsing<C>
-): UsingCallback<[A, B]>;
+): UsingCallback<[A, B, C]>;
 export function using<A, B, C, D>(
   usingA: IUsing<A>,
   usingB: IUsing<B>,
   usingC: IUsing<C>,
   usingD: IUsing<D>
-): UsingCallback<[A, B]>;
+): UsingCallback<[A, B, C, D]>;
 export function using(...usings: IUsing<any>[]): UsingCallback<any[]> {
   return callback => {
     try {
