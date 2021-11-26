@@ -4,7 +4,13 @@
  * @created 2021-10-03 22:02:35
  */
 
-export type Middleware<Args, Return> = (args: Args) => Return;
+export type Middleware<Args, Return> = ((args: Args) => Return) & {
+  /**
+   * 现在没用到，可以利用 skip 直接跳过一个 middleware 用于优化调用栈
+   * @deprecated
+   */
+  skip?: (args: Args) => boolean;
+};
 
 export type MiddlewareNext<Args, Return> = (
   next: Middleware<Args, Return>

@@ -67,10 +67,11 @@ export class ResolveRecordManager extends DerivationBase {
       .map(it => {
         let message = getResolveIdentifierRecordName(it);
 
-        if (
+        // add mark for cycle node
+        const isCycleNode =
           cycleResolveIdentifierRecord &&
-          isEqualResolveRecord(it, cycleResolveIdentifierRecord)
-        ) {
+          isEqualResolveRecord(it, cycleResolveIdentifierRecord);
+        if (isCycleNode) {
           message = `(( ${message} ))`;
         }
 

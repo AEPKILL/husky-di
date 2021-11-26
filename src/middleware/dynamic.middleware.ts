@@ -32,7 +32,7 @@ export const dynamicMiddleware: ContainerMiddlewareNext = (<T>(
     resolveRecordManagerSnapshoot.pushResolveRecord({
       message: `"${getServiceIdentifierName(
         serviceIdentifier
-      )}" is a ref value, wait for use`,
+      )}" is a dynamic value, wait for use`,
     });
   });
 

@@ -5,6 +5,7 @@
  */
 import {
   ContainerMiddlewareArgs,
+  ContainerMiddlewareNext,
   IContainer,
   ResolveReturnType,
   UnRegister,
@@ -54,6 +55,10 @@ export class Container implements IContainer {
     this.addMiddleware(dynamicMiddleware);
     this.addMiddleware(optionalMiddleware);
     this.addMiddleware(resolutionScopedMiddleware);
+
+    for (const middleware of Container.middlewares) {
+      this.addMiddleware(middleware);
+    }
   }
 
   addMiddleware(
@@ -168,7 +173,7 @@ export class Container implements IContainer {
       const cycleResolveIdentifierRecord = resolveRecordManager.getCycleResolveIdentifierRecord();
       if (cycleResolveIdentifierRecord) {
         throw resolveRecordManager.getResolveException(
-          `circular dependency detected! try use ref.`,
+          `circular dependency detected! try use ref flag or dynamic flag`,
           {
             cycleResolveIdentifierRecord,
           }
@@ -185,4 +190,6 @@ export class Container implements IContainer {
       }) as ResolveReturnType<T, Options>;
     });
   }
+
+  static readonly middlewares: ContainerMiddlewareNext[] = [];
 }

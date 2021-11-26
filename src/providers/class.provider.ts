@@ -59,14 +59,10 @@ export class ClassProvider<T> extends ProviderBase<T> {
         }
 
         const parameters = parametersMetadata.map((it, index) => {
-          try {
-            resolveRecordManager.pushResolveRecord({
-              message: `resolve parameter #${index} of constructor ${this._constructor.name}`,
-            });
-            return container.resolve(it.serviceIdentifier, it);
-          } finally {
-            resolveRecordManager.popResolveRecord();
-          }
+          resolveRecordManager.pushResolveRecord({
+            message: `resolve parameter #${index} of constructor ${this._constructor.name}`,
+          });
+          return container.resolve(it.serviceIdentifier, it);
         });
 
         return new this._constructor(...parameters);

@@ -163,7 +163,7 @@ describe('class provider test', () => {
           'resolve service identifier ID[#Container4]',
           'resolve parameter #0 of constructor D',
           'resolve service identifier IB[#Container4]',
-          'circular dependency detected! try use ref.',
+          'circular dependency detected! try use ref flag or dynamic flag',
         ])
     );
   });
