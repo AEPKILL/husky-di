@@ -135,14 +135,25 @@ export class ResolveRecordManager extends DerivationBase {
       return null;
     }
 
+    if (latestResolveRecord.resolveOptions?.dynamic) {
+      return null;
+    }
+
     for (let i = this._recordStack.length - 2; i >= 0; i--) {
       const it = this._recordStack[i];
+
       if (!isResolveIdentifierRecord(it)) {
         continue;
       }
+
       if (it.resolveOptions?.ref) {
         break;
       }
+
+      if (it.resolveOptions?.dynamic) {
+        break;
+      }
+
       if (isEqualResolveRecord(latestResolveRecord, it)) {
         return latestResolveRecord;
       }
