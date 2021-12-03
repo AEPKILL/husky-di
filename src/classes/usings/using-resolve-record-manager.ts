@@ -31,10 +31,10 @@ export class UsingResolveRecordManager extends UsingBase<ResolveRecordManager>
       return this._current!;
     }
 
+    this._isRootRequest = resolveRecordManagerRef.isRoot;
     this._current = resolveRecordManagerRef.getInstance(
       this._resolveRecordManager
     );
-    this._isRootRequest = resolveRecordManagerRef.isRoot;
     this._backup = this._current.clone();
     this._resolved = true;
 
