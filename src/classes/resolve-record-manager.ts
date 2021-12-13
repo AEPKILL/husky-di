@@ -55,9 +55,17 @@ export class ResolveRecordManager extends DerivationBase {
       this.pushResolveRecord({ message });
     }
 
-    return new ResolveException(
-      this.getResolveMessage(cycleResolveIdentifierRecord)
-    );
+    const resolveMessage = this.getResolveMessage(cycleResolveIdentifierRecord);
+    const resolveException = new ResolveException(resolveMessage);
+
+    // 如果有原始异常，裁剪出原始异常的调用栈，方便定位问题
+    if (exception) {
+      const stacks = (exception.stack || '').split('\n');
+      stacks.shift();
+      resolveException.stack = resolveMessage + '\n' + stacks.join('\n');
+    }
+
+    return resolveException;
   }
 
   getResolveMessage(

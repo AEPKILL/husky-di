@@ -48,7 +48,16 @@ export class ClassProvider<T> extends ProviderBase<T> {
       const length = this._constructor.length;
 
       if (length === 0) {
-        return new this._constructor();
+        try {
+          return new this._constructor();
+        } catch (error) {
+          throw resolveRecordManager.getResolveException(
+            `try create instance fail: ${(error as any)?.message || 'unknown'}`,
+            {
+              exception: error as Error,
+            }
+          );
+        }
       } else {
         const parametersMetadata = getParametersMetadata(this._constructor);
 

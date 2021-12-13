@@ -15,9 +15,6 @@ export class ResolveException extends Error {
    * ```
    */
   private readonly _isResolveException = true;
-  constructor(message: string) {
-    super(message);
-  }
 
   static isResolveException(error: any) {
     return error && (error as ResolveException)._isResolveException;
