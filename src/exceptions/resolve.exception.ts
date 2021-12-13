@@ -14,12 +14,12 @@ export class ResolveException extends Error {
    * new A() instanceof A // false
    * ```
    */
-  readonly isResolveException = true;
+  private readonly _isResolveException = true;
   constructor(message: string) {
     super(message);
   }
 
   static isResolveException(error: any) {
-    return error && (error as ResolveException).isResolveException;
+    return error && (error as ResolveException)._isResolveException;
   }
 }

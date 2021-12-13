@@ -67,7 +67,7 @@ export class ResolveRecordManager extends DerivationBase {
       .map(it => {
         let message = getResolveIdentifierRecordName(it);
 
-        // add mark for cycle node
+        // 给循环引用的节点加个标记
         const isCycleNode =
           cycleResolveIdentifierRecord &&
           isEqualResolveRecord(it, cycleResolveIdentifierRecord);

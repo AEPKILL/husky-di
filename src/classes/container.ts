@@ -35,7 +35,7 @@ export class Container implements IContainer {
   /**
    * @deprecated internal use, don't access it
    */
-  $internal_resolveContextRef = new InstanceRefCount(createResolveContext);
+  _resolveContextRef = new InstanceRefCount(createResolveContext);
   private readonly _registry = new Registry<IProvider<any>>();
   private readonly _name: string;
   private readonly _middlewareManager = new MiddlewareManager<

@@ -12,5 +12,5 @@ import { ResolveContext } from '../../types/resolve-context.type';
 export function getResolveContextRef(
   container: IContainer
 ): InstanceRefCount<ResolveContext> {
-  return (container as Container).$internal_resolveContextRef;
+  return (container as Container)._resolveContextRef;
 }

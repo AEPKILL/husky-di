@@ -73,11 +73,18 @@ export function isEqualResolveRecord(
     const isNotRef =
       !aResolveRecord.resolveOptions?.ref &&
       !bResolveRecord.resolveOptions?.ref;
+    const isNotDynamic =
+      !aResolveRecord.resolveOptions?.dynamic &&
+      !bResolveRecord.resolveOptions?.dynamic;
 
-    if (containerIsEqual && serviceIdentifierIsEqual && isNotRef) {
-      return true;
-    }
+    return [
+      containerIsEqual,
+      serviceIdentifierIsEqual,
+      isNotRef,
+      isNotDynamic,
+    ].every(it => it === true);
   }
 
   return false;
 }
+  
