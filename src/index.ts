@@ -8,9 +8,9 @@ export { ClassProvider } from './providers/class.provider';
 export { FactoryProvider } from './providers/factory.provider';
 export { ValueProvider } from './providers/value.provider';
 
-export { Tagged } from './decorators/tagged.decorator';
-export { Inject } from './decorators/inject.decorator';
-export { CompilerMetadata } from './decorators/compiler-metadata.decorator';
+export { tagged as Tagged } from './decorators/tagged.decorator';
+export { inject as Inject } from './decorators/inject.decorator';
+export { compilerMetadata as CompilerMetadata } from './decorators/compiler-metadata.decorator';
 
 export { LifecycleEnum } from './enums/lifecycle.enum';
 

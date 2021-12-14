@@ -6,7 +6,7 @@
 
 import { InjectionMetadataKeyConst } from '../constants/metadata-key.const';
 
-export const Tagged = <T>(
+export const tagged = <T>(
   metadata: HuskyDi.InjectionMetadata<T>
 ): ParameterDecorator => {
   return (

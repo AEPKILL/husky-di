@@ -52,7 +52,9 @@ export class ClassProvider<T> extends ProviderBase<T> {
           return new this._constructor();
         } catch (error) {
           throw resolveRecordManager.getResolveException(
-            `try create instance fail: ${(error as any)?.message || 'unknown'}`,
+            `try create "${
+              this._constructor.name
+            }" instance fail: ${(error as any)?.message || 'unknown'}`,
             {
               exception: error as Error,
             }
