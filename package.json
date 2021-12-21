@@ -1,5 +1,5 @@
 {
-  "version": "0.1.0",
+  "version": "0.1.1",
   "license": "MIT",
   "main": "dist/index.js",
   "typings": "dist/index.d.ts",
@@ -15,7 +15,7 @@
     "build": "tsdx build&&node ./scripts/after-build.js",
     "test": "tsdx test",
     "lint": "tsdx lint src",
-    "prepare": "tsdx build&&&&node ./scripts/after-build.js",
+    "prepare": "tsdx build&&node ./scripts/after-build.js",
     "size": "size-limit",
     "analyze": "size-limit --why"
   },
