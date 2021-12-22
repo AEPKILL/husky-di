@@ -6,4 +6,5 @@
 
 export type Ref<T> = {
   readonly current: T;
+  readonly resolved: boolean;
 };

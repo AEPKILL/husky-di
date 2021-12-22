@@ -41,6 +41,9 @@ export const refMiddleware: ContainerMiddlewareNext = (<T>(
   });
 
   return {
+    get resolved() {
+      return resolved;
+    },
     get current() {
       if (resolved) {
         return instance!;

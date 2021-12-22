@@ -36,11 +36,18 @@ export const dynamicMiddleware: ContainerMiddlewareNext = (<T>(
     });
   });
 
+  let wasResolved = false;
+
   return {
+    get resolved() {
+      return wasResolved;
+    },
     get current() {
-      return using(
+      const instance = using(
         new UsingResolveRecordManager(resolveRecordManagerSnapshoot)
       )(() => container.resolve(serviceIdentifier, metadata));
+      wasResolved = true;
+      return instance;
     },
   };
 }) as ContainerMiddlewareNext;
