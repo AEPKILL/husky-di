@@ -22,6 +22,7 @@ export interface IProvider<T> extends DerivationBase {
 
   resolve(container: IContainer, resolveContext: ResolveContext): T;
   setInstance(instance?: T): void;
-  setWasResolved(): void;
+  setResolved(value: boolean): void;
   setIsPrivate(isPrivate: boolean): void;
+  reset(): void;
 }

@@ -53,13 +53,13 @@ export const defaultMiddleware: ContainerMiddleware<any> = <T>(
           return provider.instance!;
         }
 
-        const itInstance = provider.resolve(container, resolveContext);
+        const instanceItem = provider.resolve(container, resolveContext);
         if (provider.lifecycle === LifecycleEnum.singleton) {
-          provider.setInstance(itInstance);
-          provider.setWasResolved();
+          provider.setInstance(instanceItem);
+          provider.setResolved(true);
         }
 
-        return itInstance;
+        return instanceItem;
       });
   } else {
     const provider = container.getProvider(serviceIdentifier)!;
@@ -70,7 +70,7 @@ export const defaultMiddleware: ContainerMiddleware<any> = <T>(
     instance = provider.resolve(container, resolveContext);
     if (provider.lifecycle === LifecycleEnum.singleton) {
       provider.setInstance(instance);
-      provider.setWasResolved();
+      provider.setResolved(true);
     }
   }
 

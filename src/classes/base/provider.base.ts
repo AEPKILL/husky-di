@@ -50,8 +50,13 @@ export abstract class ProviderBase<T> extends DerivationBase
     this._instance = instance;
   }
 
-  setWasResolved(): void {
-    this._resolved = true;
+  setResolved(value: boolean): void {
+    this._resolved = value;
+  }
+
+  reset(): void {
+    this._resolved = false;
+    this._instance = undefined;
   }
 
   setIsPrivate(isPrivate: boolean) {
