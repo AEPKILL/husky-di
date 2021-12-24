@@ -135,13 +135,15 @@ export class Container implements IContainer {
     serviceIdentifier: ServiceIdentifier<T>,
     options?: Options
   ): ResolveReturnType<T, Options> {
+    const container = options?.container || this;
+
     return using(
       new UsingResolveContext(this),
       new UsingResolveRecordManager()
     )((resolveContext, resolveRecordManager) => {
       // append resolve record
       resolveRecordManager.pushResolveRecord({
-        container: this,
+        container,
         serviceIdentifier,
         resolveOptions: options,
       });
@@ -182,7 +184,7 @@ export class Container implements IContainer {
 
       return this._middlewareManager.invoke!({
         resolveContext,
-        container: this,
+        container,
         metadata: {
           ...options,
           serviceIdentifier,

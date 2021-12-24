@@ -4,6 +4,7 @@
  * @created 2021-10-04 03:00:26
  */
 
+import { IContainer } from '..';
 import { ServiceIdentifier } from '../types/service-identifier.type';
 
 declare global {
@@ -14,6 +15,7 @@ declare global {
       ref?: boolean;
       optional?: boolean;
       defaultValue?: T | T[];
+      container?: IContainer;
     }
 
     interface InjectionOptions<T> {}
