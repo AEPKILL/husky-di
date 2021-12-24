@@ -18,7 +18,7 @@ export {
 } from './providers/value.provider';
 
 export { tagged } from './decorators/tagged.decorator';
-export { inject } from './decorators/inject.decorator';
+export { inject, InjectOptions } from './decorators/inject.decorator';
 export { compilerMetadata as CompilerMetadata } from './decorators/compiler-metadata.decorator';
 
 export { LifecycleEnum } from './enums/lifecycle.enum';

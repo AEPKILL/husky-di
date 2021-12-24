@@ -138,7 +138,7 @@ export class Container implements IContainer {
     const container = options?.container || this;
 
     return using(
-      new UsingResolveContext(this),
+      new UsingResolveContext(container),
       new UsingResolveRecordManager()
     )((resolveContext, resolveRecordManager) => {
       // append resolve record
