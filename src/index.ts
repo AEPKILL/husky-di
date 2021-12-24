@@ -34,7 +34,16 @@ export { ServiceIdentifier } from './types/service-identifier.type';
 export {
   IContainer,
   ResolveReturnType,
+  ContainerMiddleware,
+  ContainerMiddlewareArgs,
+  ContainerMiddlewareNext,
 } from './interfaces/container.interface';
+
+export { ResolveRecordManager } from './classes/resolve-record-manager';
+export { UsingResolveContext } from './classes/usings/using-resolve-context';
+export { UsingResolveRecordManager } from './classes/usings/using-resolve-record-manager';
+export { getServiceIdentifierName } from './shared/helpers/service-identifier.helper';
+export { using, UsingCallback } from './shared/using';
 
 /**
  * # 代表 container
