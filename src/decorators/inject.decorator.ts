@@ -7,10 +7,13 @@
 import { ServiceIdentifier } from '../types/service-identifier.type';
 import { tagged } from './tagged.decorator';
 
-export type InjectOptions<T> = Omit<
-  HuskyDi.InjectionMetadata<T>,
-  'serviceIdentifier'
->;
+/**
+ * WARN: 
+ * type  InjectOptions<T> = Omit<HuskyDi.InjectionMetadata<T>, 'serviceIdentifier'>
+ * builded code: Pick<HuskyDi.InjectionMetadata<T>, .....>
+ */
+export interface InjectOptions<T>
+  extends Omit<HuskyDi.InjectionMetadata<T>, 'serviceIdentifier'> {}
 
 export const inject = <T>(
   serviceIdentifier: ServiceIdentifier<T>,
