@@ -135,7 +135,7 @@ export class Container implements IContainer {
     serviceIdentifier: ServiceIdentifier<T>,
     options?: Options
   ): ResolveReturnType<T, Options> {
-    const container = options?.container || this;
+    const container = this;
 
     return using(
       new UsingResolveContext(container),

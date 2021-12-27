@@ -15,7 +15,6 @@ declare global {
       ref?: boolean;
       optional?: boolean;
       defaultValue?: T | T[];
-      container?: IContainer;
     }
 
     interface InjectionOptions<T> {}
