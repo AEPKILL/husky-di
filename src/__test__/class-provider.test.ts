@@ -8,7 +8,7 @@ import {
   ClassProvider,
   CompilerMetadata,
   createContainer,
-  Inject,
+  inject,
   LifecycleEnum,
   Ref,
   ServiceIdentifierManager,
@@ -26,7 +26,7 @@ describe('class provider test', () => {
     }
 
     class C {
-      constructor(@Inject(B) readonly b: B, readonly a: A) {}
+      constructor(@inject(B) readonly b: B, readonly a: A) {}
     }
 
     const container = createContainer('Container1');
@@ -48,7 +48,7 @@ describe('class provider test', () => {
     class A {}
     class B {}
     class C {
-      constructor(@Inject(IA) readonly a: A, @Inject(IB) readonly b: B) {}
+      constructor(@inject(IA) readonly a: A, @inject(IB) readonly b: B) {}
     }
 
     const container = createContainer('Container2', container => {
@@ -73,10 +73,10 @@ describe('class provider test', () => {
     const IB = serviceIdentifierManager.createServiceIdentifier<B>('IB');
 
     class A {
-      constructor(@Inject(IB, { ref: true }) readonly b: Ref<B>) {}
+      constructor(@inject(IB, { ref: true }) readonly b: Ref<B>) {}
     }
     class B {
-      constructor(@Inject(IA) readonly a: A) {}
+      constructor(@inject(IA) readonly a: A) {}
     }
 
     const container = createContainer('Container3', container => {
@@ -109,18 +109,18 @@ describe('class provider test', () => {
     const ID = serviceIdentifierManager.createServiceIdentifier<D>('ID');
 
     class A {
-      constructor(@Inject(IB, { ref: true }) readonly b: Ref<B>) {}
+      constructor(@inject(IB, { ref: true }) readonly b: Ref<B>) {}
     }
     class B {
-      constructor(@Inject(IC) readonly c: C) {}
+      constructor(@inject(IC) readonly c: C) {}
     }
 
     class C {
-      constructor(@Inject(ID) readonly d: D) {}
+      constructor(@inject(ID) readonly d: D) {}
     }
 
     class D {
-      constructor(@Inject(IB) readonly b: B) {}
+      constructor(@inject(IB) readonly b: B) {}
     }
 
     const container = createContainer('Container4', container => {

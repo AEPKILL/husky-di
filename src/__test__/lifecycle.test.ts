@@ -8,7 +8,7 @@ import {
   ClassProvider,
   createContainer,
   FactoryProvider,
-  Inject,
+  inject,
   LifecycleEnum,
   Ref,
   ServiceIdentifierManager,
@@ -20,10 +20,10 @@ describe('lifecycle test', () => {
 
   class Test {
     constructor(
-      @Inject('factory') readonly a: number,
-      @Inject('factory') readonly b: number,
-      @Inject('factory') readonly c: number,
-      @Inject('factory', { ref: true }) readonly d: Ref<number>
+      @inject('factory') readonly a: number,
+      @inject('factory') readonly b: number,
+      @inject('factory') readonly c: number,
+      @inject('factory', { ref: true }) readonly d: Ref<number>
     ) {}
   }
 
@@ -143,15 +143,15 @@ describe('lifecycle test', () => {
   test('resolutionScoped ref for class', () => {
     class A {
       constructor(
-        @Inject('b') readonly b: B,
-        @Inject('c', { ref: true }) readonly c: Ref<C>
+        @inject('b') readonly b: B,
+        @inject('c', { ref: true }) readonly c: Ref<C>
       ) {}
     }
 
     class B {}
 
     class C {
-      constructor(@Inject('b') readonly b: B) {}
+      constructor(@inject('b') readonly b: B) {}
     }
     const container = createContainer('ResolutionScopedRefForClass');
     container.register(
@@ -187,11 +187,11 @@ describe('lifecycle test', () => {
 
     class A {
       constructor(
-        @Inject(IB) readonly b: B,
-        @Inject(IB, { ref: true }) readonly b2: Ref<B>,
+        @inject(IB) readonly b: B,
+        @inject(IB, { ref: true }) readonly b2: Ref<B>,
 
-        @Inject(IB, { multiple: true }) readonly b3: B[],
-        @Inject(IB) readonly b4: B
+        @inject(IB, { multiple: true }) readonly b3: B[],
+        @inject(IB) readonly b4: B
       ) {}
     }
     class B {
@@ -233,8 +233,8 @@ describe('lifecycle test', () => {
 
     class A {
       constructor(
-        @Inject(IB, { multiple: true }) readonly b: B[],
-        @Inject(IB) readonly b2: B
+        @inject(IB, { multiple: true }) readonly b: B[],
+        @inject(IB) readonly b2: B
       ) {}
     }
     class B {
