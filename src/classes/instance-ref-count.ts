@@ -44,8 +44,11 @@ export class InstanceRefCount<T> {
   }
 
   getInstance(instance?: T): T {
+    const finallyInstance = this.getInstanceWithoutRef(instance);
+
     this._refsCount++;
-    return this.getInstanceWithoutRef(instance);
+
+    return finallyInstance;
   }
 
   reset(): void {
