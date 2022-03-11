@@ -47,7 +47,6 @@
   "devDependencies": {
     "@size-limit/preset-small-lib": "^5.0.5",
     "husky": "^7.0.2",
-    "rollup-plugin-copy": "^3.4.0",
     "size-limit": "^5.0.5",
     "tsdx": "^0.14.1",
     "tslib": "^2.3.1",
