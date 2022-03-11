@@ -6,7 +6,7 @@
 
 import {
   ClassProvider,
-  CompilerMetadata,
+  injectable,
   createContainer,
   inject,
   LifecycleEnum,
@@ -17,14 +17,16 @@ import { generateStringsIndent } from '../shared/helpers/string.helper';
 
 describe('class provider test', () => {
   test('constructor can be inject', () => {
+    @injectable
     class A {}
 
     // 必须添加装饰器才可以触发元数据
-    @CompilerMetadata
+    @injectable
     class B {
       constructor(readonly a: A) {}
     }
 
+    @injectable
     class C {
       constructor(@inject(B) readonly b: B, readonly a: A) {}
     }
@@ -45,8 +47,11 @@ describe('class provider test', () => {
     const IB = serviceIdentifierManager.createServiceIdentifier<B>('IB');
     const IC = serviceIdentifierManager.createServiceIdentifier<C>('IC');
 
+    @injectable
     class A {}
+    @injectable
     class B {}
+    @injectable
     class C {
       constructor(@inject(IA) readonly a: A, @inject(IB) readonly b: B) {}
     }
@@ -72,9 +77,11 @@ describe('class provider test', () => {
     const IA = serviceIdentifierManager.createServiceIdentifier<A>('IA');
     const IB = serviceIdentifierManager.createServiceIdentifier<B>('IB');
 
+    @injectable
     class A {
       constructor(@inject(IB, { ref: true }) readonly b: Ref<B>) {}
     }
+    @injectable
     class B {
       constructor(@inject(IA) readonly a: A) {}
     }
@@ -108,17 +115,19 @@ describe('class provider test', () => {
     const IC = serviceIdentifierManager.createServiceIdentifier<C>('IC');
     const ID = serviceIdentifierManager.createServiceIdentifier<D>('ID');
 
+    @injectable
     class A {
       constructor(@inject(IB, { ref: true }) readonly b: Ref<B>) {}
     }
+    @injectable
     class B {
       constructor(@inject(IC) readonly c: C) {}
     }
-
+    @injectable
     class C {
       constructor(@inject(ID) readonly d: D) {}
     }
-
+    @injectable
     class D {
       constructor(@inject(IB) readonly b: B) {}
     }

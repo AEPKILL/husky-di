@@ -11,6 +11,7 @@ import {
   inject,
   LifecycleEnum,
   Ref,
+  injectable,
   ServiceIdentifierManager,
 } from '..';
 
@@ -18,6 +19,7 @@ describe('lifecycle test', () => {
   const serviceIdentifierManager = new ServiceIdentifierManager();
   const ITest = serviceIdentifierManager.createServiceIdentifier<Test>('test');
 
+  @injectable
   class Test {
     constructor(
       @inject('factory') readonly a: number,
@@ -141,6 +143,7 @@ describe('lifecycle test', () => {
   });
 
   test('resolutionScoped ref for class', () => {
+    @injectable
     class A {
       constructor(
         @inject('b') readonly b: B,
@@ -148,8 +151,9 @@ describe('lifecycle test', () => {
       ) {}
     }
 
+    @injectable
     class B {}
-
+    @injectable
     class C {
       constructor(@inject('b') readonly b: B) {}
     }
@@ -185,6 +189,7 @@ describe('lifecycle test', () => {
     const IA = serviceIdentifierManager.createServiceIdentifier<A>('IA');
     const IB = serviceIdentifierManager.createServiceIdentifier<B>('IB');
 
+    @injectable
     class A {
       constructor(
         @inject(IB) readonly b: B,
@@ -194,6 +199,7 @@ describe('lifecycle test', () => {
         @inject(IB) readonly b4: B
       ) {}
     }
+    @injectable
     class B {
       constructor() {}
     }
@@ -231,12 +237,14 @@ describe('lifecycle test', () => {
     const IA = serviceIdentifierManager.createServiceIdentifier<A>('IA333333');
     const IB = serviceIdentifierManager.createServiceIdentifier<B>('IB333333');
 
+    @injectable
     class A {
       constructor(
         @inject(IB, { multiple: true }) readonly b: B[],
         @inject(IB) readonly b2: B
       ) {}
     }
+    @injectable
     class B {
       constructor() {}
     }

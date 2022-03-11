@@ -10,7 +10,8 @@ import { UsingResolveContext } from '../classes/usings/using-resolve-context';
 import { UsingResolveRecordManager } from '../classes/usings/using-resolve-record-manager';
 import { IContainer } from '../interfaces/container.interface';
 import { ProviderOptions } from '../interfaces/provider.interface';
-import { getParametersMetadata } from '../shared/helpers/reflection.helper';
+import { getServiceIdentifierName } from '../shared/helpers/service-identifier.helper';
+import { targetInjectionMetadata } from '../shared/instances';
 import { using } from '../shared/using';
 import { Constructor } from '../types/constructor.type';
 import { ResolveContext } from '../types/resolve-context.type';
@@ -45,9 +46,17 @@ export class ClassProvider<T> extends ProviderBase<T> {
       new UsingResolveContext(container, resolveContext),
       new UsingResolveRecordManager()
     )((_resolveContext, resolveRecordManager) => {
-      const length = this._constructor.length;
+      const parametersMetadata = targetInjectionMetadata.get(this._constructor);
 
-      if (length === 0) {
+      if (!parametersMetadata) {
+        throw new Error(
+          `constructor "${getServiceIdentifierName(
+            this._constructor
+          )}" can't instantiate, please use '@injectable' decorate it`
+        );
+      }
+
+      if (parametersMetadata.length === 0) {
         try {
           return new this._constructor();
         } catch (error) {
@@ -61,8 +70,7 @@ export class ClassProvider<T> extends ProviderBase<T> {
           );
         }
       } else {
-        const parametersMetadata = getParametersMetadata(this._constructor);
-
+        const length = this._constructor.length;
         if (parametersMetadata.length !== length) {
           throw resolveRecordManager.getResolveException(
             `${this._constructor.name} parameters metadata mismatch`
