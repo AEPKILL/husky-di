@@ -52,7 +52,7 @@ export class ClassProvider<T> extends ProviderBase<T> {
         throw new Error(
           `constructor "${getServiceIdentifierName(
             this._constructor
-          )}" can't instantiate, please use '@injectable' decorate it`
+          )}" can't instantiate, please use "@injectable" decorate it`
         );
       }
 

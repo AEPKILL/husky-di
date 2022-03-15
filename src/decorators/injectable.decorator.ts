@@ -12,7 +12,7 @@ import { Constructor } from '../types/constructor.type';
 export const injectable = ((target: Constructor<any>) => {
   if (targetInjectionMetadata.has(target)) {
     throw new Error(
-      `can't use  '@injectable' decorator on constructor "${getServiceIdentifierName(
+      `can't use  "@injectable" decorator on constructor "${getServiceIdentifierName(
         target
       )}" twice`
     );

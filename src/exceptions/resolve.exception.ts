@@ -14,9 +14,8 @@ export class ResolveException extends Error {
    * new A() instanceof A // false
    * ```
    */
-  private readonly _isResolveException = true;
 
-  static isResolveException(error: any) {
-    return error && (error as ResolveException)._isResolveException;
+  static isResolveException(error: any): boolean {
+    return Boolean(error && error instanceof ResolveException);
   }
 }
