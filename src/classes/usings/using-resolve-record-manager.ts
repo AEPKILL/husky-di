@@ -31,7 +31,7 @@ export class UsingResolveRecordManager extends UsingBase<ResolveRecordManager>
       return this._current!;
     }
 
-    this._isRootRequest = resolveRecordManagerRef.isRoot;
+    this._isRootRequest = resolveRecordManagerRef.isNoRefs;
     this._current = resolveRecordManagerRef.getInstance(
       this._resolveRecordManager
     );
@@ -50,7 +50,7 @@ export class UsingResolveRecordManager extends UsingBase<ResolveRecordManager>
       }
 
       const isResolveManagerDirty =
-        this._isRootRequest && !resolveRecordManagerRef.isRoot;
+        this._isRootRequest && !resolveRecordManagerRef.isNoRefs;
 
       if (isResolveManagerDirty) {
         const rootRequestContainer = this._current!.getRootRequestContainer();

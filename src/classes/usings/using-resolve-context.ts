@@ -38,7 +38,7 @@ export class UsingResolveContext extends UsingBase<ResolveContext>
     }
 
     this._resolveContextRef = getResolveContextRef(this._container);
-    this._isContainerRootRequest = this._resolveContextRef.isRoot;
+    this._isContainerRootRequest = this._resolveContextRef.isNoRefs;
     this._current = this._resolveContextRef.getInstance(this._resolveContext);
     this._resolved = true;
 
@@ -50,7 +50,7 @@ export class UsingResolveContext extends UsingBase<ResolveContext>
       this._resolveContextRef!.releaseInstance();
 
       const isResolveContextRefDirty =
-        this._isContainerRootRequest && !this._resolveContextRef!.isRoot;
+        this._isContainerRootRequest && !this._resolveContextRef!.isNoRefs;
 
       if (isResolveContextRefDirty) {
         this._resolveContextRef!.reset();
