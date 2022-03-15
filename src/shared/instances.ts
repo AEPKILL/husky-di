@@ -6,10 +6,19 @@
 
 import { InstanceRefCount } from '../classes/instance-ref-count';
 import { ResolveRecordManager } from '../classes/resolve-record-manager';
-import { TargetInjectionMetadata } from '../classes/target-injection-metadata';
+import { Constructor } from '../types/constructor.type';
 
 export const resolveRecordManagerRef = new InstanceRefCount(
   () => new ResolveRecordManager()
 );
 
-export const targetInjectionMetadata = new TargetInjectionMetadata();
+export const targetInjectionMetadata = new Map() as {
+  has<T>(target: Constructor<T>): boolean;
+  get<T>(
+    target: Constructor<T>
+  ): Array<HuskyDi.InjectionMetadata<T>> | undefined;
+  set<T>(
+    target: Constructor<T>,
+    injectionMetadata: Array<HuskyDi.InjectionMetadata<T>>
+  ): void;
+};
