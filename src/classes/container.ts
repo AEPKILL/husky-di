@@ -24,7 +24,7 @@ import {
 } from './middleware-manager';
 import { Registry } from './registry';
 import { InstanceRefCount } from './instance-ref-count';
-import { createResolveContext } from '../factory/create-resolve-context.factory';
+import { createResolveContext } from '../factories/create-resolve-context.factory';
 import { using } from '../shared/using';
 import { UsingResolveContext } from './usings/using-resolve-context';
 import { UsingResolveRecordManager } from './usings/using-resolve-record-manager';
