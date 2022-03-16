@@ -27,8 +27,8 @@ export { ServiceIdentifierManager } from './classes/service-identifier-manager';
 
 export { Ref } from './types/ref.type';
 
-export { createContainer } from './factory/create-container.factory';
-export { createServiceIdentifier } from './factory/create-service-identifier.factory';
+export { createContainer } from './factories/create-container.factory';
+export { createServiceIdentifier } from './factories/create-service-identifier.factory';
 export { ServiceIdentifier } from './types/service-identifier.type';
 
 export {

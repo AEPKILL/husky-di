@@ -25,8 +25,10 @@ export const dynamicMiddleware: ContainerMiddlewareNext = (<T>(
     return next(middlewareArgs);
   }
 
-  // dynamic also keep resolve record
+  // 动态请求不保留 ResolveContext，但是保留 ResolveRecord
   let resolveRecordManagerSnapshoot: ResolveRecordManager;
+  let wasResolved = false;
+
   using(new UsingResolveRecordManager())(it => {
     resolveRecordManagerSnapshoot = it.clone();
     resolveRecordManagerSnapshoot.pushResolveRecord({
@@ -35,8 +37,6 @@ export const dynamicMiddleware: ContainerMiddlewareNext = (<T>(
       )}" is a dynamic value, wait for use`,
     });
   });
-
-  let wasResolved = false;
 
   return {
     get resolved() {

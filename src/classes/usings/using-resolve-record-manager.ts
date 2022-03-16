@@ -45,6 +45,7 @@ export class UsingResolveRecordManager extends UsingBase<ResolveRecordManager>
     if (this._resolved && !this._disposed) {
       resolveRecordManagerRef.releaseInstance();
 
+      //  如果是非 RootRequest 结束后要丢弃掉添加的解析记录
       if (!this._isRootRequest) {
         resolveRecordManagerRef.$internal_setInstance(this._backup!);
       }
