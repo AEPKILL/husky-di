@@ -26,7 +26,6 @@ export function isResolveIdentifierRecord<T>(
  * @param resolveIdentifierRecord
  * @returns
  * @example
- *
  * IUser[#A, Ref, Multiple]
  */
 export function getResolveIdentifierRecordName<T>(
@@ -39,19 +38,22 @@ export function getResolveIdentifierRecordName<T>(
 
   names.push('#' + resolveIdentifierRecord.container.name);
 
-  if (resolveIdentifierRecord.resolveOptions?.ref) {
+  const { ref, optional, multiple, defaultValue } =
+    resolveIdentifierRecord.resolveOptions || {};
+
+  if (ref) {
     names.push('Ref');
   }
 
-  if (resolveIdentifierRecord.resolveOptions?.optional) {
+  if (optional) {
     names.push('Optional');
   }
 
-  if (resolveIdentifierRecord.resolveOptions?.multiple) {
+  if (multiple) {
     names.push('Multiple');
   }
 
-  if (resolveIdentifierRecord.resolveOptions?.defaultValue) {
+  if (defaultValue) {
     names.push('DefaultValue');
   }
 
@@ -62,14 +64,19 @@ export function isEqualResolveRecord(
   aResolveRecord: IResolveRecord<any>,
   bResolveRecord: IResolveRecord<any>
 ): boolean {
-  if (
+  const bothIsResolveIdentifierRecord =
     isResolveIdentifierRecord(aResolveRecord) &&
-    isResolveIdentifierRecord(bResolveRecord)
-  ) {
+    isResolveIdentifierRecord(bResolveRecord);
+
+  // 只有两个 `ResolveIdentifierRecord` 比较才有意义
+  if (bothIsResolveIdentifierRecord) {
     const containerIsEqual =
       aResolveRecord.container === bResolveRecord.container;
     const serviceIdentifierIsEqual =
       aResolveRecord.serviceIdentifier === bResolveRecord.serviceIdentifier;
+
+    // 这个方法是拿来判断循环引用的，当加了 ref 或 dynamic 标识时是不会产生循环引用的
+    // 所以当这两个标识有一个为 true 时就认为两个请求记录不相等
     const isNotRef =
       !aResolveRecord.resolveOptions?.ref &&
       !bResolveRecord.resolveOptions?.ref;
@@ -77,14 +84,11 @@ export function isEqualResolveRecord(
       !aResolveRecord.resolveOptions?.dynamic &&
       !bResolveRecord.resolveOptions?.dynamic;
 
-    return [
-      containerIsEqual,
-      serviceIdentifierIsEqual,
-      isNotRef,
-      isNotDynamic,
-    ].every(it => it === true);
+    // TODO 暂时不考虑 optional 的情况
+    return (
+      containerIsEqual && serviceIdentifierIsEqual && isNotRef && isNotDynamic
+    );
   }
 
   return false;
 }
-  

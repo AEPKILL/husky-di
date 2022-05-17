@@ -12,7 +12,7 @@ export class InstanceRefCount<T> {
   private _resolved: boolean;
   private _factory: CreateInstanceFactory<T>;
 
-  get isRoot(): boolean {
+  get isNoRefs(): boolean {
     return this._refsCount === 0;
   }
 

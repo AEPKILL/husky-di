@@ -141,14 +141,14 @@ export class Container implements IContainer {
       new UsingResolveContext(container),
       new UsingResolveRecordManager()
     )((resolveContext, resolveRecordManager) => {
-      // append resolve record
+      // 添加一条引用记录
       resolveRecordManager.pushResolveRecord({
         container,
         serviceIdentifier,
         resolveOptions: options,
       });
 
-      // check options
+      // 检查一下 options
       const { ref, dynamic } = options || {};
       if (ref && dynamic) {
         throw resolveRecordManager.getResolveException(
@@ -156,7 +156,8 @@ export class Container implements IContainer {
         );
       }
 
-      // check is private
+      // 检查一下是否是私有的 serviceIdentifier
+      // 私有的 serviceIdentifier 仅允许容器内引用
       if (this.isRegistered(serviceIdentifier)) {
         const provider = this.getProvider(serviceIdentifier)!;
         if (provider.isPrivate) {
@@ -171,7 +172,7 @@ export class Container implements IContainer {
         }
       }
 
-      // check cycle reference
+      // 检查是否有循环依赖
       const cycleResolveIdentifierRecord = resolveRecordManager.getCycleResolveIdentifierRecord();
       if (cycleResolveIdentifierRecord) {
         throw resolveRecordManager.getResolveException(
@@ -182,6 +183,7 @@ export class Container implements IContainer {
         );
       }
 
+      // 交给 Middleware 去解析
       return this._middlewareManager.invoke!({
         resolveContext,
         container,
