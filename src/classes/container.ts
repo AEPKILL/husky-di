@@ -167,11 +167,7 @@ export class Container implements IInternalContainer {
         const key = getResolveOptionKey(options || {});
         instances = resolutionCache.get(key);
         if (instances && instances.length) {
-          if (multiple) {
-            return instances as ResolveReturnType<T, Options>;
-          } else {
-            return instances[0] as ResolveReturnType<T, Options>;
-          }
+          return this.getResolveReturnValue<T, Options>(instances, options);
         }
       }
 
@@ -184,11 +180,7 @@ export class Container implements IInternalContainer {
               useClass: serviceIdentifier as Constructor<T>,
             }).resolve(this, resolveContext) as T,
           ];
-          if (multiple) {
-            return instances as ResolveReturnType<T, Options>;
-          } else {
-            return instances[0] as ResolveReturnType<T, Options>;
-          }
+          return this.getResolveReturnValue<T, Options>(instances, options);
         }
       }
 
@@ -214,7 +206,7 @@ export class Container implements IInternalContainer {
           }),
         ];
 
-        return instances as ResolveReturnType<T, Options>;
+        return this.getResolveReturnValue<T, Options>(instances, options);
       }
 
       //  handle dynamic flag
@@ -239,7 +231,7 @@ export class Container implements IInternalContainer {
           }),
         ];
 
-        return instances as ResolveReturnType<T, Options>;
+        return this.getResolveReturnValue<T, Options>(instances, options);
       }
 
       if (!isRegistered) {
@@ -260,13 +252,11 @@ export class Container implements IInternalContainer {
         instances = this.getAllProvider(serviceIdentifier).map((provider) => {
           return applyProviderResolve(provider, this, resolveContext);
         });
-
-        return instances as ResolveReturnType<T, Options>;
       } else {
         instances = [applyProviderResolve(provider!, this, resolveContext)];
-
-        return instances[0] as ResolveReturnType<T, Options>;
       }
+
+      return this.getResolveReturnValue<T, Options>(instances, options);
     } finally {
       // check is need cache resolution result
       const shouldCacheInstances =
@@ -300,6 +290,18 @@ export class Container implements IInternalContainer {
           resolveRecordManagerSnapshot
         );
       }
+    }
+  }
+
+  private getResolveReturnValue<T, Options extends ResolveOptions<T>>(
+    instances: T[] | Array<Ref<T>>,
+    options?: Options
+  ): ResolveReturnType<T, Options> {
+    const { multiple } = options || {};
+    if (multiple) {
+      return instances as ResolveReturnType<T, Options>;
+    } else {
+      return instances[0] as ResolveReturnType<T, Options>;
     }
   }
 
