@@ -4,14 +4,12 @@
  * @created 2022-03-11 16:02:58
  */
 
-import {
-  InjectionMetadataKeyConst,
-  ParamsMetadataKeyConst,
-} from "@/constants/metadata-key.const";
-import { injectionMetadataMap } from "@/shared/instances";
-import { Constructor } from "@/types/constructor.type";
-import { InjectionMetadata } from "@/types/injection-metadata.type";
-import { ServiceIdentifier } from "@/types/service-identifier.type";
+import { InjectionMetadataKeyConst, ParamsMetadataKeyConst } from '@/constants/metadata-key.const';
+import { injectionMetadataMap } from '@/shared/instances';
+
+import type { Constructor } from "@/types/constructor.type";
+import type { InjectionMetadata } from "@/types/injection-metadata.type";
+import type { ServiceIdentifier } from "@/types/service-identifier.type";
 
 /**
  * @description

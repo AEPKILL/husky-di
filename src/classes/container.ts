@@ -4,33 +4,30 @@
  * @created 2023-05-25 14:45:22
  */
 
-import { LifecycleEnum } from "@/enums/lifecycle.enum";
-import {
+import { LifecycleEnum } from '@/enums/lifecycle.enum';
+import { ClassProvider } from '@/providers/class.provider';
+import { resolveRecordManagerRef } from '@/shared/instances';
+import { getResolveOptionKey } from '@/utils/container.utils';
+import { applyProviderResolve, resetProvider, setProviderRegistered } from '@/utils/provider.utils';
+import { getServiceIdentifierName } from '@/utils/service-identifier.utils';
+
+import { InstanceDynamicRef } from './instance-dynamic-ref';
+import { InstanceRef } from './instance-ref';
+import { InstanceRefCount } from './instance-ref-count';
+import { Registry } from './registry';
+
+import type {
   IContainer,
   ResolveOptions,
   ResolveReturnType,
 } from "@/interfaces/container.interface";
-import { IDisposable } from "@/interfaces/disposable.interface";
-import { IInternalContainer } from "@/interfaces/internal-container.interface";
-import { IProvider } from "@/interfaces/provider.interface";
-import { ClassProvider } from "@/providers/class.provider";
-import { resolveRecordManagerRef } from "@/shared/instances";
-import { Constructor } from "@/types/constructor.type";
-import { Ref } from "@/types/ref.type";
-import { ResolveContext } from "@/types/resolve-context.type";
-import { ServiceIdentifier } from "@/types/service-identifier.type";
-import { getResolveOptionKey } from "@/utils/container.utils";
-import {
-  applyProviderResolve,
-  resetProvider,
-  setProviderRegistered,
-} from "@/utils/provider.utils";
-import { getServiceIdentifierName } from "@/utils/service-identifier.utils";
-
-import { InstanceDynamicRef } from "./instance-dynamic-ref";
-import { InstanceRef } from "./instance-ref";
-import { InstanceRefCount } from "./instance-ref-count";
-import { Registry } from "./registry";
+import type{ IDisposable } from "@/interfaces/disposable.interface";
+import type{ IInternalContainer } from "@/interfaces/internal-container.interface";
+import type{ IProvider } from "@/interfaces/provider.interface";
+import type{ Constructor } from "@/types/constructor.type";
+import type{ Ref } from "@/types/ref.type";
+import type{ ResolveContext } from "@/types/resolve-context.type";
+import type{ ServiceIdentifier } from "@/types/service-identifier.type";
 
 export class Container implements IInternalContainer {
   readonly name: string;

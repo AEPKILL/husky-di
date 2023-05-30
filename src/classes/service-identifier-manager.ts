@@ -4,8 +4,9 @@
  * @created 2021-10-11 17:25:47
  */
 
-import { ServiceIdentifier } from "@/types/service-identifier.type";
-import { getServiceIdentifierName } from "@/utils/service-identifier.utils";
+import { getServiceIdentifierName } from '@/utils/service-identifier.utils';
+
+import type { ServiceIdentifier } from "@/types/service-identifier.type";
 
 export class ServiceIdentifierManager {
   private _serviceIdentifiers: Set<ServiceIdentifier<any>>;

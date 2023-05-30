@@ -5,11 +5,15 @@
  */
 
 import { ResolveException } from "@/exceptions/resolve.exception";
-import { IContainer, ResolveOptions } from "@/interfaces/container.interface";
-import { IDerivation } from "@/interfaces/derivation.interface";
-import { ServiceIdentifier } from "@/types/service-identifier.type";
 import { formatStringsWithIndent } from "@/utils/format.utils";
 import { getServiceIdentifierName } from "@/utils/service-identifier.utils";
+
+import type {
+  IContainer,
+  ResolveOptions,
+} from "@/interfaces/container.interface";
+import type { IDerivation } from "@/interfaces/derivation.interface";
+import type { ServiceIdentifier } from "@/types/service-identifier.type";
 
 export type ResolveMessageRecord = {
   message: string;

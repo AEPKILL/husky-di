@@ -4,11 +4,10 @@
  * @created 2021-10-02 09:21:27
  */
 
-import { Ref } from '@/types/ref.type';
-import { ServiceIdentifier } from '@/types/service-identifier.type';
-
-import { IDisposable } from './disposable.interface';
-import { IProvider } from './provider.interface';
+import type { Ref } from '@/types/ref.type';
+import type { ServiceIdentifier } from '@/types/service-identifier.type';
+import type { IDisposable } from './disposable.interface';
+import type { IProvider } from './provider.interface';
 
 export type ResolveOptions<T> = {
   dynamic?: boolean;

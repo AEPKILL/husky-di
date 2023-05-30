@@ -4,6 +4,6 @@
  * @created 2021-10-02 09:17:41
  */
 
-import { Constructor } from "./constructor.type";
+import type { Constructor } from "./constructor.type";
 
 export type ServiceIdentifier<T> = Constructor<T> | string | symbol;

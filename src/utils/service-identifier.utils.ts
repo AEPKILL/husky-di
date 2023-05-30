@@ -4,7 +4,7 @@
  * @created 2021-10-08 14:35:38
  */
 
-import { ServiceIdentifier } from "@/types/service-identifier.type";
+import type { ServiceIdentifier } from "@/types/service-identifier.type";
 
 declare global {
   interface Function {

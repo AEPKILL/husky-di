@@ -4,11 +4,12 @@
  * @created 2023-05-25 13:42:38
  */
 
-import { LifecycleEnum } from "@/enums/lifecycle.enum";
-import { IContainer } from "@/interfaces/container.interface";
-import { IProvider } from "@/interfaces/provider.interface";
-import { ResolveContext } from "@/types/resolve-context.type";
-import { Writable } from "@/types/utils.type";
+import { LifecycleEnum } from '@/enums/lifecycle.enum';
+
+import type { IContainer } from "@/interfaces/container.interface";
+import type { IProvider } from "@/interfaces/provider.interface";
+import type { ResolveContext } from "@/types/resolve-context.type";
+import  type{ Writable } from "@/types/utils.type";
 
 export function setProviderInstance<T>(provider: IProvider<T>, instance: T) {
   (provider as Writable<IProvider<T>>).instance = instance;

@@ -4,7 +4,7 @@
  * @created 2021-10-02 09:33:39
  */
 
-import { ServiceIdentifier } from "@/types/service-identifier.type";
+import type { ServiceIdentifier } from "@/types/service-identifier.type";
 
 export class Registry<T> {
   protected _registryMap = new Map<ServiceIdentifier<any>, T[]>();

@@ -5,9 +5,9 @@
  */
 
 import { InstanceRefCount } from "@/classes/instance-ref-count";
-import { IContainer, ResolveOptions } from "@/interfaces/container.interface";
-import { IInternalContainer } from "@/interfaces/internal-container.interface";
-import { ResolveContext } from "@/types/resolve-context.type";
+import type { IContainer, ResolveOptions } from "@/interfaces/container.interface";
+import type { IInternalContainer } from "@/interfaces/internal-container.interface";
+import type { ResolveContext } from "@/types/resolve-context.type";
 
 export function getResolveContextRefs(
   container: IContainer

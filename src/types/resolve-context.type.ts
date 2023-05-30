@@ -4,7 +4,7 @@
  * @created 2021-10-02 09:22:05
  */
 
-import { ServiceIdentifier } from "./service-identifier.type";
+import type { ServiceIdentifier } from "./service-identifier.type";
 
 /**
  * ResolveContext

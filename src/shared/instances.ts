@@ -4,10 +4,11 @@
  * @created 2023-05-24 11:06:40
  */
 
-import { InstanceRefCount } from "@/classes/instance-ref-count";
-import { ResolveRecordManager } from "@/classes/resolve-record-manager";
-import { Constructor } from "@/types/constructor.type";
-import { InjectionMetadata } from "@/types/injection-metadata.type";
+import { InstanceRefCount } from '@/classes/instance-ref-count';
+import { ResolveRecordManager } from '@/classes/resolve-record-manager';
+
+import type { Constructor } from "@/types/constructor.type";
+import type { InjectionMetadata } from "@/types/injection-metadata.type";
 
 /**
  * this map is used to store the injection metadata of the class constructor params

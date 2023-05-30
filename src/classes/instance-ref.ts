@@ -4,7 +4,7 @@
  * @created 2023-05-26 11:23:17
  */
 
-import { Ref } from "@/types/ref.type";
+import type { Ref } from "@/types/ref.type";
 
 export class InstanceRef<T> implements Ref<T> {
   private _current: T | undefined;

@@ -4,7 +4,7 @@
  * @created 2023-05-24 10:47:34
  */
 
-import { ServiceIdentifier } from "./service-identifier.type";
+import type { ServiceIdentifier } from "./service-identifier.type";
 
 export type InjectionMetadata<T> = {
   serviceIdentifier: ServiceIdentifier<T>;
