@@ -32,7 +32,7 @@ export class ClassProvider<T> extends ProviderBase<T> {
 
     if (!resolveRecordManager) {
       throw new Error(
-        "can't invoke resolve method outside of container resolve."
+        "can't invoke resolve method outside of container resolve"
       );
     }
 
@@ -41,13 +41,13 @@ export class ClassProvider<T> extends ProviderBase<T> {
       throw resolveRecordManager.getResolveException(
         `service identifier "${getServiceIdentifierName(
           this._classConstructor
-        )}" can't be resolved, please use '@injectable' decorate it.`
+        )}" can't be resolved, please use '@injectable' decorate it`
       );
     }
 
     const parameter = parametersMetadata.map((it, index) => {
       resolveRecordManager.pushResolveRecord({
-        message: `resolve parameter #${index} of constructor ${this._classConstructor.name}.`,
+        message: `resolve parameter #${index} of constructor ${this._classConstructor.name}`,
       });
       return container.resolve(it.serviceIdentifier, it);
     });
@@ -58,7 +58,7 @@ export class ClassProvider<T> extends ProviderBase<T> {
       throw resolveRecordManager.getResolveException(
         `try create "${this._classConstructor.name}" instance fail: ${
           (error as any)?.message || "unknown"
-        }.`,
+        }`,
         {
           exception: error as Error,
         }

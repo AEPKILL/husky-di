@@ -48,7 +48,7 @@ export class Container implements IInternalContainer {
     provider: IProvider<T>
   ): IDisposable {
     if (provider.registered) {
-      throw new Error(`provider was already registered.`);
+      throw new Error(`provider was already registered`);
     }
 
     const providers = this._registry.getAll(serviceIdentifier);
@@ -58,7 +58,7 @@ export class Container implements IInternalContainer {
         throw new Error(
           `all providers for the service identifier "${getServiceIdentifierName(
             serviceIdentifier
-          )}" must have a consistent lifecycle.`
+          )}" must have a consistent lifecycle`
         );
       }
       // must be same accessibility
@@ -66,7 +66,7 @@ export class Container implements IInternalContainer {
         throw new Error(
           `all providers for the service identifier "${getServiceIdentifierName(
             serviceIdentifier
-          )}" must have a consistent accessibility.`
+          )}" must have a consistent accessibility`
         );
       }
     }
@@ -129,7 +129,7 @@ export class Container implements IInternalContainer {
       // check options
       if (ref && dynamic) {
         throw resolveRecordManager.getResolveException(
-          `ref and dynamic flag can't be true at the same time.`
+          `ref and dynamic flag can't be true at the same time`
         );
       }
 
@@ -142,7 +142,7 @@ export class Container implements IInternalContainer {
             throw resolveRecordManager.getResolveException(
               `service identifier "${getServiceIdentifierName(
                 serviceIdentifier
-              )}" is private, only can be resolved in container "${this.name}".`
+              )}" is private, only can be resolved in container "${this.name}"`
             );
           }
         }
@@ -153,7 +153,7 @@ export class Container implements IInternalContainer {
         resolveRecordManager.getCycleResolveIdentifierRecord();
       if (cycleResolveIdentifierRecord) {
         throw resolveRecordManager.getResolveException(
-          `circular dependency detected, try use ref or dynamic flag.`,
+          `circular dependency detected, try use ref or dynamic flag`,
           {
             cycleResolveIdentifierRecord,
           }
@@ -180,7 +180,7 @@ export class Container implements IInternalContainer {
         resolveRecordManagerSnapshot.pushResolveRecord({
           message: `"${getServiceIdentifierName(
             serviceIdentifier
-          )}" is a ref value, wait for use.`,
+          )}" is a ref value, wait for use`,
         });
 
         return new InstanceRef(() => {
@@ -201,7 +201,7 @@ export class Container implements IInternalContainer {
         resolveRecordManagerSnapshot.pushResolveRecord({
           message: `"${getServiceIdentifierName(
             serviceIdentifier
-          )}" is a dynamic value, wait for use.`,
+          )}" is a dynamic value, wait for use`,
         });
 
         return new InstanceDynamicRef(() => {
@@ -226,7 +226,7 @@ export class Container implements IInternalContainer {
         throw resolveRecordManager.getResolveException(
           `attempted to resolve unregistered dependency service identifier: "${getServiceIdentifierName(
             serviceIdentifier
-          )}".`
+          )}"`
         );
       }
 
@@ -248,14 +248,14 @@ export class Container implements IInternalContainer {
       if (isRootResolveContext) {
         if (!this.resolveContextRefs.isNoRefs) {
           this.resolveContextRefs.reset();
-          console.warn(`resolve context refs is not empty(#${this.name}).`);
+          console.warn(`resolve context refs is not empty(#${this.name})`);
         }
       }
 
       if (isRootResolveRecordManager) {
         if (!resolveRecordManagerRef.isNoRefs) {
           resolveRecordManagerRef.reset();
-          console.warn(`resolve record manager refs is not empty.`);
+          console.warn(`resolve record manager refs is not empty`);
         }
       } else {
         resolveRecordManagerRef.$internal_setInstance(

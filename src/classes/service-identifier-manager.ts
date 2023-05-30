@@ -20,7 +20,7 @@ export class ServiceIdentifierManager {
       throw new Error(
         `service identifier: "${getServiceIdentifierName(
           id
-        )}" is already exists.`
+        )}" is already exists`
       );
     }
 

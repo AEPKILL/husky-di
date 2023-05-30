@@ -1,6 +1,7 @@
 import { describe, test, expect } from "@jest/globals";
 import {
   ClassProvider,
+  FactoryProvider,
   LifecycleEnum,
   ValueProvider,
   createContainer,
@@ -37,16 +38,20 @@ describe("container  test", () => {
           lifecycle: LifecycleEnum.resolution,
         })
       );
-    }).toThrow("all providers for the service identifier \"test\" must have a consistent lifecycle.");
+    }).toThrow(
+      'all providers for the service identifier "test" must have a consistent lifecycle'
+    );
     expect(() => {
       container.register(
         "test",
         new ValueProvider({
           useValue: "test",
-          isPrivate: true
+          isPrivate: true,
         })
       );
-    }).toThrow("all providers for the service identifier \"test\" must have a consistent accessibility.");
+    }).toThrow(
+      'all providers for the service identifier "test" must have a consistent accessibility'
+    );
   });
 
   test(`service identifier can register multiple provider`, () => {
@@ -69,7 +74,7 @@ describe("container  test", () => {
     container.register("test", testProvider);
     expect(() => {
       container.register("test", testProvider);
-    }).toThrow("provider was already registered.");
+    }).toThrow("provider was already registered");
   });
 
   test(`provider can unregister`, () => {
@@ -123,9 +128,39 @@ describe("container  test", () => {
     const container = createContainer("test");
     expect(() => container.resolve(Test)).toThrow(
       formatStringsWithIndent([
-        `resolve service identifier Test[#test].`,
-        `service identifier "Test" can't be resolved, please use '@injectable' decorate it.`,
+        `resolve service identifier Test[#test]`,
+        `service identifier "Test" can't be resolved, please use '@injectable' decorate it`,
       ])
+    );
+  });
+
+  test(`resolve cycle dependency`, () => {
+    const container = createContainer("test");
+    container.register(
+      "test1",
+      new FactoryProvider({
+        useFactory() {
+          return container.resolve("test2");
+        },
+      })
+    );
+    container.register(
+      "test2",
+      new FactoryProvider({
+        useFactory() {
+          return container.resolve("test1");
+        },
+      })
+    );
+
+    expect(() => container.resolve("test1")).toThrow(
+      "(( test1[#test] )) -> test2[#test] -> (( test1[#test] ))\n" +
+        formatStringsWithIndent([
+          "resolve service identifier test1[#test]",
+          "resolve service identifier test2[#test]",
+          "resolve service identifier test1[#test]",
+          "circular dependency detected, try use ref or dynamic flag",
+        ])
     );
   });
 });
