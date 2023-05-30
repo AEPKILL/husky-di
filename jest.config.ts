@@ -17,7 +17,7 @@ const config: Config = {
       },
     ],
   },
-  testPathIgnorePatterns: ["/node_modules/", "/commons/", "/utils/"],
+  testPathIgnorePatterns: ["/node_modules/", "/shared/", "/utils/"],
   setupFilesAfterEnv: ["<rootDir>/jest.setup.ts"],
 };
 

@@ -41,7 +41,7 @@ export class FactoryProvider<T> extends ProviderBase<T> {
 
     if (!resolveRecordManager) {
       throw new Error(
-        "don't invoke resolve method outside of container resolve."
+        "can't invoke resolve method outside of container resolve."
       );
     }
 

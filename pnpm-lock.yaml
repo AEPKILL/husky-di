@@ -1,5 +1,10 @@
 lockfileVersion: '6.0'
 
+dependencies:
+  tslib:
+    specifier: ^2.5.2
+    version: 2.5.2
+
 devDependencies:
   '@jest/globals':
     specifier: ^29.5.0
@@ -2453,6 +2458,10 @@ packages:
       semver: 7.5.1
       strip-ansi: 6.0.1
     dev: true
+
+  /tslib@2.5.2:
+    resolution: {integrity: sha512-5svOrSA2w3iGFDs1HibEVBGbDrAY82bFQ3HZ3ixB+88nsbsWQoKqDRb5UBYAUPEzbBn6dAp5gRNXglySbx1MlA==}
+    dev: false
 
   /type-detect@4.0.8:
     resolution: {integrity: sha512-0fr/mIH1dlO+x7TlcMy+bIDqKPsw/70tVyeHW787goQjhmqaZe10uwLujubK9q9Lg6Fiho1KUKDYz0Z7k7g5/g==}

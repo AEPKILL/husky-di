@@ -187,7 +187,7 @@ export class ResolveRecordManager implements IDerivation {
       if (isResolveIdentifierRecord(it)) {
         return `resolve service identifier ${getResolveIdentifierRecordName(
           it
-        )}`;
+        )}.`;
       } else {
         return it.message;
       }

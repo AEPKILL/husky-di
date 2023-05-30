@@ -56,17 +56,17 @@ export class Container implements IInternalContainer {
       // must be same lifecycle
       if (it.lifecycle !== provider.lifecycle) {
         throw new Error(
-          `service identifier ${getServiceIdentifierName(
+          `all providers for the service identifier "${getServiceIdentifierName(
             serviceIdentifier
-          )} all provider must have consistent lifecycle`
+          )}" must have a consistent lifecycle.`
         );
       }
       // must be same accessibility
       if (it.isPrivate !== provider.isPrivate) {
         throw new Error(
-          `service identifier"${getServiceIdentifierName(
+          `all providers for the service identifier "${getServiceIdentifierName(
             serviceIdentifier
-          )}" all provider must have consistent accessibility`
+          )}" must have a consistent accessibility.`
         );
       }
     }
@@ -180,7 +180,7 @@ export class Container implements IInternalContainer {
         resolveRecordManagerSnapshot.pushResolveRecord({
           message: `"${getServiceIdentifierName(
             serviceIdentifier
-          )}" is a ref value, wait for use`,
+          )}" is a ref value, wait for use.`,
         });
 
         return new InstanceRef(() => {
@@ -201,7 +201,7 @@ export class Container implements IInternalContainer {
         resolveRecordManagerSnapshot.pushResolveRecord({
           message: `"${getServiceIdentifierName(
             serviceIdentifier
-          )}" is a dynamic value, wait for use`,
+          )}" is a dynamic value, wait for use.`,
         });
 
         return new InstanceDynamicRef(() => {

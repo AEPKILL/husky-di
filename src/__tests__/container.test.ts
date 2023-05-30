@@ -1,9 +1,109 @@
 import { describe, test, expect } from "@jest/globals";
-import { createContainer, createServiceIdentifier, ValueProvider } from "..";
+import {
+  ClassProvider,
+  LifecycleEnum,
+  ValueProvider,
+  createContainer,
+  createServiceIdentifier,
+  formatStringsWithIndent,
+  injectable,
+} from "..";
 
-describe("container test", () => {
-  test("container resolve", () => {
-    const container = createContainer("Resolve");
+describe("container  test", () => {
+  test(`provider can register & can find`, () => {
+    const container = createContainer("test");
+    const testProvider = new ValueProvider({ useValue: "test" });
+    container.register("test", testProvider);
+    expect(container.isRegistered("test")).toBe(true);
+    expect(container.getAllRegisteredServiceIdentifiers()).toStrictEqual([
+      "test",
+    ]);
+  });
+
+  test(`provider must have some lifecycle & accessibility`, () => {
+    const container = createContainer("test");
+    container.register(
+      "test",
+      new ValueProvider({
+        useValue: "test",
+        lifecycle: LifecycleEnum.transient,
+      })
+    );
+    expect(() => {
+      container.register(
+        "test",
+        new ValueProvider({
+          useValue: "test",
+          lifecycle: LifecycleEnum.resolution,
+        })
+      );
+    }).toThrow("all providers for the service identifier \"test\" must have a consistent lifecycle.");
+    expect(() => {
+      container.register(
+        "test",
+        new ValueProvider({
+          useValue: "test",
+          isPrivate: true
+        })
+      );
+    }).toThrow("all providers for the service identifier \"test\" must have a consistent accessibility.");
+  });
+
+  test(`service identifier can register multiple provider`, () => {
+    const container = createContainer("test");
+    const test1Provider = new ValueProvider({ useValue: "test1" });
+    const test2Provider = new ValueProvider({ useValue: "test2" });
+
+    container.register("test", test1Provider);
+    container.register("test", test2Provider);
+
+    expect(container.getAllProvider("test")).toStrictEqual([
+      test1Provider,
+      test2Provider,
+    ]);
+  });
+
+  test(`provider can't duplicate register`, () => {
+    const container = createContainer("test");
+    const testProvider = new ValueProvider({ useValue: "test" });
+    container.register("test", testProvider);
+    expect(() => {
+      container.register("test", testProvider);
+    }).toThrow("provider was already registered.");
+  });
+
+  test(`provider can unregister`, () => {
+    @injectable
+    class Test {
+      readonly id = Test._id++;
+
+      static _id = 0;
+    }
+
+    const container = createContainer("test");
+    const testProvider = new ClassProvider({
+      useClass: Test,
+      lifecycle: LifecycleEnum.singleton,
+    });
+    const testServiceIdentifier = createServiceIdentifier<Test>("test");
+    const testRegistration = container.register(
+      testServiceIdentifier,
+      testProvider
+    );
+
+    expect(container.isRegistered(testServiceIdentifier)).toBe(true);
+    expect(container.resolve(testServiceIdentifier).id).toBe(0);
+    testRegistration.dispose();
+    expect(container.isRegistered(testServiceIdentifier)).toBe(false);
+    expect(() =>
+      container.register(testServiceIdentifier, testProvider)
+    ).not.toThrow();
+    // unregister provider wil reset provider, so will create new instance, so id will be 1
+    expect(container.resolve(testServiceIdentifier).id).toBe(1);
+  });
+
+  test("container resolve unregistered service identifier", () => {
+    const container = createContainer("test");
     expect(() => {
       container.resolve("unknown");
     }).toThrow(
@@ -11,64 +111,21 @@ describe("container test", () => {
     );
   });
 
-  test(`provider can't duplicate use`, () => {
-    const container = createContainer("OptionalResolve");
-    const provider = new ValueProvider({
-      useValue: 2333,
-    });
-
-    const aRegistration = container.register("a", provider);
-
-    expect(() => {
-      container.register("b", provider);
-    }).toThrow("provider was already registered.");
-
-    aRegistration.dispose();
-
-    expect(() => {
-      container.register("b", provider);
-      container.register("b", provider.clone());
-    }).not.toThrow();
+  test("container resolve unregistered constructor service identifier", () => {
+    @injectable
+    class Test {}
+    const container = createContainer("test");
+    expect(container.resolve(Test)).toBeInstanceOf(Test);
   });
 
-  test("container resolve optional", () => {
-    const container = createContainer("OptionalResolve");
-    expect(container.resolve("unknown", { optional: true })).toBe(void 0);
-    expect(
-      container.resolve("unknown", { optional: true, defaultValue: 0 })
-    ).toBe(0);
-  });
-
-  test("container register multiple", () => {
-    const container = createContainer("MultipleResolve", (container) => {
-      container.register("value", new ValueProvider({ useValue: 0 }));
-      container.register("value", new ValueProvider({ useValue: 0 }));
-    });
-    expect(container.resolve("value")).toBe(0);
-    expect(container.resolve("value", { multiple: true })).toStrictEqual([
-      0, 0,
-    ]);
-  });
-
-  test("container other api test", () => {
-    const IA = createServiceIdentifier<number>("IA");
-    const provider = new ValueProvider({
-      useValue: 2,
-    });
-
-    const container = createContainer("ContainerAPI");
-
-    const aRegistration = container.register(IA, provider);
-
-    expect(container.isRegistered(IA)).toBe(true);
-    expect(container.getAllRegisteredServiceIdentifiers()).toStrictEqual([IA]);
-    expect(container.getProvider(IA) == provider).toBe(true);
-    expect(container.getAllProvider(IA).length).toBe(1);
-    expect(container.getAllProvider(IA).every((it) => it == provider)).toBe(
-      true
+  test("container can't resolve unregistered constructor service identifier without @injectable", () => {
+    class Test {}
+    const container = createContainer("test");
+    expect(() => container.resolve(Test)).toThrow(
+      formatStringsWithIndent([
+        `resolve service identifier Test[#test].`,
+        `service identifier "Test" can't be resolved, please use '@injectable' decorate it.`,
+      ])
     );
-
-    aRegistration.dispose();
-    expect(container.isRegistered(IA)).toBe(false);
   });
 });

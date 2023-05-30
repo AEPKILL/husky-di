@@ -25,5 +25,8 @@
   },
   "peerDependencies": {
     "reflect-metadata": "^0.1.13"
+  },
+  "dependencies": {
+    "tslib": "^2.5.2"
   }
 }
