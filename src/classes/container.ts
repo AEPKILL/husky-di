@@ -4,31 +4,32 @@
  * @created 2023-05-25 14:45:22
  */
 
-import { LifecycleEnum } from '@/enums/lifecycle.enum';
-import { ClassProvider } from '@/providers/class.provider';
-import { resolveRecordManagerRef } from '@/shared/instances';
-import { getResolveOptionKey } from '@/utils/container.utils';
-import { applyProviderResolve, resetProvider, setProviderRegistered } from '@/utils/provider.utils';
-import { getServiceIdentifierName } from '@/utils/service-identifier.utils';
+import { LifecycleEnum } from "@/enums/lifecycle.enum";
+import { ClassProvider } from "@/providers/class.provider";
+import { resolveRecordManagerRef } from "@/shared/instances";
+import {
+  resetProvider,
+  setProviderInstance,
+  setProviderRegistered,
+} from "@/utils/provider.utils";
+import { getServiceIdentifierName } from "@/utils/service-identifier.utils";
 
-import { InstanceDynamicRef } from './instance-dynamic-ref';
-import { InstanceRef } from './instance-ref';
-import { InstanceRefCount } from './instance-ref-count';
-import { Registry } from './registry';
+import { InstanceDynamicRef } from "./instance-dynamic-ref";
+import { InstanceRef } from "./instance-ref";
+import { InstanceRefCount } from "./instance-ref-count";
+import { Registry } from "./registry";
 
 import type {
   IContainer,
   ResolveOptions,
   ResolveReturnType,
 } from "@/interfaces/container.interface";
-import type{ IDisposable } from "@/interfaces/disposable.interface";
-import type{ IInternalContainer } from "@/interfaces/internal-container.interface";
-import type{ IProvider } from "@/interfaces/provider.interface";
-import type{ Constructor } from "@/types/constructor.type";
-import type{ Ref } from "@/types/ref.type";
-import type{ ResolveContext } from "@/types/resolve-context.type";
-import type{ ServiceIdentifier } from "@/types/service-identifier.type";
-
+import type { IDisposable } from "@/interfaces/disposable.interface";
+import type { IInternalContainer } from "@/interfaces/internal-container.interface";
+import type { IProvider } from "@/interfaces/provider.interface";
+import type { Constructor } from "@/types/constructor.type";
+import type { ResolveContext } from "@/types/resolve-context.type";
+import type { ServiceIdentifier } from "@/types/service-identifier.type";
 export class Container implements IInternalContainer {
   readonly name: string;
   readonly resolveContextRefs: InstanceRefCount<ResolveContext>;
@@ -37,9 +38,9 @@ export class Container implements IInternalContainer {
 
   constructor(name: string) {
     this.name = name;
-    this.resolveContextRefs = new InstanceRefCount<ResolveContext>(
-      () => new Map()
-    );
+    this.resolveContextRefs = new InstanceRefCount<ResolveContext>(() => {
+      return new Map();
+    });
   }
 
   register<T>(
@@ -105,16 +106,18 @@ export class Container implements IInternalContainer {
     serviceIdentifier: ServiceIdentifier<T>,
     options?: Options | undefined
   ): ResolveReturnType<T, Options> {
+    const { ref, dynamic, multiple, optional, defaultValue } = options || {};
+
+    const providers = this.getAllProvider(serviceIdentifier);
+    const provider = this.getProvider(serviceIdentifier);
+
+    const isRegistered = this.isRegistered(serviceIdentifier);
     const isRootResolveContext = this.resolveContextRefs.isNoRefs;
     const isRootResolveRecordManager = resolveRecordManagerRef.isNoRefs;
+
     const resolveContext = this.resolveContextRefs.useInstance();
     const resolveRecordManager = resolveRecordManagerRef.useInstance();
     const resolveRecordManagerSnapshot = resolveRecordManager.clone();
-    const provider = this.getProvider(serviceIdentifier);
-    const isRegistered = this.isRegistered(serviceIdentifier);
-    const { ref, dynamic, multiple, optional, defaultValue } = options || {};
-
-    let instances: T[] | Array<Ref<T>> | undefined;
 
     try {
       resolveRecordManager.pushResolveRecord({
@@ -157,27 +160,17 @@ export class Container implements IInternalContainer {
         );
       }
 
-      // handle resolution scope lifecycle
-      // only resolution lifecycle will cache instance in resolve context
-      const resolutionCache = resolveContext.get(serviceIdentifier);
-      if (resolutionCache) {
-        const key = getResolveOptionKey(options || {});
-        instances = resolutionCache.get(key);
-        if (instances && instances.length) {
-          return this.getResolveReturnValue<T, Options>(instances, options);
-        }
-      }
-
       // service identifier not registered and service identifier is a constructor
       // use temporary class provider to resolve
       if (!isRegistered) {
         if (typeof serviceIdentifier === "function") {
-          instances = [
-            new ClassProvider({
-              useClass: serviceIdentifier as Constructor<T>,
-            }).resolve(this, resolveContext) as T,
-          ];
-          return this.getResolveReturnValue<T, Options>(instances, options);
+          const instance = new ClassProvider({
+            useClass: serviceIdentifier as Constructor<T>,
+          }).resolve(this, resolveContext);
+          return (multiple ? [instance] : instance) as ResolveReturnType<
+            T,
+            Options
+          >;
         }
       }
 
@@ -190,20 +183,16 @@ export class Container implements IInternalContainer {
           )}" is a ref value, wait for use`,
         });
 
-        instances = [
-          new InstanceRef(() => {
-            resolveRecordManagerRef.$internal_setInstance(
-              resolveRecordManagerSnapshot
-            );
-            this.resolveContextRefs.$internal_setInstance(resolveContext);
-            return this.resolve(serviceIdentifier, {
-              ...options,
-              ref: false,
-            });
-          }),
-        ];
-
-        return this.getResolveReturnValue<T, Options>(instances, options);
+        return new InstanceRef(() => {
+          resolveRecordManagerRef.$internal_setInstance(
+            resolveRecordManagerSnapshot
+          );
+          this.resolveContextRefs.$internal_setInstance(resolveContext);
+          return this.resolve(serviceIdentifier, {
+            ...options,
+            ref: false,
+          });
+        }) as ResolveReturnType<T, Options>;
       }
 
       //  handle dynamic flag
@@ -215,20 +204,16 @@ export class Container implements IInternalContainer {
           )}" is a dynamic value, wait for use`,
         });
 
-        instances = [
-          new InstanceDynamicRef(() => {
-            resolveRecordManagerRef.$internal_setInstance(
-              resolveRecordManagerSnapshot
-            );
-            this.resolveContextRefs.$internal_setInstance(resolveContext);
-            return this.resolve(serviceIdentifier, {
-              ...options,
-              dynamic: false,
-            });
-          }),
-        ];
-
-        return this.getResolveReturnValue<T, Options>(instances, options);
+        return new InstanceDynamicRef(() => {
+          resolveRecordManagerRef.$internal_setInstance(
+            resolveRecordManagerSnapshot
+          );
+          this.resolveContextRefs.$internal_setInstance(resolveContext);
+          return this.resolve(serviceIdentifier, {
+            ...options,
+            dynamic: false,
+          });
+        }) as ResolveReturnType<T, Options>;
       }
 
       if (!isRegistered) {
@@ -246,27 +231,17 @@ export class Container implements IInternalContainer {
       }
 
       if (multiple) {
-        instances = this.getAllProvider(serviceIdentifier).map((provider) => {
-          return applyProviderResolve(provider, this, resolveContext);
-        });
+        return providers.map((provider) => {
+          return this._applyProviderResolve(resolveContext, provider, this);
+        }) as ResolveReturnType<T, Options>;
       } else {
-        instances = [applyProviderResolve(provider!, this, resolveContext)];
+        return this._applyProviderResolve(
+          resolveContext,
+          provider!,
+          this
+        ) as ResolveReturnType<T, Options>;
       }
-
-      return this.getResolveReturnValue<T, Options>(instances, options);
     } finally {
-      // check is need cache resolution result
-      const shouldCacheInstances =
-        provider?.lifecycle === LifecycleEnum.resolution &&
-        instances &&
-        instances.length;
-      if (shouldCacheInstances) {
-        const resolutionCache =
-          resolveContext.get(serviceIdentifier) || new Map();
-        resolutionCache.set(getResolveOptionKey(options || {}), instances);
-        resolveContext.set(serviceIdentifier, resolutionCache);
-      }
-
       this.resolveContextRefs.releaseInstance();
       resolveRecordManagerRef.releaseInstance();
 
@@ -290,16 +265,34 @@ export class Container implements IInternalContainer {
     }
   }
 
-  private getResolveReturnValue<T, Options extends ResolveOptions<T>>(
-    instances: T[] | Array<Ref<T>>,
-    options?: Options
-  ): ResolveReturnType<T, Options> {
-    const { multiple } = options || {};
-    if (multiple) {
-      return instances as ResolveReturnType<T, Options>;
-    } else {
-      return instances[0] as ResolveReturnType<T, Options>;
+  private _applyProviderResolve<T>(
+    resolveContext: ResolveContext,
+    provider: IProvider<T>,
+    container: IContainer
+  ): T {
+    if (provider.resolved) {
+      return provider.instance!;
     }
+
+    const cacheInstance = resolveContext.get(provider);
+    if (cacheInstance) {
+      return cacheInstance;
+    }
+
+    const instance = provider.resolve(container, resolveContext);
+
+    switch (provider.lifecycle) {
+      case LifecycleEnum.singleton: {
+        setProviderInstance(provider, instance);
+        break;
+      }
+      case LifecycleEnum.resolution: {
+        resolveContext.set(provider, instance);
+        break;
+      }
+    }
+
+    return instance;
   }
 
   static createContainer(

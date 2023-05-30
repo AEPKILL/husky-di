@@ -4,18 +4,6 @@
  * @created 2021-10-02 09:22:05
  */
 
-import type { ServiceIdentifier } from "./service-identifier.type";
+import type { IProvider } from "@/interfaces/provider.interface";
 
-/**
- * ResolveContext
- * @example
- * ```
- * {
- *   serviceIdentifier: {
- *     getResolveOptionKey(resolveOptions | metadata): Array<instance>
- *   }
- * }
- *
- * ```
- */
-export type ResolveContext = Map<ServiceIdentifier<any>, Map<string, any[]>>;
+export type ResolveContext = Map<IProvider<any>, any>;
