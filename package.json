@@ -2,7 +2,8 @@
   "name": "husky-di",
   "version": "1.0.0",
   "description": "lightweight dependency injection container",
-  "main": "index.js",
+  "main": "dist/index.js",
+  "typings": "dist/index.d.ts",
   "scripts": {
     "postinstall": "ts-patch install",
     "build": "rimraf dist && tsc --project tsconfig.json",
@@ -12,6 +13,9 @@
     "fix": "eslint --fix --ext \".js,.jsx,.ts,.tsx\" \"./src\"",
     "prepare": "husky install"
   },
+  "files": [
+    "dist"
+  ],
   "keywords": [],
   "author": "AEPKILL",
   "license": "MIT",

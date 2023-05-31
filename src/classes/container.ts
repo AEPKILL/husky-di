@@ -284,9 +284,8 @@ export class Container implements IInternalContainer {
       return provider.instance!;
     }
 
-    const cacheInstance = resolveContext.get(provider);
-    if (cacheInstance) {
-      return cacheInstance;
+    if (resolveContext.has(provider)) {
+      return resolveContext.get(provider)!;
     }
 
     const instance = provider.resolve(
