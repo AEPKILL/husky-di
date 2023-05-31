@@ -16,14 +16,6 @@ export class InstanceRefCount<T> {
     return this._count === 0;
   }
 
-  get refsCount(): number {
-    return this._count;
-  }
-
-  get resolved(): boolean {
-    return this._resolved;
-  }
-
   get instance(): T | undefined {
     return this._instance;
   }

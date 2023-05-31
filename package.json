@@ -6,7 +6,8 @@
   "scripts": {
     "postinstall": "ts-patch install",
     "build": "rimraf dist && tsc --project tsconfig.json",
-    "test": "jest"
+    "test": "jest",
+    "coverage": "jest --coverage"
   },
   "keywords": [],
   "author": "AEPKILL",

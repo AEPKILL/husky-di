@@ -7,8 +7,12 @@
 import { LifecycleEnum } from '@/enums/lifecycle.enum';
 
 import type { IContainer } from "@/interfaces/container.interface";
-import type { IProvider, ProviderOptions } from "@/interfaces/provider.interface";
+import type {
+  IProvider,
+  ProviderOptions,
+} from "@/interfaces/provider.interface";
 import type { ResolveContext } from "@/types/resolve-context.type";
+import type { ResolveRecordManager } from "../resolve-record-manager";
 
 export abstract class ProviderBase<T> implements IProvider<T> {
   readonly lifecycle: LifecycleEnum;
@@ -25,6 +29,10 @@ export abstract class ProviderBase<T> implements IProvider<T> {
     this.lifecycle = lifecycle;
   }
 
-  abstract resolve(container: IContainer, resolveContext: ResolveContext): T;
+  abstract resolve(
+    container: IContainer,
+    resolveContext: ResolveContext,
+    resolveRecordManager: ResolveRecordManager
+  ): T;
   abstract clone(): this;
 }

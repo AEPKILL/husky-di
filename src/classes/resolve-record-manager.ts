@@ -222,11 +222,15 @@ function getResolveIdentifierRecordName<T>(
 
   names.push("#" + resolveIdentifierRecord.container.name);
 
-  const { ref, optional, multiple, defaultValue } =
+  const { ref, dynamic, optional, multiple, defaultValue } =
     resolveIdentifierRecord.resolveOptions || {};
 
   if (ref) {
     names.push("Ref");
+  }
+
+  if (dynamic) {
+    names.push("Dynamic");
   }
 
   if (optional) {

@@ -4,6 +4,7 @@
  * @created 2021-10-02 09:20:39
  */
 
+import type { ResolveRecordManager } from "@/classes/resolve-record-manager";
 import type { LifecycleEnum } from "../enums/lifecycle.enum";
 import type { ResolveContext } from "../types/resolve-context.type";
 import type { IContainer } from "./container.interface";
@@ -21,5 +22,9 @@ export interface IProvider<T>
   readonly resolved: boolean;
   readonly registered: boolean;
 
-  resolve(container: IContainer, resolveContext: ResolveContext): T;
+  resolve(
+    container: IContainer,
+    resolveContext: ResolveContext,
+    resolveRecordManager: ResolveRecordManager
+  ): T;
 }

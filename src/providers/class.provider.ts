@@ -4,17 +4,15 @@
  * @created 2023-05-25 13:53:22
  */
 
-import { ProviderBase } from "@/classes/base/provider.base";
-import { IContainer } from "@/interfaces/container.interface";
-import { ProviderOptions } from "@/interfaces/provider.interface";
-import {
-  injectionMetadataMap,
-  resolveRecordManagerRef,
-} from "@/shared/instances";
-import { Constructor } from "@/types/constructor.type";
-import { ResolveContext } from "@/types/resolve-context.type";
-import { getServiceIdentifierName } from "@/utils/service-identifier.utils";
+import { ProviderBase } from '@/classes/base/provider.base';
+import { injectionMetadataMap } from '@/shared/instances';
+import { getServiceIdentifierName } from '@/utils/service-identifier.utils';
 
+import type { IContainer } from "@/interfaces/container.interface";
+import type { ProviderOptions } from "@/interfaces/provider.interface";
+import type { Constructor } from "@/types/constructor.type";
+import type { ResolveContext } from "@/types/resolve-context.type";
+import type { ResolveRecordManager } from "@/classes/resolve-record-manager";
 export interface ClassProviderOptions<T> extends ProviderOptions {
   useClass: Constructor<T>;
 }
@@ -27,15 +25,11 @@ export class ClassProvider<T> extends ProviderBase<T> {
     this._classConstructor = options.useClass;
   }
 
-  resolve(container: IContainer, _resolveContext: ResolveContext): T {
-    const resolveRecordManager = resolveRecordManagerRef.instance;
-
-    if (!resolveRecordManager) {
-      throw new Error(
-        "can't invoke resolve method outside of container resolve"
-      );
-    }
-
+  resolve(
+    container: IContainer,
+    _resolveContext: ResolveContext,
+    resolveRecordManager: ResolveRecordManager
+  ): T {
     const parametersMetadata = injectionMetadataMap.get(this._classConstructor);
     if (!parametersMetadata) {
       throw resolveRecordManager.getResolveException(

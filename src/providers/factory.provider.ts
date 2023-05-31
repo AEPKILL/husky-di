@@ -4,11 +4,14 @@
  * @created 2021-10-03 16:16:33
  */
 
-import { ProviderBase } from "../classes/base/provider.base";
-import { IContainer } from "../interfaces/container.interface";
-import { ProviderOptions } from "../interfaces/provider.interface";
-import { ResolveContext } from "../types/resolve-context.type";
-import { resolveRecordManagerRef } from "@/shared/instances";
+
+import { ProviderBase } from '../classes/base/provider.base';
+
+import type { ResolveRecordManager } from '@/classes/resolve-record-manager';
+import type { IContainer } from '@/interfaces/container.interface';
+import type { ProviderOptions } from '@/interfaces/provider.interface';
+import type { ResolveContext } from '@/types/resolve-context.type';
+
 
 export type Factory<T> = (
   container: IContainer,
@@ -36,14 +39,8 @@ export class FactoryProvider<T> extends ProviderBase<T> {
     }) as this;
   }
 
-  resolve(container: IContainer, resolveContext: ResolveContext): T {
-    const resolveRecordManager = resolveRecordManagerRef.instance;
+  resolve(container: IContainer, resolveContext: ResolveContext, resolveRecordManager: ResolveRecordManager): T {
 
-    if (!resolveRecordManager) {
-      throw new Error(
-        "can't invoke resolve method outside of container resolve"
-      );
-    }
 
     try {
       return this._factory(container, resolveContext);

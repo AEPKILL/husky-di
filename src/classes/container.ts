@@ -30,6 +30,7 @@ import type { IProvider } from "@/interfaces/provider.interface";
 import type { Constructor } from "@/types/constructor.type";
 import type { ResolveContext } from "@/types/resolve-context.type";
 import type { ServiceIdentifier } from "@/types/service-identifier.type";
+import type { ResolveRecordManager } from "./resolve-record-manager";
 export class Container implements IInternalContainer {
   readonly name: string;
   readonly resolveContextRefs: InstanceRefCount<ResolveContext>;
@@ -142,7 +143,9 @@ export class Container implements IInternalContainer {
             throw resolveRecordManager.getResolveException(
               `service identifier "${getServiceIdentifierName(
                 serviceIdentifier
-              )}" is private, only can be resolved in container "${this.name}"`
+              )}" is private, can only be resolved within the container "${
+                this.name
+              }"`
             );
           }
         }
@@ -166,7 +169,7 @@ export class Container implements IInternalContainer {
         if (typeof serviceIdentifier === "function") {
           const instance = new ClassProvider({
             useClass: serviceIdentifier as Constructor<T>,
-          }).resolve(this, resolveContext);
+          }).resolve(this, resolveContext, resolveRecordManager);
           return (multiple ? [instance] : instance) as ResolveReturnType<
             T,
             Options
@@ -232,11 +235,17 @@ export class Container implements IInternalContainer {
 
       if (multiple) {
         return providers.map((provider) => {
-          return this._applyProviderResolve(resolveContext, provider, this);
+          return this._applyProviderResolve(
+            resolveContext,
+            resolveRecordManager,
+            provider,
+            this
+          );
         }) as ResolveReturnType<T, Options>;
       } else {
         return this._applyProviderResolve(
           resolveContext,
+          resolveRecordManager,
           provider!,
           this
         ) as ResolveReturnType<T, Options>;
@@ -267,6 +276,7 @@ export class Container implements IInternalContainer {
 
   private _applyProviderResolve<T>(
     resolveContext: ResolveContext,
+    resolveRecordManager: ResolveRecordManager,
     provider: IProvider<T>,
     container: IContainer
   ): T {
@@ -279,7 +289,11 @@ export class Container implements IInternalContainer {
       return cacheInstance;
     }
 
-    const instance = provider.resolve(container, resolveContext);
+    const instance = provider.resolve(
+      container,
+      resolveContext,
+      resolveRecordManager
+    );
 
     switch (provider.lifecycle) {
       case LifecycleEnum.singleton: {
