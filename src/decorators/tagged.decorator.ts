@@ -4,9 +4,9 @@
  * @created 2021-10-03 21:16:18
  */
 
-import { InjectionMetadataKeyConst } from '@/constants/metadata-key.const';
+import { InjectionMetadataKeyConst } from "@/constants/metadata-key.const";
 
-import type { InjectionMetadata } from '@/types/injection-metadata.type';
+import type { InjectionMetadata } from "@/types/injection-metadata.type";
 
 export const tagged = <T>(
   metadata: InjectionMetadata<T>

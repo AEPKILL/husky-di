@@ -4,10 +4,7 @@
  * @created 2023-05-25 14:20:41
  */
 
-export function formatStringsWithIndent(
-  strings: string[],
-  indent: number = 1
-): string {
+export function formatStringsWithIndent(strings: string[], indent = 1): string {
   return strings.reduce((result, it, index) => {
     result += `${" ".repeat(index * indent)}${it}`;
 

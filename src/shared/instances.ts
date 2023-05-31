@@ -4,8 +4,8 @@
  * @created 2023-05-24 11:06:40
  */
 
-import { InstanceRefCount } from '@/classes/instance-ref-count';
-import { ResolveRecordManager } from '@/classes/resolve-record-manager';
+import { InstanceRefCount } from "@/classes/instance-ref-count";
+import { ResolveRecordManager } from "@/classes/resolve-record-manager";
 
 import type { Constructor } from "@/types/constructor.type";
 import type { InjectionMetadata } from "@/types/injection-metadata.type";

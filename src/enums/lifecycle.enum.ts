@@ -22,5 +22,5 @@ export enum LifecycleEnum {
    * resolution means that the container will create a new instance every time it is resolved,
    * and then return the same instance every time it is resolved in the same resolution context.
    */
-  resolution,
+  resolution
 }

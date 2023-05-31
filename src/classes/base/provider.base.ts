@@ -4,12 +4,12 @@
  * @created 2021-10-03 16:17:24
  */
 
-import { LifecycleEnum } from '@/enums/lifecycle.enum';
+import { LifecycleEnum } from "@/enums/lifecycle.enum";
 
 import type { IContainer } from "@/interfaces/container.interface";
 import type {
   IProvider,
-  ProviderOptions,
+  ProviderOptions
 } from "@/interfaces/provider.interface";
 import type { ResolveContext } from "@/types/resolve-context.type";
 import type { ResolveRecordManager } from "../resolve-record-manager";

@@ -4,8 +4,11 @@
  * @created 2022-03-11 16:02:58
  */
 
-import { InjectionMetadataKeyConst, ParamsMetadataKeyConst } from '@/constants/metadata-key.const';
-import { injectionMetadataMap } from '@/shared/instances';
+import {
+  InjectionMetadataKeyConst,
+  ParamsMetadataKeyConst
+} from "@/constants/metadata-key.const";
+import { injectionMetadataMap } from "@/shared/instances";
 
 import type { Constructor } from "@/types/constructor.type";
 import type { InjectionMetadata } from "@/types/injection-metadata.type";

@@ -8,14 +8,14 @@ import type { Ref } from "@/types/ref.type";
 
 export class InstanceRef<T> implements Ref<T> {
   private _current: T | undefined;
-  private _resolved: boolean = false;
+  private _resolved = false;
   private readonly _createInstance: () => T;
 
   constructor(createInstance: () => T) {
     this._createInstance = createInstance;
   }
 
-  get current() {
+  get current(): T {
     if (!this._resolved) {
       this._current = this._createInstance();
       this._resolved = true;
@@ -24,7 +24,7 @@ export class InstanceRef<T> implements Ref<T> {
     return this._current!;
   }
 
-  get resolved() {
+  get resolved(): boolean {
     return this._resolved;
   }
 }

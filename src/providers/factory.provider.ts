@@ -4,14 +4,12 @@
  * @created 2021-10-03 16:16:33
  */
 
+import { ProviderBase } from "../classes/base/provider.base";
 
-import { ProviderBase } from '../classes/base/provider.base';
-
-import type { ResolveRecordManager } from '@/classes/resolve-record-manager';
-import type { IContainer } from '@/interfaces/container.interface';
-import type { ProviderOptions } from '@/interfaces/provider.interface';
-import type { ResolveContext } from '@/types/resolve-context.type';
-
+import type { ResolveRecordManager } from "@/classes/resolve-record-manager";
+import type { IContainer } from "@/interfaces/container.interface";
+import type { ProviderOptions } from "@/interfaces/provider.interface";
+import type { ResolveContext } from "@/types/resolve-context.type";
 
 export type Factory<T> = (
   container: IContainer,
@@ -35,13 +33,15 @@ export class FactoryProvider<T> extends ProviderBase<T> {
     return new FactoryProvider({
       lifecycle: this.lifecycle,
       isPrivate: this.isPrivate,
-      useFactory: this._factory,
+      useFactory: this._factory
     }) as this;
   }
 
-  resolve(container: IContainer, resolveContext: ResolveContext, resolveRecordManager: ResolveRecordManager): T {
-
-
+  resolve(
+    container: IContainer,
+    resolveContext: ResolveContext,
+    resolveRecordManager: ResolveRecordManager
+  ): T {
     try {
       return this._factory(container, resolveContext);
     } catch (error) {
@@ -50,7 +50,7 @@ export class FactoryProvider<T> extends ProviderBase<T> {
           (error as Error)?.message || "unknown"
         }`,
         {
-          exception: error as Error,
+          exception: error as Error
         }
       );
     }

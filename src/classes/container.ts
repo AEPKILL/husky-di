@@ -10,7 +10,7 @@ import { resolveRecordManagerRef } from "@/shared/instances";
 import {
   resetProvider,
   setProviderInstance,
-  setProviderRegistered,
+  setProviderRegistered
 } from "@/utils/provider.utils";
 import { getServiceIdentifierName } from "@/utils/service-identifier.utils";
 
@@ -22,7 +22,7 @@ import { Registry } from "./registry";
 import type {
   IContainer,
   ResolveOptions,
-  ResolveReturnType,
+  ResolveReturnType
 } from "@/interfaces/container.interface";
 import type { IDisposable } from "@/interfaces/disposable.interface";
 import type { IInternalContainer } from "@/interfaces/internal-container.interface";
@@ -83,7 +83,7 @@ export class Container implements IInternalContainer {
           providers.filter((it) => it !== provider)
         );
         resetProvider(provider);
-      },
+      }
     };
   }
 
@@ -124,7 +124,7 @@ export class Container implements IInternalContainer {
       resolveRecordManager.pushResolveRecord({
         container: this,
         serviceIdentifier,
-        resolveOptions: options,
+        resolveOptions: options
       });
 
       // check options
@@ -158,7 +158,7 @@ export class Container implements IInternalContainer {
         throw resolveRecordManager.getResolveException(
           `circular dependency detected, try use ref or dynamic flag`,
           {
-            cycleResolveIdentifierRecord,
+            cycleResolveIdentifierRecord
           }
         );
       }
@@ -168,7 +168,7 @@ export class Container implements IInternalContainer {
       if (!isRegistered) {
         if (typeof serviceIdentifier === "function") {
           const instance = new ClassProvider({
-            useClass: serviceIdentifier as Constructor<T>,
+            useClass: serviceIdentifier as Constructor<T>
           }).resolve(this, resolveContext, resolveRecordManager);
           return (multiple ? [instance] : instance) as ResolveReturnType<
             T,
@@ -183,7 +183,7 @@ export class Container implements IInternalContainer {
         resolveRecordManagerSnapshot.pushResolveRecord({
           message: `"${getServiceIdentifierName(
             serviceIdentifier
-          )}" is a ref value, wait for use`,
+          )}" is a ref value, wait for use`
         });
 
         return new InstanceRef(() => {
@@ -193,7 +193,7 @@ export class Container implements IInternalContainer {
           this.resolveContextRefs.$internal_setInstance(resolveContext);
           return this.resolve(serviceIdentifier, {
             ...options,
-            ref: false,
+            ref: false
           });
         }) as ResolveReturnType<T, Options>;
       }
@@ -204,7 +204,7 @@ export class Container implements IInternalContainer {
         resolveRecordManagerSnapshot.pushResolveRecord({
           message: `"${getServiceIdentifierName(
             serviceIdentifier
-          )}" is a dynamic value, wait for use`,
+          )}" is a dynamic value, wait for use`
         });
 
         return new InstanceDynamicRef(() => {
@@ -214,7 +214,7 @@ export class Container implements IInternalContainer {
           this.resolveContextRefs.$internal_setInstance(resolveContext);
           return this.resolve(serviceIdentifier, {
             ...options,
-            dynamic: false,
+            dynamic: false
           });
         }) as ResolveReturnType<T, Options>;
       }

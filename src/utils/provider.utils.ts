@@ -7,7 +7,10 @@
 import type { IProvider } from "@/interfaces/provider.interface";
 import type { Writable } from "@/types/utils.type";
 
-export function setProviderInstance<T>(provider: IProvider<T>, instance: T) {
+export function setProviderInstance<T>(
+  provider: IProvider<T>,
+  instance: T
+): void {
   (provider as Writable<IProvider<T>>).instance = instance;
   (provider as Writable<IProvider<T>>).resolved = true;
 }
@@ -15,11 +18,11 @@ export function setProviderInstance<T>(provider: IProvider<T>, instance: T) {
 export function setProviderRegistered<T>(
   provider: IProvider<T>,
   registered: boolean
-) {
+): void {
   (provider as Writable<IProvider<T>>).registered = registered;
 }
 
-export function resetProvider<T>(provider: IProvider<T>) {
+export function resetProvider<T>(provider: IProvider<T>): void {
   (provider as Writable<IProvider<T>>).instance = undefined;
   (provider as Writable<IProvider<T>>).resolved = false;
   (provider as Writable<IProvider<T>>).registered = false;

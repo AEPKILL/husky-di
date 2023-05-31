@@ -10,7 +10,7 @@ import { getServiceIdentifierName } from "@/utils/service-identifier.utils";
 
 import type {
   IContainer,
-  ResolveOptions,
+  ResolveOptions
 } from "@/interfaces/container.interface";
 import type { IDerivation } from "@/interfaces/derivation.interface";
 import type { ServiceIdentifier } from "@/types/service-identifier.type";
@@ -36,22 +36,22 @@ export type GetResolveExceptionOptions = {
 export class ResolveRecordManager implements IDerivation {
   private _recordStack: ResolveRecord<any>[] = [];
 
-  get recordCount() {
+  get recordCount(): number {
     return this._recordStack.length;
   }
 
-  pushResolveRecord(resolveRecord: ResolveRecord<any>) {
+  pushResolveRecord(resolveRecord: ResolveRecord<any>): void {
     this._recordStack.push(resolveRecord);
   }
 
-  popResolveRecord() {
+  popResolveRecord(): void {
     this._recordStack.pop();
   }
 
   getResolveException(
     message?: string,
     options: GetResolveExceptionOptions = {}
-  ) {
+  ): ResolveException {
     const { cycleResolveIdentifierRecord, exception } = options;
 
     // if is resolve exception, return it directly

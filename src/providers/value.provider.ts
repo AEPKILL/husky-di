@@ -4,7 +4,7 @@
  * @created 2021-10-03 16:16:33
  */
 
-import { ProviderBase } from '@/classes/base/provider.base';
+import { ProviderBase } from "@/classes/base/provider.base";
 
 import type { ProviderOptions } from "@/interfaces/provider.interface";
 
@@ -25,7 +25,7 @@ export class ValueProvider<T> extends ProviderBase<T> {
     return new ValueProvider({
       lifecycle: this.lifecycle,
       isPrivate: this.isPrivate,
-      useValue: this._value,
+      useValue: this._value
     }) as this;
   }
 

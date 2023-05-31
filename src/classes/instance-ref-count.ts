@@ -60,7 +60,7 @@ export class InstanceRefCount<T> {
     this._instance = void 0;
   }
 
-  $internal_setInstance(instance: T) {
+  $internal_setInstance(instance: T): void {
     this._resolved = true;
     this._instance = instance;
   }

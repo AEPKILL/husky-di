@@ -9,7 +9,7 @@ import {
   createServiceIdentifier,
   formatStringsWithIndent,
   inject,
-  injectable,
+  injectable
 } from "..";
 import { Ref } from "../types/ref.type";
 
@@ -20,7 +20,7 @@ describe("container  test", () => {
     container.register("test", testProvider);
     expect(container.isRegistered("test")).toBe(true);
     expect(container.getAllRegisteredServiceIdentifiers()).toStrictEqual([
-      "test",
+      "test"
     ]);
   });
 
@@ -39,7 +39,7 @@ describe("container  test", () => {
       "test",
       new ValueProvider({
         useValue: "test",
-        lifecycle: LifecycleEnum.transient,
+        lifecycle: LifecycleEnum.transient
       })
     );
     expect(() => {
@@ -47,7 +47,7 @@ describe("container  test", () => {
         "test",
         new ValueProvider({
           useValue: "test",
-          lifecycle: LifecycleEnum.resolution,
+          lifecycle: LifecycleEnum.resolution
         })
       );
     }).toThrow(
@@ -58,7 +58,7 @@ describe("container  test", () => {
         "test",
         new ValueProvider({
           useValue: "test",
-          isPrivate: true,
+          isPrivate: true
         })
       );
     }).toThrow(
@@ -76,7 +76,7 @@ describe("container  test", () => {
 
     expect(container.getAllProvider("test")).toStrictEqual([
       test1Provider,
-      test2Provider,
+      test2Provider
     ]);
   });
 
@@ -100,7 +100,7 @@ describe("container  test", () => {
     const container = createContainer("test");
     const testProvider = new ClassProvider({
       useClass: Test,
-      lifecycle: LifecycleEnum.singleton,
+      lifecycle: LifecycleEnum.singleton
     });
     const testServiceIdentifier = createServiceIdentifier<Test>("test");
     const testRegistration = container.register(
@@ -134,7 +134,7 @@ describe("container  test", () => {
     const container = createContainer("test");
     expect(container.resolve(Test)).toBeInstanceOf(Test);
     expect(container.resolve(Test, { multiple: true })).toStrictEqual([
-      container.resolve(Test),
+      container.resolve(Test)
     ]);
   });
 
@@ -144,7 +144,7 @@ describe("container  test", () => {
     expect(() => container.resolve(Test)).toThrow(
       formatStringsWithIndent([
         `resolve service identifier Test[#test]`,
-        `service identifier "Test" can't be resolved, please use '@injectable' decorate it`,
+        `service identifier "Test" can't be resolved, please use '@injectable' decorate it`
       ])
     );
   });
@@ -156,7 +156,7 @@ describe("container  test", () => {
       new FactoryProvider({
         useFactory() {
           return container.resolve("test2");
-        },
+        }
       })
     );
     container.register(
@@ -164,7 +164,7 @@ describe("container  test", () => {
       new FactoryProvider({
         useFactory() {
           return container.resolve("test1");
-        },
+        }
       })
     );
 
@@ -174,7 +174,7 @@ describe("container  test", () => {
           "resolve service identifier test1[#test]",
           "resolve service identifier test2[#test]",
           "resolve service identifier test1[#test]",
-          "circular dependency detected, try use ref or dynamic flag",
+          "circular dependency detected, try use ref or dynamic flag"
         ])
     );
   });
@@ -206,21 +206,21 @@ describe("container  test", () => {
       test1,
       new ClassProvider({
         useClass: Test1,
-        lifecycle: LifecycleEnum.resolution,
+        lifecycle: LifecycleEnum.resolution
       })
     );
     container.register(
       test2,
       new ClassProvider({
         useClass: Test2,
-        lifecycle: LifecycleEnum.resolution,
+        lifecycle: LifecycleEnum.resolution
       })
     );
     container.register(
       test3,
       new ClassProvider({
         useClass: Test3,
-        lifecycle: LifecycleEnum.resolution,
+        lifecycle: LifecycleEnum.resolution
       })
     );
 
@@ -259,7 +259,7 @@ describe("container  test", () => {
       new FactoryProvider({
         useFactory: () => {
           throw new Error("something error");
-        },
+        }
       })
     );
 
@@ -267,7 +267,7 @@ describe("container  test", () => {
       "test[#test]\n" +
         formatStringsWithIndent([
           "resolve service identifier test[#test]",
-          "factory function execute exception: something error",
+          "factory function execute exception: something error"
         ])
     );
   });
@@ -285,7 +285,7 @@ describe("container  test", () => {
     container.register(
       "test",
       new ClassProvider({
-        useClass: Test,
+        useClass: Test
       })
     );
 
@@ -293,7 +293,7 @@ describe("container  test", () => {
       "test[#test]\n" +
         formatStringsWithIndent([
           "resolve service identifier test[#test]",
-          `try create "Test" instance fail: unknown`,
+          `try create "Test" instance fail: unknown`
         ])
     );
   });
@@ -310,7 +310,7 @@ describe("container  test", () => {
     container.register(
       "test2",
       new ClassProvider({
-        useClass: Test2,
+        useClass: Test2
       })
     );
     expect((container.resolve("test2") as Test2).test1).toBeInstanceOf(Test1);
@@ -351,7 +351,7 @@ describe("container  test", () => {
       "test1[#test]\n" +
         formatStringsWithIndent([
           `resolve service identifier test1[#test]`,
-          `service identifier "test1" is private, can only be resolved within the container "test"`,
+          `service identifier "test1" is private, can only be resolved within the container "test"`
         ])
     );
   });
