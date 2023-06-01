@@ -66,11 +66,8 @@ export class ResolveRecordManager implements IDerivation {
     const resolveMessage = this.getResolveMessage(cycleResolveIdentifierRecord);
     const resolveException = new ResolveException(resolveMessage);
 
-    // if has original exception, cut out the call stack of the original exception for easy positioning of the problem
     if (exception) {
-      const stacks = (exception.stack || "").split("\n");
-      stacks.shift();
-      resolveException.stack = resolveMessage + "\n" + stacks.join("\n");
+      resolveException.stack = exception.stack;
     }
 
     return resolveException;

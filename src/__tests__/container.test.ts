@@ -142,10 +142,12 @@ describe("container  test", () => {
     class Test {}
     const container = createContainer("test");
     expect(() => container.resolve(Test)).toThrow(
-      formatStringsWithIndent([
-        `resolve service identifier Test[#test]`,
-        `service identifier "Test" can't be resolved, please use '@injectable' decorate it`
-      ])
+      "Test[#test]\n" +
+        formatStringsWithIndent([
+          "resolve service identifier Test[#test]",
+          `service identifier "Test" is not registered, but it is a constructor, use temporary class provider to resolve`,
+          "service identifier \"Test\" can't be resolved, please use '@injectable' decorate it"
+        ])
     );
   });
 
@@ -356,13 +358,13 @@ describe("container  test", () => {
     );
   });
 
-  test(`can't use  "@injectable" decorator class twice`, () => {
+  test(`can't use  "@injectable" decorate class twice`, () => {
     expect(() => {
       @injectable
       @injectable
       class Test {}
 
       return Test;
-    }).toThrow(`can't use  "@injectable" decorator on class "Test" twice`);
+    }).toThrow(`can't use  "@injectable" decorate class "Test" twice`);
   });
 });

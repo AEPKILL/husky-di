@@ -13,16 +13,27 @@ import type { ProviderOptions } from "@/interfaces/provider.interface";
 import type { Constructor } from "@/types/constructor.type";
 import type { ResolveContext } from "@/types/resolve-context.type";
 import type { ResolveRecordManager } from "@/classes/resolve-record-manager";
+import type { InjectionMetadata } from "@/types/injection-metadata.type";
+
 export interface ClassProviderOptions<T> extends ProviderOptions {
   useClass: Constructor<T>;
 }
 
 export class ClassProvider<T> extends ProviderBase<T> {
   private readonly _classConstructor: Constructor<T>;
+  private readonly _parametersMetadata: Array<InjectionMetadata<T>>;
 
   constructor(options: ClassProviderOptions<T>) {
     super(options);
     this._classConstructor = options.useClass;
+    this._parametersMetadata = injectionMetadataMap.get(this._classConstructor);
+    if (!this._parametersMetadata) {
+      throw new Error(
+        `service identifier "${getServiceIdentifierName(
+          this._classConstructor
+        )}" can't be resolved, please use '@injectable' decorate it`
+      );
+    }
   }
 
   resolve(
@@ -30,16 +41,7 @@ export class ClassProvider<T> extends ProviderBase<T> {
     _resolveContext: ResolveContext,
     resolveRecordManager: ResolveRecordManager
   ): T {
-    const parametersMetadata = injectionMetadataMap.get(this._classConstructor);
-    if (!parametersMetadata) {
-      throw resolveRecordManager.getResolveException(
-        `service identifier "${getServiceIdentifierName(
-          this._classConstructor
-        )}" can't be resolved, please use '@injectable' decorate it`
-      );
-    }
-
-    const parameter = parametersMetadata.map((it, index) => {
+    const parameter = this._parametersMetadata.map((it, index) => {
       resolveRecordManager.pushResolveRecord({
         message: `resolve parameter #${index} of constructor ${this._classConstructor.name}`
       });

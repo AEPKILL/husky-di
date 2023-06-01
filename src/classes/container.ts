@@ -167,13 +167,24 @@ export class Container implements IInternalContainer {
       // use temporary class provider to resolve
       if (!isRegistered) {
         if (typeof serviceIdentifier === "function") {
-          const instance = new ClassProvider({
-            useClass: serviceIdentifier as Constructor<T>
-          }).resolve(this, resolveContext, resolveRecordManager);
-          return (multiple ? [instance] : instance) as ResolveReturnType<
-            T,
-            Options
-          >;
+          try {
+            resolveRecordManager.pushResolveRecord({
+              message: `service identifier "${getServiceIdentifierName(
+                serviceIdentifier
+              )}" is not registered, but it is a constructor, use temporary class provider to resolve`
+            });
+            const instance = new ClassProvider({
+              useClass: serviceIdentifier as Constructor<T>
+            }).resolve(this, resolveContext, resolveRecordManager);
+            return (multiple ? [instance] : instance) as ResolveReturnType<
+              T,
+              Options
+            >;
+          } catch (e: any) {
+            throw resolveRecordManager.getResolveException(e.message, {
+              exception: e
+            });
+          }
         }
       }
 

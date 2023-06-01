@@ -21,7 +21,7 @@ import type { ServiceIdentifier } from "@/types/service-identifier.type";
 export const injectable: ClassDecorator = ((target: Constructor<any>) => {
   if (injectionMetadataMap.has(target)) {
     throw new Error(
-      `can't use  "@injectable" decorator on class "${target.name}" twice`
+      `can't use  "@injectable" decorate class "${target.name}" twice`
     );
   }
 
