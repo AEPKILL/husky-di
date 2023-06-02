@@ -5,13 +5,12 @@
   "main": "dist/index.js",
   "typings": "dist/index.d.ts",
   "scripts": {
-    "postinstall": "ts-patch install",
     "build": "rimraf dist && tsc --project tsconfig.json",
     "test": "jest",
     "coverage": "jest --coverage",
     "lint": "eslint --ext \".js,.jsx,.ts,.tsx\" \"./src\"",
     "fix": "eslint --fix --ext \".js,.jsx,.ts,.tsx\" \"./src\"",
-    "prepare": "husky install"
+    "prepare": "ts-patch install && husky install"
   },
   "files": [
     "dist"
