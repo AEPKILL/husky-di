@@ -27,13 +27,15 @@ export const injectable: ClassDecorator = ((target: Constructor<any>) => {
 
   const parametersServiceIdentifiers: Array<ServiceIdentifier<any>> =
     Reflect.getMetadata(ParamsMetadataKeyConst, target) || [];
-
   const ownParametersMetadata: Array<InjectionMetadata<any>> =
     Reflect.getMetadata(InjectionMetadataKeyConst, target) || [];
-
   const metadata: InjectionMetadata<any>[] = [];
+  const parametersMetadataLength = Math.max(
+    parametersServiceIdentifiers.length,
+    ownParametersMetadata.length
+  );
 
-  for (let index = 0; index < parametersServiceIdentifiers.length; index++) {
+  for (let index = 0; index < parametersMetadataLength; index++) {
     if (ownParametersMetadata[index] !== void 0) {
       metadata.push(ownParametersMetadata[index]);
       continue;
