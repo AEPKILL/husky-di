@@ -7,14 +7,26 @@
 import { ServiceIdentifierManager } from "@/classes/service-identifier-manager";
 
 import { Container } from "@/classes/container";
-import { IContainer } from "@/interfaces/container.interface";
+import {
+  IContainer,
+  ResolveOptions,
+  ResolveReturnType
+} from "@/interfaces/container.interface";
 export { IProvider } from "@/interfaces/provider.interface";
 import { ServiceIdentifier } from "@/types/service-identifier.type";
 export { Ref } from "@/types/ref.type";
+export { InjectionMetadata } from "@/types/injection-metadata.type";
+export { ResolveContext } from "@/types/resolve-context.type";
 
 export { LifecycleEnum } from "@/enums/lifecycle.enum";
 
-export { IContainer, ServiceIdentifier, ServiceIdentifierManager };
+export {
+  IContainer,
+  ResolveOptions,
+  ResolveReturnType,
+  ServiceIdentifier,
+  ServiceIdentifierManager
+};
 
 export { tagged } from "@/decorators/tagged.decorator";
 export { inject } from "@/decorators/inject.decorator";
