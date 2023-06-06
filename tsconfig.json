@@ -7,7 +7,7 @@
       "@/*": ["*"]
     },
     "declaration": true,
-    "outDir": "./dist"
+    "outDir": "./dist/cjs"
   },
   "exclude": ["src/__tests__"]
 }
