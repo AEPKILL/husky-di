@@ -9,9 +9,10 @@ import {
   createServiceIdentifier,
   formatStringsWithIndent,
   inject,
-  injectable
+  injectable,
+  Ref,
+  createServiceDecorator
 } from "..";
-import { Ref } from "../types/ref.type";
 
 describe("container  test", () => {
   test(`provider can register & can find`, () => {
@@ -366,5 +367,41 @@ describe("container  test", () => {
 
       return Test;
     }).toThrow(`can't use  "@injectable" decorate class "Test" twice`);
+  });
+
+  test(`use "createServiceDecorator can replace @inject."`, () => {
+    const container = createContainer("test");
+    const test1 = createServiceDecorator<Test1>("test1");
+    const test2 = createServiceDecorator<Test2>("test2");
+
+    @injectable
+    class Test1 {}
+
+    @injectable
+    class Test2 {
+      constructor(
+        @test1() readonly test1: Test1,
+        @test1({ multiple: true }) readonly test11: Test1[]
+      ) {}
+    }
+
+    container.register(
+      test1.serviceIdentifier,
+      new ClassProvider({ useClass: Test1 })
+    );
+    container.register(
+      test2.serviceIdentifier,
+      new ClassProvider({ useClass: Test2 })
+    );
+
+    expect(container.resolve(test2.serviceIdentifier).test1).toBeInstanceOf(
+      Test1
+    );
+    expect(container.resolve(test2.serviceIdentifier).test11).toBeInstanceOf(
+      Array
+    );
+    for (const item of container.resolve(test2.serviceIdentifier).test11) {
+      expect(item).toBeInstanceOf(Test1);
+    }
   });
 });

@@ -4,29 +4,24 @@
  * @created 2023-05-24 09:29:41
  */
 
+import { Container } from "@/classes/container";
 import { ServiceIdentifierManager } from "@/classes/service-identifier-manager";
 
-import { Container } from "@/classes/container";
-import {
+export { ServiceIdentifierManager, Container };
+
+export type {
   IContainer,
   ResolveOptions,
   ResolveReturnType
 } from "@/interfaces/container.interface";
-export { IProvider } from "@/interfaces/provider.interface";
-import { ServiceIdentifier } from "@/types/service-identifier.type";
-export { Ref } from "@/types/ref.type";
-export { InjectionMetadata } from "@/types/injection-metadata.type";
-export { ResolveContext } from "@/types/resolve-context.type";
+export type { IProvider } from "@/interfaces/provider.interface";
+export type { ServiceIdentifier } from "@/types/service-identifier.type";
+export type { ServiceDecorator } from "@/types/service-decorator.type";
+export type { Ref } from "@/types/ref.type";
+export type { InjectionMetadata } from "@/types/injection-metadata.type";
+export type { ResolveContext } from "@/types/resolve-context.type";
 
 export { LifecycleEnum } from "@/enums/lifecycle.enum";
-
-export {
-  IContainer,
-  ResolveOptions,
-  ResolveReturnType,
-  ServiceIdentifier,
-  ServiceIdentifierManager
-};
 
 export { tagged } from "@/decorators/tagged.decorator";
 export { inject } from "@/decorators/inject.decorator";
@@ -41,5 +36,9 @@ export { formatStringsWithIndent } from "@/utils/format.utils";
 export const createContainer = Container.createContainer.bind(Container);
 export const createServiceIdentifier =
   ServiceIdentifierManager.createServiceIdentifier.bind(
+    ServiceIdentifierManager
+  );
+export const createServiceDecorator =
+  ServiceIdentifierManager.createServiceDecorator.bind(
     ServiceIdentifierManager
   );
