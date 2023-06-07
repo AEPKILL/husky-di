@@ -147,7 +147,7 @@ describe("container  test", () => {
         formatStringsWithIndent([
           "resolve service identifier Test[#test]",
           `service identifier "Test" is not registered, but it is a constructor, use temporary class provider to resolve`,
-          "service identifier \"Test\" can't be resolved, please use '@injectable' decorate it"
+          "constructor \"Test\" can't be resolved, please use '@injectable' decorate it"
         ])
     );
   });

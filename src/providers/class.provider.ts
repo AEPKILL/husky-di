@@ -29,7 +29,7 @@ export class ClassProvider<T> extends ProviderBase<T> {
     this._parametersMetadata = injectionMetadataMap.get(this._classConstructor);
     if (!this._parametersMetadata) {
       throw new Error(
-        `service identifier "${getServiceIdentifierName(
+        `constructor "${getServiceIdentifierName(
           this._classConstructor
         )}" can't be resolved, please use '@injectable' decorate it`
       );
