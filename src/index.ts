@@ -29,7 +29,7 @@ export { injectable } from "@/decorators/injectable.decorator";
 
 export { ClassProvider } from "@/providers/class.provider";
 export { ValueProvider } from "@/providers/value.provider";
-export { FactoryProvider } from "@/providers/factory.provider";
+export { FactoryProvider, Factory } from "@/providers/factory.provider";
 
 export { formatStringsWithIndent } from "@/utils/format.utils";
 

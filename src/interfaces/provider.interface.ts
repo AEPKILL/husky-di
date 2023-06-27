@@ -15,6 +15,12 @@ export interface ProviderOptions {
   isPrivate?: boolean;
 }
 
+export interface ProviderResolveOptions {
+  container: IContainer;
+  resolveContext: ResolveContext;
+  resolveRecordManager: ResolveRecordManager;
+}
+
 export interface IProvider<T>
   extends IDerivation,
     Readonly<Required<ProviderOptions>> {
@@ -22,9 +28,5 @@ export interface IProvider<T>
   readonly resolved: boolean;
   readonly registered: boolean;
 
-  resolve(
-    container: IContainer,
-    resolveContext: ResolveContext,
-    resolveRecordManager: ResolveRecordManager
-  ): T;
+  resolve(options: ProviderResolveOptions): T;
 }
