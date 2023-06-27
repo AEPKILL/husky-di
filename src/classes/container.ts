@@ -175,7 +175,11 @@ export class Container implements IInternalContainer {
             });
             const instance = new ClassProvider({
               useClass: serviceIdentifier as Constructor<T>
-            }).resolve(this, resolveContext, resolveRecordManager);
+            }).resolve({
+              container: this,
+              resolveContext,
+              resolveRecordManager
+            });
             return (multiple ? [instance] : instance) as ResolveReturnType<
               T,
               Options
@@ -190,8 +194,8 @@ export class Container implements IInternalContainer {
 
       // handle ref flag
       if (ref) {
-        const resolveRecordManagerSnapshot = resolveRecordManager.clone();
-        resolveRecordManagerSnapshot.pushResolveRecord({
+        const refResolveRecordManagerSnapshot = resolveRecordManager.clone();
+        refResolveRecordManagerSnapshot.pushResolveRecord({
           message: `"${getServiceIdentifierName(
             serviceIdentifier
           )}" is a ref value, wait for use`
@@ -199,7 +203,7 @@ export class Container implements IInternalContainer {
 
         return new InstanceRef(() => {
           resolveRecordManagerRef.$internal_setInstance(
-            resolveRecordManagerSnapshot
+            refResolveRecordManagerSnapshot
           );
           this.resolveContextRefs.$internal_setInstance(resolveContext);
           return this.resolve(serviceIdentifier, {
@@ -211,8 +215,9 @@ export class Container implements IInternalContainer {
 
       //  handle dynamic flag
       if (dynamic) {
-        const resolveRecordManagerSnapshot = resolveRecordManager.clone();
-        resolveRecordManagerSnapshot.pushResolveRecord({
+        const dynamicResolveRecordManagerSnapshot =
+          resolveRecordManager.clone();
+        dynamicResolveRecordManagerSnapshot.pushResolveRecord({
           message: `"${getServiceIdentifierName(
             serviceIdentifier
           )}" is a dynamic value, wait for use`
@@ -220,7 +225,7 @@ export class Container implements IInternalContainer {
 
         return new InstanceDynamicRef(() => {
           resolveRecordManagerRef.$internal_setInstance(
-            resolveRecordManagerSnapshot
+            dynamicResolveRecordManagerSnapshot
           );
           this.resolveContextRefs.$internal_setInstance(resolveContext);
           return this.resolve(serviceIdentifier, {
@@ -299,11 +304,11 @@ export class Container implements IInternalContainer {
       return resolveContext.get(provider)!;
     }
 
-    const instance = provider.resolve(
+    const instance = provider.resolve({
       container,
       resolveContext,
       resolveRecordManager
-    );
+    });
 
     switch (provider.lifecycle) {
       case LifecycleEnum.singleton: {
