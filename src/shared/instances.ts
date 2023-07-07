@@ -20,5 +20,6 @@ export const injectionMetadataMap = new Map() as {
 };
 
 export const resolveRecordManagerRef = new InstanceRefCount(
+  "ResolveRecordManager",
   () => new ResolveRecordManager()
 );
