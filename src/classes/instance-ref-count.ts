@@ -12,6 +12,8 @@ export class InstanceRefCount<T> {
   private _resolved: boolean;
   private _factory: CreateInstanceFactory<T>;
 
+  readonly name: string;
+
   get isNoRefs(): boolean {
     return this._count === 0;
   }
@@ -20,10 +22,11 @@ export class InstanceRefCount<T> {
     return this._instance;
   }
 
-  constructor(factory: CreateInstanceFactory<T>) {
+  constructor(name: string, factory: CreateInstanceFactory<T>) {
     this._factory = factory;
     this._count = 0;
     this._resolved = false;
+    this.name = name;
   }
 
   useInstance(instance?: T): T {

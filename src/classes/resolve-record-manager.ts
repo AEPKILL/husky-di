@@ -34,18 +34,26 @@ export type GetResolveExceptionOptions = {
 };
 
 export class ResolveRecordManager implements IDerivation {
-  private _recordStack: ResolveRecord<any>[] = [];
+  private _resolveRecordStack: ResolveRecord<any>[] = [];
 
   get recordCount(): number {
-    return this._recordStack.length;
+    return this._resolveRecordStack.length;
+  }
+
+  restore(resolveRecordStack: ResolveRecord<any>[]): void {
+    this._resolveRecordStack = resolveRecordStack;
+  }
+
+  getResolveRecordStack(): ResolveRecord<any>[] {
+    return this._resolveRecordStack.slice();
   }
 
   pushResolveRecord(resolveRecord: ResolveRecord<any>): void {
-    this._recordStack.push(resolveRecord);
+    this._resolveRecordStack.push(resolveRecord);
   }
 
   popResolveRecord(): void {
-    this._recordStack.pop();
+    this._resolveRecordStack.pop();
   }
 
   getResolveException(
@@ -101,7 +109,7 @@ export class ResolveRecordManager implements IDerivation {
   }
 
   getParentRequestContainer(): IContainer | null {
-    if (!this._recordStack.length) {
+    if (!this._resolveRecordStack.length) {
       return null;
     }
 
@@ -109,8 +117,8 @@ export class ResolveRecordManager implements IDerivation {
     // containers[1] is parent container
     const containers: IContainer[] = [];
 
-    for (let i = this._recordStack.length - 1; i >= 0; i--) {
-      const it = this._recordStack[i];
+    for (let i = this._resolveRecordStack.length - 1; i >= 0; i--) {
+      const it = this._resolveRecordStack[i];
       if (isResolveIdentifierRecord(it)) {
         containers.push(it.container);
       }
@@ -123,8 +131,8 @@ export class ResolveRecordManager implements IDerivation {
   }
 
   getRootRequestContainer(): IContainer | null {
-    for (let i = 0; i < this._recordStack.length; i++) {
-      const it = this._recordStack[i];
+    for (let i = 0; i < this._resolveRecordStack.length; i++) {
+      const it = this._resolveRecordStack[i];
 
       if (isResolveIdentifierRecord(it)) {
         return it.container;
@@ -134,12 +142,13 @@ export class ResolveRecordManager implements IDerivation {
   }
 
   getCycleResolveIdentifierRecord(): null | ResolveIdentifierRecord<any> {
-    if (this._recordStack.length < 2) {
+    if (this._resolveRecordStack.length < 2) {
       return null;
     }
 
     // only check latest resolve record
-    const latestResolveRecord = this._recordStack[this._recordStack.length - 1];
+    const latestResolveRecord =
+      this._resolveRecordStack[this._resolveRecordStack.length - 1];
 
     if (!isResolveIdentifierRecord(latestResolveRecord)) {
       return null;
@@ -153,8 +162,8 @@ export class ResolveRecordManager implements IDerivation {
       return null;
     }
 
-    for (let i = this._recordStack.length - 2; i >= 0; i--) {
-      const it = this._recordStack[i];
+    for (let i = this._resolveRecordStack.length - 2; i >= 0; i--) {
+      const it = this._resolveRecordStack[i];
 
       if (!isResolveIdentifierRecord(it)) {
         continue;
@@ -177,13 +186,13 @@ export class ResolveRecordManager implements IDerivation {
   }
 
   getResolveIdentifierRecords(): ResolveIdentifierRecord<any>[] {
-    return this._recordStack.filter((it) =>
+    return this._resolveRecordStack.filter((it) =>
       isResolveIdentifierRecord(it)
     ) as ResolveIdentifierRecord<any>[];
   }
 
   getResolveMessages(): string[] {
-    return this._recordStack.map((it) => {
+    return this._resolveRecordStack.map((it) => {
       if (isResolveIdentifierRecord(it)) {
         return `resolve service identifier ${getResolveIdentifierRecordName(
           it
@@ -196,7 +205,7 @@ export class ResolveRecordManager implements IDerivation {
 
   clone(): this {
     const resolveRecordManager = new ResolveRecordManager();
-    resolveRecordManager._recordStack = this._recordStack.slice();
+    resolveRecordManager._resolveRecordStack = this._resolveRecordStack.slice();
     return resolveRecordManager as this;
   }
 }
