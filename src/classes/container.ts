@@ -39,9 +39,12 @@ export class Container implements IInternalContainer {
 
   constructor(name: string) {
     this.name = name;
-    this.resolveContextRefs = new InstanceRefCount<ResolveContext>(() => {
-      return new Map();
-    });
+    this.resolveContextRefs = new InstanceRefCount<ResolveContext>(
+      `ResolveContext(#${this.name})`,
+      () => {
+        return new Map();
+      }
+    );
   }
 
   register<T>(
@@ -118,7 +121,9 @@ export class Container implements IInternalContainer {
 
     const resolveContext = this.resolveContextRefs.useInstance();
     const resolveRecordManager = resolveRecordManagerRef.useInstance();
-    const resolveRecordManagerSnapshot = resolveRecordManager.clone();
+
+    const resolveRecordStackSnapshot =
+      resolveRecordManager.getResolveRecordStack();
 
     try {
       resolveRecordManager.pushResolveRecord({
@@ -283,9 +288,7 @@ export class Container implements IInternalContainer {
           console.warn(`resolve record manager refs is not empty`);
         }
       } else {
-        resolveRecordManagerRef.$internal_setInstance(
-          resolveRecordManagerSnapshot
-        );
+        resolveRecordManager.restore(resolveRecordStackSnapshot);
       }
     }
   }
