@@ -22,6 +22,10 @@ export class InstanceRefCount<T> {
     return this._instance;
   }
 
+  get resolved(): boolean {
+    return this._resolved;
+  }
+
   constructor(name: string, factory: CreateInstanceFactory<T>) {
     this._factory = factory;
     this._count = 0;

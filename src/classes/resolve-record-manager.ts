@@ -130,8 +130,8 @@ export class ResolveRecordManager implements IDerivation {
     return containers[1] || null;
   }
 
-  getRootRequestContainer(): IContainer | null {
-    for (let i = 0; i < this._resolveRecordStack.length; i++) {
+  getCurrentRequestContainer(): IContainer | null {
+    for (let i = this._resolveRecordStack.length - 1; i >= 0; i--) {
       const it = this._resolveRecordStack[i];
 
       if (isResolveIdentifierRecord(it)) {

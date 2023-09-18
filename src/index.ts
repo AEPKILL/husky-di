@@ -32,6 +32,7 @@ export { ValueProvider } from "@/providers/value.provider";
 export { FactoryProvider, Factory } from "@/providers/factory.provider";
 
 export { formatStringsWithIndent } from "@/utils/format.utils";
+export { resolve } from "@/utils/container.utils";
 
 export const createContainer = Container.createContainer.bind(Container);
 export const createServiceIdentifier =
