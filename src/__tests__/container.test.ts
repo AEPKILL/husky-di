@@ -11,8 +11,10 @@ import {
   inject,
   injectable,
   Ref,
-  createServiceDecorator
+  createServiceDecorator,
+  createContainerFromRegistration
 } from "..";
+import { Registration } from "@/classes/registration";
 
 describe("container  test", () => {
   test(`provider can register & can find`, () => {
@@ -403,5 +405,36 @@ describe("container  test", () => {
     for (const item of container.resolve(test2.serviceIdentifier).test11) {
       expect(item).toBeInstanceOf(Test1);
     }
+  });
+
+  test(`can create container from registration`, () => {
+    const registration = new Registration();
+
+    let value = 0;
+
+    registration.register(
+      "test",
+      new FactoryProvider({
+        lifecycle: LifecycleEnum.singleton,
+        useFactory() {
+          return value++;
+        }
+      })
+    );
+
+    const container1 = createContainerFromRegistration(
+      "container1",
+      registration
+    );
+    const container2 = createContainerFromRegistration(
+      "container2",
+      registration
+    );
+
+    expect(container1.resolve("test")).toBe(0);
+    expect(container2.resolve("test")).toBe(1);
+    expect(container1.getProvider("test")).not.toBe(
+      container2.getProvider("test")
+    );
   });
 });
