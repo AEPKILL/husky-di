@@ -7,37 +7,31 @@
 import { LifecycleEnum } from "@/enums/lifecycle.enum";
 import { ClassProvider } from "@/providers/class.provider";
 import { resolveRecordManagerRef } from "@/shared/instances";
-import {
-  resetProvider,
-  setProviderInstance,
-  setProviderRegistered
-} from "@/utils/provider.utils";
+import { setProviderInstance } from "@/utils/provider.utils";
 import { getServiceIdentifierName } from "@/utils/service-identifier.utils";
 
 import { InstanceDynamicRef } from "./instance-dynamic-ref";
 import { InstanceRef } from "./instance-ref";
 import { InstanceRefCount } from "./instance-ref-count";
-import { Registry } from "./registry";
 
 import type {
   IContainer,
   ResolveOptions,
   ResolveReturnType
 } from "@/interfaces/container.interface";
-import type { IDisposable } from "@/interfaces/disposable.interface";
 import type { IInternalContainer } from "@/interfaces/internal-container.interface";
 import type { IProvider } from "@/interfaces/provider.interface";
 import type { Constructor } from "@/types/constructor.type";
 import type { ResolveContext } from "@/types/resolve-context.type";
 import type { ServiceIdentifier } from "@/types/service-identifier.type";
 import type { ResolveRecordManager } from "./resolve-record-manager";
-export class Container implements IInternalContainer {
+import { Registration } from "./registration";
+export class Container extends Registration implements IInternalContainer {
   readonly name: string;
   readonly resolveContextRefs: InstanceRefCount<ResolveContext>;
 
-  private readonly _registry = new Registry<IProvider<any>>();
-
   constructor(name: string) {
+    super();
     this.name = name;
     this.resolveContextRefs = new InstanceRefCount<ResolveContext>(
       `ResolveContext(#${this.name})`,
@@ -45,65 +39,6 @@ export class Container implements IInternalContainer {
         return new Map();
       }
     );
-  }
-
-  register<T>(
-    serviceIdentifier: ServiceIdentifier<T>,
-    provider: IProvider<T>
-  ): IDisposable {
-    if (provider.registered) {
-      throw new Error(`provider was already registered`);
-    }
-
-    const providers = this._registry.getAll(serviceIdentifier);
-    for (const it of providers) {
-      // must be same lifecycle
-      if (it.lifecycle !== provider.lifecycle) {
-        throw new Error(
-          `all providers for the service identifier "${getServiceIdentifierName(
-            serviceIdentifier
-          )}" must have a consistent lifecycle`
-        );
-      }
-      // must be same accessibility
-      if (it.isPrivate !== provider.isPrivate) {
-        throw new Error(
-          `all providers for the service identifier "${getServiceIdentifierName(
-            serviceIdentifier
-          )}" must have a consistent accessibility`
-        );
-      }
-    }
-
-    this._registry.set(serviceIdentifier, provider);
-    setProviderRegistered(provider, true);
-
-    return {
-      dispose: () => {
-        const providers = this._registry.getAll(serviceIdentifier);
-        this._registry.setAll(
-          serviceIdentifier,
-          providers.filter((it) => it !== provider)
-        );
-        resetProvider(provider);
-      }
-    };
-  }
-
-  isRegistered<T>(serviceIdentifier: ServiceIdentifier<T>): boolean {
-    return this._registry.has(serviceIdentifier);
-  }
-
-  getProvider<T>(serviceIdentifier: ServiceIdentifier<T>): IProvider<T> | null {
-    return this._registry.get(serviceIdentifier);
-  }
-
-  getAllRegisteredServiceIdentifiers(): ServiceIdentifier<any>[] {
-    return this._registry.keys();
-  }
-
-  getAllProvider<T>(serviceIdentifier: ServiceIdentifier<T>): IProvider<T>[] {
-    return this._registry.getAll(serviceIdentifier);
   }
 
   resolve<T, Options extends ResolveOptions<T>>(

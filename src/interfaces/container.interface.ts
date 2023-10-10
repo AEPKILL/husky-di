@@ -6,8 +6,7 @@
 
 import type { Ref } from "@/types/ref.type";
 import type { ServiceIdentifier } from "@/types/service-identifier.type";
-import type { IDisposable } from "./disposable.interface";
-import type { IProvider } from "./provider.interface";
+import type { IRegistration } from "./registration.interface";
 
 export type ResolveOptions<T> = {
   dynamic?: boolean;
@@ -28,24 +27,8 @@ export type ResolveReturnType<
   ? Ref<T>
   : T;
 
-export interface IContainer {
+export interface IContainer extends IRegistration {
   readonly name: string;
-
-  register<T>(
-    serviceIdentifier: ServiceIdentifier<T>,
-    provider: IProvider<T>
-  ): IDisposable;
-
-  isRegistered<T>(serviceIdentifier: ServiceIdentifier<T>): boolean;
-
-  getProvider<T>(serviceIdentifier: ServiceIdentifier<T>): IProvider<T> | null;
-
-  getAllRegisteredServiceIdentifiers(): ServiceIdentifier<any>[];
-
-  getAllProvider<T>(
-    serviceIdentifier: ServiceIdentifier<T>
-  ): Array<IProvider<T>>;
-
   resolve<T, Options extends ResolveOptions<T>>(
     serviceIdentifier: ServiceIdentifier<T>,
     options?: Options
