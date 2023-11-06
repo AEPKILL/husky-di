@@ -93,7 +93,7 @@ describe("container  test", () => {
   });
 
   test(`provider can unregister`, () => {
-    @injectable
+    @injectable()
     class Test {
       readonly id = Test._id++;
 
@@ -132,7 +132,7 @@ describe("container  test", () => {
   });
 
   test("can resolve unregistered constructor service identifier", () => {
-    @injectable
+    @injectable()
     class Test {}
     const container = createContainer("test");
     expect(container.resolve(Test)).toBeInstanceOf(Test);
@@ -141,7 +141,7 @@ describe("container  test", () => {
     ]);
   });
 
-  test("container can't resolve unregistered constructor service identifier without @injectable", () => {
+  test("container can't resolve unregistered constructor service identifier without @injectable()", () => {
     class Test {}
     const container = createContainer("test");
     expect(() => container.resolve(Test)).toThrow(
@@ -149,7 +149,7 @@ describe("container  test", () => {
         formatStringsWithIndent([
           "resolve service identifier Test[#test]",
           `service identifier "Test" is not registered, but it is a constructor, use temporary class provider to resolve`,
-          "constructor \"Test\" can't be resolved, please use '@injectable' decorate it"
+          "constructor \"Test\" can't be resolved, please use '@injectable()' decorate it"
         ])
     );
   });
@@ -189,7 +189,7 @@ describe("container  test", () => {
     const test1 = createServiceIdentifier<Test1>(Symbol("test1"));
     const test2 = createServiceIdentifier<Test2>(Symbol("test2"));
     const test3 = createServiceIdentifier<Test3>(Symbol("test3"));
-    @injectable
+    @injectable()
     class Test1 {
       constructor(
         @inject(test2, { ref: true }) readonly test2: Ref<Test2>,
@@ -197,12 +197,12 @@ describe("container  test", () => {
       ) {}
     }
 
-    @injectable
+    @injectable()
     class Test2 {
       constructor(@inject(test1) readonly test1: Test1) {}
     }
 
-    @injectable
+    @injectable()
     class Test3 {
       constructor(@inject(test1) readonly test1: Test1) {}
     }
@@ -280,7 +280,7 @@ describe("container  test", () => {
   test(`resolve class with exception`, () => {
     const container = createContainer("test");
 
-    @injectable
+    @injectable()
     class Test {
       constructor() {
         throw new Error();
@@ -306,9 +306,9 @@ describe("container  test", () => {
   test(`inject class constructor parameters without @inject decorator`, () => {
     const container = createContainer("test");
 
-    @injectable
+    @injectable()
     class Test1 {}
-    @injectable
+    @injectable()
     class Test2 {
       constructor(public readonly test1: Test1) {}
     }
@@ -337,10 +337,10 @@ describe("container  test", () => {
     const test2 =
       serviceIdentifierManager.createServiceIdentifier<Test2>("test2");
 
-    @injectable
+    @injectable()
     class Test1 {}
 
-    @injectable
+    @injectable()
     class Test2 {
       constructor(@inject(test1) readonly test1: Test1) {}
     }
@@ -361,14 +361,14 @@ describe("container  test", () => {
     );
   });
 
-  test(`can't use  "@injectable" decorate class twice`, () => {
+  test(`can't use  "@injectable()" decorate class twice`, () => {
     expect(() => {
-      @injectable
-      @injectable
+      @injectable()
+      @injectable()
       class Test {}
 
       return Test;
-    }).toThrow(`can't use  "@injectable" decorate class "Test" twice`);
+    }).toThrow(`can't use  "@injectable()" decorate class "Test" twice`);
   });
 
   test(`use "createServiceDecorator can replace @inject."`, () => {
@@ -376,10 +376,10 @@ describe("container  test", () => {
     const test1 = createServiceDecorator<Test1>("test1");
     const test2 = createServiceDecorator<Test2>("test2");
 
-    @injectable
+    @injectable()
     class Test1 {}
 
-    @injectable
+    @injectable()
     class Test2 {
       constructor(
         @test1() readonly test1: Test1,

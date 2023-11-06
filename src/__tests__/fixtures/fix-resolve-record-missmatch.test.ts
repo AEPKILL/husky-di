@@ -16,19 +16,19 @@ test(`provider can register & can find`, () => {
   const test2 = createServiceIdentifier<Test2>(Symbol("test2"));
   const test3 = createServiceIdentifier<Test3>(Symbol("test3"));
 
-  @injectable
+  @injectable()
   class Test1 {
     constructor() {}
   }
 
-  @injectable
+  @injectable()
   class Test2 {
     constructor() {
       throw new Error("exception");
     }
   }
 
-  @injectable
+  @injectable()
   class Test3 {
     constructor(
       @inject(test1) readonly test1: Test1,
