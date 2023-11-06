@@ -31,7 +31,7 @@ export class ClassProvider<T> extends ProviderBase<T> {
       throw new Error(
         `constructor "${getServiceIdentifierName(
           this._classConstructor
-        )}" can't be resolved, please use '@injectable' decorate it`
+        )}" can't be resolved, please use '@injectable()' decorate it`
       );
     }
   }
