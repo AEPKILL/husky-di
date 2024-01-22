@@ -14,13 +14,22 @@ export interface IRegistration {
     provider: IProvider<T>
   ): IDisposable;
 
+  unRegister<T>(
+    serviceIdentifier: ServiceIdentifier<T>,
+    provider: IProvider<T>
+  ): void;
+
   isRegistered<T>(serviceIdentifier: ServiceIdentifier<T>): boolean;
+  isRegistered<T>(
+    serviceIdentifier: ServiceIdentifier<T>,
+    provider: IProvider<T>
+  ): boolean;
 
   getProvider<T>(serviceIdentifier: ServiceIdentifier<T>): IProvider<T> | null;
-
-  getAllRegisteredServiceIdentifiers(): ServiceIdentifier<any>[];
 
   getAllProvider<T>(
     serviceIdentifier: ServiceIdentifier<T>
   ): Array<IProvider<T>>;
+
+  getAllRegisteredServiceIdentifiers(): ServiceIdentifier<any>[];
 }
