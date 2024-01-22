@@ -1,6 +1,6 @@
 {
   "name": "husky-di",
-  "version": "1.0.9",
+  "version": "1.0.10",
   "description": "lightweight dependency injection container",
   "main": "dist/cjs/index.js",
   "module": "dist/esm/index.js",
