@@ -98,7 +98,15 @@ const logRef = container.resolve('ILog', {
 
 // It will be resolved only when used.
 logRef.current.log()
+```
 
+#### optional
+
+Even if there are no providers registered for the service identifier when resolve, it does not throw exception.
+
+#### defaultValue
+
+If `optional` is set to true and there are no providers registered for the service identifier, resolve return the specified value.
 
 ### unRegister
 
@@ -126,14 +134,6 @@ e.g.
 container.unRegister('Pi')
 
 ```
-
-#### optional
-
-Even if there are no providers registered for the service identifier when resolve, it does not throw exception.
-
-#### defaultValue
-
-If `optional` is set to true and there are no providers registered for the service identifier, resolve return the specified value.
 
 ### isRegistered
 
