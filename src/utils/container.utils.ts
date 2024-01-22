@@ -15,10 +15,12 @@ import type {
 import type { IRegistration } from "@/interfaces/registration.interface";
 import type { ServiceIdentifier } from "@/types/service-identifier.type";
 
-export const resolve: IContainer["resolve"] = function resolve<
-  T,
-  Options extends ResolveOptions<T>
->(
+function _resolve<T>(serviceIdentifier: ServiceIdentifier<T>): T;
+function _resolve<T, Options extends ResolveOptions<T>>(
+  serviceIdentifier: ServiceIdentifier<T>,
+  options: Options
+): ResolveReturnType<T, Options>;
+function _resolve<T, Options extends ResolveOptions<T>>(
   serviceIdentifier: ServiceIdentifier<T>,
   options?: Options
 ): ResolveReturnType<T, Options> {
@@ -37,8 +39,11 @@ export const resolve: IContainer["resolve"] = function resolve<
     );
   }
 
-  return currentContainer.resolve(serviceIdentifier, options);
-};
+  return currentContainer.resolve(serviceIdentifier, options!);
+}
+
+// Ensure the function signatures are consistent.
+export const resolve: IContainer["resolve"] = _resolve;
 
 export function createContainerFromRegistration(
   name: string,

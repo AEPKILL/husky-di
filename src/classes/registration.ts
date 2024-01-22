@@ -50,18 +50,47 @@ export class Registration implements IRegistration {
 
     return {
       dispose: () => {
-        const providers = this._registry.getAll(serviceIdentifier);
-        this._registry.setAll(
-          serviceIdentifier,
-          providers.filter((it) => it !== provider)
-        );
-        resetProvider(provider);
+        this.unRegister(serviceIdentifier, provider);
       }
     };
   }
 
-  isRegistered<T>(serviceIdentifier: ServiceIdentifier<T>): boolean {
-    return this._registry.has(serviceIdentifier);
+  unRegister<T>(
+    serviceIdentifier: ServiceIdentifier<T>,
+    provider?: IProvider<T>
+  ): void {
+    const providers = this._registry.getAll(serviceIdentifier);
+
+    let finallyProviders: IProvider<T>[] = [];
+
+    if (provider) {
+      finallyProviders = providers.filter((it) => it !== provider);
+      resetProvider(provider);
+    } else {
+      providers.forEach((it) => {
+        resetProvider(it);
+      });
+    }
+
+    if (finallyProviders.length > 0) {
+      this._registry.setAll(serviceIdentifier, finallyProviders);
+    } else {
+      this._registry.delete(serviceIdentifier);
+    }
+  }
+
+  isRegistered<T>(
+    serviceIdentifier: ServiceIdentifier<T>,
+    provider?: IProvider<T>
+  ): boolean {
+    const serviceIdentifierIsRegistered = this._registry.has(serviceIdentifier);
+    if (provider == void 0) {
+      return serviceIdentifierIsRegistered;
+    }
+
+    const providers = this._registry.getAll(serviceIdentifier);
+
+    return providers.some((it) => it == provider);
   }
 
   getProvider<T>(serviceIdentifier: ServiceIdentifier<T>): IProvider<T> | null {

@@ -29,8 +29,9 @@ export type ResolveReturnType<
 
 export interface IContainer extends IRegistration {
   readonly name: string;
+  resolve<T>(serviceIdentifier: ServiceIdentifier<T>): T;
   resolve<T, Options extends ResolveOptions<T>>(
     serviceIdentifier: ServiceIdentifier<T>,
-    options?: Options
+    options: Options
   ): ResolveReturnType<T, Options>;
 }
