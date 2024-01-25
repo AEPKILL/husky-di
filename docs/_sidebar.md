@@ -4,3 +4,4 @@
 - Examples
   - [Circular dependencies](./circular-dependencies.md)
   - [Property Injection](./property-injection.md)
+  - [Javascript](./javascript.md)
