@@ -430,7 +430,7 @@ e.g.
 
 ```typescript
 
-  // Select a database service based on certain conditions.
+  // Select a database service based on conditions.
   @injectable()
   class BookStoreService {
     private database: IDatabase
@@ -442,6 +442,28 @@ e.g.
         this.database = database1
       } else {
         this.database = database2
+
+      }
+    }
+  }
+
+```
+
+This may lead to the creation of two service instances. Using `resolve` is a better choice.
+
+e.g.
+
+```typescript
+
+  // Select a database service based on conditions.
+  @injectable()
+  class BookStoreService {
+    private database: IDatabase
+    constructor() {
+      if (supportDatabase1) {
+        this.database = resolve(database1)
+      } else {
+        this.database = resolve(database2)
 
       }
     }
