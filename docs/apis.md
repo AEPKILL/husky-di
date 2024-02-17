@@ -80,7 +80,7 @@ const logRef = container.resolve('ILog', {
   ref: true
 })
 
-// It will be resolved only when used.
+// It will be resolved only when used and cache the value.
 logRef.current.log()
 
 ```
@@ -96,7 +96,7 @@ const logRef = container.resolve('ILog', {
   dynamic: true
 })
 
-// It will be resolved only when used.
+// It will be resolved only when used and not cache the value.
 logRef.current.log()
 ```
 
@@ -390,7 +390,7 @@ const constNumber = container.resolve(IConstNumber)
 
 This is not [container.resolve](#resolve).
 
-It must be called within a resolution context. When invoked, it will look for the current container in the resolution context and then execute the resolve.
+It must be called within a resolution context. When called, it will look for the current container in the resolution context and then execute the resolve.
 
 e.g.
 
