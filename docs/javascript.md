@@ -1,4 +1,4 @@
-# Javascript without decorator
+# Javascript
 
 Using with javascript
 
