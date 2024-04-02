@@ -13,8 +13,10 @@ import { getServiceIdentifierName } from "@/utils/service-identifier.utils";
 import { InstanceDynamicRef } from "./instance-dynamic-ref";
 import { InstanceRef } from "./instance-ref";
 import { InstanceRefCount } from "./instance-ref-count";
+import { Registration } from "./registration";
 
 import type {
+  CreateChildContainerOptions,
   IContainer,
   ResolveOptions,
   ResolveReturnType
@@ -25,10 +27,15 @@ import type { Constructor } from "@/types/constructor.type";
 import type { ResolveContext } from "@/types/resolve-context.type";
 import type { ServiceIdentifier } from "@/types/service-identifier.type";
 import type { ResolveRecordManager } from "./resolve-record-manager";
-import { Registration } from "./registration";
+
 export class Container extends Registration implements IInternalContainer {
+  #parentContainer: IContainer | null = null;
   readonly name: string;
   readonly resolveContextRefs: InstanceRefCount<ResolveContext>;
+
+  get parent(): IContainer | null {
+    return this.#parentContainer;
+  }
 
   constructor(name: string) {
     super();
@@ -39,6 +46,22 @@ export class Container extends Registration implements IInternalContainer {
         return new Map();
       }
     );
+  }
+
+  createChildContainer(options: CreateChildContainerOptions): IContainer {
+    const container = new Container(options.name);
+    container.#parentContainer = this;
+    return container;
+  }
+
+  hasChildContainer(container: IContainer): boolean {
+    while (container.parent) {
+      if (container.parent === this) {
+        return true;
+      }
+      container = container.parent;
+    }
+    return false;
   }
 
   resolve<T, Options extends ResolveOptions<T>>(
@@ -66,6 +89,18 @@ export class Container extends Registration implements IInternalContainer {
         serviceIdentifier,
         resolveOptions: options
       });
+
+      if (!this.isRegistered(serviceIdentifier) && this.parent) {
+        resolveRecordManager.pushResolveRecord({
+          message: `current container "${
+            this.name
+          }" not register service identifier "${getServiceIdentifierName(
+            serviceIdentifier
+          )}", try to resolve in parent container`
+        });
+
+        return this.parent.resolve(serviceIdentifier, options!);
+      }
 
       // check options
       if (ref && dynamic) {
