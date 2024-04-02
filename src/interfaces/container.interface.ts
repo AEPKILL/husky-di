@@ -16,6 +16,10 @@ export type ResolveOptions<T> = {
   defaultValue?: T | T[];
 };
 
+export type CreateChildContainerOptions = {
+  name: string;
+};
+
 export type ResolveReturnType<
   T,
   Options extends ResolveOptions<T>
@@ -29,6 +33,9 @@ export type ResolveReturnType<
 
 export interface IContainer extends IRegistration {
   readonly name: string;
+  readonly parent: IContainer | null;
+  createChildContainer(options: CreateChildContainerOptions): IContainer;
+  hasChildContainer(container: IContainer): boolean;
   resolve<T>(serviceIdentifier: ServiceIdentifier<T>): T;
   resolve<T, Options extends ResolveOptions<T>>(
     serviceIdentifier: ServiceIdentifier<T>,
