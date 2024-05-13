@@ -8,6 +8,11 @@ import type { ServiceIdentifier } from "@/types/service-identifier.type";
 import type { IProvider } from "./provider.interface";
 import type { IDisposable } from "./disposable.interface";
 
+export type IsRegisteredOptions<T> = {
+  serviceIdentifier: ServiceIdentifier<T>;
+  provider?: IProvider<T>;
+};
+
 export interface IRegistration {
   register<T>(
     serviceIdentifier: ServiceIdentifier<T>,
@@ -24,6 +29,7 @@ export interface IRegistration {
     serviceIdentifier: ServiceIdentifier<T>,
     provider: IProvider<T>
   ): boolean;
+  isRegistered<T>(options: IsRegisteredOptions<T>): boolean;
 
   getProvider<T>(serviceIdentifier: ServiceIdentifier<T>): IProvider<T> | null;
 
