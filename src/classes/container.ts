@@ -18,6 +18,7 @@ import { Registration } from "./registration";
 import type {
   CreateChildContainerOptions,
   IContainer,
+  IsRegisteredOptions,
   ResolveOptions,
   ResolveReturnType
 } from "@/interfaces/container.interface";
@@ -47,6 +48,30 @@ export class Container extends Registration implements IInternalContainer {
       }
     );
   }
+  isRegistered<T>(serviceIdentifier: ServiceIdentifier<T>): boolean;
+  isRegistered<T>(
+    serviceIdentifier: ServiceIdentifier<T>,
+    provider: IProvider<T>
+  ): boolean;
+  isRegistered<T>(options: IsRegisteredOptions<T>): boolean;
+  isRegistered<T>(
+    serviceIdentifierOrOptions: ServiceIdentifier<T> | IsRegisteredOptions<T>,
+    provider?: IProvider<T>
+  ): boolean {
+    const options = (typeof serviceIdentifierOrOptions === "object" &&
+      serviceIdentifierOrOptions) || {
+      serviceIdentifier: serviceIdentifierOrOptions,
+      provider
+    };
+
+    if (super.isRegistered(options)) return true;
+
+    if (options.recursive && this.parent) {
+      return this.parent.isRegistered(options);
+    }
+
+    return false;
+  }
 
   createChildContainer(options: CreateChildContainerOptions): IContainer {
     const container = new Container(options.name);
@@ -73,7 +98,10 @@ export class Container extends Registration implements IInternalContainer {
     const providers = this.getAllProvider(serviceIdentifier);
     const provider = this.getProvider(serviceIdentifier);
 
-    const isRegistered = this.isRegistered(serviceIdentifier);
+    const isRegistered = this.isRegistered({
+      serviceIdentifier,
+      provider: provider || void 0
+    });
     const isRootResolveContext = this.resolveContextRefs.isNoRefs;
     const isRootResolveRecordManager = resolveRecordManagerRef.isNoRefs;
 
@@ -90,16 +118,28 @@ export class Container extends Registration implements IInternalContainer {
         resolveOptions: options
       });
 
-      if (!this.isRegistered(serviceIdentifier) && this.parent) {
-        resolveRecordManager.pushResolveRecord({
-          message: `current container "${
-            this.name
-          }" not register service identifier "${getServiceIdentifierName(
-            serviceIdentifier
-          )}", try to resolve in parent container`
-        });
+      const registeredInCurrentContainer = this.isRegistered({
+        serviceIdentifier,
+        provider: provider || void 0
+      });
 
-        return this.parent.resolve(serviceIdentifier, options!);
+      if (!registeredInCurrentContainer && this.parent) {
+        const registeredInParentContainer = this.parent.isRegistered({
+          serviceIdentifier,
+          provider: provider || void 0,
+          recursive: true
+        });
+        if (registeredInParentContainer) {
+          resolveRecordManager.pushResolveRecord({
+            message: `current container "${
+              this.name
+            }" not register service identifier "${getServiceIdentifierName(
+              serviceIdentifier
+            )}", try to resolve in parent container`
+          });
+
+          return this.parent.resolve(serviceIdentifier, options!);
+        }
       }
 
       // check options

@@ -4,7 +4,10 @@
  * @created 2023-10-10 11:01:57
  */
 
-import type { IRegistration } from "@/interfaces/registration.interface";
+import type {
+  IRegistration,
+  IsRegisteredOptions
+} from "@/interfaces/registration.interface";
 import { resetProvider, setProviderRegistered } from "@/utils/provider.utils";
 import { getServiceIdentifierName } from "@/utils/service-identifier.utils";
 
@@ -79,18 +82,36 @@ export class Registration implements IRegistration {
     }
   }
 
+  isRegistered<T>(serviceIdentifier: ServiceIdentifier<T>): boolean;
   isRegistered<T>(
     serviceIdentifier: ServiceIdentifier<T>,
+    provider: IProvider<T>
+  ): boolean;
+  isRegistered<T>(options: IsRegisteredOptions<T>): boolean;
+  isRegistered<T>(
+    serviceIdentifierOrOptions: ServiceIdentifier<T> | IsRegisteredOptions<T>,
     provider?: IProvider<T>
   ): boolean {
-    const serviceIdentifierIsRegistered = this._registry.has(serviceIdentifier);
-    if (provider == void 0) {
+    const options = (typeof serviceIdentifierOrOptions === "object" &&
+      serviceIdentifierOrOptions) || {
+      serviceIdentifier: serviceIdentifierOrOptions,
+      provider
+    };
+
+    const serviceIdentifierIsRegistered = this._registry.has(
+      options.serviceIdentifier
+    );
+
+    if (!serviceIdentifierIsRegistered) return false;
+
+    if (options.provider == void 0) {
       return serviceIdentifierIsRegistered;
     }
 
-    const providers = this._registry.getAll(serviceIdentifier);
+    const providers = this._registry.getAll(options.serviceIdentifier);
+    const hasSameProvider = providers.some((it) => it == options.provider);
 
-    return providers.some((it) => it == provider);
+    return hasSameProvider;
   }
 
   getProvider<T>(serviceIdentifier: ServiceIdentifier<T>): IProvider<T> | null {
