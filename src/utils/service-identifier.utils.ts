@@ -25,3 +25,13 @@ export function getServiceIdentifierName(
 
   return serviceIdentifier;
 }
+
+export function isServiceIdentifier<T>(
+  serviceIdentifier: ServiceIdentifier<T> | any
+): serviceIdentifier is ServiceIdentifier<T> {
+  return (
+    typeof serviceIdentifier === "function" ||
+    typeof serviceIdentifier === "symbol" ||
+    typeof serviceIdentifier === "string"
+  );
+}

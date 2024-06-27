@@ -8,7 +8,10 @@ import { LifecycleEnum } from "@/enums/lifecycle.enum";
 import { ClassProvider } from "@/providers/class.provider";
 import { resolveRecordManagerRef } from "@/shared/instances";
 import { setProviderInstance } from "@/utils/provider.utils";
-import { getServiceIdentifierName } from "@/utils/service-identifier.utils";
+import {
+  getServiceIdentifierName,
+  isServiceIdentifier
+} from "@/utils/service-identifier.utils";
 
 import { InstanceDynamicRef } from "./instance-dynamic-ref";
 import { InstanceRef } from "./instance-ref";
@@ -48,21 +51,17 @@ export class Container extends Registration implements IInternalContainer {
       }
     );
   }
+
   isRegistered<T>(serviceIdentifier: ServiceIdentifier<T>): boolean;
-  isRegistered<T>(
-    serviceIdentifier: ServiceIdentifier<T>,
-    provider: IProvider<T>
-  ): boolean;
   isRegistered<T>(options: IsRegisteredOptions<T>): boolean;
   isRegistered<T>(
-    serviceIdentifierOrOptions: ServiceIdentifier<T> | IsRegisteredOptions<T>,
-    provider?: IProvider<T>
+    serviceIdentifierOrOptions: ServiceIdentifier<T> | IsRegisteredOptions<T>
   ): boolean {
-    const options = (typeof serviceIdentifierOrOptions === "object" &&
-      serviceIdentifierOrOptions) || {
-      serviceIdentifier: serviceIdentifierOrOptions,
-      provider
-    };
+    const options = isServiceIdentifier(serviceIdentifierOrOptions)
+      ? {
+          serviceIdentifier: serviceIdentifierOrOptions
+        }
+      : serviceIdentifierOrOptions;
 
     if (super.isRegistered(options)) return true;
 

@@ -36,6 +36,7 @@ export {
   resolve,
   createContainerFromRegistration
 } from "@/utils/container.utils";
+export { isServiceIdentifier } from "@/utils/service-identifier.utils";
 export { Registration } from "@/classes/registration";
 
 export const createContainer = Container.createContainer.bind(Container);

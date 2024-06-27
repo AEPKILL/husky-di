@@ -25,10 +25,6 @@ export interface IRegistration {
   ): void;
 
   isRegistered<T>(serviceIdentifier: ServiceIdentifier<T>): boolean;
-  isRegistered<T>(
-    serviceIdentifier: ServiceIdentifier<T>,
-    provider: IProvider<T>
-  ): boolean;
   isRegistered<T>(options: IsRegisteredOptions<T>): boolean;
 
   getProvider<T>(serviceIdentifier: ServiceIdentifier<T>): IProvider<T> | null;
