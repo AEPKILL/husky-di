@@ -9,7 +9,10 @@ import type {
   IsRegisteredOptions
 } from "@/interfaces/registration.interface";
 import { resetProvider, setProviderRegistered } from "@/utils/provider.utils";
-import { getServiceIdentifierName } from "@/utils/service-identifier.utils";
+import {
+  getServiceIdentifierName,
+  isServiceIdentifier
+} from "@/utils/service-identifier.utils";
 
 import { Registry } from "./registry";
 
@@ -83,20 +86,15 @@ export class Registration implements IRegistration {
   }
 
   isRegistered<T>(serviceIdentifier: ServiceIdentifier<T>): boolean;
-  isRegistered<T>(
-    serviceIdentifier: ServiceIdentifier<T>,
-    provider: IProvider<T>
-  ): boolean;
   isRegistered<T>(options: IsRegisteredOptions<T>): boolean;
   isRegistered<T>(
-    serviceIdentifierOrOptions: ServiceIdentifier<T> | IsRegisteredOptions<T>,
-    provider?: IProvider<T>
+    serviceIdentifierOrOptions: ServiceIdentifier<T> | IsRegisteredOptions<T>
   ): boolean {
-    const options = (typeof serviceIdentifierOrOptions === "object" &&
-      serviceIdentifierOrOptions) || {
-      serviceIdentifier: serviceIdentifierOrOptions,
-      provider
-    };
+    const options = isServiceIdentifier(serviceIdentifierOrOptions)
+      ? {
+          serviceIdentifier: serviceIdentifierOrOptions
+        }
+      : serviceIdentifierOrOptions;
 
     const serviceIdentifierIsRegistered = this._registry.has(
       options.serviceIdentifier

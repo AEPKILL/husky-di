@@ -10,7 +10,6 @@ import type {
   IRegistration,
   IsRegisteredOptions as IRegistrationIsRegisteredOptions
 } from "./registration.interface";
-import { IProvider } from "./provider.interface";
 
 export type ResolveOptions<T> = {
   dynamic?: boolean;
@@ -57,9 +56,5 @@ export interface IContainer extends Omit<IRegistration, "isRegistered"> {
   ): ResolveReturnType<T, Options>;
 
   isRegistered<T>(serviceIdentifier: ServiceIdentifier<T>): boolean;
-  isRegistered<T>(
-    serviceIdentifier: ServiceIdentifier<T>,
-    provider: IProvider<T>
-  ): boolean;
   isRegistered<T>(options: IsRegisteredOptions<T>): boolean;
 }
