@@ -38,15 +38,15 @@ export class ClassProvider<T> extends ProviderBase<T> {
 
   resolve({ container, resolveRecordManager }: ProviderResolveOptions): T {
     const parameter = this._parametersMetadata.map((it, index) => {
-      try {
-        resolveRecordManager.pushResolveRecord({
-          message: `resolve parameter #${index} of constructor ${this._classConstructor.name}`
-        });
+      resolveRecordManager.pushResolveRecord({
+        message: `resolve parameter #${index} of constructor ${this._classConstructor.name}`
+      });
 
-        return container.resolve(it.serviceIdentifier, it);
-      } finally {
-        resolveRecordManager.popResolveRecord();
-      }
+      const value = container.resolve(it.serviceIdentifier, it);
+
+      resolveRecordManager.popResolveRecord();
+
+      return value;
     });
 
     try {
