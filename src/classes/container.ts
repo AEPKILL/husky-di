@@ -22,6 +22,8 @@ import type {
   CreateChildContainerOptions,
   IContainer,
   IsRegisteredOptions,
+  Middleware,
+  MiddlewareParams,
   ResolveOptions,
   ResolveReturnType
 } from "@/interfaces/container.interface";
@@ -34,6 +36,8 @@ import type { ResolveRecordManager } from "./resolve-record-manager";
 
 export class Container extends Registration implements IInternalContainer {
   #parentContainer: IContainer | null = null;
+  #middlewares: Middleware[] = [];
+
   readonly name: string;
   readonly resolveContextRefs: InstanceRefCount<ResolveContext>;
 
@@ -50,6 +54,14 @@ export class Container extends Registration implements IInternalContainer {
         return new Map();
       }
     );
+  }
+  addMiddleware(middleware: Middleware): () => void {
+    if (!this.#middlewares.find((it) => it === middleware)) {
+      this.#middlewares.push(middleware);
+    }
+    return () => {
+      this.#middlewares = this.#middlewares.filter((it) => it !== middleware);
+    };
   }
 
   isRegistered<T>(serviceIdentifier: ServiceIdentifier<T>): boolean;
@@ -92,15 +104,6 @@ export class Container extends Registration implements IInternalContainer {
     serviceIdentifier: ServiceIdentifier<T>,
     options?: Options | undefined
   ): ResolveReturnType<T, Options> {
-    const { ref, dynamic, multiple, optional, defaultValue } = options || {};
-
-    const providers = this.getAllProvider(serviceIdentifier);
-    const provider = this.getProvider(serviceIdentifier);
-
-    const isRegistered = this.isRegistered({
-      serviceIdentifier,
-      provider: provider || void 0
-    });
     const isRootResolveContext = this.resolveContextRefs.isNoRefs;
     const isRootResolveRecordManager = resolveRecordManagerRef.isNoRefs;
 
@@ -110,6 +113,11 @@ export class Container extends Registration implements IInternalContainer {
     const resolveRecordStackSnapshot =
       resolveRecordManager.getResolveRecordStack();
 
+    const middlewares = Container.#staticMiddlewares.concat(this.#middlewares);
+    const middlewareExecutor = middlewares.reduce((result, middleware) => {
+      return middleware(result);
+    }, this._internalResolve.bind(this) as ReturnType<Middleware>);
+
     try {
       resolveRecordManager.pushResolveRecord({
         container: this,
@@ -117,169 +125,13 @@ export class Container extends Registration implements IInternalContainer {
         resolveOptions: options
       });
 
-      const registeredInCurrentContainer = this.isRegistered({
+      return middlewareExecutor({
+        container: this,
         serviceIdentifier,
-        provider: provider || void 0
-      });
-
-      if (!registeredInCurrentContainer && this.parent) {
-        const registeredInParentContainer = this.parent.isRegistered({
-          serviceIdentifier,
-          provider: provider || void 0,
-          recursive: true
-        });
-        if (registeredInParentContainer) {
-          resolveRecordManager.pushResolveRecord({
-            message: `current container "${
-              this.name
-            }" not register service identifier "${getServiceIdentifierName(
-              serviceIdentifier
-            )}", try to resolve in parent container`
-          });
-
-          return this.parent.resolve(serviceIdentifier, options!);
-        }
-      }
-
-      // check options
-      if (ref && dynamic) {
-        throw resolveRecordManager.getResolveException(
-          `ref and dynamic flag can't be true at the same time`
-        );
-      }
-
-      // check accessibility
-      if (provider) {
-        if (provider.isPrivate) {
-          const parentRequestContainer =
-            resolveRecordManager.getParentRequestContainer();
-          if (parentRequestContainer !== this) {
-            throw resolveRecordManager.getResolveException(
-              `service identifier "${getServiceIdentifierName(
-                serviceIdentifier
-              )}" is private, can only be resolved within the container "${
-                this.name
-              }"`
-            );
-          }
-        }
-      }
-
-      // check cycle dependency
-      const cycleResolveIdentifierRecord =
-        resolveRecordManager.getCycleResolveIdentifierRecord();
-      if (cycleResolveIdentifierRecord) {
-        throw resolveRecordManager.getResolveException(
-          `circular dependency detected, try use ref or dynamic flag`,
-          {
-            cycleResolveIdentifierRecord
-          }
-        );
-      }
-
-      // service identifier not registered and service identifier is a constructor
-      // use temporary class provider to resolve
-      if (!isRegistered) {
-        if (typeof serviceIdentifier === "function") {
-          try {
-            resolveRecordManager.pushResolveRecord({
-              message: `service identifier "${getServiceIdentifierName(
-                serviceIdentifier
-              )}" is not registered, but it is a constructor, use temporary class provider to resolve`
-            });
-            const instance = new ClassProvider({
-              useClass: serviceIdentifier as Constructor<T>
-            }).resolve({
-              container: this,
-              resolveContext,
-              resolveRecordManager
-            });
-            return (multiple ? [instance] : instance) as ResolveReturnType<
-              T,
-              Options
-            >;
-          } catch (e: any) {
-            throw resolveRecordManager.getResolveException(e.message, {
-              exception: e
-            });
-          }
-        }
-      }
-
-      // handle ref flag
-      if (ref) {
-        const refResolveRecordManagerSnapshot = resolveRecordManager.clone();
-        refResolveRecordManagerSnapshot.pushResolveRecord({
-          message: `"${getServiceIdentifierName(
-            serviceIdentifier
-          )}" is a ref value, wait for use`
-        });
-
-        return new InstanceRef(() => {
-          resolveRecordManagerRef.$internal_setInstance(
-            refResolveRecordManagerSnapshot
-          );
-          this.resolveContextRefs.$internal_setInstance(resolveContext);
-          return this.resolve(serviceIdentifier, {
-            ...options,
-            ref: false
-          });
-        }) as ResolveReturnType<T, Options>;
-      }
-
-      //  handle dynamic flag
-      if (dynamic) {
-        const dynamicResolveRecordManagerSnapshot =
-          resolveRecordManager.clone();
-        dynamicResolveRecordManagerSnapshot.pushResolveRecord({
-          message: `"${getServiceIdentifierName(
-            serviceIdentifier
-          )}" is a dynamic value, wait for use`
-        });
-
-        return new InstanceDynamicRef(() => {
-          resolveRecordManagerRef.$internal_setInstance(
-            dynamicResolveRecordManagerSnapshot
-          );
-          this.resolveContextRefs.$internal_setInstance(resolveContext);
-          return this.resolve(serviceIdentifier, {
-            ...options,
-            dynamic: false
-          });
-        }) as ResolveReturnType<T, Options>;
-      }
-
-      if (!isRegistered) {
-        // handle optional flag
-        if (optional) {
-          return defaultValue as ResolveReturnType<T, Options>;
-        }
-
-        // not registered and not constructor, can't resolve it
-        throw resolveRecordManager.getResolveException(
-          `attempted to resolve unregistered dependency service identifier: "${getServiceIdentifierName(
-            serviceIdentifier
-          )}"`
-        );
-      }
-
-      if (multiple) {
-        return providers.map((provider) => {
-          return this._applyProviderResolve(
-            resolveContext,
-            resolveRecordManager,
-            provider,
-            this
-          );
-        }) as ResolveReturnType<T, Options>;
-      } else {
-        return this._applyProviderResolve(
-          resolveContext,
-          resolveRecordManager,
-          provider!,
-          this
-        ) as ResolveReturnType<T, Options>;
-      }
+        resolveOptions: options,
+        resolveContext,
+        resolveRecordManager
+      }) as ResolveReturnType<T, Options>;
     } finally {
       this.resolveContextRefs.releaseInstance();
       resolveRecordManagerRef.releaseInstance();
@@ -300,6 +152,193 @@ export class Container extends Registration implements IInternalContainer {
         resolveRecordManager.restore(resolveRecordStackSnapshot);
       }
     }
+  }
+
+  private _internalResolve<T, Options extends ResolveOptions<T>>(
+    params: MiddlewareParams<T>
+  ): ResolveReturnType<T, Options> {
+    const {
+      serviceIdentifier,
+      resolveOptions: options,
+      resolveContext,
+      resolveRecordManager
+    } = params;
+    const { ref, dynamic, multiple, optional, defaultValue } = options || {};
+
+    const providers = this.getAllProvider(serviceIdentifier);
+    const provider = this.getProvider(serviceIdentifier);
+    const isRegistered = this.isRegistered({
+      serviceIdentifier,
+      provider: provider || void 0
+    });
+
+    const registeredInCurrentContainer = this.isRegistered({
+      serviceIdentifier,
+      provider: provider || void 0
+    });
+
+    if (!registeredInCurrentContainer && this.parent) {
+      const registeredInParentContainer = this.parent.isRegistered({
+        serviceIdentifier,
+        provider: provider || void 0,
+        recursive: true
+      });
+      if (registeredInParentContainer) {
+        resolveRecordManager.pushResolveRecord({
+          message: `current container "${
+            this.name
+          }" not register service identifier "${getServiceIdentifierName(
+            serviceIdentifier
+          )}", try to resolve in parent container`
+        });
+
+        return this.parent.resolve(
+          serviceIdentifier,
+          options!
+        ) as ResolveReturnType<T, Options>;
+      }
+    }
+
+    // check options
+    if (ref && dynamic) {
+      throw resolveRecordManager.getResolveException(
+        `ref and dynamic flag can't be true at the same time`
+      );
+    }
+
+    // check accessibility
+    if (provider) {
+      if (provider.isPrivate) {
+        const parentRequestContainer =
+          resolveRecordManager.getParentRequestContainer();
+        if (parentRequestContainer !== this) {
+          throw resolveRecordManager.getResolveException(
+            `service identifier "${getServiceIdentifierName(
+              serviceIdentifier
+            )}" is private, can only be resolved within the container "${
+              this.name
+            }"`
+          );
+        }
+      }
+    }
+
+    // check cycle dependency
+    const cycleResolveIdentifierRecord =
+      resolveRecordManager.getCycleResolveIdentifierRecord();
+    if (cycleResolveIdentifierRecord) {
+      throw resolveRecordManager.getResolveException(
+        `circular dependency detected, try use ref or dynamic flag`,
+        {
+          cycleResolveIdentifierRecord
+        }
+      );
+    }
+
+    // service identifier not registered and service identifier is a constructor
+    // use temporary class provider to resolve
+    if (!isRegistered) {
+      if (typeof serviceIdentifier === "function") {
+        try {
+          resolveRecordManager.pushResolveRecord({
+            message: `service identifier "${getServiceIdentifierName(
+              serviceIdentifier
+            )}" is not registered, but it is a constructor, use temporary class provider to resolve`
+          });
+          const instance = new ClassProvider({
+            useClass: serviceIdentifier as Constructor<T>
+          }).resolve({
+            container: this,
+            resolveContext,
+            resolveRecordManager
+          });
+          return (multiple ? [instance] : instance) as ResolveReturnType<
+            T,
+            Options
+          >;
+        } catch (e: any) {
+          throw resolveRecordManager.getResolveException(e.message, {
+            exception: e
+          });
+        }
+      }
+    }
+
+    // handle ref flag
+    if (ref) {
+      const refResolveRecordManagerSnapshot = resolveRecordManager.clone();
+      refResolveRecordManagerSnapshot.pushResolveRecord({
+        message: `"${getServiceIdentifierName(
+          serviceIdentifier
+        )}" is a ref value, wait for use`
+      });
+
+      return new InstanceRef(() => {
+        resolveRecordManagerRef.$internal_setInstance(
+          refResolveRecordManagerSnapshot
+        );
+        this.resolveContextRefs.$internal_setInstance(resolveContext);
+        return this.resolve(serviceIdentifier, {
+          ...options,
+          ref: false
+        });
+      }) as ResolveReturnType<T, Options>;
+    }
+
+    //  handle dynamic flag
+    if (dynamic) {
+      const dynamicResolveRecordManagerSnapshot = resolveRecordManager.clone();
+      dynamicResolveRecordManagerSnapshot.pushResolveRecord({
+        message: `"${getServiceIdentifierName(
+          serviceIdentifier
+        )}" is a dynamic value, wait for use`
+      });
+
+      return new InstanceDynamicRef(() => {
+        resolveRecordManagerRef.$internal_setInstance(
+          dynamicResolveRecordManagerSnapshot
+        );
+        this.resolveContextRefs.$internal_setInstance(resolveContext);
+        return this.resolve(serviceIdentifier, {
+          ...options,
+          dynamic: false
+        });
+      }) as ResolveReturnType<T, Options>;
+    }
+
+    if (!isRegistered) {
+      // handle optional flag
+      if (optional) {
+        return defaultValue as ResolveReturnType<T, Options>;
+      }
+
+      // not registered and not constructor, can't resolve it
+      throw resolveRecordManager.getResolveException(
+        `attempted to resolve unregistered dependency service identifier: "${getServiceIdentifierName(
+          serviceIdentifier
+        )}"`
+      );
+    }
+
+    if (multiple) {
+      return providers.map((provider) => {
+        return this._applyProviderResolve(
+          resolveContext,
+          resolveRecordManager,
+          provider,
+          this
+        );
+      }) as ResolveReturnType<T, Options>;
+    } else {
+      return this._applyProviderResolve(
+        resolveContext,
+        resolveRecordManager,
+        provider!,
+        this
+      ) as ResolveReturnType<T, Options>;
+    }
+
+    return null as any;
   }
 
   private _applyProviderResolve<T>(
@@ -336,6 +375,18 @@ export class Container extends Registration implements IInternalContainer {
     return instance;
   }
 
+  static #staticMiddlewares: Middleware[] = [];
+
+  static addMiddleware(middleware: Middleware): () => void {
+    if (!this.#staticMiddlewares.find((it) => it === middleware)) {
+      this.#staticMiddlewares.push(middleware);
+    }
+    return () => {
+      this.#staticMiddlewares = this.#staticMiddlewares.filter(
+        (it) => it !== middleware
+      );
+    };
+  }
   static createContainer(
     name: string,
     register?: (container: IContainer) => void
