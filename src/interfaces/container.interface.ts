@@ -10,6 +10,8 @@ import type {
   IRegistration,
   IsRegisteredOptions as IRegistrationIsRegisteredOptions
 } from "./registration.interface";
+import { ResolveContext } from "@/types/resolve-context.type";
+import { ResolveRecordManager } from "@/classes/resolve-record-manager";
 
 export type ResolveOptions<T> = {
   dynamic?: boolean;
@@ -18,6 +20,18 @@ export type ResolveOptions<T> = {
   optional?: boolean;
   defaultValue?: T | T[];
 };
+
+export interface MiddlewareParams<T = any> {
+  serviceIdentifier: ServiceIdentifier<T>;
+  container: IContainer;
+  resolveContext: ResolveContext;
+  resolveRecordManager: ResolveRecordManager;
+  resolveOptions?: ResolveOptions<T>;
+}
+
+export type Middleware = (
+  next: (params: MiddlewareParams) => unknown
+) => (params: MiddlewareParams) => unknown;
 
 export type CreateChildContainerOptions = {
   name: string;
@@ -47,6 +61,9 @@ export type IsRegisteredOptions<T> = IRegistrationIsRegisteredOptions<T> & {
 export interface IContainer extends Omit<IRegistration, "isRegistered"> {
   readonly name: string;
   readonly parent: IContainer | null;
+
+  addMiddleware(middleware: Middleware): () => void;
+
   createChildContainer(options: CreateChildContainerOptions): IContainer;
   hasChildContainer(container: IContainer): boolean;
   resolve<T>(serviceIdentifier: ServiceIdentifier<T>): T;
