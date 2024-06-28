@@ -1,6 +1,6 @@
 # Middleware
 
-Middleware is designed to perform various middleware operations, such as intercepting resolve, adding logs, modifying the resolution results, and more.
+Middleware is designed to perform intermediary operations, such as intercepting resolve, adding logs, transform result, and more.
 
 ## Illustration
 
