@@ -13,13 +13,13 @@ import type {
 import { ResolveContext } from "@/types/resolve-context.type";
 import { ResolveRecordManager } from "@/classes/resolve-record-manager";
 
-export type ResolveOptions<T> = {
+export interface ResolveOptions<T> {
   dynamic?: boolean;
   multiple?: boolean;
   ref?: boolean;
   optional?: boolean;
   defaultValue?: T | T[];
-};
+}
 
 export interface MiddlewareParams<T = any> {
   serviceIdentifier: ServiceIdentifier<T>;
