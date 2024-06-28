@@ -4,14 +4,9 @@
  * @created 2023-05-24 10:47:34
  */
 
+import { ResolveOptions } from "@/interfaces/container.interface";
 import type { ServiceIdentifier } from "./service-identifier.type";
 
-export type InjectionMetadata<T> = {
+export interface InjectionMetadata<T> extends ResolveOptions<T> {
   serviceIdentifier: ServiceIdentifier<T>;
-
-  dynamic?: boolean;
-  multiple?: boolean;
-  ref?: boolean;
-  optional?: boolean;
-  defaultValue?: T | T[];
-};
+}
