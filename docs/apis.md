@@ -13,39 +13,45 @@ It takes two parameters. The first parameter is the service identifier, which ca
 e.g.
 
 ```typescript
-  import { Container, ValueProvider } from 'husky-di';
+import { Container, ValueProvider } from "husky-di";
 
-  const container = new Container('Container');
+const container = new Container("Container");
 
-  container.register('Pi', new ValueProvider({
+container.register(
+  "Pi",
+  new ValueProvider({
     useValue: 3.14
-  }))
-
- ```
+  })
+);
+```
 
 It is possible to bind multiple providers to a single service identifier. For instance, in the case of a logging system, there could be multiple log records, such as local logs and remote logs.
 
 e.g.
 
 ```typescript
-  import { Container, ClassProvider } from 'husky-di';
-  import { LocalLogService } from '@/services/local-log.service'
-  import { RemoteLogService } from '@/services/remote-log.service'
+import { Container, ClassProvider } from "husky-di";
+import { LocalLogService } from "@/services/local-log.service";
+import { RemoteLogService } from "@/services/remote-log.service";
 
-  const container = new Container('Container');
-  
+const container = new Container("Container");
 
-  const ILog = createServiceIdentifier('ILog')
+const ILog = createServiceIdentifier("ILog");
 
-  container.register(ILog, new ClassProvider({
+container.register(
+  ILog,
+  new ClassProvider({
     useClass: LocalLogService
-  }))
+  })
+);
 
-  container.register(ILog, new ClassProvider({
+container.register(
+  ILog,
+  new ClassProvider({
     useClass: RemoteLogService
-  }))
-
- ```
+  })
+);
+```
 
 ### resolve
 
@@ -56,7 +62,7 @@ Resolve object from the container.
 Resolve the most recently bound provider for a given service identifier.
 
 ```typescript
-const log = container.resolve('ILog')
+const log = container.resolve("ILog");
 ```
 
 #### multiple object
@@ -64,9 +70,9 @@ const log = container.resolve('ILog')
 Resolve all providers bound to the service identifier.
 
 ```typescript
-const logs = container.resolve('ILog', {
+const logs = container.resolve("ILog", {
   multiple: true
-})
+});
 ```
 
 #### ref
@@ -74,15 +80,13 @@ const logs = container.resolve('ILog', {
 Reference an object without resolving it immediately, it is resolved only when used.
 
 ```typescript
-
 // It does not resolve immediately.
-const logRef = container.resolve('ILog', { 
+const logRef = container.resolve("ILog", {
   ref: true
-})
+});
 
 // It will be resolved only when used and cache the value.
-logRef.current.log()
-
+logRef.current.log();
 ```
 
 #### dynamic
@@ -90,14 +94,13 @@ logRef.current.log()
 Similar to `ref`, `dynamic` establishes a reference, but `ref` caches the resolved result, whereas `dynamic` does not cache the resolve result.
 
 ```typescript
-
 // It does not resolve immediately.
-const logRef = container.resolve('ILog', { 
+const logRef = container.resolve("ILog", {
   dynamic: true
-})
+});
 
 // It will be resolved only when used and not cache the value.
-logRef.current.log()
+logRef.current.log();
 ```
 
 #### optional
@@ -115,13 +118,11 @@ Unregister a provider bound to the service identifier from the container.
 e.g.
 
 ```typescript
-
 const piProvider = new ValueProvider({
-   useValue: 3.14
-})
+  useValue: 3.14
+});
 
-container.unRegister('Pi', piProvider)
-
+container.unRegister("Pi", piProvider);
 ```
 
 Unregister all providers bound to this service identifier from the container.
@@ -129,10 +130,8 @@ Unregister all providers bound to this service identifier from the container.
 e.g.
 
 ```typescript
-
 // only pass the service identifier
-container.unRegister('Pi')
-
+container.unRegister("Pi");
 ```
 
 ### isRegistered
@@ -142,16 +141,15 @@ Check if the service identifier has been registered with a provider.
 e.g.
 
 ```typescript
-
 const piProvider = new ValueProvider({
-   useValue: 3.14
-})
+  useValue: 3.14
+});
 
 // Check if any provider has been registered for the service identifier "Pi".
-container.isRegistered('Pi')
+container.isRegistered("Pi");
 
 // Check if a specified  provider has been registered for the service identifier "Pi".
-container.isRegistered('Pi', piProvider)
+container.isRegistered("Pi", piProvider);
 ```
 
 ### getProvider
@@ -161,9 +159,7 @@ Get the most recently bound provider for a given service identifier.
 e.g.
 
 ```typescript
-
-const piProvider = container.getProvider('pi')
-
+const piProvider = container.getProvider("pi");
 ```
 
 ### getAllProvider
@@ -173,9 +169,7 @@ Get the all bound providers for a given service identifier.
 e.g.
 
 ```typescript
-
-const logProviders = container.getAllProvider('ILog')
-
+const logProviders = container.getAllProvider("ILog");
 ```
 
 ### getAllRegisteredServiceIdentifiers
@@ -185,9 +179,48 @@ Get all service identifiers registered on the container.
 e.g.
 
 ```typescript
+const serviceIdentifiers = container.getAllRegisteredServiceIdentifiers();
+```
 
-const serviceIdentifiers = container.getAllRegisteredServiceIdentifiers()
+### addMiddleware
 
+Add middleware to a container. Middleware can perform additional operations during the resolve handling process.
+
+e.g.
+
+```typescript
+container.addMiddleware((next) => (params) => {
+  console.log("before resolve");
+  const result = next(params);
+  console.log("after resolve");
+
+  return result;
+});
+```
+
+`addMiddleware` will return a function that can be used to remove the middleware.
+
+```typescript
+const removeMiddleware = container.addMiddleware((next) => (params) => {
+  return next(params);
+});
+
+// remove
+removeMiddleware();
+```
+
+### Container.addMiddleware
+
+Add middleware to all container.
+
+e.g.
+
+```typescript
+import { Container } from "husky-di";
+
+Container.addMiddleware((next) => (params) => {
+  return next(params);
+});
 ```
 
 ## Providers
@@ -197,7 +230,7 @@ const serviceIdentifiers = container.getAllRegisteredServiceIdentifiers()
 #### lifecycle
 
 - `LifecycleEnum.transient`
-  
+
   `LifecycleEnum.transient` is the default lifecycle type.
 
   `LifecycleEnum.transient` means that the container will create a new instance every time it is resolved.
@@ -213,17 +246,19 @@ const serviceIdentifiers = container.getAllRegisteredServiceIdentifiers()
 e.g.
 
 ```typescript
-  import { Container, ClassProvider, LifecycleEnum } from 'husky-di';
-  import { DatabaseService } from '@/services/database.service'
-  
-  const IDatabase = createServiceIdentifier('IDatabase')
-  const container = new Container('Container');
+import { Container, ClassProvider, LifecycleEnum } from "husky-di";
+import { DatabaseService } from "@/services/database.service";
 
-  container.register(IDatabase, new ClassProvider({
+const IDatabase = createServiceIdentifier("IDatabase");
+const container = new Container("Container");
+
+container.register(
+  IDatabase,
+  new ClassProvider({
     lifecycle: LifecycleEnum.singleton,
     useClass: DatabaseService
-  }))
-
+  })
+);
 ```
 
 #### isPrivate
@@ -233,42 +268,48 @@ Indicate whether a provider is container-private. Container-private providers ar
 e.g.
 
 ```typescript
+import {
+  Container,
+  ClassProvider,
+  injectable,
+  inject,
+  LifecycleEnum,
+  createServiceIdentifier
+} from "husky-di";
+import { DatabaseService } from "@/services/database.service";
 
-  import { Container, ClassProvider, injectable, inject, LifecycleEnum, createServiceIdentifier } from 'husky-di';
-  import { DatabaseService } from '@/services/database.service'
+const container = new Container("Container");
 
-  const container = new Container('Container');
-  
-  const IDatabase = createServiceIdentifier<DatabaseService>('IDatabase')
+const IDatabase = createServiceIdentifier<DatabaseService>("IDatabase");
 
-
-  // Register the database service as private.
-  container.register(IDatabase, new ClassProvider({
+// Register the database service as private.
+container.register(
+  IDatabase,
+  new ClassProvider({
     isPrivate: true,
     lifecycle: LifecycleEnum.singleton,
     useClass: DatabaseService
-  }))
+  })
+);
 
-  @injectable()
-  class BookStoreService {
-    constructor(
-      @inject(IDatabase) private database: IDatabase
-    ) {
-    }
-  }
-  const IBookStore = createServiceIdentifier<BookStoreService>('IBookStore')
+@injectable()
+class BookStoreService {
+  constructor(@inject(IDatabase) private database: IDatabase) {}
+}
+const IBookStore = createServiceIdentifier<BookStoreService>("IBookStore");
 
-  container.register(IBookStore, new ClassProvider({
+container.register(
+  IBookStore,
+  new ClassProvider({
     useClass: BookStoreService
-  }))
+  })
+);
 
+// Ok, `IBookStore`` is registered internally in the container, allowing the injection of the private `IDatabase` into `BookStoreService`.
+container.resolve(IBookStore);
 
-  // Ok, `IBookStore`` is registered internally in the container, allowing the injection of the private `IDatabase` into `BookStoreService`.
-  container.resolve(IBookStore);
-
-  // Error, being registered as private disallows direct resolve.
-  container.resolve(IDatabase)
-
+// Error, being registered as private disallows direct resolve.
+container.resolve(IDatabase);
 ```
 
 ### ClassProvider
@@ -278,17 +319,18 @@ This provider is used to resolve classes by their constructor.
 e.g.
 
 ```typescript
+import { Container, ClassProvide, createServiceIdentifier } from "husky-di";
+import { DatabaseService } from "@/services/database.service";
 
-  import { Container, ClassProvide, createServiceIdentifier } from 'husky-di';
-  import { DatabaseService } from '@/services/database.service'
+const container = new Container("Container");
+const IDatabase = createServiceIdentifier<DatabaseService>("IDatabase");
 
-  const container = new Container('Container');
-  const IDatabase = createServiceIdentifier<DatabaseService>('IDatabase')
-
-  container.register(IDatabase, new ClassProvider({
+container.register(
+  IDatabase,
+  new ClassProvider({
     useClass: DatabaseService
-  }))
-
+  })
+);
 ```
 
 ### ValueProvider
@@ -296,16 +338,17 @@ e.g.
 This provider is used to resolve a given value.
 
 ```typescript
+import { Container, ValueProvide, createServiceIdentifier } from "husky-di";
 
-  import { Container, ValueProvide, createServiceIdentifier } from 'husky-di';
+const container = new Container("Container");
+const IPi = createServiceIdentifier<number>("IPi");
 
-  const container = new Container('Container');
-  const IPi = createServiceIdentifier<number>('IPi')
-
-  container.register(IPi, new ValueProvider({
+container.register(
+  IPi,
+  new ValueProvider({
     useValue: 3.14
-  }))
-
+  })
+);
 ```
 
 ### FactoryProvider
@@ -313,18 +356,19 @@ This provider is used to resolve a given value.
 This provider is used to resolve a given factory.
 
 ```typescript
+import { Container, FactoryProvide, createServiceIdentifier } from "husky-di";
 
-  import { Container, FactoryProvide, createServiceIdentifier } from 'husky-di';
+const container = new Container("Container");
+const IPi = createServiceIdentifier<number>("IPi");
 
-  const container = new Container('Container');
-  const IPi = createServiceIdentifier<number>('IPi')
-
-  container.register(IPi, new ValueProvider({
+container.register(
+  IPi,
+  new ValueProvider({
     useFactory() {
-      return 3.14
+      return 3.14;
     }
-  }))
-
+  })
+);
 ```
 
 ## Decorators
@@ -336,11 +380,10 @@ The `@injectable` decorator is used to indicate that a class can be injected.
 e.g.
 
 ```typescript
-  import { injectable } from 'husky-di';
+import { injectable } from "husky-di";
 
-  @injectable()
-  class BasicService {}
-
+@injectable()
+class BasicService {}
 ```
 
 > Another reason to use `@injectable` is that when a class has no decorators applied, the TypeScript compiler won't generate parameter metadata.
@@ -378,9 +421,9 @@ To address this issue, it is highly recommended to use `createServiceIdentifier`
 e.g.
 
 ```typescript
-const IConstNumber = createServiceIdentifier<number>('IConstNumber')
+const IConstNumber = createServiceIdentifier<number>("IConstNumber");
 
-const constNumber = container.resolve(IConstNumber)
+const constNumber = container.resolve(IConstNumber);
 
 // The following code will result in a compilation error
 // const constNumber = container.resolve<string>(IConstNumber)
@@ -395,33 +438,43 @@ It must be called within a resolution context. When called, it will look for the
 e.g.
 
 ```typescript
+import {
+  Container,
+  ClassProvider,
+  injectable,
+  inject,
+  LifecycleEnum,
+  createServiceIdentifier
+} from "husky-di";
+import { DatabaseService } from "@/services/database.service";
 
-  import { Container, ClassProvider, injectable, inject, LifecycleEnum, createServiceIdentifier } from 'husky-di';
-  import { DatabaseService } from '@/services/database.service'
+const container = new Container("Container");
 
-  const container = new Container('Container');
-  
-  const IDatabase = createServiceIdentifier<DatabaseService>('IDatabase')
+const IDatabase = createServiceIdentifier<DatabaseService>("IDatabase");
 
-
-  container.register(IDatabase, new ClassProvider({
+container.register(
+  IDatabase,
+  new ClassProvider({
     useClass: DatabaseService
-  }))
+  })
+);
 
-  @injectable()
-  class BookStoreService {
-    private database: IDatabase
-    constructor() {
-      this.database = resolve(IDatabase)
-    }
+@injectable()
+class BookStoreService {
+  private database: IDatabase;
+  constructor() {
+    this.database = resolve(IDatabase);
   }
-  const IBookStore = createServiceIdentifier<BookStoreService>('IBookStore')
-  container.register(IBookStore, new ClassProvider({
+}
+const IBookStore = createServiceIdentifier<BookStoreService>("IBookStore");
+container.register(
+  IBookStore,
+  new ClassProvider({
     useClass: BookStoreService
-  }))
+  })
+);
 
-  container.resolve(IBookStore)
-
+container.resolve(IBookStore);
 ```
 
 It is particularly useful when you need to choose one service from several services.
@@ -429,24 +482,21 @@ It is particularly useful when you need to choose one service from several servi
 e.g.
 
 ```typescript
-
-  // Select a database service based on conditions.
-  @injectable()
-  class BookStoreService {
-    private database: IDatabase
-    constructor( 
-      @inject(IDatabase1) database1: IDatabase,
-      @inject(IDatabase2) database2: IDatabase
-    ) {
-      if (supportDatabase1) {
-        this.database = database1
-      } else {
-        this.database = database2
-
-      }
+// Select a database service based on conditions.
+@injectable()
+class BookStoreService {
+  private database: IDatabase;
+  constructor(
+    @inject(IDatabase1) database1: IDatabase,
+    @inject(IDatabase2) database2: IDatabase
+  ) {
+    if (supportDatabase1) {
+      this.database = database1;
+    } else {
+      this.database = database2;
     }
   }
-
+}
 ```
 
 This may lead to the creation of two service instances. Using `resolve` is a better choice.
@@ -454,19 +504,16 @@ This may lead to the creation of two service instances. Using `resolve` is a bet
 e.g.
 
 ```typescript
-
-  // Select a database service based on conditions.
-  @injectable()
-  class BookStoreService {
-    private database: IDatabase
-    constructor() {
-      if (supportDatabase1) {
-        this.database = resolve(database1)
-      } else {
-        this.database = resolve(database2)
-
-      }
+// Select a database service based on conditions.
+@injectable()
+class BookStoreService {
+  private database: IDatabase;
+  constructor() {
+    if (supportDatabase1) {
+      this.database = resolve(database1);
+    } else {
+      this.database = resolve(database2);
     }
   }
-
+}
 ```
