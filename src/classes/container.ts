@@ -123,8 +123,8 @@ export class Container extends Registration implements IInternalContainer {
       const middlewares = Container.#staticMiddlewares.concat(
         this.#middlewares
       );
-      const middlewareExecutor = middlewares.reduce((result, middleware) => {
-        return middleware(result);
+      const middlewareExecutor = middlewares.reduce((next, middleware) => {
+        return middleware(next);
       }, this._internalResolve.bind(this) as ReturnType<Middleware>);
 
       return middlewareExecutor({
