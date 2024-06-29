@@ -113,17 +113,19 @@ export class Container extends Registration implements IInternalContainer {
     const resolveRecordStackSnapshot =
       resolveRecordManager.getResolveRecordStack();
 
-    const middlewares = Container.#staticMiddlewares.concat(this.#middlewares);
-    const middlewareExecutor = middlewares.reduce((result, middleware) => {
-      return middleware(result);
-    }, this._internalResolve.bind(this) as ReturnType<Middleware>);
-
     try {
       resolveRecordManager.pushResolveRecord({
         container: this,
         serviceIdentifier,
         resolveOptions: options
       });
+
+      const middlewares = Container.#staticMiddlewares.concat(
+        this.#middlewares
+      );
+      const middlewareExecutor = middlewares.reduce((result, middleware) => {
+        return middleware(result);
+      }, this._internalResolve.bind(this) as ReturnType<Middleware>);
 
       return middlewareExecutor({
         container: this,
