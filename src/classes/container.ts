@@ -339,8 +339,6 @@ export class Container extends Registration implements IInternalContainer {
         this
       ) as ResolveReturnType<T, Options>;
     }
-
-    return null as any;
   }
 
   private _applyProviderResolve<T>(
