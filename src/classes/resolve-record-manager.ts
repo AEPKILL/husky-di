@@ -234,23 +234,23 @@ function getResolveIdentifierRecordName<T>(
   const { ref, dynamic, optional, multiple, defaultValue } =
     resolveIdentifierRecord.resolveOptions || {};
 
-  if (ref) {
+  if (ref === true) {
     names.push("Ref");
   }
 
-  if (dynamic) {
+  if (dynamic === true) {
     names.push("Dynamic");
   }
 
-  if (optional) {
+  if (optional === true) {
     names.push("Optional");
   }
 
-  if (multiple) {
+  if (multiple === true) {
     names.push("Multiple");
   }
 
-  if (defaultValue) {
+  if (defaultValue !== void 0) {
     names.push("DefaultValue");
   }
 
