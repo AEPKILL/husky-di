@@ -429,7 +429,7 @@ const constNumber = container.resolve(IConstNumber);
 // const constNumber = container.resolve<string>(IConstNumber)
 ```
 
-### resolve
+### static resolve
 
 This is not [container.resolve](#resolve).
 
@@ -463,6 +463,10 @@ container.register(
 class BookStoreService {
   private database: IDatabase;
   constructor() {
+    // ----------------------------------
+    // Here, directly calling the `resolve` function is like calling the `container.resolve` method.
+    // it must be called within a resolution context.
+    // ----------------------------------
     this.database = resolve(IDatabase);
   }
 }
