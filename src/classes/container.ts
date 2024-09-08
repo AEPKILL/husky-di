@@ -8,10 +8,7 @@ import { LifecycleEnum } from "@/enums/lifecycle.enum";
 import { ClassProvider } from "@/providers/class.provider";
 import { resolveRecordManagerRef } from "@/shared/instances";
 import { setProviderInstance } from "@/utils/provider.utils";
-import {
-  getServiceIdentifierName,
-  isServiceIdentifier
-} from "@/utils/service-identifier.utils";
+import { getServiceIdentifierName } from "@/utils/service-identifier.utils";
 
 import { InstanceDynamicRef } from "./instance-dynamic-ref";
 import { InstanceRef } from "./instance-ref";
@@ -64,21 +61,16 @@ export class Container extends Registration implements IInternalContainer {
     };
   }
 
-  isRegistered<T>(serviceIdentifier: ServiceIdentifier<T>): boolean;
-  isRegistered<T>(options: IsRegisteredOptions<T>): boolean;
   isRegistered<T>(
-    serviceIdentifierOrOptions: ServiceIdentifier<T> | IsRegisteredOptions<T>
+    serviceIdentifier: ServiceIdentifier<T>,
+    options?: IsRegisteredOptions<T>
   ): boolean {
-    const options = isServiceIdentifier(serviceIdentifierOrOptions)
-      ? {
-          serviceIdentifier: serviceIdentifierOrOptions
-        }
-      : serviceIdentifierOrOptions;
+    const { recursive = false } = options || {};
 
-    if (super.isRegistered(options)) return true;
+    if (super.isRegistered(serviceIdentifier, options)) return true;
 
-    if (options.recursive && this.parent) {
-      return this.parent.isRegistered(options);
+    if (recursive && this.parent) {
+      return this.parent.isRegistered(serviceIdentifier, options);
     }
 
     return false;
@@ -169,22 +161,19 @@ export class Container extends Registration implements IInternalContainer {
 
     const providers = this.getAllProvider(serviceIdentifier);
     const provider = this.getProvider(serviceIdentifier);
-    const isRegistered = this.isRegistered({
+    const isRegisteredInCurrentContainer = this.isRegistered(
       serviceIdentifier,
-      provider: provider || void 0
-    });
-
-    const registeredInCurrentContainer = this.isRegistered({
-      serviceIdentifier,
-      provider: provider || void 0
-    });
-
-    if (!registeredInCurrentContainer && this.parent) {
-      const registeredInParentContainer = this.parent.isRegistered({
-        serviceIdentifier,
+      {
         provider: provider || void 0,
-        recursive: true
-      });
+        recursive: false
+      }
+    );
+
+    if (!isRegisteredInCurrentContainer && this.parent) {
+      const registeredInParentContainer = this.parent.isRegistered(
+        serviceIdentifier,
+        { provider: provider || void 0, recursive: true }
+      );
       if (registeredInParentContainer) {
         resolveRecordManager.pushResolveRecord({
           message: `current container "${
@@ -239,7 +228,7 @@ export class Container extends Registration implements IInternalContainer {
 
     // service identifier not registered and service identifier is a constructor
     // use temporary class provider to resolve
-    if (!isRegistered) {
+    if (!isRegisteredInCurrentContainer) {
       if (typeof serviceIdentifier === "function") {
         try {
           resolveRecordManager.pushResolveRecord({
@@ -308,7 +297,7 @@ export class Container extends Registration implements IInternalContainer {
       }) as ResolveReturnType<T, Options>;
     }
 
-    if (!isRegistered) {
+    if (!isRegisteredInCurrentContainer) {
       // handle optional flag
       if (optional) {
         return defaultValue as ResolveReturnType<T, Options>;

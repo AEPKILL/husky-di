@@ -2,7 +2,7 @@
 
 ## Container
 
-The main APIs that will be used are `register` and `resolve`.
+The main APIs to be used are `register` and `resolve`.
 
 ### register
 
@@ -149,7 +149,9 @@ const piProvider = new ValueProvider({
 container.isRegistered("Pi");
 
 // Check if a specified  provider has been registered for the service identifier "Pi".
-container.isRegistered("Pi", piProvider);
+container.isRegistered("Pi", {
+  provider: piProvider
+});
 ```
 
 ### getProvider

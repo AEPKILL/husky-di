@@ -72,6 +72,8 @@ export interface IContainer extends Omit<IRegistration, "isRegistered"> {
     options: Options
   ): ResolveReturnType<T, Options>;
 
-  isRegistered<T>(serviceIdentifier: ServiceIdentifier<T>): boolean;
-  isRegistered<T>(options: IsRegisteredOptions<T>): boolean;
+  isRegistered<T>(
+    serviceIdentifier: ServiceIdentifier<T>,
+    options?: IsRegisteredOptions<T>
+  ): boolean;
 }
