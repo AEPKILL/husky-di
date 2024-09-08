@@ -9,7 +9,6 @@ import type { IProvider } from "./provider.interface";
 import type { IDisposable } from "./disposable.interface";
 
 export type IsRegisteredOptions<T> = {
-  serviceIdentifier: ServiceIdentifier<T>;
   provider?: IProvider<T>;
 };
 
@@ -24,8 +23,10 @@ export interface IRegistration {
     provider: IProvider<T>
   ): void;
 
-  isRegistered<T>(serviceIdentifier: ServiceIdentifier<T>): boolean;
-  isRegistered<T>(options: IsRegisteredOptions<T>): boolean;
+  isRegistered<T>(
+    serviceIdentifier: ServiceIdentifier<T>,
+    options?: IsRegisteredOptions<T>
+  ): boolean;
 
   getProvider<T>(serviceIdentifier: ServiceIdentifier<T>): IProvider<T> | null;
 
