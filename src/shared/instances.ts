@@ -13,7 +13,8 @@ import type { InjectionMetadata } from "@/types/injection-metadata.type";
 /**
  * this map is used to store the injection metadata of the class constructor params
  */
-export const injectionMetadataMap = new Map() as {
+const InjectionMetadataMap = typeof WeakMap === "undefined" ? Map : WeakMap;
+export const injectionMetadataMap = new InjectionMetadataMap() as {
   get<T>(target: Constructor<T>): InjectionMetadata<T>[];
   has<T>(target: Constructor<T>): boolean;
   set<T>(target: Constructor<T>, metadata: InjectionMetadata<T>[]): void;
