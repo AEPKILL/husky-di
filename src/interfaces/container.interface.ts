@@ -14,10 +14,34 @@ import { ResolveContext } from "@/types/resolve-context.type";
 import { ResolveRecordManager } from "@/classes/resolve-record-manager";
 
 export interface ResolveOptions<T> {
+  /**
+   * @description
+   * whether to resolve the dependency dynamically
+   * @default false
+   */
   dynamic?: boolean;
+  /**
+   * @description
+   * whether to resolve the dependency as a array (resolve multiple instance)
+   * @default false
+   */
   multiple?: boolean;
+  /**
+   * @description
+   * whether to resolve the dependency as a reference
+   * @default false
+   */
   ref?: boolean;
+  /**
+   * @description
+   * whether the dependency is optional
+   * @default false
+   */
   optional?: boolean;
+  /**
+   * @description
+   * the default value to return if the dependency is not registered and optional flag is true
+   */
   defaultValue?: T | T[];
 }
 

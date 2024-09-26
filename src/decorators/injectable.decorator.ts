@@ -28,17 +28,17 @@ export const injectable: () => ClassDecorator = () =>
 
     const parametersServiceIdentifiers: Array<ServiceIdentifier<any>> =
       Reflect.getMetadata(ParamsMetadataKeyConst, target) || [];
-    const ownParametersMetadata: Array<InjectionMetadata<any>> =
+    const parametersMetadata: Array<InjectionMetadata<any>> =
       Reflect.getMetadata(InjectionMetadataKeyConst, target) || [];
     const metadata: InjectionMetadata<any>[] = [];
     const parametersMetadataLength = Math.max(
       parametersServiceIdentifiers.length,
-      ownParametersMetadata.length
+      parametersMetadata.length
     );
 
     for (let index = 0; index < parametersMetadataLength; index++) {
-      if (ownParametersMetadata[index] !== void 0) {
-        metadata.push(ownParametersMetadata[index]);
+      if (parametersMetadata[index] !== void 0) {
+        metadata.push(parametersMetadata[index]);
         continue;
       }
 
@@ -58,6 +58,7 @@ export const injectable: () => ClassDecorator = () =>
         );
       }
 
+      // class type use LifecycleEnum.transient
       metadata.push({ serviceIdentifier });
     }
 
