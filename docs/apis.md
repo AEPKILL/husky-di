@@ -2,15 +2,20 @@
 
 ## Container
 
-The main APIs to be used are `register` and `resolve`.
+The main APIs you'll use are `register` and `resolve`.
 
 ### register
 
-Register a service in the container.
+Registers a service in the container.
 
-It takes two parameters. The first parameter is the service identifier, which can be a string, symbol, or constructor function. It is recommended to use [createServiceIdentifier](#createserviceidentifier) to generate a type-safe service identifier. The second parameter is the service [provider](#providers).
+It takes two parameters:
 
-e.g.
+1. The service identifier (a string, symbol, or constructor function)
+2. The service [provider](#providers)
+
+It's recommended to use [createServiceIdentifier](#createserviceidentifier) to generate a type-safe service identifier.
+
+Example:
 
 ```typescript
 import { Container, ValueProvider } from "husky-di";
@@ -25,9 +30,7 @@ container.register(
 );
 ```
 
-It is possible to bind multiple providers to a single service identifier. For instance, in the case of a logging system, there could be multiple log records, such as local logs and remote logs.
-
-e.g.
+You can bind multiple providers to a single service identifier. For instance, in a logging system, you might have both local and remote logs:
 
 ```typescript
 import { Container, ClassProvider } from "husky-di";
@@ -55,19 +58,19 @@ container.register(
 
 ### resolve
 
-Resolve object from the container.
+Resolves an instance from the container.
 
-#### single object
+#### Single instance
 
-Resolve the most recently bound provider for a given service identifier.
+Resolves the most recently bound provider for a given service identifier:
 
 ```typescript
 const log = container.resolve("ILog");
 ```
 
-#### multiple object
+#### Multiple instances
 
-Resolve all providers bound to the service identifier.
+Resolves all providers bound to the service identifier:
 
 ```typescript
 const logs = container.resolve("ILog", {
@@ -77,45 +80,43 @@ const logs = container.resolve("ILog", {
 
 #### ref
 
-Reference an object without resolving it immediately, it is resolved only when used.
+References an object without resolving it immediately. It's resolved only when used:
 
 ```typescript
-// It does not resolve immediately.
+// Not resolved immediately
 const logRef = container.resolve("ILog", {
   ref: true
 });
 
-// It will be resolved only when used and cache the value.
+// Resolved when used and caches the value
 logRef.current.log();
 ```
 
 #### dynamic
 
-Similar to `ref`, `dynamic` establishes a reference, but `ref` caches the resolved result, whereas `dynamic` does not cache the resolve result.
+Similar to `ref`, but doesn't cache the resolved result:
 
 ```typescript
-// It does not resolve immediately.
+// Not resolved immediately
 const logRef = container.resolve("ILog", {
   dynamic: true
 });
 
-// It will be resolved only when used and not cache the value.
+// Resolved when used, not cached
 logRef.current.log();
 ```
 
 #### optional
 
-Even if there are no providers registered for the service identifier when resolve, it does not throw exception.
+Doesn't throw an exception if no providers are registered for the service identifier.
 
 #### defaultValue
 
-If `optional` is set to true and there are no providers registered for the service identifier, resolve return the specified value.
+If `optional` is true and no providers are registered, returns the specified default value.
 
 ### unRegister
 
-Unregister a provider bound to the service identifier from the container.
-
-e.g.
+Unregister a provider bound to the service identifier from the container:
 
 ```typescript
 const piProvider = new ValueProvider({
@@ -125,30 +126,26 @@ const piProvider = new ValueProvider({
 container.unRegister("Pi", piProvider);
 ```
 
-Unregister all providers bound to this service identifier from the container.
-
-e.g.
+To unregister all providers bound to a service identifier:
 
 ```typescript
-// only pass the service identifier
+// Only pass the service identifier
 container.unRegister("Pi");
 ```
 
 ### isRegistered
 
-Check if the service identifier has been registered with a provider.
-
-e.g.
+Checks if the service identifier has been registered with a provider:
 
 ```typescript
 const piProvider = new ValueProvider({
   useValue: 3.14
 });
 
-// Check if any provider has been registered for the service identifier "Pi".
+// Check if any provider is registered for "Pi"
 container.isRegistered("Pi");
 
-// Check if a specified  provider has been registered for the service identifier "Pi".
+// Check if a specific provider is registered for "Pi"
 container.isRegistered("Pi", {
   provider: piProvider
 });
@@ -156,9 +153,7 @@ container.isRegistered("Pi", {
 
 ### getProvider
 
-Get the most recently bound provider for a given service identifier.
-
-e.g.
+Gets the most recently registered provider for a given service identifier:
 
 ```typescript
 const piProvider = container.getProvider("pi");
@@ -166,9 +161,7 @@ const piProvider = container.getProvider("pi");
 
 ### getAllProvider
 
-Get the all bound providers for a given service identifier.
-
-e.g.
+Gets all registered providers for a given service identifier:
 
 ```typescript
 const logProviders = container.getAllProvider("ILog");
@@ -176,9 +169,7 @@ const logProviders = container.getAllProvider("ILog");
 
 ### getAllRegisteredServiceIdentifiers
 
-Get all service identifiers registered on the container.
-
-e.g.
+Gets all service identifiers registered on the container:
 
 ```typescript
 const serviceIdentifiers = container.getAllRegisteredServiceIdentifiers();
@@ -186,9 +177,7 @@ const serviceIdentifiers = container.getAllRegisteredServiceIdentifiers();
 
 ### addMiddleware
 
-Add middleware to a container. Middleware can perform additional operations during the resolve handling process.
-
-e.g.
+Adds middleware to a container. Middleware can perform additional operations during the resolve handling process:
 
 ```typescript
 container.addMiddleware((next) => (params) => {
@@ -200,22 +189,20 @@ container.addMiddleware((next) => (params) => {
 });
 ```
 
-`addMiddleware` will return a function that can be used to remove the middleware.
+`addMiddleware` returns a function that can be used to remove the middleware:
 
 ```typescript
 const removeMiddleware = container.addMiddleware((next) => (params) => {
   return next(params);
 });
 
-// remove
+// Remove
 removeMiddleware();
 ```
 
 ### Container.addMiddleware
 
-Add middleware to all container.
-
-e.g.
+Adds middleware to all containers:
 
 ```typescript
 import { Container } from "husky-di";
@@ -231,21 +218,16 @@ Container.addMiddleware((next) => (params) => {
 
 #### lifecycle
 
-- `LifecycleEnum.transient`
-
-  `LifecycleEnum.transient` is the default lifecycle type.
-
-  `LifecycleEnum.transient` means that the container will create a new instance every time it is resolved.
+- `LifecycleEnum.transient` (default)
+  Creates a new instance every time it's resolved.
 
 - `LifecycleEnum.singleton`
+  Creates a new instance the first time it's resolved, then returns the same instance for subsequent resolutions.
 
-  `LifecycleEnum.singleton` means that the container will create a new instance the first time it is resolved, and then return the same instance every time it is resolved.
+- `LifecycleEnum.resolution`
+  Creates a new instance for each resolution context, then returns the same instance within that context.
 
-- LifecycleEnum.resolution
-
-  `LifecycleEnum.resolution` means that the container will create a new instance every time it is resolved, and then return the same instance every time it is resolved in the same resolution context.
-
-e.g.
+Example:
 
 ```typescript
 import { Container, ClassProvider, LifecycleEnum } from "husky-di";
@@ -265,9 +247,7 @@ container.register(
 
 #### isPrivate
 
-Indicate whether a provider is container-private. Container-private providers are not allowed to be resolved externally; they are only permitted for internal use within the container.
-
-e.g.
+Indicates whether a provider is container-private. Private providers can only be used internally within the container:
 
 ```typescript
 import {
@@ -284,7 +264,7 @@ const container = new Container("Container");
 
 const IDatabase = createServiceIdentifier<DatabaseService>("IDatabase");
 
-// Register the database service as private.
+// Register the database service as private
 container.register(
   IDatabase,
   new ClassProvider({
@@ -307,18 +287,16 @@ container.register(
   })
 );
 
-// Ok, `IBookStore`` is registered internally in the container, allowing the injection of the private `IDatabase` into `BookStoreService`.
+// OK: IBookStore is registered internally, allowing injection of private IDatabase
 container.resolve(IBookStore);
 
-// Error, being registered as private disallows direct resolve.
+// Error: IDatabase is private and can't be resolved directly
 container.resolve(IDatabase);
 ```
 
 ### ClassProvider
 
-This provider is used to resolve classes by their constructor.
-
-e.g.
+Used to resolve classes by their constructor:
 
 ```typescript
 import { Container, ClassProvide, createServiceIdentifier } from "husky-di";
@@ -337,7 +315,7 @@ container.register(
 
 ### ValueProvider
 
-This provider is used to resolve a given value.
+Used to resolve a given value:
 
 ```typescript
 import { Container, ValueProvide, createServiceIdentifier } from "husky-di";
@@ -355,7 +333,7 @@ container.register(
 
 ### FactoryProvider
 
-This provider is used to resolve a given factory.
+Used to resolve a given factory:
 
 ```typescript
 import { Container, FactoryProvide, createServiceIdentifier } from "husky-di";
@@ -377,9 +355,7 @@ container.register(
 
 ### @injectable
 
-The `@injectable` decorator is used to indicate that a class can be injected.
-
-e.g.
+Indicates that a class can be injected:
 
 ```typescript
 import { injectable } from "husky-di";
@@ -388,56 +364,44 @@ import { injectable } from "husky-di";
 class BasicService {}
 ```
 
-> Another reason to use `@injectable` is that when a class has no decorators applied, the TypeScript compiler won't generate parameter metadata.
+> Note: `@injectable` is also necessary when a class has no decorators, as TypeScript won't generate parameter metadata otherwise.
 
 ### @inject
 
-The `@inject` decorator is used to inject a specified value into the constructor's parameters.
-
-Its parameters are the same as [container.resolve](#resolve).
-
-e.g.
+Injects a specified value into the constructor's parameters:
 
 ```typescript
 class BookStoreService {
-  constructor(
-    @inject(IDatabase) private readonly database: IDatabase
-  ) {
-    ...
+  constructor(@inject(IDatabase) private readonly database: IDatabase) {
+    // ...
   }
 }
 ```
 
 ### @tagged
 
-`tagged` is an internal decorator used to add metadata tags to the constructor's parameters.
+An internal decorator used to add metadata tags to the constructor's parameters.
 
-## Others
+## Utilities
 
 ### createServiceIdentifier
 
-The service identifier can be a string, symbol, or constructor function. However, when resolving, it is not possible to determine the service type associated with the service identifier using strings and symbols alone. In such cases, it is necessary to explicitly specify a type, for example, `resolve<number>('IConstNumber')`. This introduces a new problem: the service identifier and service type lack type-safe constraints. Without careful consideration, it's possible to write code like `resolve<string>('IConstNumber')`, leading to type errors that the compiler won't catch.
-
-To address this issue, it is highly recommended to use `createServiceIdentifier` to generate a type-safe service identifier. This helps prevent potential complications and ensures type safety, avoiding inadvertent mistakes.
-
-e.g.
+Creates a type-safe service identifier. This is recommended over using strings or symbols directly:
 
 ```typescript
 const IConstNumber = createServiceIdentifier<number>("IConstNumber");
 
 const constNumber = container.resolve(IConstNumber);
 
-// The following code will result in a compilation error
+// This will result in a compilation error:
 // const constNumber = container.resolve<string>(IConstNumber)
 ```
 
 ### static resolve
 
-This is not [container.resolve](#resolve).
+This is different from [container.resolve](#resolve).
 
-It must be called within a resolution context. When called, it will look for the current container in the resolution context and then execute the resolve.
-
-e.g.
+It must be called within a resolution context. It looks for the current container in the context and then executes the resolve:
 
 ```typescript
 import {
@@ -465,10 +429,8 @@ container.register(
 class BookStoreService {
   private database: IDatabase;
   constructor() {
-    // ----------------------------------
-    // Here, directly calling the `resolve` function is like calling the `container.resolve` method.
-    // it must be called within a resolution context.
-    // ----------------------------------
+    // This is equivalent to calling container.resolve
+    // It must be called within a resolution context
     this.database = resolve(IDatabase);
   }
 }
@@ -483,34 +445,10 @@ container.register(
 container.resolve(IBookStore);
 ```
 
-It is particularly useful when you need to choose one service from several services.
-
-e.g.
+It's particularly useful when you need to choose one service from several options:
 
 ```typescript
-// Select a database service based on conditions.
-@injectable()
-class BookStoreService {
-  private database: IDatabase;
-  constructor(
-    @inject(IDatabase1) database1: IDatabase,
-    @inject(IDatabase2) database2: IDatabase
-  ) {
-    if (supportDatabase1) {
-      this.database = database1;
-    } else {
-      this.database = database2;
-    }
-  }
-}
-```
-
-This may lead to the creation of two service instances. Using `resolve` is a better choice.
-
-e.g.
-
-```typescript
-// Select a database service based on conditions.
+// Select a database service based on conditions
 @injectable()
 class BookStoreService {
   private database: IDatabase;
@@ -523,3 +461,5 @@ class BookStoreService {
   }
 }
 ```
+
+This approach is more efficient than injecting multiple services and choosing between them, as it only creates the instances you actually need.

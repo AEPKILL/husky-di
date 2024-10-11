@@ -1,7 +1,7 @@
 # Husky-di
 
-lightweight dependency injection container.
+A lightweight dependency injection container.
 
 - Concise API
 - Extendable
-- Easy-to-understand exception message
+- Easy-to-understand exception messages
