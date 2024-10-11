@@ -1,6 +1,6 @@
 # Javascript
 
-Using with javascript
+Using with JavaScript
 
 <iframe src="https://stackblitz.com/edit/js-cyxtja?devToolsHeight=33&embed=1&file=index.js&hideNavigation=1"
      style="width:100%; height: 700px; border:0; border-radius: 4px; overflow:hidden;"

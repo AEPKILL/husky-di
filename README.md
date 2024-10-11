@@ -4,11 +4,11 @@
 
 # husky-di
 
-lightweight  dependency injection container.
+A lightweight dependency injection container.
 
 ## Links
 
-- [Docs](https://blog.aepkill.com/husky-di)
+- [Documentation](https://blog.aepkill.com/husky-di)
 
 ## References
 
@@ -17,4 +17,4 @@ lightweight  dependency injection container.
 
 ## License
 
-License under the MIT License (MIT)
+MIT © [AEPKILL](https://github.com/AEPKILL)

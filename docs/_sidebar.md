@@ -1,8 +1,8 @@
 - [Introduction](/)
-- [Get Started](./get-started.md)
+- [Getting Started](./get-started.md)
 - [APIs](./apis.md)
 - [Middleware](./middleware.md)
 - Examples
-  - [Circular dependencies](./circular-dependencies.md)
+  - [Circular Dependencies](./circular-dependencies.md)
   - [Property Injection](./property-injection.md)
-  - [Javascript](./javascript.md)
+  - [JavaScript Usage](./javascript.md)
