@@ -4,6 +4,7 @@
  * @created 2023-05-24 11:06:40
  */
 
+import { ConfigureManager } from "@/classes/configure-manager";
 import { InstanceRefCount } from "@/classes/instance-ref-count";
 import { ResolveRecordManager } from "@/classes/resolve-record-manager";
 
@@ -24,3 +25,5 @@ export const resolveRecordManagerRef = new InstanceRefCount(
   "ResolveRecordManager",
   () => new ResolveRecordManager()
 );
+
+export const configureManager = new ConfigureManager();

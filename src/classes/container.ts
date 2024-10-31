@@ -6,7 +6,7 @@
 
 import { LifecycleEnum } from "@/enums/lifecycle.enum";
 import { ClassProvider } from "@/providers/class.provider";
-import { resolveRecordManagerRef } from "@/shared/instances";
+import { configureManager, resolveRecordManagerRef } from "@/shared/instances";
 import { setProviderInstance } from "@/utils/provider.utils";
 import { getServiceIdentifierName } from "@/utils/service-identifier.utils";
 
@@ -229,7 +229,9 @@ export class Container extends Registration implements IInternalContainer {
     // service identifier not registered and service identifier is a constructor
     // use temporary class provider to resolve
     if (!isRegisteredInCurrentContainer) {
-      if (typeof serviceIdentifier === "function") {
+      const isStrict = configureManager.getConfigure().strict;
+
+      if (typeof serviceIdentifier === "function" && !isStrict) {
         try {
           resolveRecordManager.pushResolveRecord({
             message: `service identifier "${getServiceIdentifierName(

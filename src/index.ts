@@ -6,6 +6,7 @@
 
 import { Container } from "@/classes/container";
 import { ServiceIdentifierManager } from "@/classes/service-identifier-manager";
+import { configureManager } from "@/shared/instances";
 
 export { ServiceIdentifierManager, Container };
 
@@ -48,3 +49,8 @@ export const createServiceDecorator =
   ServiceIdentifierManager.createServiceDecorator.bind(
     ServiceIdentifierManager
   );
+
+export const setConfigure =
+  configureManager.getConfigure.bind(configureManager);
+export const getConfigure =
+  configureManager.setConfigure.bind(configureManager);
