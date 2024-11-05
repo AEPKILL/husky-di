@@ -16,7 +16,10 @@ export type {
   ResolveReturnType
 } from "@/interfaces/container.interface";
 export type { IProvider } from "@/interfaces/provider.interface";
-export type { ServiceIdentifier } from "@/types/service-identifier.type";
+export type {
+  ServiceIdentifier,
+  ServiceIdentifierInstance
+} from "@/types/service-identifier.type";
 export type { ServiceDecorator } from "@/types/service-decorator.type";
 export type { Ref } from "@/types/ref.type";
 export type { InjectionMetadata } from "@/types/injection-metadata.type";
