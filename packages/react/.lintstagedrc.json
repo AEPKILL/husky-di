@@ -1,5 +1,0 @@
-{
-	"*.{js,ts,jsx,tsx}": ["biome check --write"],
-	"*.json": ["biome check --write"],
-	"*.css": ["biome check --write"]
-}
