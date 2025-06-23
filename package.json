@@ -1,0 +1,22 @@
+{
+	"name": "husky-di",
+	"version": "1.0.0",
+	"description": "",
+	"main": "index.js",
+	"private": true,
+	"scripts": {
+		"prepare": "husky"
+	},
+	"keywords": [],
+	"author": "AEPKILL",
+	"license": "MIT",
+	"engines": {
+		"node": ">=23"
+	},
+	"packageManager": "pnpm@10.12.2+sha512.a32540185b964ee30bb4e979e405adc6af59226b438ee4cc19f9e8773667a66d302f5bfee60a39d3cac69e35e4b96e708a71dd002b7e9359c4112a1722ac323f",
+	"devDependencies": {
+		"@biomejs/biome": "2.0.5",
+		"husky": "^9.1.7",
+		"lint-staged": "^16.1.2"
+	}
+}
