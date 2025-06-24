@@ -1,0 +1,154 @@
+# Cursor Rules for husky-di Project
+
+## Project Overview
+
+This is a TypeScript monorepo project containing core library and React component library. The project uses pnpm workspaces for management and rslib as the build tool.
+
+## Tech Stack
+
+- **Language**: TypeScript (v5.8.3+)
+- **Build Tool**: rslib (v0.10.2+)
+- **Package Manager**: pnpm (v10.12.2+)
+- **Code Formatter**: Biome (v2.0.5)
+- **Test Framework**: Vitest (v3.2.4+)
+- **React Version**: React 19.1.0+
+- **Storybook**: v9.0.11+
+- **Node Version**: >=23
+
+## Code Style Guidelines
+
+### General Rules
+
+1. **Strict TypeScript Type Safety**
+   - Use explicit type declarations
+   - Avoid using `any` type
+   - Prefer `interface` over `type` for object type definitions
+
+2. **Code Formatting**
+   - Use Tab indentation (following biome.json config)
+   - Use double quotes for strings
+   - Enable automatic import sorting
+   - Follow Biome's recommended rules
+
+3. **File and Directory Structure**
+   - Use kebab-case for file and directory naming
+   - Use PascalCase.tsx for component files
+   - Use *.test.ts or*.test.tsx for test files
+   - Use index.ts for export files
+
+4. **Chinese Comments**
+   - All function comments (JSDoc) must be written in Chinese
+   - Inline comments should be in Chinese
+   - Documentation and README files should be in Chinese
+   - Variable and function names remain in English following naming conventions
+
+### Package Structure Guidelines
+
+#### Core Package (packages/core)
+
+- **Purpose**: Provide core functionality and utility functions
+- **Exports**: Support both ESM and CommonJS formats
+- **Types**: Must provide complete TypeScript type definitions
+- **Testing**: Use Vitest for unit testing
+
+#### React Package (packages/react)
+
+- **Purpose**: Provide React component library
+- **Component Guidelines**:
+  - Use functional components and Hooks
+  - Support TypeScript type-safe props
+  - Provide Storybook documentation
+  - Include complete test coverage
+
+### Code Generation Rules
+
+#### Creating New Components
+
+```typescript
+// Component file template (packages/react/src/ComponentName.tsx)
+import React from "react";
+import "./ComponentName.css";
+
+export interface ComponentNameProps {
+ // Define props types
+}
+
+export const ComponentName: React.FC<ComponentNameProps> = (props) => {
+ // Component implementation
+};
+```
+
+#### Creating New Utility Functions
+
+```typescript
+// Utility function template (packages/core/src/utils.ts)
+/**
+ * 函数功能描述
+ * @param param 参数描述
+ * @returns 返回值描述
+ */
+export const functionName = (param: Type): ReturnType => {
+ // 实现逻辑注释
+ // Function implementation
+};
+```
+
+#### Test File Template
+
+```typescript
+import { describe, it, expect } from "vitest";
+import { functionName } from "../src/index";
+
+describe("functionName", () => {
+ it("should work correctly", () => {
+  // 测试实现
+  // Test implementation
+  expect(functionName()).toBe(expected);
+ });
+});
+```
+
+### Dependency Management Rules
+
+1. **Use pnpm for dependency installation**
+2. **Place dev dependencies in respective package's devDependencies**
+3. **Use peerDependencies for production dependencies (React package)**
+4. **Use ^ prefix for version constraints**
+
+### Build and Development Workflow
+
+1. **Development mode**: `pnpm dev` starts watch mode
+2. **Build**: `pnpm build` generates dist files
+3. **Testing**: `pnpm test` runs all tests
+4. **Storybook**: `pnpm storybook` starts component documentation
+
+### Git Commit Guidelines
+
+- Use Husky for Git hooks management
+- Automatically run lint-staged before commits
+- Use semantic commit message format
+
+### Prohibited Practices
+
+- Don't modify dist directory directly
+- Don't use console.log in code (except for error handling)
+- Don't bypass TypeScript type checking
+- Don't use @ts-ignore in production code
+
+### Performance Optimization
+
+- Use React.memo to wrap pure components
+- Use useMemo and useCallback appropriately
+- Avoid creating new objects in render functions
+
+### Documentation Requirements
+
+- Every exported function/component needs JSDoc comments **in Chinese**
+- Complex logic needs inline comments for explanation **in Chinese**
+- Update relevant README.md files **in Chinese**
+- Use proper Chinese punctuation and formatting
+- Maintain technical accuracy while using clear Chinese expressions
+
+## Code Generation Guidelines
+
+When generating code, please follow all the above specifications to ensure code quality and project consistency.
