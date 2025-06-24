@@ -1,6 +1,12 @@
 import { defineConfig } from "@rslib/core";
+import { resolve } from "path";
 
 export default defineConfig({
+	source: {
+		alias: {
+			"@": resolve(__dirname, "src"),
+		},
+	},
 	lib: [
 		{
 			format: "esm",
