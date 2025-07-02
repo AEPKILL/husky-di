@@ -5,6 +5,6 @@
  */
 
 export const ParamsMetadataKeyConst = "design:paramtypes";
-export const InjectionMetadataKeyConst = "husky-di.injectionMetadata";
+export const InjectionMetadataKeyConst = "husky-di.injection-metadata";
 export const InjectionParamsMetadataKeyConst =
-	"husky-di.InjectionParamsMetadata";
+	"husky-di.injection-params-metadata";
