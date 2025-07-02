@@ -70,11 +70,11 @@ export function getServiceIdentifierName(
 	serviceIdentifier: ServiceIdentifier<unknown>,
 ): string {
 	if (typeof serviceIdentifier === "function") {
-		return serviceIdentifier.name;
+		return serviceIdentifier.name || "Anonymous";
 	}
 
 	if (typeof serviceIdentifier === "symbol") {
-		return serviceIdentifier.toString();
+		return serviceIdentifier.description || serviceIdentifier.toString();
 	}
 
 	return serviceIdentifier;

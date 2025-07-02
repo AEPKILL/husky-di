@@ -19,14 +19,15 @@ export function incrementalIdFactory(prefix: string = "ID"): () => string {
 		return `${prefix}-${id}`;
 	};
 }
+
 /**
  * 创建容器ID生成器
  * @returns 返回一个生成唯一ID的函数
  */
-export const createContainerId = incrementalIdFactory("Container");
+export const createContainerId = incrementalIdFactory("CONTAINER");
 
 /**
  * 创建模块ID生成器
  * @returns 返回一个生成唯一ID的函数
  */
-export const createModuleId = incrementalIdFactory("Module");
+export const createModuleId = incrementalIdFactory("MODULE");
