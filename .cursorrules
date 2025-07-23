@@ -20,20 +20,23 @@ This is a TypeScript monorepo project containing core library and React componen
 ### General Rules
 
 1. **Strict TypeScript Type Safety**
+
    - Use explicit type declarations
    - Avoid using `any` type
    - Prefer `interface` over `type` for object type definitions
 
 2. **Code Formatting**
+
    - Use Tab indentation (following biome.json config)
    - Use double quotes for strings
    - Enable automatic import sorting
    - Follow Biome's recommended rules
 
 3. **File and Directory Structure**
+
    - Use kebab-case for file and directory naming
    - Use PascalCase.tsx for component files
-   - Use *.test.ts or*.test.tsx for test files
+   - Use _.test.ts or_.test.tsx for test files
    - Use index.ts for export files
 
 4. **Chinese Comments**
@@ -66,16 +69,16 @@ This is a TypeScript monorepo project containing core library and React componen
 
 ```typescript
 // Component file template (packages/react/src/ComponentName.tsx)
-import React from "react";
+import React, { memo } from "react";
 import "./ComponentName.css";
 
 export interface ComponentNameProps {
- // Define props types
+  // Define props types
 }
 
-export const ComponentName: React.FC<ComponentNameProps> = (props) => {
- // Component implementation
-};
+export const ComponentName: React.FC<ComponentNameProps> = memo((props) => {
+  // Component implementation
+});
 ```
 
 #### Creating New Utility Functions
@@ -88,8 +91,8 @@ export const ComponentName: React.FC<ComponentNameProps> = (props) => {
  * @returns 返回值描述
  */
 export const functionName = (param: Type): ReturnType => {
- // 实现逻辑注释
- // Function implementation
+  // 实现逻辑注释
+  // Function implementation
 };
 ```
 
@@ -100,11 +103,11 @@ import { describe, it, expect } from "vitest";
 import { functionName } from "../src/index";
 
 describe("functionName", () => {
- it("should work correctly", () => {
-  // 测试实现
-  // Test implementation
-  expect(functionName()).toBe(expected);
- });
+  it("should work correctly", () => {
+    // 测试实现
+    // Test implementation
+    expect(functionName()).toBe(expected);
+  });
 });
 ```
 
