@@ -96,7 +96,7 @@ DynamicModule.register({
 
 要不然抛弃装饰器吧，因为装饰器对于类型的支持不友好。
 
-DynamicModule 应该是可以完美替代 Container 的，除此之外我觉得还应该提供一个 RootModule，RootModule 也应该是一个 DynamicModule 可以注册一些全局性的东西。
+dynamicModule 应该是可以完美替代 Container 的，除此之外我觉得还应该提供一个 RootModule，RootModule 也应该是一个 DynamicModule 可以注册一些全局性的东西。
 
 但是层次化依赖注入该怎么搞？
 
@@ -107,3 +107,11 @@ const DynamicModule = createDynamicModule({
   name: "DynamicModule",
 });
 ```
+
+2025-07-25:
+
+我觉得还是应该职责分离:
+
+- core 专注依赖注入的核心逻辑
+- decorator 支持装饰器语法的依赖注入
+- module 支持依赖注入模块化清晰架构

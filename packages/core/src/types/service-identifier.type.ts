@@ -8,4 +8,4 @@ import type { Constructor } from "@/types/constructor.type";
 
 export type ServiceIdentifier<T> = Constructor<T> | string | symbol;
 export type ServiceIdentifierInstance<R extends ServiceIdentifier<unknown>> =
-	R extends ServiceIdentifier<infer T> ? T : never;
+	R extends ServiceIdentifier<infer T> ? T : unknown;

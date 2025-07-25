@@ -89,6 +89,6 @@ export type ResolveInstance<T, O extends ResolveOptions<T>> = ResolveRefType<
 	O
 >;
 
-export interface IModule extends IUnique, IDisposable {
+export interface IContainer extends IUnique, IDisposable {
 	readonly name: string;
 }

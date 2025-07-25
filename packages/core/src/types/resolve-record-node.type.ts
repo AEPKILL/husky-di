@@ -5,7 +5,10 @@
  */
 
 import type { ResolveIdentifierRecordTypeEnum } from "@/enums/resolve-identifier-record-type.enum";
-import type { IModule, ResolveOptions } from "@/interfaces/module.interface";
+import type {
+	IContainer,
+	ResolveOptions,
+} from "@/interfaces/container.interface";
 import type { ServiceIdentifier } from "@/types/service-identifier.type";
 
 export type MessageResolveRecordNode = {
@@ -17,7 +20,7 @@ export type ServiceIdentifierResolveRecordNode<T> = {
 	readonly type: ResolveIdentifierRecordTypeEnum.serviceIdentifier;
 	readonly serviceIdentifier: ServiceIdentifier<T>;
 	readonly options: ResolveOptions<T>;
-	readonly paths: IModule[];
+	readonly container: IContainer;
 };
 
 export type ResolveRecordNode<T> =
