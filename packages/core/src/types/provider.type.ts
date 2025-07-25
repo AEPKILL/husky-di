@@ -5,27 +5,29 @@
  */
 
 import type { LifecycleEnum } from "@/enums/lifecycle.enum";
-import type { Constructor } from "./constructor.type";
-import type { ServiceIdentifier } from "./service-identifier.type";
+import type { IContainer } from "@/interfaces/container.interface";
+import type { Constructor } from "@/types/constructor.type";
+import type { ServiceIdentifier } from "@/types/service-identifier.type";
 
 export type ProviderBase = {
-	lifecycle: LifecycleEnum;
+	readonly lifecycle: LifecycleEnum;
 };
 
 export type ClassProvider<T> = ProviderBase & {
-	useClass: Constructor<T>;
+	readonly useClass: Constructor<T>;
 };
 
 export type ValueProvider<T> = ProviderBase & {
-	useValue: T;
+	readonly useValue: T;
 };
 
 export type FactoryProvider<T> = ProviderBase & {
-	useFactory: () => T;
+	readonly useFactory: () => T;
 };
 
 export type AliasProvider<T> = ProviderBase & {
-	useAlias: ServiceIdentifier<T>;
+	readonly useAlias: ServiceIdentifier<T>;
+	readonly container?: IContainer;
 };
 
 export type Provider<T> =
