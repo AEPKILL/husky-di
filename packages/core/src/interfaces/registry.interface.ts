@@ -7,8 +7,6 @@
 import type { IDisposable } from "@/interfaces/disposable.interface";
 import type { ServiceIdentifier } from "@/types/service-identifier.type";
 
-export type IsRegisteredOptions<T> = {
-	provider?: IProvider<T>;
-};
+export type IsRegisteredOptions<T> = {};
 
 export type IRegistry = {};
