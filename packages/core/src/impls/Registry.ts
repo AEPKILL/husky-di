@@ -4,9 +4,8 @@
  * @created 2025-07-27 21:03:11
  */
 
+import type { IRegistration } from "@/interfaces/registration.interface";
 import type { IRegistry } from "@/interfaces/registry.interface";
-import type { Extendable, ExtendableConstraint } from "@/types/extendable.type";
-import type { Registration, RegistrationBase } from "@/types/registration.type";
 import type { ServiceIdentifier } from "@/types/service-identifier.type";
 
 /**
@@ -20,7 +19,7 @@ export class Registry implements IRegistry {
 	 */
 	private readonly _registrationMap = new Map<
 		ServiceIdentifier<unknown>,
-		Array<Registration<unknown>>
+		Array<IRegistration<unknown>>
 	>();
 
 	/**
@@ -28,15 +27,12 @@ export class Registry implements IRegistry {
 	 * @param serviceIdentifier 服务标识符
 	 * @returns 服务注册信息
 	 */
-	get<T, Extra extends ExtendableConstraint<RegistrationBase<T>>>(
+	get<T>(
 		serviceIdentifier: ServiceIdentifier<T>,
-	): Extendable<Registration<T>, Extra> | undefined {
+	): IRegistration<T> | undefined {
 		const registrations = this._registrationMap.get(serviceIdentifier);
 		if (registrations && registrations.length > 0) {
-			return registrations[registrations.length - 1] as Extendable<
-				Registration<T>,
-				Extra
-			>;
+			return registrations[registrations.length - 1] as IRegistration<T>;
 		}
 		return undefined;
 	}
@@ -45,13 +41,9 @@ export class Registry implements IRegistry {
 	 * 获取所有已注册的服务信息
 	 * @returns 所有服务注册信息的数组
 	 */
-	getAll<T, Extra extends ExtendableConstraint<RegistrationBase<T>>>(
-		serviceIdentifier: ServiceIdentifier<T>,
-	): Array<Extendable<Registration<T>, Extra>> {
+	getAll<T>(serviceIdentifier: ServiceIdentifier<T>): Array<IRegistration<T>> {
 		const registrations = this._registrationMap.get(serviceIdentifier);
-		return registrations
-			? (registrations as Array<Extendable<Registration<T>, Extra>>)
-			: [];
+		return registrations ? (registrations as Array<IRegistration<T>>) : [];
 	}
 
 	/**
@@ -68,9 +60,9 @@ export class Registry implements IRegistry {
 	 * @param serviceIdentifier 服务标识符
 	 * @param registration 服务注册信息
 	 */
-	set<T, Extra extends ExtendableConstraint<RegistrationBase<T>>>(
+	set<T>(
 		serviceIdentifier: ServiceIdentifier<T>,
-		registration: Extendable<Registration<T>, Extra>,
+		registration: IRegistration<T>,
 	): void {
 		const registrations = [
 			...(this._registrationMap.get(serviceIdentifier) || []),
@@ -83,9 +75,9 @@ export class Registry implements IRegistry {
 	 * 批量设置服务注册信息
 	 * @param registrations 服务注册信息数组
 	 */
-	setAll<T, Extra extends ExtendableConstraint<RegistrationBase<T>>>(
+	setAll<T>(
 		serviceIdentifier: ServiceIdentifier<T>,
-		registrations: Array<Extendable<Registration<T>, Extra>>,
+		registrations: Array<IRegistration<T>>,
 	): void {
 		this._registrationMap.set(serviceIdentifier, registrations);
 	}

@@ -52,7 +52,6 @@ export interface IRegistration<T> extends IUnique {
 	readonly lifecycle: LifecycleEnum;
 	readonly instance: T | undefined;
 	readonly resolved: boolean;
-	readonly registered: boolean;
 	readonly provider:
 		| CreateClassRegistrationOptions<T>["useClass"]
 		| CreateFactoryRegistrationOptions<T>["useFactory"]
@@ -60,12 +59,13 @@ export interface IRegistration<T> extends IUnique {
 		| CreateAliasRegistrationOptions<T>["useAlias"];
 	readonly container?: IContainer;
 
-	setResolved(resolved: boolean): void;
-	setRegistered(registered: boolean): void;
-	setInstance(instance: T): void;
-
 	getExtra<T>(key: string | symbol): T | undefined;
 	setExtra<T>(key: string | symbol, value: T): void;
 	deleteExtra(key: string | symbol): void;
 	getExtraKeys(): Array<string | symbol>;
+}
+
+export interface IInternalRegistration<T> extends IRegistration<T> {
+	setResolved(resolved: boolean): void;
+	setInstance(instance: T): void;
 }
