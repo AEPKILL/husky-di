@@ -4,6 +4,6 @@
  * @created 2021-10-02 09:22:05
  */
 
-import type { IProvider } from "@/interfaces/provider.interface";
+import type { Registration } from "@/types/registration.type";
 
-export type ResolveContext = Map<IProvider<unknown>, unknown>;
+export type ResolveContext = Map<Registration<unknown>, unknown>;

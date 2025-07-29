@@ -31,3 +31,9 @@ export const createContainerId = incrementalIdFactory("CONTAINER");
  * @returns 返回一个生成唯一ID的函数
  */
 export const createModuleId = incrementalIdFactory("MODULE");
+
+/**
+ * 创建注册ID生成器
+ * @returns 返回一个生成唯一ID的函数
+ */
+export const createRegistrationId = incrementalIdFactory("REGISTRATION");
