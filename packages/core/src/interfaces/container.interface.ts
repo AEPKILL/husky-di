@@ -5,8 +5,15 @@
  */
 
 import type { IDisposable } from "@/interfaces/disposable.interface";
+import type { CreateRegistrationOptions } from "@/interfaces/registration.interface";
 import type { IUnique } from "@/interfaces/unique.interface";
 import type { Ref } from "@/types/ref.type";
+import type { ServiceIdentifier } from "@/types/service-identifier.type";
+import type { IDisplayName } from "./display-name.interface";
+import type {
+	Middleware,
+	MiddlewareExecutor,
+} from "./middleware-chain.interface";
 
 /**
  * ResolveOptions:
@@ -84,11 +91,50 @@ type ResolveRefType<T, O extends ResolveOptions<any>> = O extends
  * @param T 实例类型
  * @param O 选项类型
  */
-export type ResolveInstance<T, O extends ResolveOptions<T>> = ResolveRefType<
+
+// biome-ignore lint/suspicious/noExplicitAny: here is a generic type
+export type ResolveInstance<T, O extends ResolveOptions<any>> = ResolveRefType<
 	ResolveOptionalType<T, O>,
 	O
 >;
 
-export interface IContainer extends IUnique, IDisposable {
+export type ResolveMiddlewareExecutor<
+	T,
+	O extends ResolveOptions<T>,
+> = MiddlewareExecutor<
+	{
+		serviceIdentifier: ServiceIdentifier<T>;
+		resolveOptions: O;
+	},
+	ResolveInstance<T, O>
+>;
+
+export type ResolveMiddleware<T, O extends ResolveOptions<T>> = Middleware<
+	{
+		serviceIdentifier: ServiceIdentifier<T>;
+		resolveOptions: O;
+	},
+	ResolveInstance<T, O>
+>;
+
+export interface IContainer extends IUnique, IDisposable, IDisplayName {
 	readonly name: string;
+
+	resolve<T, O extends ResolveOptions<T>>(
+		serviceIdentifier: ServiceIdentifier<T>,
+		resolveOptions: O,
+	): ResolveInstance<T, O>;
+
+	register<T>(
+		serviceIdentifier: ServiceIdentifier<T>,
+		registration: CreateRegistrationOptions<T>,
+	): void;
+
+	addMiddleware<T, O extends ResolveOptions<T>>(
+		middleware: ResolveMiddleware<T, O>,
+	): void;
+
+	removeMiddleware<T, O extends ResolveOptions<T>>(
+		middleware: ResolveMiddleware<T, O>,
+	): void;
 }
