@@ -129,6 +129,8 @@ export interface IContainer extends IUnique, IDisposable, IDisplayName {
 		serviceIdentifier: ServiceIdentifier<T>,
 		registration: CreateRegistrationOptions<T>,
 	): void;
+	isRegistered<T>(serviceIdentifier: ServiceIdentifier<T>): boolean;
+	unregister<T>(serviceIdentifier: ServiceIdentifier<T>): void;
 
 	addMiddleware<T, O extends ResolveOptions<T>>(
 		middleware: ResolveMiddleware<T, O>,
@@ -138,3 +140,5 @@ export interface IContainer extends IUnique, IDisposable, IDisplayName {
 		middleware: ResolveMiddleware<T, O>,
 	): void;
 }
+
+export interface IInternalContainer extends IContainer {}
