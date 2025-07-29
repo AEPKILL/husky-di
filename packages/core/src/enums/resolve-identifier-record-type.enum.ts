@@ -5,6 +5,7 @@
  */
 
 export enum ResolveIdentifierRecordTypeEnum {
-	serviceIdentifier = 0,
-	message = 1,
+	root = 0,
+	serviceIdentifier = 1,
+	message = 2,
 }

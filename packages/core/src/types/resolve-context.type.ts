@@ -4,6 +4,6 @@
  * @created 2021-10-02 09:22:05
  */
 
-import type { Registration } from "@/types/registration.type";
+import type { IRegistration } from "@/interfaces/registration.interface";
 
-export type ResolveContext = Map<Registration<unknown>, unknown>;
+export type ResolveContext = Map<IRegistration<unknown>, unknown>;
