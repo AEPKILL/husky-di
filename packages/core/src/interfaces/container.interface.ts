@@ -5,15 +5,20 @@
  */
 
 import type { IDisposable } from "@/interfaces/disposable.interface";
-import type { CreateRegistrationOptions } from "@/interfaces/registration.interface";
+import type {
+	CreateRegistrationOptions,
+	IRegistration,
+} from "@/interfaces/registration.interface";
 import type { IUnique } from "@/interfaces/unique.interface";
-import type { Ref } from "@/types/ref.type";
+import type { MutableRef, Ref } from "@/types/ref.type";
+import type { ResolveContext } from "@/types/resolve-context.type";
 import type { ServiceIdentifier } from "@/types/service-identifier.type";
 import type { IDisplayName } from "./display-name.interface";
 import type {
 	Middleware,
 	MiddlewareExecutor,
 } from "./middleware-chain.interface";
+import type { IInternalResolveRecord } from "./resolve-record.interface";
 
 /**
  * ResolveOptions:
@@ -98,22 +103,21 @@ export type ResolveInstance<T, O extends ResolveOptions<any>> = ResolveRefType<
 	O
 >;
 
+export type ResolveMiddlewareParams<T, O extends ResolveOptions<T>> = {
+	serviceIdentifier: ServiceIdentifier<T>;
+	resolveOptions: O;
+	resolveRecord: IInternalResolveRecord;
+	registration: IRegistration<T>;
+	resolveContext: ResolveContext;
+};
+
 export type ResolveMiddlewareExecutor<
 	T,
 	O extends ResolveOptions<T>,
-> = MiddlewareExecutor<
-	{
-		serviceIdentifier: ServiceIdentifier<T>;
-		resolveOptions: O;
-	},
-	ResolveInstance<T, O>
->;
+> = MiddlewareExecutor<ResolveMiddlewareParams<T, O>, ResolveInstance<T, O>>;
 
 export type ResolveMiddleware<T, O extends ResolveOptions<T>> = Middleware<
-	{
-		serviceIdentifier: ServiceIdentifier<T>;
-		resolveOptions: O;
-	},
+	ResolveMiddlewareParams<T, O>,
 	ResolveInstance<T, O>
 >;
 
@@ -132,13 +136,17 @@ export interface IContainer extends IUnique, IDisposable, IDisplayName {
 	isRegistered<T>(serviceIdentifier: ServiceIdentifier<T>): boolean;
 	unregister<T>(serviceIdentifier: ServiceIdentifier<T>): void;
 
-	addMiddleware<T, O extends ResolveOptions<T>>(
-		middleware: ResolveMiddleware<T, O>,
+	addMiddleware(
+		// biome-ignore lint/suspicious/noExplicitAny: here is a generic type
+		middleware: ResolveMiddleware<any, any>,
 	): void;
 
-	removeMiddleware<T, O extends ResolveOptions<T>>(
-		middleware: ResolveMiddleware<T, O>,
+	removeMiddleware(
+		// biome-ignore lint/suspicious/noExplicitAny: here is a generic type
+		middleware: ResolveMiddleware<any, any>,
 	): void;
 }
 
-export interface IInternalContainer extends IContainer {}
+export interface IInternalContainer extends IContainer {
+	readonly resolveContext: MutableRef<ResolveContext>;
+}

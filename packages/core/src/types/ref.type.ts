@@ -8,3 +8,7 @@ export type Ref<T> = {
 	readonly current: T;
 	readonly resolved: boolean;
 };
+
+export type MutableRef<T> = {
+	current?: T;
+};
