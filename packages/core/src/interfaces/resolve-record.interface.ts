@@ -25,7 +25,7 @@ export type MessageResolveRecordNode = {
 export type ServiceIdentifierResolveRecordNode<T> = {
 	readonly type: ResolveIdentifierRecordTypeEnum.serviceIdentifier;
 	readonly serviceIdentifier: ServiceIdentifier<T>;
-	readonly options: ResolveOptions<T>;
+	readonly resolveOptions: ResolveOptions<T>;
 	readonly container: IContainer;
 };
 
