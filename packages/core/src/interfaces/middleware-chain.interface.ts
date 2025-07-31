@@ -4,6 +4,7 @@
  * @created 2025-07-26 21:55:06
  */
 
+import type { IDisposable } from "./disposable.interface";
 import type { ITypedEvent } from "./typed-event.interface";
 
 export type MiddlewareExecutor<Params, Result> = (params: Params) => Result;
@@ -34,7 +35,8 @@ export type MiddlewareChainEvents<Params, Result> = {
 };
 
 export interface IMiddlewareManager<Params, Result>
-	extends ITypedEvent<MiddlewareChainEvents<Params, Result>> {
+	extends ITypedEvent<MiddlewareChainEvents<Params, Result>>,
+		IDisposable {
 	readonly middlewares: Middleware<Params, Result>[];
 
 	use(...middlewares: Middleware<Params, Result>[]): void;
@@ -45,5 +47,6 @@ export interface IMiddlewareManager<Params, Result>
 
 export interface IMiddlewareChain<Params, Result>
 	extends IMiddlewareManager<Params, Result> {
+	readonly globalMiddlewares: IMiddlewareManager<Params, Result>;
 	execute(params: Params): Result;
 }

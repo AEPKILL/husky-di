@@ -49,6 +49,10 @@ export class ResolveRecord implements IInternalResolveRecord {
 		});
 	}
 
+	getCycleNodes(): ResolveRecordTreeNode<unknown>[] {
+		return [];
+	}
+
 	setCurrent(node: ResolveRecordTreeNode<unknown>) {
 		this._current = node;
 	}
