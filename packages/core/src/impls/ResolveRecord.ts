@@ -7,10 +7,13 @@
 import { ResolveIdentifierRecordTypeEnum } from "@/enums/resolve-identifier-record-type.enum";
 import type { IContainer } from "@/interfaces/container.interface";
 import type {
+	CycleNodeInfo,
 	IInternalResolveRecord,
 	ResolveRecordNode,
 	ResolveRecordTreeNode,
+	ServiceIdentifierResolveRecordNode,
 } from "@/interfaces/resolve-record.interface";
+import { isResolveServiceIdentifierRecord } from "@/utils/resolve-record.utils";
 import {
 	createResolveRecordId,
 	incrementalIdFactory,
@@ -49,8 +52,21 @@ export class ResolveRecord implements IInternalResolveRecord {
 		});
 	}
 
-	getCycleNodes(): ResolveRecordTreeNode<unknown>[] {
-		return [];
+	getCycleNodes(): undefined | CycleNodeInfo {
+		const lastRecordNode = this._current;
+		if (!isResolveServiceIdentifierRecord(lastRecordNode.value))
+			return undefined;
+
+		let cycleNode: ServiceIdentifierResolveRecordNode<unknown> | undefined;
+
+		let tempRecordNode = lastRecordNode;
+		while (tempRecordNode.parent) {
+			tempRecordNode = tempRecordNode.parent;
+			if (isResolveServiceIdentifierRecord(tempRecordNode.value)) {
+				cycleNode = tempRecordNode.value;
+				break;
+			}
+		}
 	}
 
 	setCurrent(node: ResolveRecordTreeNode<unknown>) {

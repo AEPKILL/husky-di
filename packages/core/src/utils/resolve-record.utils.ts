@@ -72,7 +72,7 @@ export function getResolveIdentifierRecordName<T>(
 	return `${serviceIdentifierName}[${names.join(",")}]`;
 }
 
-export function isResolveIdentifierRecord<T>(
+export function isResolveServiceIdentifierRecord<T>(
 	resolveRecord: ResolveRecordNode<T>,
 ): resolveRecord is ServiceIdentifierResolveRecordNode<T> {
 	return (
@@ -81,13 +81,13 @@ export function isResolveIdentifierRecord<T>(
 }
 
 // check two resolve record is equal, for check cycle reference
-export function isEqualResolveRecord(
+export function isEqualServiceIdentifierResolveRecord(
 	aResolveRecord: ResolveRecordNode<unknown>,
 	bResolveRecord: ResolveRecordNode<unknown>,
 ): boolean {
 	const bothIsResolveIdentifierRecord =
-		isResolveIdentifierRecord(aResolveRecord) &&
-		isResolveIdentifierRecord(bResolveRecord);
+		isResolveServiceIdentifierRecord(aResolveRecord) &&
+		isResolveServiceIdentifierRecord(bResolveRecord);
 
 	if (!bothIsResolveIdentifierRecord) {
 		return false;
