@@ -40,13 +40,22 @@ export type ResolveRecordTreeNode<T> = {
 	readonly value: ResolveRecordNode<T>;
 } & IUnique;
 
+export type CycleNodeInfo = {
+	cycleNode: ServiceIdentifierResolveRecordNode<unknown>;
+	paths: [
+		ServiceIdentifierResolveRecordNode<unknown>,
+		...ResolveRecordNode<unknown>[],
+		ServiceIdentifierResolveRecordNode<unknown>,
+	];
+};
+
 export interface IResolveRecord extends IUnique {
 	readonly current: ResolveRecordTreeNode<unknown>;
 	readonly root: ResolveRecordTreeNode<unknown>;
 
 	addRecordNode(node: ResolveRecordNode<unknown>): void;
 
-	getCycleNodes(): ResolveRecordTreeNode<unknown>[];
+	getCycleNodes(): undefined | CycleNodeInfo;
 }
 
 export interface IInternalResolveRecord extends IResolveRecord {
