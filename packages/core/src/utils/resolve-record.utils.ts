@@ -25,3 +25,7 @@ export function getEnsureResolveRecord(
 export function resetResolveRecord(): void {
 	resolveRecordRef.current = undefined;
 }
+
+export function setResolveRecord(resolveRecord: IInternalResolveRecord): void {
+	resolveRecordRef.current = resolveRecord;
+}
