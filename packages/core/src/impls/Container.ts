@@ -141,7 +141,7 @@ export class Container implements IInternalContainer {
 
 		resolveRecord.addRecordNode({
 			type: ResolveIdentifierRecordTypeEnum.serviceIdentifier,
-			options,
+			resolveOptions: options,
 			serviceIdentifier,
 			container: this,
 		});
