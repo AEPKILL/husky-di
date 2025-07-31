@@ -106,6 +106,7 @@ export type ResolveInstance<T, O extends ResolveOptions<any>> = ResolveRefType<
 export type ResolveMiddlewareParams<T, O extends ResolveOptions<T>> = {
 	serviceIdentifier: ServiceIdentifier<T>;
 	resolveOptions: O;
+	container: IContainer;
 	resolveRecord: IInternalResolveRecord;
 	registration: IRegistration<T>;
 	resolveContext: ResolveContext;
@@ -114,15 +115,24 @@ export type ResolveMiddlewareParams<T, O extends ResolveOptions<T>> = {
 export type ResolveMiddlewareExecutor<
 	T,
 	O extends ResolveOptions<T>,
-> = MiddlewareExecutor<ResolveMiddlewareParams<T, O>, ResolveInstance<T, O>>;
+> = MiddlewareExecutor<ResolveMiddlewareParams<T, O>, T>;
 
 export type ResolveMiddleware<T, O extends ResolveOptions<T>> = Middleware<
 	ResolveMiddlewareParams<T, O>,
 	ResolveInstance<T, O>
 >;
 
+export type IsRegisteredOptions = {
+	/**
+	 * Whether to check recursively in the parent container.
+	 * @default false
+	 */
+	recursive?: boolean;
+};
+
 export interface IContainer extends IUnique, IDisposable, IDisplayName {
 	readonly name: string;
+	readonly parent?: IContainer;
 
 	resolve<T, O extends ResolveOptions<T>>(
 		serviceIdentifier: ServiceIdentifier<T>,
@@ -133,7 +143,10 @@ export interface IContainer extends IUnique, IDisposable, IDisplayName {
 		serviceIdentifier: ServiceIdentifier<T>,
 		registration: CreateRegistrationOptions<T>,
 	): void;
-	isRegistered<T>(serviceIdentifier: ServiceIdentifier<T>): boolean;
+	isRegistered<T>(
+		serviceIdentifier: ServiceIdentifier<T>,
+		options?: IsRegisteredOptions,
+	): boolean;
 	unregister<T>(serviceIdentifier: ServiceIdentifier<T>): void;
 
 	addMiddleware(

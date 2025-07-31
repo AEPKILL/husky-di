@@ -30,13 +30,20 @@ export type MiddlewareChainEvents<Params, Result> = {
 	before: MiddlewareBeforeListener<Params, Result>;
 	after: MiddlewareAfterListener<Params, Result>;
 	error: MiddlewareErrorListener<Params, Result>;
+	change: (middlewares: Middleware<Params, Result>[]) => void;
 };
 
-export interface IMiddlewareChain<Params, Result>
+export interface IMiddlewareManager<Params, Result>
 	extends ITypedEvent<MiddlewareChainEvents<Params, Result>> {
-	use(middleware: Middleware<Params, Result>): void;
-	unused(middleware: Middleware<Params, Result>): void;
+	readonly middlewares: Middleware<Params, Result>[];
+
+	use(...middlewares: Middleware<Params, Result>[]): void;
+	unused(...middlewares: Middleware<Params, Result>[]): void;
 	has(middleware: Middleware<Params, Result>): boolean;
 	all(): Middleware<Params, Result>[];
+}
+
+export interface IMiddlewareChain<Params, Result>
+	extends IMiddlewareManager<Params, Result> {
 	execute(params: Params): Result;
 }
