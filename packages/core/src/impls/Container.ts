@@ -101,12 +101,18 @@ export class Container implements IInternalContainer {
 		this._parent = parent;
 
 		// 初始化默认的解析中间件链
-		this._resolveMiddlewareChain = new MiddlewareChain((params) => {
-			return this._resolveRegistration(params);
-		}, globalMiddlewares.all());
+		this._resolveMiddlewareChain = new MiddlewareChain(
+			(params) => {
+				return this._resolveRegistration(params);
+			},
+			globalMiddlewares,
+			[],
+		);
 
 		this._disposableRegistry = new DisposableRegistry();
 		this._resolveContext = {};
+
+		this._disposableRegistry.addDisposable(this._resolveMiddlewareChain);
 	}
 
 	/**
@@ -132,6 +138,13 @@ export class Container implements IInternalContainer {
 		const resolveContext = this._getResolveContext();
 		const { multiple, optional, defaultValue } = options;
 		const registrations = this._registry.getAll(serviceIdentifier);
+
+		resolveRecord.addRecordNode({
+			type: ResolveIdentifierRecordTypeEnum.serviceIdentifier,
+			options,
+			serviceIdentifier,
+			container: this,
+		});
 
 		if (registrations.length === 0) {
 			if (this._parent?.isRegistered(serviceIdentifier)) {
@@ -285,7 +298,7 @@ export class Container implements IInternalContainer {
 	 * 销毁容器
 	 */
 	public dispose(): void {
-		assertNotDisposed(this);
+		if (this.disposed) return;
 
 		this._disposableRegistry.dispose();
 		this._registry.clear();

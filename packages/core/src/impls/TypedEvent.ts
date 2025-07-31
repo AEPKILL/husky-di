@@ -5,11 +5,16 @@
  */
 
 import type { ITypedEvent } from "@/interfaces/typed-event.interface";
+import { createAssertNotDisposed } from "@/utils/disposable.utils";
+import { Disposable } from "./Disposable";
 
+const assertNotDisposed = createAssertNotDisposed("TypedEvent");
 export class TypedEvent<
-	// biome-ignore lint/suspicious/noExplicitAny: any
-	Events extends Record<string | symbol, (...args: any[]) => void>,
-> implements ITypedEvent<Events>
+		// biome-ignore lint/suspicious/noExplicitAny: any
+		Events extends Record<string | symbol, (...args: any[]) => void>,
+	>
+	extends Disposable
+	implements ITypedEvent<Events>
 {
 	/**
 	 * 存储事件监听器的映射表
@@ -27,6 +32,8 @@ export class TypedEvent<
 		eventName: EventName,
 		...args: Parameters<Events[EventName]>
 	): void {
+		assertNotDisposed(this);
+
 		const eventListeners = this.listeners.get(eventName);
 		if (eventListeners) {
 			for (const listener of eventListeners.values()) {
@@ -44,6 +51,8 @@ export class TypedEvent<
 		eventName: EventName,
 		listener: Events[EventName],
 	): void {
+		assertNotDisposed(this);
+
 		if (!this.listeners.has(eventName)) {
 			this.listeners.set(eventName, new Set());
 		}
@@ -60,6 +69,8 @@ export class TypedEvent<
 		eventName: EventName,
 		listener: Events[EventName],
 	): void {
+		assertNotDisposed(this);
+
 		const eventListeners = this.listeners.get(eventName);
 		if (eventListeners) {
 			eventListeners.delete(listener);
@@ -67,5 +78,13 @@ export class TypedEvent<
 				this.listeners.delete(eventName);
 			}
 		}
+	}
+
+	dispose(): void {
+		if (this.disposed) {
+			return;
+		}
+		super.dispose();
+		this.listeners.clear();
 	}
 }

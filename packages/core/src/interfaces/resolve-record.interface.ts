@@ -45,6 +45,8 @@ export interface IResolveRecord extends IUnique {
 	readonly root: ResolveRecordTreeNode<unknown>;
 
 	addRecordNode(node: ResolveRecordNode<unknown>): void;
+
+	getCycleNodes(): ResolveRecordTreeNode<unknown>[];
 }
 
 export interface IInternalResolveRecord extends IResolveRecord {
