@@ -10,13 +10,14 @@ import type { IDisposable } from "@/interfaces/disposable.interface";
 export class DisposableRegistry extends Disposable implements IDisposable {
 	private _disposables: IDisposable[] = [];
 
-	public addDisposable(disposable: IDisposable): void {
-		this._disposables.push(disposable);
+	constructor() {
+		super(() => {
+			this._disposables.forEach((disposable) => disposable.dispose());
+			this._disposables = [];
+		});
 	}
 
-	public dispose(): void {
-		super.dispose();
-		this._disposables.forEach((disposable) => disposable.dispose());
-		this._disposables = [];
+	public addDisposable(disposable: IDisposable): void {
+		this._disposables.push(disposable);
 	}
 }
