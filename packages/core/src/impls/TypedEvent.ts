@@ -23,6 +23,12 @@ export class TypedEvent<
 	// biome-ignore lint/suspicious/noExplicitAny: any
 	private listeners = new Map<keyof Events, Set<(...args: any[]) => void>>();
 
+	constructor() {
+		super(() => {
+			this.listeners.clear();
+		});
+	}
+
 	/**
 	 * 触发指定事件
 	 * @param eventName 事件名称
@@ -78,13 +84,5 @@ export class TypedEvent<
 				this.listeners.delete(eventName);
 			}
 		}
-	}
-
-	dispose(): void {
-		if (this.disposed) {
-			return;
-		}
-		super.dispose();
-		this.listeners.clear();
 	}
 }

@@ -4,7 +4,7 @@
  * @created 2025-07-29 23:01:46
  */
 
-import { MiddlewareManager } from "@/impls/MiddlewareManager";
+import { MiddlewareManager } from "@/impls/MiddlewareManagerx";
 import type {
 	ResolveMiddlewareParams,
 	ResolveOptions,

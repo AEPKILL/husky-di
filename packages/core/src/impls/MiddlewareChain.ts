@@ -4,14 +4,13 @@
  * @created 2025-07-26 22:07:03
  */
 
+import { MiddlewareManager } from "@/impls/MiddlewareManagerx";
 import type {
 	IMiddlewareChain,
 	IMiddlewareManager,
 	Middleware,
 	MiddlewareExecutor,
 } from "@/interfaces/middleware-chain.interface";
-import { MiddlewareManager } from "./MiddlewareManager";
-
 /**
  * 中间件链类
  * 用于管理和执行一系列中间件，支持链式调用和事件监听

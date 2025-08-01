@@ -10,6 +10,7 @@ import { InstanceRef } from "@/classes/InstanceRef";
 import { LifecycleEnum } from "@/enums/lifecycle.enum";
 import { RegistrationTypeEnum } from "@/enums/registration-type.enum";
 import { ResolveIdentifierRecordTypeEnum } from "@/enums/resolve-identifier-record-type.enum";
+import { Disposable } from "@/impls/Disposable";
 import { MiddlewareChain } from "@/impls/MiddlewareChain";
 import { Registration } from "@/impls/Registration";
 import { Registry } from "@/impls/Registry";
@@ -50,7 +51,7 @@ const assertNotDisposed = createAssertNotDisposed("Container");
  * 依赖注入容器实现类
  * 提供服务的注册、解析和管理功能
  */
-export class Container implements IInternalContainer {
+export class Container extends Disposable implements IInternalContainer {
 	public readonly id: string;
 
 	public get name(): string {
@@ -68,8 +69,6 @@ export class Container implements IInternalContainer {
 	public get resolveContext(): MutableRef<ResolveContext> {
 		return this._resolveContext;
 	}
-
-	private _disposed: boolean = false;
 
 	private readonly _registry: Registry;
 
@@ -95,6 +94,11 @@ export class Container implements IInternalContainer {
 	 * @param name 容器名称
 	 */
 	constructor(name: string = "DefaultContainer", parent?: IContainer) {
+		super(() => {
+			this._disposableRegistry.dispose();
+			this._registry.clear();
+		});
+
 		this.id = createContainerId();
 		this._name = name;
 		this._registry = new Registry();
@@ -113,13 +117,6 @@ export class Container implements IInternalContainer {
 		this._resolveContext = {};
 
 		this._disposableRegistry.addDisposable(this._resolveMiddlewareChain);
-	}
-
-	/**
-	 * 获取是否已销毁
-	 */
-	public get disposed(): boolean {
-		return this._disposed;
 	}
 
 	/**
@@ -292,16 +289,6 @@ export class Container implements IInternalContainer {
 		assertNotDisposed(this);
 
 		this._resolveMiddlewareChain.unused(middleware);
-	}
-
-	/**
-	 * 销毁容器
-	 */
-	public dispose(): void {
-		if (this.disposed) return;
-
-		this._disposableRegistry.dispose();
-		this._registry.clear();
 	}
 
 	/**
