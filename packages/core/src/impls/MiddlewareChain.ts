@@ -23,10 +23,10 @@ export class MiddlewareChain<Params, Result>
 {
 	private _middlewareExecutor: MiddlewareExecutor<Params, Result>;
 	private _defaultMiddlewareExecutor: MiddlewareExecutor<Params, Result>;
-	private _globalMiddlewares: IMiddlewareManager<Params, Result>;
+	private _globalMiddleware: IMiddlewareManager<Params, Result>;
 
-	get globalMiddlewares(): IMiddlewareManager<Params, Result> {
-		return this._globalMiddlewares;
+	get globalMiddleware(): IMiddlewareManager<Params, Result> {
+		return this._globalMiddleware;
 	}
 
 	constructor(
@@ -35,13 +35,13 @@ export class MiddlewareChain<Params, Result>
 		middlewares: Middleware<Params, Result>[],
 	) {
 		super(middlewares);
+		this._globalMiddleware = globalMiddlewares;
 		this._defaultMiddlewareExecutor = defaultMiddlewareExecutor;
 		this._middlewareExecutor = this.buildMiddlewareExecutor();
-		this._globalMiddlewares = globalMiddlewares;
 		this.on("change", () => {
 			this._middlewareExecutor = this.buildMiddlewareExecutor();
 		});
-		this._globalMiddlewares.on("change", () => {
+		this._globalMiddleware.on("change", () => {
 			this._middlewareExecutor = this.buildMiddlewareExecutor();
 		});
 	}
@@ -61,7 +61,7 @@ export class MiddlewareChain<Params, Result>
 	 * @returns 构建好的中间件执行器函数
 	 */
 	buildMiddlewareExecutor(): MiddlewareExecutor<Params, Result> {
-		return [...this._globalMiddlewares.middlewares, ...this.middlewares].reduce(
+		return [...this._globalMiddleware.middlewares, ...this.middlewares].reduce(
 			(next, middleware) => {
 				return (params: Params) => {
 					// 触发中间件执行前的事件

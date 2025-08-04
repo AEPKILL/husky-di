@@ -47,6 +47,6 @@ export interface IMiddlewareManager<Params, Result>
 
 export interface IMiddlewareChain<Params, Result>
 	extends IMiddlewareManager<Params, Result> {
-	readonly globalMiddlewares: IMiddlewareManager<Params, Result>;
+	readonly globalMiddleware: IMiddlewareManager<Params, Result>;
 	execute(params: Params): Result;
 }

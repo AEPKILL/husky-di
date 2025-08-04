@@ -11,5 +11,5 @@ export function createContainer(
 	name: string = "DefaultContainer",
 	parent?: IContainer,
 ): IContainer {
-	return new Container(name, parent);
+	return new Container(name, parent ?? Container.rootContainer);
 }
