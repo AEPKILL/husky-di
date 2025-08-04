@@ -134,9 +134,10 @@ export interface IContainer extends IUnique, IDisposable, IDisplayName {
 	readonly name: string;
 	readonly parent?: IContainer;
 
+	resolve<T>(serviceIdentifier: ServiceIdentifier<T>): T;
 	resolve<T, O extends ResolveOptions<T>>(
 		serviceIdentifier: ServiceIdentifier<T>,
-		resolveOptions: O,
+		options: O,
 	): ResolveInstance<T, O>;
 
 	register<T>(

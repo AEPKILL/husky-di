@@ -128,13 +128,14 @@ export class Container extends Disposable implements IInternalContainer {
 	 */
 	public resolve<T, O extends ResolveOptions<T>>(
 		serviceIdentifier: ServiceIdentifier<T>,
-		options: O,
+		options?: O,
 	): ResolveInstance<T, O> {
 		assertNotDisposed(this);
 
 		const resolveRecord = getEnsureResolveRecord(this);
 		const resolveContext = this._getResolveContext();
-		const { dynamic, ref, multiple, optional, defaultValue } = options;
+		const resolveOptions = options || ({} as ResolveOptions<T>);
+		const { dynamic, ref, multiple, optional, defaultValue } = resolveOptions;
 		const registrations = this._registry.getAll(serviceIdentifier);
 
 		try {
@@ -147,7 +148,7 @@ export class Container extends Disposable implements IInternalContainer {
 
 			resolveRecord.addRecordNode({
 				type: ResolveIdentifierRecordTypeEnum.serviceIdentifier,
-				resolveOptions: options,
+				resolveOptions,
 				serviceIdentifier,
 				container: this,
 			});
@@ -167,7 +168,10 @@ export class Container extends Disposable implements IInternalContainer {
 						message: `Service Identifier "${getServiceIdentifierName(serviceIdentifier)}" is not registered in "${this.displayName}", but it is registered in parent container, so we will resolve it from parent container`,
 					});
 
-					return this._parent.resolve(serviceIdentifier, options);
+					return this._parent.resolve(
+						serviceIdentifier,
+						resolveOptions,
+					) as ResolveInstance<T, O>;
 				}
 
 				if (typeof serviceIdentifier === "function") {
@@ -179,7 +183,7 @@ export class Container extends Disposable implements IInternalContainer {
 					return this._resolveInternal({
 						container: this,
 						serviceIdentifier,
-						resolveOptions: options,
+						resolveOptions,
 						registration: new Registration({
 							lifecycle: LifecycleEnum.transient,
 							useClass: serviceIdentifier as Constructor<T>,
@@ -203,7 +207,7 @@ export class Container extends Disposable implements IInternalContainer {
 					return this._resolveInternal({
 						container: this,
 						serviceIdentifier,
-						resolveOptions: options,
+						resolveOptions,
 						registration,
 						resolveContext,
 						resolveRecord,
@@ -215,7 +219,7 @@ export class Container extends Disposable implements IInternalContainer {
 				return this._resolveInternal({
 					container: this,
 					serviceIdentifier,
-					resolveOptions: options,
+					resolveOptions,
 					registration: registrations[registrations.length - 1],
 					resolveContext,
 					resolveRecord,
@@ -335,11 +339,7 @@ export class Container extends Disposable implements IInternalContainer {
 			return new InstanceRef<T>(() => {
 				this._resolveContext.current = resolveContext;
 				setResolveRecord(resolveRecord);
-				return this.resolve(serviceIdentifier, {
-					...resolveOptions,
-					ref: false,
-					multiple: false,
-				}) as T;
+				return this.resolve(serviceIdentifier, resolveOptions) as T;
 			});
 		}
 
@@ -356,7 +356,7 @@ export class Container extends Disposable implements IInternalContainer {
 					...resolveOptions,
 					multiple: false,
 					dynamic: false,
-				}) as T;
+				} as ResolveOptions<T>) as T;
 			});
 		}
 
@@ -405,15 +405,15 @@ export class Container extends Disposable implements IInternalContainer {
 		switch (registration.type) {
 			case RegistrationTypeEnum.class: {
 				const provider =
-					resolveOptions as CreateClassRegistrationOptions<T>["useClass"];
-				instance = new provider(params);
+					registration.provider as CreateClassRegistrationOptions<T>["useClass"];
+				instance = new provider();
 				break;
 			}
 			case RegistrationTypeEnum.value:
 				return registration.provider as CreateValueRegistrationOptions<T>["useValue"];
 			case RegistrationTypeEnum.factory: {
 				const provider =
-					resolveOptions as CreateFactoryRegistrationOptions<T>["useFactory"];
+					registration.provider as CreateFactoryRegistrationOptions<T>["useFactory"];
 				instance = provider(container, resolveContext);
 				break;
 			}
@@ -436,4 +436,6 @@ export class Container extends Disposable implements IInternalContainer {
 		}
 		return this._resolveContext.current;
 	}
+
+	static rootContainer: IContainer = new Container("Root");
 }
