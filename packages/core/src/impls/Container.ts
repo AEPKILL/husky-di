@@ -10,6 +10,7 @@ import { InstanceRef } from "@/classes/InstanceRef";
 import { LifecycleEnum } from "@/enums/lifecycle.enum";
 import { RegistrationTypeEnum } from "@/enums/registration-type.enum";
 import { ResolveIdentifierRecordTypeEnum } from "@/enums/resolve-identifier-record-type.enum";
+import { ResolveException } from "@/exceptions/resolve.exception";
 import { Disposable } from "@/impls/Disposable";
 import { MiddlewareChain } from "@/impls/MiddlewareChain";
 import { Registration } from "@/impls/Registration";
@@ -133,55 +134,70 @@ export class Container extends Disposable implements IInternalContainer {
 
 		const resolveRecord = getEnsureResolveRecord(this);
 		const resolveContext = this._getResolveContext();
-		const { multiple, optional, defaultValue } = options;
+		const { dynamic, ref, multiple, optional, defaultValue } = options;
 		const registrations = this._registry.getAll(serviceIdentifier);
 
-		resolveRecord.addRecordNode({
-			type: ResolveIdentifierRecordTypeEnum.serviceIdentifier,
-			resolveOptions: options,
-			serviceIdentifier,
-			container: this,
-		});
-
-		if (registrations.length === 0) {
-			if (this._parent?.isRegistered(serviceIdentifier)) {
-				resolveRecord.addRecordNode({
-					type: ResolveIdentifierRecordTypeEnum.message,
-					message: `Service Identifier "${getServiceIdentifierName(serviceIdentifier)}" is not registered in "${this.displayName}", but it is registered in parent container, so we will resolve it from parent container`,
-				});
-
-				return this._parent.resolve(serviceIdentifier, options);
-			}
-
-			if (typeof serviceIdentifier === "function") {
-				resolveRecord.addRecordNode({
-					type: ResolveIdentifierRecordTypeEnum.message,
-					message: `Service Identifier "${getServiceIdentifierName(serviceIdentifier)}" is not registered in "${this.displayName}", but it is a class, so we will register it as a transient class and resolve it`,
-				});
-
-				return this._resolveInternal({
-					container: this,
-					serviceIdentifier,
-					resolveOptions: options,
-					registration: new Registration({
-						lifecycle: LifecycleEnum.transient,
-						useClass: serviceIdentifier as Constructor<T>,
-					}),
-					resolveContext,
-					resolveRecord,
-				}) as ResolveInstance<T, O>;
-			}
-
-			if (optional) {
-				return defaultValue as ResolveInstance<T, O>;
-			}
-
-			throw new Error(
-				`Service Identifier "${getServiceIdentifierName(serviceIdentifier)}" is not registered and is not optional`,
-			);
-		}
-
 		try {
+			if (dynamic && ref) {
+				throw new ResolveException(
+					`Service Identifier "${getServiceIdentifierName(serviceIdentifier)}" is resolved as a dynamic ref and a ref, but it is not allowed`,
+					resolveRecord,
+				);
+			}
+
+			resolveRecord.addRecordNode({
+				type: ResolveIdentifierRecordTypeEnum.serviceIdentifier,
+				resolveOptions: options,
+				serviceIdentifier,
+				container: this,
+			});
+
+			const cycleNodeInfo = resolveRecord.getCycleNodes();
+			if (cycleNodeInfo) {
+				throw new ResolveException(
+					`Service Identifier "${getServiceIdentifierName(serviceIdentifier)}" is resolved as a cycle, try use "ref" or "dynamic" option to resolve it`,
+					resolveRecord,
+				);
+			}
+
+			if (registrations.length === 0) {
+				if (this._parent?.isRegistered(serviceIdentifier)) {
+					resolveRecord.addRecordNode({
+						type: ResolveIdentifierRecordTypeEnum.message,
+						message: `Service Identifier "${getServiceIdentifierName(serviceIdentifier)}" is not registered in "${this.displayName}", but it is registered in parent container, so we will resolve it from parent container`,
+					});
+
+					return this._parent.resolve(serviceIdentifier, options);
+				}
+
+				if (typeof serviceIdentifier === "function") {
+					resolveRecord.addRecordNode({
+						type: ResolveIdentifierRecordTypeEnum.message,
+						message: `Service Identifier "${getServiceIdentifierName(serviceIdentifier)}" is not registered in "${this.displayName}", but it is a class, so we will register it as a transient class and resolve it`,
+					});
+
+					return this._resolveInternal({
+						container: this,
+						serviceIdentifier,
+						resolveOptions: options,
+						registration: new Registration({
+							lifecycle: LifecycleEnum.transient,
+							useClass: serviceIdentifier as Constructor<T>,
+						}),
+						resolveContext,
+						resolveRecord,
+					}) as ResolveInstance<T, O>;
+				}
+
+				if (optional) {
+					return defaultValue as ResolveInstance<T, O>;
+				}
+
+				throw new Error(
+					`Service Identifier "${getServiceIdentifierName(serviceIdentifier)}" is not registered and is not optional`,
+				);
+			}
+
 			if (multiple) {
 				const instances = registrations.map((registration) => {
 					return this._resolveInternal({
@@ -377,8 +393,15 @@ export class Container extends Disposable implements IInternalContainer {
 	private _resolveRegistration<T, O extends ResolveOptions<T>>(
 		params: ResolveMiddlewareParams<T, O>,
 	): T {
-		const { resolveOptions, registration, container, resolveContext } = params;
+		const {
+			resolveOptions,
+			resolveRecord,
+			registration,
+			container,
+			resolveContext,
+		} = params;
 		let instance: T;
+		resolveRecord.stashCurrent();
 		switch (registration.type) {
 			case RegistrationTypeEnum.class: {
 				const provider =
@@ -403,6 +426,7 @@ export class Container extends Disposable implements IInternalContainer {
 			default:
 				throw new Error(`Unsupported registration type: ${registration.type}`);
 		}
+		resolveRecord.restoreCurrent();
 		return instance;
 	}
 
