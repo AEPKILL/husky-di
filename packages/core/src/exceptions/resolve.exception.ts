@@ -4,8 +4,24 @@
  * @created 2023-05-24 09:32:03
  */
 
+import type { IResolveRecord } from "@/interfaces/resolve-record.interface";
+import { getResolveRecordMessage } from "@/utils/resolve-record.utils";
+
 export class ResolveException extends Error {
 	private __isResolveException = true;
+
+	constructor(message: string, resolveRecord: IResolveRecord) {
+		const cycleNode = resolveRecord.getCycleNodes();
+		const paths = resolveRecord.getPaths().map((it) => it.value);
+		super(
+			getResolveRecordMessage({
+				message,
+				paths,
+				cycleNode: cycleNode?.cycleNode.value,
+			}),
+		);
+	}
+
 	static isResolveException(error: unknown): error is ResolveException {
 		// don't use instanceof, because it will be false when the error is not in the same frame
 		return (
