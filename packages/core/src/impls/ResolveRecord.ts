@@ -14,6 +14,7 @@ import type {
 } from "@/interfaces/resolve-record.interface";
 import {
 	isEqualServiceIdentifierResolveRecord,
+	isResolveRootRecord,
 	isResolveServiceIdentifierRecord,
 } from "@/utils/resolve-record.utils";
 import {
@@ -52,11 +53,14 @@ export class ResolveRecord implements IInternalResolveRecord {
 		});
 		this._current = this._root;
 	}
+
 	addRecordNode(node: ResolveRecordNode<unknown>): void {
-		this._current.children.push({
+		const current = {
 			parent: this._current,
 			...createResolveRecordTreeNode(this._getTreeNodeId(), node),
-		});
+		};
+		this._current.children.push(current);
+		this._current = current;
 	}
 
 	getCycleNodes(): undefined | CycleNodeInfo {
@@ -79,6 +83,19 @@ export class ResolveRecord implements IInternalResolveRecord {
 					cycleNode: tempRecordNode,
 				};
 			}
+		}
+	}
+
+	getCurrentContainer(): IContainer | undefined {
+		let current: ResolveRecordTreeNode<unknown> | undefined = this._current;
+		while (current) {
+			if (
+				isResolveServiceIdentifierRecord(current.value) ||
+				isResolveRootRecord(current.value)
+			) {
+				return current.value.container;
+			}
+			current = current.parent;
 		}
 	}
 

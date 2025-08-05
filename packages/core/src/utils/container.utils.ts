@@ -4,20 +4,43 @@
  * @created 2025-07-30 22:53:06
  */
 
+import { ResolveException } from "@/exceptions/resolve.exception";
 import type {
-	ResolveMiddleware,
+	IContainer,
+	ResolveInstance,
 	ResolveOptions,
 } from "@/interfaces/container.interface";
-import { globalMiddleware } from "@/shared/instances";
+import { resolveRecordRef } from "@/shared/instances";
+import type { ServiceIdentifier } from "@/types/service-identifier.type";
 
-export function useGlobalMiddleware(
-	middleware: ResolveMiddleware<unknown, ResolveOptions<unknown>>,
-): void {
-	globalMiddleware.use(middleware);
+function _resolve<T>(serviceIdentifier: ServiceIdentifier<T>): T;
+function _resolve<T, Options extends ResolveOptions<T>>(
+	serviceIdentifier: ServiceIdentifier<T>,
+	options: Options,
+): ResolveInstance<T, Options>;
+function _resolve<T, Options extends ResolveOptions<T>>(
+	serviceIdentifier: ServiceIdentifier<T>,
+	options?: Options,
+): ResolveInstance<T, Options> {
+	if (!resolveRecordRef.current) {
+		throw new Error(
+			`The "resolve" method can only be called within a resolve context. This typically happens when trying to resolve a service outside of a container's resolve process.`,
+		);
+	}
+
+	const currentContainer = resolveRecordRef.current.getCurrentContainer();
+
+	if (currentContainer) {
+		return currentContainer.resolve(
+			serviceIdentifier,
+			options as Options,
+		) as ResolveInstance<T, Options>;
+	}
+
+	throw new ResolveException(
+		`No container available in the current resolve context. This usually indicates that the resolve context has been corrupted or improperly initialized.`,
+		resolveRecordRef.current,
+	);
 }
 
-export function unusedGlobalMiddleware(
-	middleware: ResolveMiddleware<unknown, ResolveOptions<unknown>>,
-): void {
-	globalMiddleware.unused(middleware);
-}
+export const resolve: IContainer["resolve"] = _resolve;

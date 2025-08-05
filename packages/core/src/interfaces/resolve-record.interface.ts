@@ -74,6 +74,8 @@ export interface IResolveRecord extends IUnique {
 	getCycleNodes(): undefined | CycleNodeInfo;
 
 	getPaths(): Array<ResolveRecordTreeNode<unknown>>;
+
+	getCurrentContainer(): IContainer | undefined;
 }
 
 export interface IInternalResolveRecord extends IResolveRecord {
