@@ -6,6 +6,7 @@
 
 import { Container } from "./impls/Container";
 
+export { LifecycleEnum } from "@/enums/lifecycle.enum";
 export * from "@/factories/container.factory";
 export type {
 	IContainer,
@@ -28,5 +29,4 @@ export type {
 export { globalMiddleware } from "@/shared/instances";
 export { resolve } from "@/utils/container.utils";
 export { createServiceIdentifier } from "@/utils/service-identifier.utils";
-
 export const rootContainer = Container.rootContainer;
