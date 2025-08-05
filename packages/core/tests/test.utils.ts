@@ -7,14 +7,10 @@ import type { IMiddlewareManager } from "../src/interfaces/middleware-chain.inte
  */
 export function clearContainer(container: IContainer): void {
 	if (container && !container.disposed) {
-		try {
-			const serviceIdentifiers = container.getServiceIdentifiers();
-			serviceIdentifiers.forEach((serviceIdentifier) => {
-				container.unregister(serviceIdentifier);
-			});
-		} catch (error) {
-			// Ignore errors during cleanup
-		}
+		const serviceIdentifiers = container.getServiceIdentifiers();
+		serviceIdentifiers.forEach((serviceIdentifier) => {
+			container.unregister(serviceIdentifier);
+		});
 	}
 }
 
@@ -23,14 +19,11 @@ export function clearContainer(container: IContainer): void {
  * @param middleware The middleware manager to clean up
  */
 export function clearMiddleware(
+	// biome-ignore lint/suspicious/noExplicitAny: <explanation>
 	middleware: IMiddlewareManager<any, any>,
 ): void {
 	if (middleware && !middleware.disposed) {
-		try {
-			const allMiddleware = middleware.all();
-			middleware.unused(...allMiddleware);
-		} catch (error) {
-			// Ignore errors during cleanup
-		}
+		const allMiddleware = middleware.all();
+		middleware.unused(...allMiddleware);
 	}
 }
