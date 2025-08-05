@@ -11,7 +11,6 @@ import type {
 	IInternalResolveRecord,
 	MessageResolveRecordNode,
 	ResolveRecordNode,
-	ResolveRecordTreeNode,
 	RootResolveRecordNode,
 	ServiceIdentifierResolveRecordNode,
 } from "@/interfaces/resolve-record.interface";
@@ -145,7 +144,7 @@ export function getResolveRecordName(
 	return "";
 }
 
-const ResolvePathSeparator = " --> ";
+const ResolvePathSeparator = " -> ";
 export interface GetResolveRecordMessageOptions {
 	message: string;
 	paths: Array<ResolveRecordNode<unknown>>;

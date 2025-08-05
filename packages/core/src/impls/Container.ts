@@ -137,11 +137,12 @@ export class Container extends Disposable implements IInternalContainer {
 		const resolveOptions = options || ({} as ResolveOptions<T>);
 		const { dynamic, ref, multiple, optional, defaultValue } = resolveOptions;
 		const registrations = this._registry.getAll(serviceIdentifier);
+		const current = resolveRecord.current;
 
 		try {
 			if (dynamic && ref) {
 				throw new ResolveException(
-					`Service Identifier "${getServiceIdentifierName(serviceIdentifier)}" is resolved as a dynamic ref and a ref, but it is not allowed`,
+					`Cannot use both "dynamic" and "ref" options simultaneously for service identifier "${getServiceIdentifierName(serviceIdentifier)}". These options are mutually exclusive. Please choose either "dynamic" or "ref", but not both.`,
 					resolveRecord,
 				);
 			}
@@ -156,7 +157,7 @@ export class Container extends Disposable implements IInternalContainer {
 			const cycleNodeInfo = resolveRecord.getCycleNodes();
 			if (cycleNodeInfo) {
 				throw new ResolveException(
-					`Service Identifier "${getServiceIdentifierName(serviceIdentifier)}" is resolved as a cycle, try use "ref" or "dynamic" option to resolve it`,
+					`Circular dependency detected for service identifier "${getServiceIdentifierName(serviceIdentifier)}". To resolve this, use either the "ref" option to get a reference to the service or the "dynamic" option to defer resolution until the service is actually used.`,
 					resolveRecord,
 				);
 			}
@@ -165,7 +166,7 @@ export class Container extends Disposable implements IInternalContainer {
 				if (this._parent?.isRegistered(serviceIdentifier)) {
 					resolveRecord.addRecordNode({
 						type: ResolveIdentifierRecordTypeEnum.message,
-						message: `Service Identifier "${getServiceIdentifierName(serviceIdentifier)}" is not registered in "${this.displayName}", but it is registered in parent container, so we will resolve it from parent container`,
+						message: `Service identifier "${getServiceIdentifierName(serviceIdentifier)}" is not registered in "${this.displayName}", but found in parent container. Resolving from parent container.`,
 					});
 
 					return this._parent.resolve(
@@ -177,7 +178,7 @@ export class Container extends Disposable implements IInternalContainer {
 				if (typeof serviceIdentifier === "function") {
 					resolveRecord.addRecordNode({
 						type: ResolveIdentifierRecordTypeEnum.message,
-						message: `Service Identifier "${getServiceIdentifierName(serviceIdentifier)}" is not registered in "${this.displayName}", but it is a class, so we will register it as a transient class and resolve it`,
+						message: `Service identifier "${getServiceIdentifierName(serviceIdentifier)}" is not registered in "${this.displayName}", but it is a class constructor. Auto-registering as transient service.`,
 					});
 
 					return this._resolveInternal({
@@ -198,7 +199,7 @@ export class Container extends Disposable implements IInternalContainer {
 				}
 
 				throw new Error(
-					`Service Identifier "${getServiceIdentifierName(serviceIdentifier)}" is not registered and is not optional`,
+					`Service identifier "${getServiceIdentifierName(serviceIdentifier)}" is not registered in this container. Please register it first using container.register() or set the "optional" option to true if this service is optional.`,
 				);
 			}
 
@@ -232,6 +233,8 @@ export class Container extends Disposable implements IInternalContainer {
 			if (isRootResolveRecord) {
 				resetResolveRecord();
 				this.resolveContext.current = undefined;
+			} else {
+				resolveRecord.setCurrent(current);
 			}
 		}
 	}
