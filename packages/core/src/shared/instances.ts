@@ -15,7 +15,7 @@ import type { MutableRef } from "@/types/ref.type";
 
 export const resolveRecordRef: MutableRef<IInternalResolveRecord> = {};
 
-export const globalMiddlewares: IMiddlewareManager<
+export const globalMiddleware: IMiddlewareManager<
 	ResolveMiddlewareParams<unknown, ResolveOptions<unknown>>,
 	// biome-ignore lint/suspicious/noExplicitAny: here is a generic type
 	any

@@ -150,15 +150,17 @@ export interface IContainer extends IUnique, IDisposable, IDisplayName {
 	): boolean;
 	unregister<T>(serviceIdentifier: ServiceIdentifier<T>): void;
 
-	addMiddleware(
+	use(
 		// biome-ignore lint/suspicious/noExplicitAny: here is a generic type
 		middleware: ResolveMiddleware<any, any>,
 	): void;
 
-	removeMiddleware(
+	unused(
 		// biome-ignore lint/suspicious/noExplicitAny: here is a generic type
 		middleware: ResolveMiddleware<any, any>,
 	): void;
+
+	getServiceIdentifiers(): ServiceIdentifier<unknown>[];
 }
 
 export interface IInternalContainer extends IContainer {
