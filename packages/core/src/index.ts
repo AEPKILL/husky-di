@@ -16,6 +16,7 @@ export type {
 	ResolveMiddlewareParams,
 	ResolveOptions,
 } from "@/interfaces/container.interface";
+export type { IMiddlewareManager } from "@/interfaces/middleware-chain.interface";
 export type {
 	CreateAliasRegistrationOptions,
 	CreateClassRegistrationOptions,
@@ -28,3 +29,4 @@ export type {
 export { createServiceIdentifier } from "@/utils/service-identifier.utils";
 
 export const rootContainer = Container.rootContainer;
+export { globalMiddleware } from "@/shared/instances";

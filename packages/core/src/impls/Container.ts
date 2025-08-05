@@ -32,7 +32,7 @@ import type {
 	CreateValueRegistrationOptions,
 	IInternalRegistration,
 } from "@/interfaces/registration.interface";
-import { globalMiddlewares } from "@/shared/instances";
+import { globalMiddleware } from "@/shared/instances";
 import type { Constructor } from "@/types/constructor.type";
 import type { MutableRef, Ref } from "@/types/ref.type";
 import type { ResolveContext } from "@/types/resolve-context.type";
@@ -110,7 +110,7 @@ export class Container extends Disposable implements IInternalContainer {
 			(params) => {
 				return this._resolveRegistration(params);
 			},
-			globalMiddlewares,
+			globalMiddleware,
 			[],
 		);
 
@@ -289,7 +289,7 @@ export class Container extends Disposable implements IInternalContainer {
 	 * 添加解析中间件
 	 * @param middleware 中间件
 	 */
-	public addMiddleware(
+	public use(
 		// biome-ignore lint/suspicious/noExplicitAny: here is a generic type
 		middleware: ResolveMiddleware<any, any>,
 	): void {
@@ -302,13 +302,21 @@ export class Container extends Disposable implements IInternalContainer {
 	 * 移除解析中间件
 	 * @param middleware 中间件
 	 */
-	public removeMiddleware(
+	public unused(
 		// biome-ignore lint/suspicious/noExplicitAny: here is a generic type
 		middleware: ResolveMiddleware<any, any>,
 	): void {
 		assertNotDisposed(this);
 
 		this._resolveMiddlewareChain.unused(middleware);
+	}
+
+	/**
+	 * 获取所有已注册的服务标识符
+	 * @returns 服务标识符数组
+	 */
+	public getServiceIdentifiers(): ServiceIdentifier<unknown>[] {
+		return this._registry.keys();
 	}
 
 	/**

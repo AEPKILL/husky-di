@@ -96,4 +96,12 @@ export class Registry implements IRegistry {
 	clear(): void {
 		this._registrationMap.clear();
 	}
+
+	/**
+	 * 获取所有已注册的服务标识符
+	 * @returns 服务标识符数组
+	 */
+	keys(): ServiceIdentifier<unknown>[] {
+		return Array.from(this._registrationMap.keys());
+	}
 }

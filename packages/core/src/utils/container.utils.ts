@@ -8,16 +8,16 @@ import type {
 	ResolveMiddleware,
 	ResolveOptions,
 } from "@/interfaces/container.interface";
-import { globalMiddlewares } from "@/shared/instances";
+import { globalMiddleware } from "@/shared/instances";
 
 export function useGlobalMiddleware(
 	middleware: ResolveMiddleware<unknown, ResolveOptions<unknown>>,
 ): void {
-	globalMiddlewares.use(middleware);
+	globalMiddleware.use(middleware);
 }
 
 export function unusedGlobalMiddleware(
 	middleware: ResolveMiddleware<unknown, ResolveOptions<unknown>>,
 ): void {
-	globalMiddlewares.unused(middleware);
+	globalMiddleware.unused(middleware);
 }
