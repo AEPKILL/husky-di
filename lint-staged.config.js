@@ -15,7 +15,4 @@ export default {
 
 	// 处理 CSS 相关文件
 	"*.{css,scss,sass,less}": ["biome check --write"],
-
-	// 处理配置文件
-	"*.{yml,yaml}": ["biome check --write"],
 };
