@@ -27,6 +27,8 @@ export type {
 	CreateValueRegistrationOptions,
 } from "@/interfaces/registration.interface";
 export { globalMiddleware } from "@/shared/instances";
+export type { Constructor } from "@/types/constructor.type";
+export type { ServiceIdentifier } from "@/types/service-identifier.type";
 export { resolve } from "@/utils/container.utils";
 export { createServiceIdentifier } from "@/utils/service-identifier.utils";
 export const rootContainer = Container.rootContainer;
