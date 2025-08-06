@@ -8,11 +8,14 @@ import type { IResolveRecord } from "@/interfaces/resolve-record.interface";
 import { getResolveRecordMessage } from "@/utils/resolve-record.utils";
 
 export class ResolveException extends Error {
-	private __isResolveException = true;
+	private __isResolveException__ = true;
 
 	constructor(message: string, resolveRecord: IResolveRecord) {
 		const cycleNode = resolveRecord.getCycleNodes();
-		const paths = resolveRecord.getPaths().map((it) => it.value);
+		const paths = resolveRecord
+			.getPaths()
+			.map((it) => it.value)
+			.reverse();
 		super(
 			getResolveRecordMessage({
 				message,
@@ -25,7 +28,7 @@ export class ResolveException extends Error {
 	static isResolveException(error: unknown): error is ResolveException {
 		// don't use instanceof, because it will be false when the error is not in the same frame
 		return (
-			(error as unknown as ResolveException)?.__isResolveException === true
+			(error as unknown as ResolveException)?.__isResolveException__ === true
 		);
 	}
 }

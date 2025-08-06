@@ -4,7 +4,7 @@
  * @created 2025-07-30 00:25:55
  */
 
-import { ResolveIdentifierRecordTypeEnum } from "@/enums/resolve-identifier-record-type.enum";
+import { ResolveRecordTypeEnum } from "@/enums/resolve-record-type.enum";
 import { ResolveRecord } from "@/impls/ResolveRecord";
 import type { IContainer } from "@/interfaces/container.interface";
 import type {
@@ -77,21 +77,19 @@ export function getResolveIdentifierRecordName<T>(
 export function isResolveServiceIdentifierRecord<T>(
 	resolveRecord: ResolveRecordNode<T>,
 ): resolveRecord is ServiceIdentifierResolveRecordNode<T> {
-	return (
-		resolveRecord.type === ResolveIdentifierRecordTypeEnum.serviceIdentifier
-	);
+	return resolveRecord.type === ResolveRecordTypeEnum.serviceIdentifier;
 }
 
 export function isResolveRootRecord(
 	resolveRecord: ResolveRecordNode<unknown>,
 ): resolveRecord is RootResolveRecordNode {
-	return resolveRecord.type === ResolveIdentifierRecordTypeEnum.root;
+	return resolveRecord.type === ResolveRecordTypeEnum.root;
 }
 
 export function isResolveMessageRecord(
 	resolveRecord: ResolveRecordNode<unknown>,
 ): resolveRecord is MessageResolveRecordNode {
-	return resolveRecord.type === ResolveIdentifierRecordTypeEnum.message;
+	return resolveRecord.type === ResolveRecordTypeEnum.message;
 }
 
 // check two resolve record is equal, for check cycle reference
@@ -138,7 +136,7 @@ export function getResolveRecordName(
 	}
 
 	if (isResolveServiceIdentifierRecord(resolveRecord)) {
-		return getServiceIdentifierName(resolveRecord.serviceIdentifier);
+		return getResolveIdentifierRecordName(resolveRecord);
 	}
 
 	return "";

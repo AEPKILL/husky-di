@@ -295,4 +295,178 @@ describe("Error Messages", () => {
 			);
 		});
 	});
+
+	describe("useFactory Exception Handling", () => {
+		it("should throw error when factory function throws an exception", () => {
+			// Arrange
+			const errorMessage = "Factory function error";
+			container.register("FactoryService", {
+				useFactory: () => {
+					throw new Error(errorMessage);
+				},
+			});
+
+			// Act & Assert
+			expect(() => {
+				container.resolve("FactoryService");
+			}).toThrow(errorMessage);
+		});
+
+		it("should return undefined when factory function returns undefined", () => {
+			// Arrange
+			container.register("UndefinedFactoryService", {
+				useFactory: () => undefined,
+			});
+
+			// Act
+			const result = container.resolve("UndefinedFactoryService");
+
+			// Assert
+			expect(result).toBeUndefined();
+		});
+
+		it("should return null when factory function returns null", () => {
+			// Arrange
+			container.register("NullFactoryService", {
+				useFactory: () => null,
+			});
+
+			// Act
+			const result = container.resolve("NullFactoryService");
+
+			// Assert
+			expect(result).toBeNull();
+		});
+
+		it("should throw error when factory function is not a function", () => {
+			// Arrange
+			container.register("InvalidFactoryService", {
+				useFactory: "not a function" as any,
+			});
+
+			// Act & Assert
+			expect(() => {
+				container.resolve("InvalidFactoryService");
+			}).toThrow();
+		});
+
+		it("should handle factory function that throws ResolveException", () => {
+			// Arrange
+			container.register("ResolveExceptionFactoryService", {
+				useFactory: () => {
+					throw new Error("Custom resolve exception");
+				},
+			});
+
+			// Act & Assert
+			expect(() => {
+				container.resolve("ResolveExceptionFactoryService");
+			}).toThrow("Custom resolve exception");
+		});
+
+		it("should handle factory function with dependency resolution error", () => {
+			// Arrange
+			container.register("DependencyFactoryService", {
+				useFactory: (container) => {
+					// 尝试解析未注册的服务
+					return container.resolve("NonExistentDependency");
+				},
+			});
+
+			// Act & Assert
+			expect(() => {
+				container.resolve("DependencyFactoryService");
+			}).toThrow(/Service identifier "NonExistentDependency"/);
+		});
+	});
+
+	describe("useClass Exception Handling", () => {
+		it("should throw error when class constructor throws an exception", () => {
+			// Arrange
+			class ThrowingClass {
+				constructor() {
+					throw new Error("Constructor error");
+				}
+			}
+
+			container.register("ThrowingClassService", {
+				useClass: ThrowingClass,
+			});
+
+			// Act & Assert
+			expect(() => {
+				container.resolve("ThrowingClassService");
+			}).toThrow("Constructor error");
+		});
+
+		it("should throw ResolveException when class is not a constructor", () => {
+			// Arrange
+			container.register("InvalidClassService", {
+				useClass: "not a class" as any,
+			});
+
+			// Act & Assert
+			expect(() => {
+				container.resolve("InvalidClassService");
+			}).toThrow();
+		});
+
+		it("should throw error when class has circular dependency in constructor", () => {
+			// Arrange
+			class CircularClass {
+				constructor() {
+					// 在构造函数中尝试解析自身
+					container.resolve("CircularClassService");
+				}
+			}
+
+			container.register("CircularClassService", {
+				useClass: CircularClass,
+			});
+
+			// Act & Assert
+			expect(() => {
+				container.resolve("CircularClassService");
+			}).toThrow();
+		});
+
+		it("should handle class with dependency that throws error", () => {
+			// Arrange
+			class DependentClass {
+				constructor() {
+					// 尝试解析未注册的依赖
+					container.resolve("NonExistentService");
+				}
+			}
+
+			container.register("DependentClassService", {
+				useClass: DependentClass,
+			});
+
+			// Act & Assert
+			expect(() => {
+				container.resolve("DependentClassService");
+			}).toThrow(
+				'Service identifier "NonExistentService" is not registered in this container. Please register it first using container.register() or set the "optional" option to true if this service is optional.',
+			);
+		});
+
+		it("should handle class that throws ResolveException in constructor", () => {
+			// Arrange
+			class ResolveExceptionClass {
+				constructor() {
+					throw new Error("Class constructor resolve exception");
+				}
+			}
+
+			container.register("ResolveExceptionClassService", {
+				useClass: ResolveExceptionClass,
+			});
+
+			// Act & Assert
+			expect(() => {
+				container.resolve("ResolveExceptionClassService");
+			}).toThrow("Class constructor resolve exception");
+		});
+	});
 });

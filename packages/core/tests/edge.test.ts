@@ -4,15 +4,17 @@ import {
 	createServiceIdentifier,
 	type IContainer,
 	LifecycleEnum,
+	resolve,
 } from "../src/index";
 import { clearContainer } from "./test.utils";
 
 /**
  * Test service classes for edge case testing
  */
+let id = 0;
 class ServiceA1 {
 	readonly name = "ServiceA1";
-	readonly id = 1;
+	readonly id = id++;
 }
 
 class ServiceA2 {
@@ -79,13 +81,12 @@ describe("Edge Cases", () => {
 				lifecycle: LifecycleEnum.resolution,
 			});
 
-			// Act - First resolve multiple instances
-			const multipleInstances = container.resolve(IServiceA, {
-				multiple: true,
-			});
-
-			// Act - Then resolve single instance
-			const singleInstance = container.resolve(IServiceA);
+			const { multipleInstances, singleInstance } = container.resolve(
+				class TemplateClass {
+					multipleInstances = resolve(IServiceA, { multiple: true });
+					singleInstance = resolve(IServiceA);
+				},
+			);
 
 			// Assert - Verify multiple instances
 			expect(multipleInstances).toBeDefined();
@@ -106,7 +107,7 @@ describe("Edge Cases", () => {
 			expect(multipleInstances[3].name).toBe("ServiceA4");
 			expect(multipleInstances[4].name).toBe("ServiceA5");
 
-			expect(multipleInstances[0].id).toBe(1);
+			expect(multipleInstances[0].id).toBe(0);
 			expect(multipleInstances[1].id).toBe(2);
 			expect(multipleInstances[2].id).toBe(3);
 			expect(multipleInstances[3].id).toBe(4);
@@ -134,14 +135,15 @@ describe("Edge Cases", () => {
 			});
 
 			// Act - Resolve multiple times
-			const firstMultiple = container.resolve(IServiceA, {
-				multiple: true,
-			});
-			const secondMultiple = container.resolve(IServiceA, {
-				multiple: true,
-			});
-			const single1 = container.resolve(IServiceA);
-			const single2 = container.resolve(IServiceA);
+			const { firstMultiple, single1, secondMultiple, single2 } =
+				container.resolve(
+					class TemplateClass {
+						firstMultiple = resolve(IServiceA, { multiple: true });
+						single1 = resolve(IServiceA);
+						secondMultiple = resolve(IServiceA, { multiple: true });
+						single2 = resolve(IServiceA);
+					},
+				);
 
 			// Assert - With resolution lifecycle, instances should be the same within the same resolution context
 			// The resolution lifecycle maintains the same instance within the same resolution context
@@ -167,10 +169,13 @@ describe("Edge Cases", () => {
 			});
 
 			// Act
-			const multipleInstances = container.resolve(IServiceA, {
-				multiple: true,
-			});
-			const singleInstance = container.resolve(IServiceA);
+
+			const { multipleInstances, singleInstance } = container.resolve(
+				class TemplateClass {
+					multipleInstances = resolve(IServiceA, { multiple: true });
+					singleInstance = resolve(IServiceA);
+				},
+			);
 
 			// Assert
 			expect(multipleInstances).toBeDefined();
@@ -201,10 +206,12 @@ describe("Edge Cases", () => {
 			});
 
 			// Act
-			const multipleInstances = container.resolve(IServiceA, {
-				multiple: true,
-			});
-			const singleInstance = container.resolve(IServiceA);
+			const { multipleInstances, singleInstance } = container.resolve(
+				class TemplateClass {
+					multipleInstances = resolve(IServiceA, { multiple: true });
+					singleInstance = resolve(IServiceA);
+				},
+			);
 
 			// Assert
 			expect(multipleInstances).toBeDefined();
@@ -213,6 +220,7 @@ describe("Edge Cases", () => {
 			expect(multipleInstances[0]).toBeInstanceOf(ServiceA1);
 
 			expect(singleInstance).toBeInstanceOf(ServiceA1);
+			console.log(singleInstance, multipleInstances[0]);
 			expect(singleInstance).toBe(multipleInstances[0]);
 		});
 	});
