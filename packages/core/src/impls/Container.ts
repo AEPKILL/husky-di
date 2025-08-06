@@ -218,7 +218,7 @@ export class Container extends Disposable implements IInternalContainer {
 				}
 
 				throw new ResolveException(
-					`Service identifier "${getServiceIdentifierName(serviceIdentifier)}" is not registered in this container. Please register it first using container.register() or set the "optional" option to true if this service is optional.`,
+					`Service identifier "${getServiceIdentifierName(serviceIdentifier)}" is not registered in this container. Please register it first or set the "optional" option to true if this service is optional.`,
 					resolveRecord,
 				);
 			}
