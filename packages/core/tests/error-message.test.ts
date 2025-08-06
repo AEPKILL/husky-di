@@ -57,7 +57,7 @@ describe("Error Messages", () => {
 			expect(() => {
 				container.resolve("NonExistentService");
 			}).toThrow(
-				'Service identifier "NonExistentService" is not registered in this container. Please register it first using container.register() or set the "optional" option to true if this service is optional.',
+				'Service identifier "NonExistentService" is not registered in this container. Please register it first or set the "optional" option to true if this service is optional.',
 			);
 		});
 
@@ -66,7 +66,7 @@ describe("Error Messages", () => {
 			expect(() => {
 				container.resolve(INonExistentService);
 			}).toThrow(
-				'Service identifier "INonExistentService" is not registered in this container. Please register it first using container.register() or set the "optional" option to true if this service is optional.',
+				'Service identifier "INonExistentService" is not registered in this container. Please register it first or set the "optional" option to true if this service is optional.',
 			);
 		});
 
@@ -216,7 +216,7 @@ describe("Error Messages", () => {
 			expect(() => {
 				container.resolve("Service@#$%");
 			}).toThrow(
-				'Service identifier "Service@#$%" is not registered in this container. Please register it first using container.register() or set the "optional" option to true if this service is optional.',
+				'Service identifier "Service@#$%" is not registered in this container. Please register it first or set the "optional" option to true if this service is optional.',
 			);
 		});
 
@@ -447,7 +447,7 @@ describe("Error Messages", () => {
 			expect(() => {
 				container.resolve("DependentClassService");
 			}).toThrow(
-				'Service identifier "NonExistentService" is not registered in this container. Please register it first using container.register() or set the "optional" option to true if this service is optional.',
+				'Service identifier "NonExistentService" is not registered in this container. Please register it first or set the "optional" option to true if this service is optional.',
 			);
 		});
 
