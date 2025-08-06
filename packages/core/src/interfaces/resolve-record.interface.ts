@@ -25,7 +25,7 @@
  *    - 主要用于内部实现
  */
 
-import type { ResolveIdentifierRecordTypeEnum } from "@/enums/resolve-identifier-record-type.enum";
+import type { ResolveRecordTypeEnum } from "@/enums/resolve-record-type.enum";
 import type {
 	IContainer,
 	ResolveOptions,
@@ -34,17 +34,17 @@ import type { IUnique } from "@/interfaces/unique.interface";
 import type { ServiceIdentifier } from "@/types/service-identifier.type";
 
 export type RootResolveRecordNode = {
-	readonly type: ResolveIdentifierRecordTypeEnum.root;
+	readonly type: ResolveRecordTypeEnum.root;
 	readonly container: IContainer;
 };
 
 export type MessageResolveRecordNode = {
-	readonly type: ResolveIdentifierRecordTypeEnum.message;
+	readonly type: ResolveRecordTypeEnum.message;
 	readonly message: string;
 };
 
 export type ServiceIdentifierResolveRecordNode<T> = {
-	readonly type: ResolveIdentifierRecordTypeEnum.serviceIdentifier;
+	readonly type: ResolveRecordTypeEnum.serviceIdentifier;
 	readonly serviceIdentifier: ServiceIdentifier<T>;
 	readonly resolveOptions: ResolveOptions<T>;
 	readonly container: IContainer;

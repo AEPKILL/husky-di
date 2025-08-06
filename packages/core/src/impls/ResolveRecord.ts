@@ -4,7 +4,7 @@
  * @created 2025-07-29 23:36:01
  */
 
-import { ResolveIdentifierRecordTypeEnum } from "@/enums/resolve-identifier-record-type.enum";
+import { ResolveRecordTypeEnum } from "@/enums/resolve-record-type.enum";
 import type { IContainer } from "@/interfaces/container.interface";
 import type {
 	CycleNodeInfo,
@@ -48,7 +48,7 @@ export class ResolveRecord implements IInternalResolveRecord {
 	constructor(container: IContainer) {
 		this._id = createResolveRecordId();
 		this._root = createResolveRecordTreeNode(this._getTreeNodeId(), {
-			type: ResolveIdentifierRecordTypeEnum.root,
+			type: ResolveRecordTypeEnum.root,
 			container,
 		});
 		this._current = this._root;
