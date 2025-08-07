@@ -32,6 +32,7 @@ import type {
 	CreateValueRegistrationOptions,
 	IInternalRegistration,
 } from "@/interfaces/registration.interface";
+import type { IInternalResolveRecord } from "@/interfaces/resolve-record.interface";
 import { globalMiddleware } from "@/shared/instances";
 import type { Constructor } from "@/types/constructor.type";
 import type { MutableRef, Ref } from "@/types/ref.type";
@@ -82,11 +83,11 @@ export class Container extends Disposable implements IInternalContainer {
 	private readonly _resolveContext: MutableRef<ResolveContext>;
 
 	/**
-	 * 解析中间件链
+	 * 中间件
 	 */
 	private readonly _resolveMiddlewareChain: MiddlewareChain<
 		ResolveMiddlewareParams<unknown, ResolveOptions<unknown>>,
-		// biome-ignore lint/suspicious/noExplicitAny: here is a generic type
+		// biome-ignore lint/suspicious/noExplicitAny: 需要支持任意类型的中间件返回值
 		any
 	>;
 
@@ -135,184 +136,112 @@ export class Container extends Disposable implements IInternalContainer {
 		const resolveRecord = getEnsureResolveRecord(this);
 		const resolveContext = this._getResolveContext();
 		const resolveOptions = options || ({} as ResolveOptions<T>);
-		const { dynamic, ref, multiple, optional, defaultValue } = resolveOptions;
+		const { dynamic, ref, multiple } = resolveOptions;
 		const registrations = this._registry.getAll(serviceIdentifier);
 		const isRootResolveRecord =
 			resolveRecord.current.value.type === ResolveRecordTypeEnum.root;
 
-		resolveRecord.stashCurrent();
 		try {
-			// First, check if the options are mutually exclusive
-			if (dynamic && ref) {
-				throw new ResolveException(
-					`Cannot use both "dynamic" and "ref" options simultaneously for service identifier "${getServiceIdentifierName(serviceIdentifier)}". These options are mutually exclusive. Please choose either "dynamic" or "ref", but not both.`,
-					resolveRecord,
-				);
-			}
-
-			// Then, add the service identifier to the resolve record
-			if (multiple) {
-				resolveRecord.addRecordNode({
-					type: ResolveRecordTypeEnum.message,
-					message: `Service identifier "${getServiceIdentifierName(serviceIdentifier)}" is resolved as a multiple instance`,
-				});
-			} else {
-				resolveRecord.addRecordNode({
-					type: ResolveRecordTypeEnum.serviceIdentifier,
-					resolveOptions,
-					serviceIdentifier,
-					container: this,
-				});
-			}
-
-			if (ref) {
-				resolveRecord.addRecordNode({
-					type: ResolveRecordTypeEnum.message,
-					message: `Service Identifier "${getServiceIdentifierName(serviceIdentifier)}" is resolved as a ref, wait for use.`,
-				});
-				const resolveContext = this._resolveContext.current;
-				const current = resolveRecord.current;
-				const instance = new InstanceRef<T>(() => {
-					try {
-						this._resolveContext.current = resolveContext;
-						setResolveRecord(resolveRecord);
-						resolveRecord.setCurrent(current);
-						return this.resolve(serviceIdentifier, {
-							...resolveOptions,
-							ref: false,
-						}) as T;
-					} finally {
-						resetResolveRecord();
-						this.resolveContext.current = undefined;
-					}
-				}) as ResolveInstance<T, O>;
-				return instance;
-			}
-
-			if (dynamic) {
-				resolveRecord.addRecordNode({
-					type: ResolveRecordTypeEnum.message,
-					message: `Service Identifier "${getServiceIdentifierName(serviceIdentifier)}" is resolved as a dynamic ref, wait for use.`,
-				});
-				const current = resolveRecord.current;
-				const resolveContext = this._resolveContext.current;
-				const instance = new InstanceDynamicRef<T>(() => {
-					try {
-						this._resolveContext.current = resolveContext;
-						setResolveRecord(resolveRecord);
-						resolveRecord.setCurrent(current);
-						return this.resolve(serviceIdentifier, {
-							...resolveOptions,
-							dynamic: false,
-						} as ResolveOptions<T>) as T;
-					} finally {
-						resetResolveRecord();
-						this.resolveContext.current = undefined;
-					}
-				}) as ResolveInstance<T, O>;
-
-				resolveRecord.restoreCurrent();
-				return instance;
-			}
-
-			const cycleNodeInfo = resolveRecord.getCycleNodes();
-			if (cycleNodeInfo) {
-				throw new ResolveException(
-					`Circular dependency detected for service identifier "${getServiceIdentifierName(serviceIdentifier)}". To resolve this, use either the "ref" option to get a reference to the service or the "dynamic" option to defer resolution until the service is actually used.`,
-					resolveRecord,
-				);
-			}
-
-			if (registrations.length === 0) {
-				if (
-					this._parent?.isRegistered(serviceIdentifier, { recursive: true })
-				) {
-					resolveRecord.addRecordNode({
-						type: ResolveRecordTypeEnum.message,
-						message: `Service identifier "${getServiceIdentifierName(serviceIdentifier)}" is not registered in "${this.displayName}", but found in parent container. Resolving from parent container.`,
-					});
-
-					const instance = this._parent.resolve(
-						serviceIdentifier,
-						resolveOptions,
-					) as ResolveInstance<T, O>;
-
-					resolveRecord.restoreCurrent();
-					return instance;
+			return this._withResolveRecord(resolveRecord, () => {
+				// First, check if the options are mutually exclusive
+				if (dynamic && ref) {
+					throw new ResolveException(
+						`Cannot use both "dynamic" and "ref" options simultaneously for service identifier "${getServiceIdentifierName(serviceIdentifier)}". These options are mutually exclusive. Please choose either "dynamic" or "ref", but not both.`,
+						resolveRecord,
+					);
 				}
 
-				if (typeof serviceIdentifier === "function") {
+				// Then, add the service identifier to the resolve record
+				if (multiple) {
 					resolveRecord.addRecordNode({
 						type: ResolveRecordTypeEnum.message,
-						message: `Service identifier "${getServiceIdentifierName(serviceIdentifier)}" is not registered in "${this.displayName}", but it is a class constructor, try to resolve as transient service.`,
+						message: `Service identifier "${getServiceIdentifierName(serviceIdentifier)}" is resolved as a multiple instance`,
 					});
-
-					const instance = this._resolveInternal({
+				} else {
+					resolveRecord.addRecordNode({
+						type: ResolveRecordTypeEnum.serviceIdentifier,
+						resolveOptions,
+						serviceIdentifier,
 						container: this,
+					});
+				}
+
+				if (ref) {
+					resolveRecord.addRecordNode({
+						type: ResolveRecordTypeEnum.message,
+						message: `Service Identifier "${getServiceIdentifierName(serviceIdentifier)}" is resolved as a ref, wait for use.`,
+					});
+					return this._createRefInstance(
 						serviceIdentifier,
 						resolveOptions,
-						registration: new Registration({
-							lifecycle: LifecycleEnum.transient,
-							useClass: serviceIdentifier as Constructor<T>,
+						resolveRecord,
+						InstanceRef,
+						"ref",
+					);
+				}
+
+				if (dynamic) {
+					resolveRecord.addRecordNode({
+						type: ResolveRecordTypeEnum.message,
+						message: `Service Identifier "${getServiceIdentifierName(serviceIdentifier)}" is resolved as a dynamic ref, wait for use.`,
+					});
+					return this._createRefInstance(
+						serviceIdentifier,
+						resolveOptions,
+						resolveRecord,
+						InstanceDynamicRef,
+						"dynamic",
+					);
+				}
+
+				const cycleNodeInfo = resolveRecord.getCycleNodes();
+				if (cycleNodeInfo) {
+					throw new ResolveException(
+						`Circular dependency detected for service identifier "${getServiceIdentifierName(serviceIdentifier)}". To resolve this, use either the "ref" option to get a reference to the service or the "dynamic" option to defer resolution until the service is actually used.`,
+						resolveRecord,
+					);
+				}
+
+				if (registrations.length === 0) {
+					return this._handleUnregisteredService(
+						serviceIdentifier,
+						resolveOptions,
+						resolveRecord,
+						resolveContext,
+					);
+				}
+
+				if (multiple) {
+					const instances = registrations.map((registration, index) =>
+						this._withResolveRecord(resolveRecord, () => {
+							resolveRecord.addRecordNode({
+								type: ResolveRecordTypeEnum.message,
+								message: `Service identifier "${getServiceIdentifierName(serviceIdentifier)}" is resolved as a multiple instance, resolve instance #${index}`,
+							});
+
+							return this._resolveInternal({
+								container: this,
+								serviceIdentifier,
+								resolveOptions,
+								registration,
+								resolveContext,
+								resolveRecord,
+							}) as ResolveInstance<T, O>;
 						}),
-						resolveContext,
-						resolveRecord,
-					}) as ResolveInstance<T, O>;
+					);
 
-					resolveRecord.restoreCurrent();
-					return instance;
-				}
-
-				if (optional) {
-					const instance = defaultValue as ResolveInstance<T, O>;
-					resolveRecord.restoreCurrent();
-					return instance;
-				}
-
-				throw new ResolveException(
-					`Service identifier "${getServiceIdentifierName(serviceIdentifier)}" is not registered in this container. Please register it first or set the "optional" option to true if this service is optional.`,
-					resolveRecord,
-				);
-			}
-
-			if (multiple) {
-				const instances = registrations.map((registration, index) => {
-					resolveRecord.stashCurrent();
-
-					resolveRecord.addRecordNode({
-						type: ResolveRecordTypeEnum.message,
-						message: `Service identifier "${getServiceIdentifierName(serviceIdentifier)}" is resolved as a multiple instance, resolve instance #${index}`,
-					});
-
-					const instance = this._resolveInternal({
+					return instances as ResolveInstance<T, O>;
+				} else {
+					return this._resolveInternal({
 						container: this,
 						serviceIdentifier,
 						resolveOptions,
-						registration,
+						registration: registrations[registrations.length - 1],
 						resolveContext,
 						resolveRecord,
 					}) as ResolveInstance<T, O>;
-
-					resolveRecord.restoreCurrent();
-
-					return instance;
-				});
-
-				resolveRecord.restoreCurrent();
-				return instances as ResolveInstance<T, O>;
-			} else {
-				const instance = this._resolveInternal({
-					container: this,
-					serviceIdentifier,
-					resolveOptions,
-					registration: registrations[registrations.length - 1],
-					resolveContext,
-					resolveRecord,
-				}) as ResolveInstance<T, O>;
-
-				resolveRecord.restoreCurrent();
-				return instance;
-			}
+				}
+			}) as ResolveInstance<T, O>;
 		} finally {
 			if (isRootResolveRecord) {
 				resetResolveRecord();
@@ -375,7 +304,7 @@ export class Container extends Disposable implements IInternalContainer {
 	 * @param middleware 中间件
 	 */
 	public use(
-		// biome-ignore lint/suspicious/noExplicitAny: here is a generic type
+		// biome-ignore lint/suspicious/noExplicitAny: 保持与接口定义一致
 		middleware: ResolveMiddleware<any, any>,
 	): void {
 		assertNotDisposed(this);
@@ -388,7 +317,7 @@ export class Container extends Disposable implements IInternalContainer {
 	 * @param middleware 中间件
 	 */
 	public unused(
-		// biome-ignore lint/suspicious/noExplicitAny: here is a generic type
+		// biome-ignore lint/suspicious/noExplicitAny: 保持与接口定义一致
 		middleware: ResolveMiddleware<any, any>,
 	): void {
 		assertNotDisposed(this);
@@ -456,51 +385,173 @@ export class Container extends Disposable implements IInternalContainer {
 			container,
 			resolveContext,
 		} = params;
-		let instance: T;
 
+		return this._withResolveRecord(resolveRecord, () => {
+			try {
+				switch (registration.type) {
+					case RegistrationTypeEnum.class: {
+						const provider =
+							registration.provider as CreateClassRegistrationOptions<T>["useClass"];
+						return new provider();
+					}
+					case RegistrationTypeEnum.value:
+						return registration.provider as CreateValueRegistrationOptions<T>["useValue"];
+					case RegistrationTypeEnum.factory: {
+						const provider =
+							registration.provider as CreateFactoryRegistrationOptions<T>["useFactory"];
+						return provider(container, resolveContext);
+					}
+					case RegistrationTypeEnum.alias: {
+						const provider =
+							registration.provider as CreateAliasRegistrationOptions<T>["useAlias"];
+						return container.resolve(provider, resolveOptions) as T;
+					}
+					default:
+						throw new Error(
+							`Unsupported registration type: ${registration.type}`,
+						);
+				}
+			} catch (error: unknown) {
+				this._handleResolveError(error, serviceIdentifier, resolveRecord);
+			}
+		});
+	}
+
+	/**
+	 * 包装函数，管理 resolveRecord 的生命周期
+	 * @param resolveRecord 解析记录
+	 * @param operation 需要执行的操作
+	 * @returns 操作结果
+	 */
+	private _withResolveRecord<T>(
+		resolveRecord: IInternalResolveRecord,
+		operation: () => T,
+	): T {
 		resolveRecord.stashCurrent();
-
 		try {
-			switch (registration.type) {
-				case RegistrationTypeEnum.class: {
-					const provider =
-						registration.provider as CreateClassRegistrationOptions<T>["useClass"];
-					instance = new provider();
-					break;
-				}
-				case RegistrationTypeEnum.value:
-					return registration.provider as CreateValueRegistrationOptions<T>["useValue"];
-				case RegistrationTypeEnum.factory: {
-					const provider =
-						registration.provider as CreateFactoryRegistrationOptions<T>["useFactory"];
-					instance = provider(container, resolveContext);
-					break;
-				}
-				case RegistrationTypeEnum.alias: {
-					const provider =
-						registration.provider as CreateAliasRegistrationOptions<T>["useAlias"];
-					instance = container.resolve(provider, resolveOptions) as T;
-					break;
-				}
-				default:
-					throw new Error(
-						`Unsupported registration type: ${registration.type}`,
-					);
-			}
-		} catch (error: unknown) {
-			if (ResolveException.isResolveException(error)) {
-				throw error;
-			}
-
-			throw new ResolveException(
-				`Failed to resolve service identifier "${getServiceIdentifierName(serviceIdentifier)}" in "${container.displayName}": ${error instanceof Error ? error.message : String(error)}`,
-				resolveRecord,
-			);
+			return operation();
+		} finally {
+			resolveRecord.restoreCurrent();
 		}
+	}
 
-		resolveRecord.restoreCurrent();
+	/**
+	 * 创建 Ref 实例的通用方法
+	 * @param serviceIdentifier 服务标识符
+	 * @param resolveOptions 解析选项
+	 * @param resolveRecord 解析记录
+	 * @param RefClass Ref 类构造函数
+	 * @param refType ref 类型
+	 * @returns Ref 实例
+	 */
+	private _createRefInstance<T, O extends ResolveOptions<T>>(
+		serviceIdentifier: ServiceIdentifier<T>,
+		resolveOptions: O,
+		resolveRecord: IInternalResolveRecord,
+		RefClass: typeof InstanceRef | typeof InstanceDynamicRef,
+		refType: "ref" | "dynamic",
+	): ResolveInstance<T, O> {
+		const current = resolveRecord.current;
+		const resolveContext = this._resolveContext.current;
+
+		const instance = new RefClass(() => {
+			try {
+				this._resolveContext.current = resolveContext;
+				setResolveRecord(resolveRecord);
+				resolveRecord.setCurrent(current);
+				return this.resolve(serviceIdentifier, {
+					...resolveOptions,
+					[refType]: false,
+				} as ResolveOptions<T>) as T;
+			} finally {
+				resetResolveRecord();
+				this.resolveContext.current = undefined;
+			}
+		}) as ResolveInstance<T, O>;
 
 		return instance;
+	}
+
+	/**
+	 * 统一的错误处理方法
+	 * @param error 错误对象
+	 * @param serviceIdentifier 服务标识符
+	 * @param resolveRecord 解析记录
+	 */
+	private _handleResolveError(
+		error: unknown,
+		serviceIdentifier: ServiceIdentifier<unknown>,
+		resolveRecord: IInternalResolveRecord,
+	): never {
+		if (ResolveException.isResolveException(error)) {
+			throw error;
+		}
+
+		throw new ResolveException(
+			`Failed to resolve service identifier "${getServiceIdentifierName(serviceIdentifier)}" in "${this.displayName}": ${error instanceof Error ? error.message : String(error)}`,
+			resolveRecord,
+		);
+	}
+
+	/**
+	 * 处理未注册服务的解析逻辑
+	 * @param serviceIdentifier 服务标识符
+	 * @param resolveOptions 解析选项
+	 * @param resolveRecord 解析记录
+	 * @param resolveContext 解析上下文
+	 * @returns 服务实例
+	 */
+	private _handleUnregisteredService<T, O extends ResolveOptions<T>>(
+		serviceIdentifier: ServiceIdentifier<T>,
+		resolveOptions: O,
+		resolveRecord: IInternalResolveRecord,
+		resolveContext: ResolveContext,
+	): ResolveInstance<T, O> {
+		const { optional, defaultValue } = resolveOptions;
+
+		// 尝试从父容器解析
+		if (this._parent?.isRegistered(serviceIdentifier, { recursive: true })) {
+			resolveRecord.addRecordNode({
+				type: ResolveRecordTypeEnum.message,
+				message: `Service identifier "${getServiceIdentifierName(serviceIdentifier)}" is not registered in "${this.displayName}", but found in parent container. Resolving from parent container.`,
+			});
+
+			return this._parent.resolve(
+				serviceIdentifier,
+				resolveOptions,
+			) as ResolveInstance<T, O>;
+		}
+
+		// 尝试作为类构造函数解析
+		if (typeof serviceIdentifier === "function") {
+			resolveRecord.addRecordNode({
+				type: ResolveRecordTypeEnum.message,
+				message: `Service identifier "${getServiceIdentifierName(serviceIdentifier)}" is not registered in "${this.displayName}", but it is a class constructor, try to resolve as transient service.`,
+			});
+
+			return this._resolveInternal({
+				container: this,
+				serviceIdentifier,
+				resolveOptions,
+				registration: new Registration({
+					lifecycle: LifecycleEnum.transient,
+					useClass: serviceIdentifier as Constructor<T>,
+				}),
+				resolveContext,
+				resolveRecord,
+			}) as ResolveInstance<T, O>;
+		}
+
+		// 处理可选服务
+		if (optional) {
+			return defaultValue as ResolveInstance<T, O>;
+		}
+
+		// 抛出未注册异常
+		throw new ResolveException(
+			`Service identifier "${getServiceIdentifierName(serviceIdentifier)}" is not registered in this container. Please register it first or set the "optional" option to true if this service is optional.`,
+			resolveRecord,
+		);
 	}
 
 	private _getResolveContext(): ResolveContext {

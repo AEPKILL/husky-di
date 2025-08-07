@@ -15,6 +15,10 @@ const IServiceA = createServiceIdentifier<ServiceA>("IServiceA");
 const IServiceB = createServiceIdentifier<ServiceB>("IServiceB");
 const IServiceC = createServiceIdentifier<ServiceC>("IServiceC");
 const IServiceD = createServiceIdentifier<ServiceD>("IServiceD");
+const IServiceE = createServiceIdentifier<ServiceE>("IServiceE");
+const IServiceF = createServiceIdentifier<ServiceF>("IServiceF");
+const IServiceG = createServiceIdentifier<ServiceG>("IServiceG");
+const IServiceH = createServiceIdentifier<ServiceH>("IServiceH");
 const INonExistentService = createServiceIdentifier<unknown>(
 	"INonExistentService",
 );
@@ -36,6 +40,47 @@ class ServiceC {
 
 class ServiceD {
 	readonly serviceC = resolve(IServiceC);
+}
+
+/**
+ * Test service classes for ref + circular dependency testing
+ */
+class ServiceE {
+	readonly serviceF = resolve(IServiceF, { ref: true });
+}
+
+class ServiceF {
+	readonly serviceE = resolve(IServiceE);
+}
+
+class ServiceG {
+	readonly serviceH = resolve(IServiceH, { dynamic: true });
+}
+
+class ServiceH {
+	readonly serviceG = resolve(IServiceG);
+}
+
+/**
+ * Test service classes with ref resolution that should work
+ */
+class ServiceWithRefA {
+	readonly serviceBRef = resolve(IServiceB, { ref: true });
+}
+
+class ServiceWithRefB {
+	readonly serviceARef = resolve(IServiceA, { ref: true });
+}
+
+/**
+ * Test service classes with dynamic resolution that should work
+ */
+class ServiceWithDynamicA {
+	readonly serviceBDynamic = resolve(IServiceB, { dynamic: true });
+}
+
+class ServiceWithDynamicB {
+	readonly serviceADynamic = resolve(IServiceA, { dynamic: true });
 }
 
 describe("Error Messages", () => {
@@ -264,7 +309,9 @@ describe("Error Messages", () => {
 			// Act & Assert - Circular dependencies should throw ResolveException
 			expect(() => {
 				container.resolve(IServiceA);
-			}).toThrow(ResolveException);
+			}).toThrow(
+				'Circular dependency detected for service identifier "IServiceA". To resolve this, use either the "ref" option to get a reference to the service or the "dynamic" option to defer resolution until the service is actually used.',
+			);
 		});
 
 		it("should include cycle information in error message", () => {
@@ -317,6 +364,295 @@ describe("Error Messages", () => {
 		});
 	});
 
+	describe("Ref + Circular Dependency Resolution", () => {
+		it("should successfully resolve circular dependency when using ref option", () => {
+			// Arrange
+			container.register(IServiceE, {
+				useClass: ServiceE,
+			});
+			container.register(IServiceF, {
+				useClass: ServiceF,
+			});
+
+			// Act - 应该能够成功解析，因为 ServiceE 使用了 ref
+			const serviceE = container.resolve(IServiceE);
+			const serviceF = container.resolve(IServiceF);
+
+			// Assert
+			expect(serviceE).toBeInstanceOf(ServiceE);
+			expect(serviceF).toBeInstanceOf(ServiceF);
+			expect(serviceE.serviceF).toBeDefined();
+			expect(serviceE.serviceF.current).toBeInstanceOf(ServiceF);
+		});
+
+		it("should successfully resolve circular dependency when using dynamic option", () => {
+			// Arrange
+			container.register(IServiceG, {
+				useClass: ServiceG,
+			});
+			container.register(IServiceH, {
+				useClass: ServiceH,
+			});
+
+			// Act - 应该能够成功解析，因为 ServiceG 使用了 dynamic
+			const serviceG = container.resolve(IServiceG);
+			const serviceH = container.resolve(IServiceH);
+
+			// Assert
+			expect(serviceG).toBeInstanceOf(ServiceG);
+			expect(serviceH).toBeInstanceOf(ServiceH);
+			expect(serviceG.serviceH).toBeDefined();
+			expect(serviceG.serviceH.current).toBeInstanceOf(ServiceH);
+		});
+
+		it("should resolve both services with ref options to avoid circular dependency", () => {
+			// Arrange - 两个服务都使用 ref，应该能够成功解析
+			container.register("ServiceWithRefA", {
+				useClass: ServiceWithRefA,
+			});
+			container.register("ServiceWithRefB", {
+				useClass: ServiceWithRefB,
+			});
+			container.register(IServiceA, {
+				useClass: ServiceA,
+			});
+			container.register(IServiceB, {
+				useClass: ServiceB,
+			});
+
+			// Act - 解析使用 ref 的服务应该成功
+			const serviceWithRefA = container.resolve("ServiceWithRefA");
+			const serviceWithRefB = container.resolve("ServiceWithRefB");
+
+			// Assert
+			expect(serviceWithRefA).toBeInstanceOf(ServiceWithRefA);
+			expect(serviceWithRefB).toBeInstanceOf(ServiceWithRefB);
+		});
+
+		it("should resolve both services with dynamic options to avoid circular dependency", () => {
+			// Arrange - 两个服务都使用 dynamic，应该能够成功解析
+			container.register("ServiceWithDynamicA", {
+				useClass: ServiceWithDynamicA,
+			});
+			container.register("ServiceWithDynamicB", {
+				useClass: ServiceWithDynamicB,
+			});
+			container.register(IServiceA, {
+				useClass: ServiceA,
+			});
+			container.register(IServiceB, {
+				useClass: ServiceB,
+			});
+
+			// Act - 解析使用 dynamic 的服务应该成功
+			const serviceWithDynamicA = container.resolve("ServiceWithDynamicA");
+			const serviceWithDynamicB = container.resolve("ServiceWithDynamicB");
+
+			// Assert
+			expect(serviceWithDynamicA).toBeInstanceOf(ServiceWithDynamicA);
+			expect(serviceWithDynamicB).toBeInstanceOf(ServiceWithDynamicB);
+		});
+
+		it("should throw error when ref instance throws during access", () => {
+			// Arrange - 创建一个会在构造时抛出错误的服务
+			class ThrowingService {
+				constructor() {
+					throw new Error("Service construction failed");
+				}
+			}
+
+			class ServiceWithThrowingRef {
+				readonly throwingServiceRef = resolve("ThrowingService", { ref: true });
+			}
+
+			container.register("ThrowingService", {
+				useClass: ThrowingService,
+			});
+			container.register("ServiceWithThrowingRef", {
+				useClass: ServiceWithThrowingRef,
+			});
+
+			// Act - 解析包含 ref 的服务应该成功
+			const serviceWithRef = container.resolve(
+				"ServiceWithThrowingRef",
+			) as ServiceWithThrowingRef;
+			expect(serviceWithRef).toBeInstanceOf(ServiceWithThrowingRef);
+
+			// Assert - 但是访问 ref 的 current 属性时应该抛出错误
+			expect(() => {
+				serviceWithRef.throwingServiceRef.current;
+			}).toThrow(
+				/Failed to resolve service identifier "ThrowingService" in "TestContainer#CONTAINER-\d+": Service construction failed/,
+			);
+		});
+
+		it("should throw error when dynamic instance throws during access", () => {
+			// Arrange - 创建一个会在构造时抛出错误的服务
+			class ThrowingService {
+				constructor() {
+					throw new Error("Dynamic service construction failed");
+				}
+			}
+
+			class ServiceWithThrowingDynamic {
+				readonly throwingServiceDynamic = resolve("ThrowingService", {
+					dynamic: true,
+				});
+			}
+
+			container.register("ThrowingService", {
+				useClass: ThrowingService,
+			});
+			container.register("ServiceWithThrowingDynamic", {
+				useClass: ServiceWithThrowingDynamic,
+			});
+
+			// Act - 解析包含 dynamic 的服务应该成功
+			const serviceWithDynamic = container.resolve(
+				"ServiceWithThrowingDynamic",
+			) as ServiceWithThrowingDynamic;
+			expect(serviceWithDynamic).toBeInstanceOf(ServiceWithThrowingDynamic);
+
+			// Assert - 但是访问 dynamic 的 current 属性时应该抛出错误
+			expect(() => {
+				serviceWithDynamic.throwingServiceDynamic.current;
+			}).toThrow(
+				/Failed to resolve service identifier "ThrowingService" in "TestContainer#CONTAINER-\d+": Dynamic service construction failed/,
+			);
+		});
+
+		it("should handle nested ref resolution with circular dependencies", () => {
+			// Arrange - 创建嵌套的循环依赖场景
+			class NestedServiceA {
+				readonly nestedServiceB = resolve("NestedServiceB", { ref: true });
+				readonly directServiceC = resolve("NestedServiceC");
+			}
+
+			class NestedServiceB {
+				readonly nestedServiceA = resolve("NestedServiceA");
+			}
+
+			class NestedServiceC {
+				readonly value = "NestedServiceC";
+			}
+
+			container.register("NestedServiceA", {
+				useClass: NestedServiceA,
+			});
+			container.register("NestedServiceB", {
+				useClass: NestedServiceB,
+			});
+			container.register("NestedServiceC", {
+				useClass: NestedServiceC,
+			});
+
+			// Act - 应该能够成功解析，因为使用了 ref 打破循环
+			const nestedServiceA = container.resolve(
+				"NestedServiceA",
+			) as NestedServiceA;
+
+			// Assert
+			expect(nestedServiceA).toBeInstanceOf(NestedServiceA);
+			expect(nestedServiceA.directServiceC).toBeInstanceOf(NestedServiceC);
+			expect(nestedServiceA.nestedServiceB.current).toBeInstanceOf(
+				NestedServiceB,
+			);
+		});
+
+		it("should provide helpful error message for mixed ref and direct circular dependencies", () => {
+			// Arrange - 创建一个混合场景：一个服务使用 ref，另一个不使用
+			class MixedServiceA {
+				readonly mixedServiceB = resolve("MixedServiceB", { ref: true });
+				readonly directDependency = resolve("MixedServiceC");
+			}
+
+			class MixedServiceB {
+				readonly mixedServiceA = resolve("MixedServiceA"); // 直接依赖，会导致循环
+			}
+
+			class MixedServiceC {
+				readonly mixedServiceA = resolve("MixedServiceA"); // 这会创建循环
+			}
+
+			container.register("MixedServiceA", {
+				useClass: MixedServiceA,
+			});
+			container.register("MixedServiceB", {
+				useClass: MixedServiceB,
+			});
+			container.register("MixedServiceC", {
+				useClass: MixedServiceC,
+			});
+
+			// Act & Assert - 应该抛出循环依赖错误，并提供有用的错误信息
+			expect(() => {
+				container.resolve("MixedServiceA");
+			}).toThrow(
+				/Circular dependency detected for service identifier "MixedServiceA"/,
+			);
+		});
+
+		it("should handle ref resolution with factory functions", () => {
+			// Arrange - 使用工厂函数创建循环依赖
+			container.register("FactoryServiceA", {
+				useFactory: (container) => ({
+					factoryServiceB: container.resolve("FactoryServiceB", { ref: true }),
+					name: "FactoryServiceA",
+				}),
+			});
+
+			container.register("FactoryServiceB", {
+				useFactory: (container) => ({
+					factoryServiceA: container.resolve("FactoryServiceA"),
+					name: "FactoryServiceB",
+				}),
+			});
+
+			// Act - 应该能够成功解析
+			// biome-ignore lint/suspicious/noExplicitAny: 工厂函数返回的动态对象类型
+			const factoryServiceA = container.resolve("FactoryServiceA") as any;
+
+			// Assert
+			expect(factoryServiceA.name).toBe("FactoryServiceA");
+			expect(factoryServiceA.factoryServiceB).toBeDefined();
+			expect(factoryServiceA.factoryServiceB.current.name).toBe(
+				"FactoryServiceB",
+			);
+		});
+
+		it("should handle dynamic resolution with factory functions", () => {
+			// Arrange - 使用工厂函数创建循环依赖
+			container.register("DynamicFactoryServiceA", {
+				useFactory: (container) => ({
+					dynamicFactoryServiceB: container.resolve("DynamicFactoryServiceB", {
+						dynamic: true,
+					}),
+					name: "DynamicFactoryServiceA",
+				}),
+			});
+
+			container.register("DynamicFactoryServiceB", {
+				useFactory: (container) => ({
+					dynamicFactoryServiceA: container.resolve("DynamicFactoryServiceA"),
+					name: "DynamicFactoryServiceB",
+				}),
+			});
+
+			// Act - 应该能够成功解析
+			// biome-ignore lint/suspicious/noExplicitAny: 工厂函数返回的动态对象类型
+			const dynamicFactoryServiceA = container.resolve(
+				"DynamicFactoryServiceA",
+			) as any;
+
+			// Assert
+			expect(dynamicFactoryServiceA.name).toBe("DynamicFactoryServiceA");
+			expect(dynamicFactoryServiceA.dynamicFactoryServiceB).toBeDefined();
+			expect(dynamicFactoryServiceA.dynamicFactoryServiceB.current.name).toBe(
+				"DynamicFactoryServiceB",
+			);
+		});
+	});
+
 	describe("useFactory Exception Handling", () => {
 		it("should throw error when factory function throws an exception", () => {
 			// Arrange
@@ -362,6 +698,7 @@ describe("Error Messages", () => {
 		it("should throw error when factory function is not a function", () => {
 			// Arrange
 			container.register("InvalidFactoryService", {
+				// biome-ignore lint/suspicious/noExplicitAny: 测试用例需要故意使用错误的类型
 				useFactory: "not a function" as any,
 			});
 
@@ -423,6 +760,7 @@ describe("Error Messages", () => {
 		it("should throw ResolveException when class is not a constructor", () => {
 			// Arrange
 			container.register("InvalidClassService", {
+				// biome-ignore lint/suspicious/noExplicitAny: 测试用例需要故意使用错误的类型
 				useClass: "not a class" as any,
 			});
 
