@@ -428,11 +428,9 @@ export class Container extends Disposable implements IInternalContainer {
 		operation: () => T,
 	): T {
 		resolveRecord.stashCurrent();
-		try {
-			return operation();
-		} finally {
-			resolveRecord.restoreCurrent();
-		}
+		const instance = operation();
+		resolveRecord.restoreCurrent();
+		return instance;
 	}
 
 	/**
