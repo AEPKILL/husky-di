@@ -46,7 +46,7 @@ export function getResolveIdentifierRecordName<T>(
 		resolveIdentifierRecord.serviceIdentifier,
 	);
 
-	names.push(`#${resolveIdentifierRecord.container.name}`);
+	names.push(`#${resolveIdentifierRecord.container.displayName}`);
 
 	const { ref, dynamic, optional, multiple, defaultValue } =
 		resolveIdentifierRecord.resolveOptions || {};
