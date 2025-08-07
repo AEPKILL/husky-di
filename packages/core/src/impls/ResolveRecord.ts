@@ -73,6 +73,13 @@ export class ResolveRecord implements IInternalResolveRecord {
 			tempRecordNode = tempRecordNode.parent;
 			if (!isResolveServiceIdentifierRecord(tempRecordNode.value)) continue;
 
+			if (
+				tempRecordNode.value.resolveOptions.dynamic ||
+				tempRecordNode.value.resolveOptions.ref
+			) {
+				break;
+			}
+
 			const isEqual = isEqualServiceIdentifierResolveRecord(
 				tempRecordNode.value,
 				lastRecordNode.value,

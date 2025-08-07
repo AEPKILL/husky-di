@@ -142,6 +142,7 @@ export class Container extends Disposable implements IInternalContainer {
 
 		resolveRecord.stashCurrent();
 		try {
+			// First, check if the options are mutually exclusive
 			if (dynamic && ref) {
 				throw new ResolveException(
 					`Cannot use both "dynamic" and "ref" options simultaneously for service identifier "${getServiceIdentifierName(serviceIdentifier)}". These options are mutually exclusive. Please choose either "dynamic" or "ref", but not both.`,
@@ -149,6 +150,7 @@ export class Container extends Disposable implements IInternalContainer {
 				);
 			}
 
+			// Then, add the service identifier to the resolve record
 			if (multiple) {
 				resolveRecord.addRecordNode({
 					type: ResolveRecordTypeEnum.message,
@@ -161,6 +163,56 @@ export class Container extends Disposable implements IInternalContainer {
 					serviceIdentifier,
 					container: this,
 				});
+			}
+
+			if (ref) {
+				resolveRecord.addRecordNode({
+					type: ResolveRecordTypeEnum.message,
+					message: `Service Identifier "${getServiceIdentifierName(serviceIdentifier)}" is resolved as a ref, wait for use.`,
+				});
+				const resolveContext = this._resolveContext.current;
+				const current = resolveRecord.current;
+				const instance = new InstanceRef<T>(() => {
+					try {
+						this._resolveContext.current = resolveContext;
+						setResolveRecord(resolveRecord);
+						resolveRecord.setCurrent(current);
+						return this.resolve(serviceIdentifier, {
+							...resolveOptions,
+							ref: false,
+						}) as T;
+					} finally {
+						resetResolveRecord();
+						this.resolveContext.current = undefined;
+					}
+				}) as ResolveInstance<T, O>;
+				return instance;
+			}
+
+			if (dynamic) {
+				resolveRecord.addRecordNode({
+					type: ResolveRecordTypeEnum.message,
+					message: `Service Identifier "${getServiceIdentifierName(serviceIdentifier)}" is resolved as a dynamic ref, wait for use.`,
+				});
+				const current = resolveRecord.current;
+				const resolveContext = this._resolveContext.current;
+				const instance = new InstanceDynamicRef<T>(() => {
+					try {
+						this._resolveContext.current = resolveContext;
+						setResolveRecord(resolveRecord);
+						resolveRecord.setCurrent(current);
+						return this.resolve(serviceIdentifier, {
+							...resolveOptions,
+							dynamic: false,
+						} as ResolveOptions<T>) as T;
+					} finally {
+						resetResolveRecord();
+						this.resolveContext.current = undefined;
+					}
+				}) as ResolveInstance<T, O>;
+
+				resolveRecord.restoreCurrent();
+				return instance;
 			}
 
 			const cycleNodeInfo = resolveRecord.getCycleNodes();
@@ -361,47 +413,7 @@ export class Container extends Disposable implements IInternalContainer {
 	private _resolveInternal<T, O extends ResolveOptions<T>>(
 		params: ResolveMiddlewareParams<T, O>,
 	): T | Ref<T> {
-		const {
-			serviceIdentifier,
-			resolveRecord,
-			registration,
-			resolveContext,
-			resolveOptions,
-		} = params;
-
-		const { ref, dynamic } = resolveOptions;
-
-		if (ref) {
-			resolveRecord.addRecordNode({
-				type: ResolveRecordTypeEnum.message,
-				message: `Service Identifier "${getServiceIdentifierName(serviceIdentifier)}" is resolved as a ref`,
-			});
-			const resolveContext = this._resolveContext.current;
-			return new InstanceRef<T>(() => {
-				this._resolveContext.current = resolveContext;
-				setResolveRecord(resolveRecord);
-				return this.resolve(serviceIdentifier, {
-					...resolveOptions,
-					ref: false,
-				}) as T;
-			});
-		}
-
-		if (dynamic) {
-			resolveRecord.addRecordNode({
-				type: ResolveRecordTypeEnum.message,
-				message: `Service Identifier "${getServiceIdentifierName(serviceIdentifier)}" is resolved as a dynamic ref`,
-			});
-			const resolveContext = this._resolveContext.current;
-			return new InstanceDynamicRef<T>(() => {
-				this._resolveContext.current = resolveContext;
-				setResolveRecord(resolveRecord);
-				return this.resolve(serviceIdentifier, {
-					...resolveOptions,
-					dynamic: false,
-				} as ResolveOptions<T>) as T;
-			});
-		}
+		const { registration, resolveContext } = params;
 
 		const isSingleton = registration.lifecycle === LifecycleEnum.singleton;
 		if (isSingleton) {
