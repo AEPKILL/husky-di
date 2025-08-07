@@ -125,6 +125,27 @@ describe("Error Messages", () => {
 				});
 			}).toThrow(ResolveException);
 		});
+
+		it("should throw error when access a ref when ref exception factory is used", () => {
+			const exceptionFactory = () => {
+				throw new Error("test");
+			};
+
+			container.register("TestService", {
+				useFactory: exceptionFactory,
+			});
+
+			const refTestService = container.resolve("TestService", {
+				ref: true,
+			});
+
+			// Act & Assert
+			expect(() => {
+				console.log("xxxx->", refTestService.current);
+			}).toThrow(
+				/Failed to resolve service identifier "TestService" in "TestContainer#CONTAINER-\d+": test/,
+			);
+		});
 	});
 
 	describe("Parent Container Resolution", () => {

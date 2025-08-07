@@ -380,7 +380,10 @@ export class Container extends Disposable implements IInternalContainer {
 			return new InstanceRef<T>(() => {
 				this._resolveContext.current = resolveContext;
 				setResolveRecord(resolveRecord);
-				return this.resolve(serviceIdentifier, resolveOptions) as T;
+				return this.resolve(serviceIdentifier, {
+					...resolveOptions,
+					ref: false,
+				}) as T;
 			});
 		}
 
@@ -395,7 +398,6 @@ export class Container extends Disposable implements IInternalContainer {
 				setResolveRecord(resolveRecord);
 				return this.resolve(serviceIdentifier, {
 					...resolveOptions,
-					multiple: false,
 					dynamic: false,
 				} as ResolveOptions<T>) as T;
 			});
