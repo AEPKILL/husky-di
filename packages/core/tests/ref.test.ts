@@ -51,14 +51,14 @@ describe("Ref and Dynamic Ref", () => {
 				useClass: ServiceB,
 			});
 			const serviceA = container.resolve(IServiceA);
-			// expect(serviceA.serviceBRef.current).toBeInstanceOf(ServiceB);
+			expect(serviceA.serviceBRef.current).toBeInstanceOf(ServiceB);
 			expect(serviceA.serviceBRef.current.serviceA.current).toBeInstanceOf(
 				ServiceA,
 			);
-			// expect(
-			// 	serviceA.serviceBRef.current.serviceA.current.serviceBRef.current,
-			// ).toBeInstanceOf(ServiceB);
-			// expect(serviceA.serviceBRef.current).toBe(serviceA.serviceBRef.current);
+			expect(
+				serviceA.serviceBRef.current.serviceA.current.serviceBRef.current,
+			).toBeInstanceOf(ServiceB);
+			expect(serviceA.serviceBRef.current).toBe(serviceA.serviceBRef.current);
 		});
 	});
 
