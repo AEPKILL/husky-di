@@ -4,37 +4,31 @@
  * @created 2022-03-11 16:02:58
  */
 
-/** biome-ignore-all lint/suspicious/noExplicitAny: here is a class decorator, so we need to use any */
-
 import type { Constructor, ServiceIdentifier } from "@husky-di/core";
 import {
 	InjectionMetadataKeyConst,
 	ParamsMetadataKeyConst,
 } from "@/constants/metadata-key.const";
 import { injectionMetadataMap } from "@/shared/instances";
-import type { ESClassElementDecoratorContext } from "@/types/decorator-types";
 import type { InjectionMetadata } from "@/types/injection-metadata.type";
-import { createClassDecorator } from "@/utils/decorator-factory";
-import { metadataAccessor } from "@/utils/metadata-adapter";
 
 /**
  * @description
- * 标记一个类为可注入类
+ * markup a class as a injectable class
  */
-export const injectable: () => any = () => {
-	// TypeScript 装饰器实现
-	const tsImplementation = (target: Constructor<any>) => {
+export const injectable: () => ClassDecorator = () =>
+	((target: Constructor<unknown>) => {
 		if (injectionMetadataMap.has(target)) {
 			throw new Error(
 				`can't use  "@injectable()" decorate class "${target.name}" twice`,
 			);
 		}
 
-		const parametersServiceIdentifiers: Array<ServiceIdentifier<any>> =
-			metadataAccessor.getMetadata(ParamsMetadataKeyConst, target) || [];
-		const parametersMetadata: Array<InjectionMetadata<any>> =
-			metadataAccessor.getMetadata(InjectionMetadataKeyConst, target) || [];
-		const metadata: InjectionMetadata<any>[] = [];
+		const parametersServiceIdentifiers: Array<ServiceIdentifier<unknown>> =
+			Reflect.getMetadata(ParamsMetadataKeyConst, target) || [];
+		const parametersMetadata: Array<InjectionMetadata<unknown>> =
+			Reflect.getMetadata(InjectionMetadataKeyConst, target) || [];
+		const metadata: InjectionMetadata<unknown>[] = [];
 		const parametersMetadataLength = Math.max(
 			parametersServiceIdentifiers.length,
 			parametersMetadata.length,
@@ -67,20 +61,4 @@ export const injectable: () => any = () => {
 		}
 
 		injectionMetadataMap.set(target, metadata);
-	};
-
-	const esImplementation = (
-		element: any,
-		context: ESClassElementDecoratorContext,
-	) => {
-		context.addInitializer(() => {
-			const target = context.metadata.target;
-			if (target) {
-				tsImplementation(target);
-			}
-		});
-		return element;
-	};
-
-	return createClassDecorator(tsImplementation, esImplementation);
-};
+	}) as ClassDecorator;
