@@ -13,9 +13,10 @@ export function tsDecoratorPlugin(): Vite.Plugin {
 		transform(code, id) {
 			if (id.endsWith(".test.ts")) {
 				const { outputText, sourceMapText } = typescript.transpileModule(code, {
+					fileName: id,
 					compilerOptions: {
 						module: typescript.ModuleKind.ESNext,
-						target: typescript.ScriptTarget.ESNext,
+						target: typescript.ScriptTarget.ES2015,
 						emitDecoratorMetadata: true,
 						experimentalDecorators: true,
 						sourceMap: true,
