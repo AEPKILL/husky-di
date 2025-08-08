@@ -142,7 +142,7 @@ export class Container extends Disposable implements IInternalContainer {
 			resolveRecord.current.value.type === ResolveRecordTypeEnum.root;
 
 		try {
-			return this._withResolveRecord(resolveRecord, () => {
+			return this._withResolveRecord(serviceIdentifier, resolveRecord, () => {
 				// First, check if the options are mutually exclusive
 				if (dynamic && ref) {
 					throw new ResolveException(
@@ -213,7 +213,7 @@ export class Container extends Disposable implements IInternalContainer {
 
 				if (multiple) {
 					const instances = registrations.map((registration, index) =>
-						this._withResolveRecord(resolveRecord, () => {
+						this._withResolveRecord(serviceIdentifier, resolveRecord, () => {
 							resolveRecord.addRecordNode({
 								type: ResolveRecordTypeEnum.message,
 								message: `Service identifier "${getServiceIdentifierName(serviceIdentifier)}" is resolved as a multiple instance, resolve instance #${index}`,
@@ -226,7 +226,7 @@ export class Container extends Disposable implements IInternalContainer {
 								registration,
 								resolveContext,
 								resolveRecord,
-							}) as ResolveInstance<T, O>;
+							});
 						}),
 					);
 
@@ -386,7 +386,7 @@ export class Container extends Disposable implements IInternalContainer {
 			resolveContext,
 		} = params;
 
-		return this._withResolveRecord(resolveRecord, () => {
+		return this._withResolveRecord(serviceIdentifier, resolveRecord, () => {
 			try {
 				switch (registration.type) {
 					case RegistrationTypeEnum.class: {
@@ -424,13 +424,18 @@ export class Container extends Disposable implements IInternalContainer {
 	 * @returns 操作结果
 	 */
 	private _withResolveRecord<T>(
+		serviceIdentifier: ServiceIdentifier<T>,
 		resolveRecord: IInternalResolveRecord,
 		operation: () => T,
 	): T {
-		resolveRecord.stashCurrent();
-		const instance = operation();
-		resolveRecord.restoreCurrent();
-		return instance;
+		try {
+			resolveRecord.stashCurrent();
+			const instance = operation();
+			resolveRecord.restoreCurrent();
+			return instance;
+		} catch (error: unknown) {
+			this._handleResolveError(error, serviceIdentifier, resolveRecord);
+		}
 	}
 
 	/**
