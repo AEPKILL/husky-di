@@ -32,13 +32,13 @@ export const decoratorMiddleware: ResolveMiddleware<any, any> = {
 			}
 
 			const parameters = parametersMetadata.map((metadata, index) => {
-				const { serviceIdentifier } = metadata;
+				const { serviceIdentifier, ...options } = metadata;
 				resolveRecord.stashCurrent();
 				resolveRecord.addRecordNode({
 					type: ResolveRecordTypeEnum.message,
 					message: `Resolve parameter #${index} of constructor "${provider.name}"`,
 				});
-				const instance = resolve(serviceIdentifier);
+				const instance = resolve(serviceIdentifier, options);
 				resolveRecord.restoreCurrent();
 				return instance;
 			});
