@@ -176,7 +176,13 @@ export function getResolveRecordMessage(
 				return name;
 			})
 			.join(ResolvePathSeparator),
-		...indent(resolveDetails.map(getResolveRecordName)),
+		...indent(
+			resolveDetails.map((it) =>
+				isResolveServiceIdentifierRecord(it)
+					? `Resolve ${getResolveRecordName(it)}	`
+					: `${getResolveRecordName(it)}`,
+			),
+		),
 	].join("\n");
 }
 
