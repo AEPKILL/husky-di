@@ -286,7 +286,7 @@ describe("Decorator Module", () => {
 		it("should handle circular dependency detection", () => {
 			@injectable()
 			class ServiceA {
-				constructor(@inject("ServiceB") public serviceB: ServiceB) {}
+				constructor(@inject("ServiceB") public serviceB: unknown) {}
 			}
 
 			@injectable()
