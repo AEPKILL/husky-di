@@ -16,7 +16,7 @@ import {
 import { injectionMetadataMap } from "@/shared/instances";
 
 export const decoratorMiddleware: ResolveMiddleware<any, any> = {
-	name: "DecoratorMiddleware",
+	name: Symbol("DecoratorMiddleware"),
 	executor: (params, next) => {
 		const { registration, resolveRecord } = params;
 

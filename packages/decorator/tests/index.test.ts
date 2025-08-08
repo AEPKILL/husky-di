@@ -249,9 +249,110 @@ describe("Decorator Module", () => {
 		});
 	});
 
+	describe("Error handling", () => {
+		it("should handle injection of non-injectable dependency", () => {
+			// 定义一个没有使用 @injectable() 装饰器的类
+			class NonInjectableService {
+				constructor(public value: string = "non-injectable") {}
+			}
+
+			@injectable()
+			class TestService {
+				constructor(
+					@inject(NonInjectableService)
+					public dependency: NonInjectableService,
+				) {}
+			}
+
+			// 尝试解析时应该抛出错误，因为 NonInjectableService 没有注入元数据
+			expect(() => {
+				container.resolve(TestService);
+			}).toThrow("The class NonInjectableService has no injection metadata.");
+		});
+
+		it("should handle circular dependency detection", () => {
+			@injectable()
+			class ServiceA {
+				constructor(@inject("ServiceB") public serviceB: ServiceB) {}
+			}
+
+			@injectable()
+			class ServiceB {
+				constructor(@inject(ServiceA) public serviceA: ServiceA) {}
+			}
+
+			// 注册服务
+			container.register("ServiceB", { useClass: ServiceB });
+
+			// 循环依赖应该被检测到并抛出错误
+			expect(() => {
+				container.resolve(ServiceA);
+			}).toThrow(
+				'Circular dependency detected for service identifier "ServiceA". To resolve this, use either the "ref" option to get a reference to the service or the "dynamic" option to defer resolution until the service is actually used.',
+			);
+		});
+
+		it("should handle constructor error during instantiation", () => {
+			@injectable()
+			class FailingService {
+				constructor() {
+					throw new Error("Service initialization failed");
+				}
+			}
+
+			@injectable()
+			class TestService {
+				constructor(@inject(FailingService) public failing: FailingService) {}
+			}
+
+			// 依赖实例化失败应该传播错误
+			expect(() => {
+				container.resolve(TestService);
+			}).toThrow(
+				/Failed to resolve service identifier "FailingService" in "DefaultContainer#CONTAINER-\d+": Service initialization failed/,
+			);
+		});
+
+		it("should handle missing required dependency", () => {
+			// 定义一个不存在的服务标识符
+			const MISSING_SERVICE = Symbol("MissingService");
+
+			@injectable()
+			class TestService {
+				constructor(
+					@inject(MISSING_SERVICE)
+					public missing: null,
+				) {}
+			}
+
+			// 尝试注入不存在的服务应该抛出错误
+			expect(() => {
+				container.resolve(TestService);
+			}).toThrow();
+		});
+
+		it("should handle invalid service identifier in inject decorator", () => {
+			expect(() => {
+				@injectable()
+				class TestService {
+					constructor(
+						@inject("null")
+						public invalid: null,
+					) {}
+				}
+
+				container.resolve(TestService);
+			}).toThrow(
+				'Service identifier "null" is not registered in this container',
+			);
+		});
+	});
+
 	describe("decoratorMiddleware", () => {
 		it("should have correct middleware name", () => {
-			expect(decoratorMiddleware.name).toBe("DecoratorMiddleware");
+			expect(decoratorMiddleware.name.toString()).toBe(
+				"Symbol(DecoratorMiddleware)",
+			);
 		});
 
 		it("should export middleware with executor function", () => {
