@@ -351,7 +351,7 @@ describe("Decorator Module", () => {
 
 				container.resolve(TestService);
 			}).toThrow(
-				'a dService identifier "null" is not registered in this container',
+				'Service identifier "null" is not registered in this container',
 			);
 		});
 	});
