@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import { resolve } from "node:path";
-import { esbuildDecorators } from "@anatine/esbuild-decorators";
 import { defineConfig } from "vitest/config";
+import { tsDecoratorPlugin } from "./plugins/ts-decorator.plugin";
 
 export default defineConfig({
 	// Configure Vitest (https://vitest.dev/config/)
@@ -15,16 +15,5 @@ export default defineConfig({
 			"@": resolve(__dirname, "./src"),
 		},
 	},
-	plugins: [
-		esbuildDecorators({
-			tsconfig: resolve(__dirname, "./tsconfig.json"),
-			cwd: resolve(__dirname, "./"),
-		}),
-	],
-	esbuild: {
-		tsconfigRaw: fs.readFileSync(
-			resolve(__dirname, "./tsconfig.json"),
-			"utf-8",
-		),
-	},
+	plugins: [tsDecoratorPlugin()],
 });
