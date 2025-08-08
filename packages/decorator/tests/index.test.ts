@@ -110,20 +110,15 @@ describe("Decorator Module", () => {
 			class TestService {
 				constructor(
 					@inject(DependencyService, { ref: true })
-					public depRef: any,
+					public depRef: Ref<DependencyService>,
 				) {}
 			}
 
 			const instance = container.resolve(TestService);
 			expect(instance.depRef).toBeDefined();
-
-			// For now, just test that the injection works regardless of ref option
-			// The actual Ref behavior may depend on container implementation
-			if (instance.depRef.current) {
-				expect(instance.depRef.current.value).toBe("dependency");
-			} else {
-				expect(instance.depRef.value).toBe("dependency");
-			}
+			expect(instance.depRef.resolved).toBe(false);
+			expect(instance.depRef.current.value).toBe("dependency");
+			expect(instance.depRef.resolved).toBe(true);
 		});
 
 		it("should support optional injection with default value", () => {
@@ -356,7 +351,7 @@ describe("Decorator Module", () => {
 
 				container.resolve(TestService);
 			}).toThrow(
-				'Service identifier "null" is not registered in this container',
+				'a dService identifier "null" is not registered in this container',
 			);
 		});
 	});
