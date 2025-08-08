@@ -42,6 +42,19 @@ describe("Decorator Module", () => {
 			expect(container.resolve(TestService)).toBeDefined();
 		});
 
+		it("should inject class without @inject()", () => {
+			@injectable()
+			class A {}
+			@injectable()
+			class B {
+				constructor(public a: A) {}
+			}
+
+			expect(container.resolve(B)).toBeDefined();
+			expect(container.resolve(B).a).toBeDefined();
+			expect(container.resolve(B).a).toBeInstanceOf(A);
+		});
+
 		it("should handle multiple dependency injection", () => {
 			@injectable()
 			class ServiceA {}
