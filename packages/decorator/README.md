@@ -8,7 +8,7 @@
 
 ### 为什么仅支持 TypeScript 装饰器？
 
-husky-di 的设计理念是**仅支持构造函数注入**，而 ES 装饰器的规范中**没有设计参数注入器**。TypeScript 装饰器提供了更灵活的元数据操作能力，能够完美支持构造函数参数的依赖注入。
+husky-di 的设计理念是**仅支持构造函数注入**，而 ES 装饰器的规范中**没有设计参数注入器**。
 
 ## 安装
 
@@ -20,7 +20,9 @@ pnpm add @husky-di/decorator
 
 ### @injectable()
 
-标记一个类为可注入类，使其能够被依赖注入容器管理。
+标记一个类为可注入，使其能够被依赖注入容器管理。
+
+> 背后的原因是因为只有应用了装饰器，typescript 编译器才会触发元数据的标记。
 
 ```typescript
 import { injectable } from "@husky-di/decorator";
@@ -211,17 +213,7 @@ console.log(result); // "Logged: Executing: SELECT * FROM users WHERE id = 123"
 
 ## 设计原理
 
-### TypeScript 装饰器 vs ES 装饰器
-
-| 特性         | TypeScript 装饰器 | ES 装饰器       |
-| ------------ | ----------------- | --------------- |
-| 参数注入支持 | ✅ 完整支持       | ❌ 不支持       |
-| 元数据操作   | ✅ 灵活           | ❌ 受限         |
-| 构造函数注入 | ✅ 原生支持       | ❌ 需要额外设计 |
-
-### 元数据机制
-
-装饰器包使用 TypeScript 的 `reflect-metadata` 来存储和管理注入元数据：
+装饰器包使用 TypeScript 的 `reflect-metadata`或其他提供 Reflect API 的库来存储和管理注入元数据：
 
 - `@injectable()` 收集构造函数参数的注入信息
 - `@inject()` 为特定参数位置设置注入配置
@@ -241,6 +233,6 @@ console.log(result); // "Logged: Executing: SELECT * FROM users WHERE id = 123"
 
 > 建议在 tsconfig.json 中启用 `experimentalDecorators` 和 `emitDecoratorMetadata` 选项
 
-- 需要引入 `reflect-metadata` 包或其他元数据库
-- 仅支持构造函数注入，不支持属性注入
-- 装饰器中间件需要全局注册才能生效
+- 需要引入 `reflect-metadata` 包或其他提供 Reflect API 的库
+- `@inject()` 仅支持构造函数注入，不支持属性注入 (可以 `@husky-di/core` 中的 `resolve` 方法来实现属性注入)
+- 装饰器中间件需要全局注册，这样才会在每个容器中都生效
