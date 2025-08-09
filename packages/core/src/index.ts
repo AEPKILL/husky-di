@@ -20,6 +20,7 @@ export type {
 	ResolveMiddlewareParams,
 	ResolveOptions,
 } from "@/interfaces/container.interface";
+export type { IDisplayName } from "@/interfaces/display-name.interface";
 export type { IMiddlewareManager } from "@/interfaces/middleware-chain.interface";
 export type {
 	CreateAliasRegistrationOptions,
@@ -29,10 +30,16 @@ export type {
 	CreateRegistrationOptions,
 	CreateValueRegistrationOptions,
 } from "@/interfaces/registration.interface";
+export type { IUnique } from "@/interfaces/unique.interface";
 export { globalMiddleware } from "@/shared/instances";
 export type { Constructor } from "@/types/constructor.type";
 export type { Ref } from "@/types/ref.type";
 export type { ServiceIdentifier } from "@/types/service-identifier.type";
 export { resolve } from "@/utils/container.utils";
-export { createServiceIdentifier } from "@/utils/service-identifier.utils";
+export {
+	createServiceIdentifier,
+	getServiceIdentifierName,
+} from "@/utils/service-identifier.utils";
+export { incrementalIdFactory } from "@/utils/uuid.utils";
+
 export const rootContainer = Container.rootContainer;
