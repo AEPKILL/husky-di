@@ -1,1 +1,4 @@
-export const squared = (n: number): number => n * n;
+export type {
+	CreateModuleOptions,
+	IModule,
+} from "./interfaces/module.interface";

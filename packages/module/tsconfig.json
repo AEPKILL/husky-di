@@ -10,6 +10,7 @@
 		"moduleResolution": "bundler",
 		"useDefineForClassFields": true,
 		"allowImportingTsExtensions": true,
+		"downlevelIteration": true,
 		"paths": {
 			"@/*": ["./src/*"]
 		}

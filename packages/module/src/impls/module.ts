@@ -4,16 +4,19 @@
  * @created 2025-08-09 14:51:09
  */
 
-import type { ServiceIdentifier } from "@husky-di/core";
+import {
+	getServiceIdentifierName,
+	type ServiceIdentifier,
+} from "@husky-di/core";
 import type {
 	Alias,
 	CreateModuleOptions,
 	Declaration,
 	IModule,
 } from "@/interfaces/module.interface";
-import { createModuleId } from "@/utils/uuid.utils";
-import { validateModuleExports } from "@/utils/validate.utils";
+import { createModuleAliasId, createModuleId } from "@/utils/uuid.utils";
 
+let withAliasId: string | undefined;
 export class Module implements IModule {
 	get id() {
 		return this._id;
@@ -36,50 +39,95 @@ export class Module implements IModule {
 	}
 
 	get displayName(): string {
-		return `${this._name}#${String(this._id)}`;
+		return `${String(this._name)}#${this._id}`;
 	}
 
-	private _id: string | symbol;
+	private _id: string;
 	private _name: string;
 	private _declarations?: Declaration<unknown>[];
 	private _imports?: IModule[];
 	private _exports?: ServiceIdentifier<unknown>[];
 
 	constructor(options: CreateModuleOptions) {
-		this._id = createModuleId();
+		this._id = withAliasId ?? createModuleId();
 		this._name = options.name;
 		this._declarations = options.declarations;
 		this._imports = options.imports;
 		this._exports = options.exports;
 
-		// 验证 exports 必须在 declarations 中或在 imports Module 的 exports 中
-		if (this._exports && this._exports.length > 0) {
-			this._validateExports();
+		this._validateImports();
+		this._validateExports();
+	}
+
+	withAlias(aliases: Alias[]): IModule {
+		const availableExportServiceIdentifiers: Set<ServiceIdentifier<unknown>> =
+			this._getAvailableExportServiceIdentifiers();
+
+		for (const alias of aliases) {
+			if (!availableExportServiceIdentifiers.has(alias.serviceIdentifier)) {
+				throw new Error(
+					`Can't find service identifier "${getServiceIdentifierName(alias.serviceIdentifier)}" in "${this.displayName}".`,
+				);
+			}
+		}
+
+		withAliasId = createModuleAliasId();
+		try {
+			return new Module({
+				name: this._name,
+				imports: [this],
+			});
+		} finally {
+			withAliasId = undefined;
 		}
 	}
 
-	withAlias(_alias: Alias[]): IModule {
-		throw new Error("Not implemented");
+	private _validateImports(): void {
+		if (!this._imports?.length) return;
+		const serviceIdentifierSet: Set<ServiceIdentifier<unknown>> = new Set();
+		for (const declaration of this._declarations ?? []) {
+			serviceIdentifierSet.add(declaration.serviceIdentifier);
+		}
+		for (const module of this._imports) {
+			for (const exportServiceIdentifier of module.exports ?? []) {
+				if (!serviceIdentifierSet.has(exportServiceIdentifier)) {
+					serviceIdentifierSet.add(exportServiceIdentifier);
+				}
+				throw new Error(
+					`Shouldn't redeclare "${getServiceIdentifierName(exportServiceIdentifier)}" from "${module.displayName}", please use "withAlias" to resolve the conflict.`,
+				);
+			}
+		}
 	}
 
-	/**
-	 * 验证模块导出
-	 */
 	private _validateExports(): void {
-		const exports = this._exports ?? [];
-		const declarationIds =
-			this._declarations?.map((d) => d.serviceIdentifier) || [];
+		if (!this._exports?.length) return;
 
-		const validationResult = validateModuleExports({
-			moduleName: this._name,
-			moduleId: this._id,
-			exports,
-			declarations: declarationIds,
-			imports: this._imports,
-		});
+		const availableExportServiceIdentifiers: Set<ServiceIdentifier<unknown>> =
+			this._getAvailableExportServiceIdentifiers();
 
-		if (!validationResult.isValid && validationResult.errorMessage) {
-			throw new Error(validationResult.errorMessage);
+		for (const exportServiceIdentifier of this._exports) {
+			if (!availableExportServiceIdentifiers.has(exportServiceIdentifier)) {
+				throw new Error(
+					`Can't find export service identifier "${getServiceIdentifierName(exportServiceIdentifier)}" in "${this.displayName}".`,
+				);
+			}
 		}
+	}
+
+	private _getAvailableExportServiceIdentifiers(): Set<
+		ServiceIdentifier<unknown>
+	> {
+		const availableExportServiceIdentifiers: Set<ServiceIdentifier<unknown>> =
+			new Set();
+		for (const declaration of this._declarations ?? []) {
+			availableExportServiceIdentifiers.add(declaration.serviceIdentifier);
+		}
+		for (const module of this._imports ?? []) {
+			for (const exportServiceIdentifier of module.exports ?? []) {
+				availableExportServiceIdentifiers.add(exportServiceIdentifier);
+			}
+		}
+		return availableExportServiceIdentifiers;
 	}
 }
