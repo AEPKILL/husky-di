@@ -404,7 +404,11 @@ export class Container extends Disposable implements IInternalContainer {
 					case RegistrationTypeEnum.alias: {
 						const provider =
 							registration.provider as CreateAliasRegistrationOptions<T>["useAlias"];
-						return container.resolve(provider, resolveOptions) as T;
+						const containerAlias = registration.getContainer
+							? registration.getContainer()
+							: container;
+
+						return containerAlias.resolve(provider, resolveOptions) as T;
 					}
 					default:
 						throw new Error(

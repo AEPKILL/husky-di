@@ -57,7 +57,7 @@ export interface IRegistration<T> extends IUnique {
 		| CreateFactoryRegistrationOptions<T>["useFactory"]
 		| CreateValueRegistrationOptions<T>["useValue"]
 		| CreateAliasRegistrationOptions<T>["useAlias"];
-	readonly container?: IContainer;
+	readonly getContainer?: () => IContainer;
 
 	getExtra<T>(key: string | symbol): T | undefined;
 	setExtra<T>(key: string | symbol, value: T): void;

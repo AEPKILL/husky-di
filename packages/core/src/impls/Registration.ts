@@ -49,7 +49,7 @@ export class Registration<T> implements IInternalRegistration<T>, IDisplayName {
 	/**
 	 * 容器引用
 	 */
-	public readonly container?: IContainer;
+	public readonly getContainer?: () => IContainer;
 
 	/**
 	 * 显示名称
@@ -87,6 +87,7 @@ export class Registration<T> implements IInternalRegistration<T>, IDisplayName {
 			this.type = RegistrationTypeEnum.alias;
 			this.provider = options.useAlias;
 			this.lifecycle = LifecycleEnum.transient; // 别名类型默认为 transient
+			this.getContainer = options.getContainer;
 		} else {
 			throw new Error("Unsupported registration options");
 		}

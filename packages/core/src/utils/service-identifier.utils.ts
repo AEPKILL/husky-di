@@ -38,7 +38,7 @@ export function createServiceIdentifier<T>(
  * ```typescript
  * if (isServiceIdentifier(someValue)) {
  *   // someValue 现在被推断为 ServiceIdentifier<T>
- *   console.log('这是一个有效的服务标识符');
+ *   console.log('This is a valid service identifier');
  * }
  * ```
  */

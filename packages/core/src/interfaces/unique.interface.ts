@@ -5,5 +5,5 @@
  */
 
 export interface IUnique {
-	readonly id: string;
+	readonly id: string | symbol;
 }
