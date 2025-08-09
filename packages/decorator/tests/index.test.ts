@@ -275,7 +275,9 @@ describe("Decorator Module", () => {
 			// 尝试解析时应该抛出错误，因为 NonInjectableService 没有注入元数据
 			expect(() => {
 				container.resolve(TestService);
-			}).toThrow("The class NonInjectableService has no injection metadata.");
+			}).toThrow(
+				"The class NonInjectableService has no injection metadata, please make sure the class is decorated with @Injectable()",
+			);
 		});
 
 		it("should handle circular dependency detection", () => {
