@@ -186,7 +186,7 @@ describe("Error Messages", () => {
 
 			// Act & Assert
 			expect(() => {
-				console.log("xxxx->", refTestService.current);
+				console.log("refTestService", refTestService.current);
 			}).toThrow(
 				/Failed to resolve service identifier "TestService" in "TestContainer#CONTAINER-\d+": test/,
 			);

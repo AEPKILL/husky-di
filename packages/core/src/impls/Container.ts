@@ -387,36 +387,32 @@ export class Container extends Disposable implements IInternalContainer {
 		} = params;
 
 		return this._withResolveRecord(serviceIdentifier, resolveRecord, () => {
-			try {
-				switch (registration.type) {
-					case RegistrationTypeEnum.class: {
-						const provider =
-							registration.provider as CreateClassRegistrationOptions<T>["useClass"];
-						return new provider();
-					}
-					case RegistrationTypeEnum.value:
-						return registration.provider as CreateValueRegistrationOptions<T>["useValue"];
-					case RegistrationTypeEnum.factory: {
-						const provider =
-							registration.provider as CreateFactoryRegistrationOptions<T>["useFactory"];
-						return provider(container, resolveContext);
-					}
-					case RegistrationTypeEnum.alias: {
-						const provider =
-							registration.provider as CreateAliasRegistrationOptions<T>["useAlias"];
-						const containerAlias = registration.getContainer
-							? registration.getContainer()
-							: container;
-
-						return containerAlias.resolve(provider, resolveOptions) as T;
-					}
-					default:
-						throw new Error(
-							`Unsupported registration type: ${registration.type}`,
-						);
+			switch (registration.type) {
+				case RegistrationTypeEnum.class: {
+					const provider =
+						registration.provider as CreateClassRegistrationOptions<T>["useClass"];
+					return new provider();
 				}
-			} catch (error: unknown) {
-				this._handleResolveError(error, serviceIdentifier, resolveRecord);
+				case RegistrationTypeEnum.value:
+					return registration.provider as CreateValueRegistrationOptions<T>["useValue"];
+				case RegistrationTypeEnum.factory: {
+					const provider =
+						registration.provider as CreateFactoryRegistrationOptions<T>["useFactory"];
+					return provider(container, resolveContext);
+				}
+				case RegistrationTypeEnum.alias: {
+					const provider =
+						registration.provider as CreateAliasRegistrationOptions<T>["useAlias"];
+					const containerRef = registration.getContainer
+						? registration.getContainer()
+						: container;
+
+					return containerRef.resolve(provider, resolveOptions) as T;
+				}
+				default:
+					throw new Error(
+						`Unsupported registration type: ${registration.type}`,
+					);
 			}
 		});
 	}
@@ -438,7 +434,14 @@ export class Container extends Disposable implements IInternalContainer {
 			resolveRecord.restoreCurrent();
 			return instance;
 		} catch (error: unknown) {
-			this._handleResolveError(error, serviceIdentifier, resolveRecord);
+			if (ResolveException.isResolveException(error)) {
+				throw error;
+			}
+
+			throw new ResolveException(
+				`Failed to resolve service identifier "${getServiceIdentifierName(serviceIdentifier)}" in "${this.displayName}": ${error instanceof Error ? error.message : String(error)}`,
+				resolveRecord,
+			);
 		}
 	}
 
@@ -477,27 +480,6 @@ export class Container extends Disposable implements IInternalContainer {
 		}) as ResolveInstance<T, O>;
 
 		return instance;
-	}
-
-	/**
-	 * 统一的错误处理方法
-	 * @param error 错误对象
-	 * @param serviceIdentifier 服务标识符
-	 * @param resolveRecord 解析记录
-	 */
-	private _handleResolveError(
-		error: unknown,
-		serviceIdentifier: ServiceIdentifier<unknown>,
-		resolveRecord: IInternalResolveRecord,
-	): never {
-		if (ResolveException.isResolveException(error)) {
-			throw error;
-		}
-
-		throw new ResolveException(
-			`Failed to resolve service identifier "${getServiceIdentifierName(serviceIdentifier)}" in "${this.displayName}": ${error instanceof Error ? error.message : String(error)}`,
-			resolveRecord,
-		);
 	}
 
 	/**

@@ -220,7 +220,6 @@ describe("Edge Cases", () => {
 			expect(multipleInstances[0]).toBeInstanceOf(ServiceA1);
 
 			expect(singleInstance).toBeInstanceOf(ServiceA1);
-			console.log(singleInstance, multipleInstances[0]);
 			expect(singleInstance).toBe(multipleInstances[0]);
 		});
 	});
