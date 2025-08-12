@@ -13,8 +13,9 @@ import type {
 	CreateModuleOptions,
 	Declaration,
 	IModule,
+	ModuleWithAliases,
 } from "@/interfaces/module.interface";
-import { createModuleAliasId, createModuleId } from "@/utils/uuid.utils";
+import { createModuleId } from "@/utils/uuid.utils";
 
 let withAliasId: string | undefined;
 export class Module implements IModule {
@@ -45,7 +46,7 @@ export class Module implements IModule {
 	private _id: string;
 	private _name: string;
 	private _declarations?: Declaration<unknown>[];
-	private _imports?: IModule[];
+	private _imports?: Array<IModule | ModuleWithAliases>;
 	private _exports?: ServiceIdentifier<unknown>[];
 
 	constructor(options: CreateModuleOptions) {
@@ -54,80 +55,12 @@ export class Module implements IModule {
 		this._declarations = options.declarations;
 		this._imports = options.imports;
 		this._exports = options.exports;
-
-		this._validateImports();
-		this._validateExports();
 	}
 
-	withAlias(aliases: Alias[]): IModule {
-		const availableExportServiceIdentifiers: Set<ServiceIdentifier<unknown>> =
-			this._getAvailableExportServiceIdentifiers();
-
-		for (const alias of aliases) {
-			if (!availableExportServiceIdentifiers.has(alias.serviceIdentifier)) {
-				throw new Error(
-					`Can't find service identifier "${getServiceIdentifierName(alias.serviceIdentifier)}" in "${this.displayName}".`,
-				);
-			}
-		}
-
-		withAliasId = createModuleAliasId();
-		try {
-			return new Module({
-				name: this._name,
-				imports: [this],
-			});
-		} finally {
-			withAliasId = undefined;
-		}
-	}
-
-	private _validateImports(): void {
-		if (!this._imports?.length) return;
-		const serviceIdentifierSet: Set<ServiceIdentifier<unknown>> = new Set();
-		for (const declaration of this._declarations ?? []) {
-			serviceIdentifierSet.add(declaration.serviceIdentifier);
-		}
-		for (const module of this._imports) {
-			for (const exportServiceIdentifier of module.exports ?? []) {
-				if (!serviceIdentifierSet.has(exportServiceIdentifier)) {
-					serviceIdentifierSet.add(exportServiceIdentifier);
-				}
-				throw new Error(
-					`Shouldn't redeclare "${getServiceIdentifierName(exportServiceIdentifier)}" from "${module.displayName}", please use "withAlias" to resolve the conflict.`,
-				);
-			}
-		}
-	}
-
-	private _validateExports(): void {
-		if (!this._exports?.length) return;
-
-		const availableExportServiceIdentifiers: Set<ServiceIdentifier<unknown>> =
-			this._getAvailableExportServiceIdentifiers();
-
-		for (const exportServiceIdentifier of this._exports) {
-			if (!availableExportServiceIdentifiers.has(exportServiceIdentifier)) {
-				throw new Error(
-					`Can't find export service identifier "${getServiceIdentifierName(exportServiceIdentifier)}" in "${this.displayName}".`,
-				);
-			}
-		}
-	}
-
-	private _getAvailableExportServiceIdentifiers(): Set<
-		ServiceIdentifier<unknown>
-	> {
-		const availableExportServiceIdentifiers: Set<ServiceIdentifier<unknown>> =
-			new Set();
-		for (const declaration of this._declarations ?? []) {
-			availableExportServiceIdentifiers.add(declaration.serviceIdentifier);
-		}
-		for (const module of this._imports ?? []) {
-			for (const exportServiceIdentifier of module.exports ?? []) {
-				availableExportServiceIdentifiers.add(exportServiceIdentifier);
-			}
-		}
-		return availableExportServiceIdentifiers;
+	withAliases(aliases: Alias[]): ModuleWithAliases {
+		return {
+			module: this,
+			aliases,
+		};
 	}
 }

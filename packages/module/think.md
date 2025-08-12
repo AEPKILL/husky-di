@@ -4,7 +4,7 @@
 
 ```js
 const AppModule = createModule({
-  imports: {
+  imports: [
     UserModule,
     DatabaseModule.config({
       type: "mysql",
@@ -12,8 +12,13 @@ const AppModule = createModule({
       port: 3306,
       username: "root",
       password: "123456",
-    })
-  },
+    }),
+    AuthModule,
+    {
+      module: AuthModule,
+      alias: {},
+    },
+  ],
   declarations: [
     {
       serviceIdentifier: "UserService",
@@ -24,5 +29,4 @@ const AppModule = createModule({
 
 const app = createApplication(AppModule).resolve(IAppService);
 app.bootstrap();
-
 ```

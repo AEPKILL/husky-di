@@ -23,15 +23,20 @@ export type CreateModuleOptions = {
 	readonly name: string;
 
 	readonly declarations?: Declaration<unknown>[];
-	readonly imports?: IModule[];
+	readonly imports?: Array<IModule | ModuleWithAliases>;
 	readonly exports?: ServiceIdentifier<unknown>[];
+};
+
+export type ModuleWithAliases = {
+	module: IModule;
+	aliases: Alias[];
 };
 
 export interface IModule extends IUnique, IDisplayName {
 	readonly name: string;
 	readonly declarations?: Declaration<unknown>[];
-	readonly imports?: IModule[];
+	readonly imports?: Array<IModule | ModuleWithAliases>;
 	readonly exports?: ServiceIdentifier<unknown>[];
 
-	withAlias(alias: Alias[]): IModule;
+	withAliases(aliases: Alias[]): ModuleWithAliases;
 }
