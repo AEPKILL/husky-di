@@ -5,6 +5,7 @@
  */
 import type {
 	CreateRegistrationOptions,
+	IContainer,
 	IDisplayName,
 	IUnique,
 	ServiceIdentifier,
@@ -29,7 +30,7 @@ export type CreateModuleOptions = {
 
 export type ModuleWithAliases = {
 	module: IModule;
-	aliases: Alias[];
+	aliases?: Alias[];
 };
 
 export interface IModule extends IUnique, IDisplayName {
@@ -37,6 +38,11 @@ export interface IModule extends IUnique, IDisplayName {
 	readonly declarations?: Declaration<unknown>[];
 	readonly imports?: Array<IModule | ModuleWithAliases>;
 	readonly exports?: ServiceIdentifier<unknown>[];
+	readonly container?: IContainer;
 
 	withAliases(aliases: Alias[]): ModuleWithAliases;
+}
+
+export interface IInternalModule extends IModule {
+	setContainer(container: IContainer): void;
 }
