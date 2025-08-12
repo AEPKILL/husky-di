@@ -7,4 +7,3 @@
 import { incrementalIdFactory } from "@husky-di/core";
 
 export const createModuleId = incrementalIdFactory("MODULE");
-export const createModuleAliasId = incrementalIdFactory("MODULE_ WITH_ALIAS");
