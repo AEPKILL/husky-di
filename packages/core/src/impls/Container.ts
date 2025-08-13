@@ -499,7 +499,13 @@ export class Container extends Disposable implements IInternalContainer {
 		const { optional, defaultValue } = resolveOptions;
 
 		// 尝试从父容器解析
-		if (this._parent?.isRegistered(serviceIdentifier, { recursive: true })) {
+		const registeredInParent =
+			this._parent &&
+			!this._parent.disposed &&
+			this._parent.isRegistered(serviceIdentifier, {
+				recursive: true,
+			});
+		if (registeredInParent) {
 			resolveRecord.addRecordNode({
 				type: ResolveRecordTypeEnum.message,
 				message: `Service identifier "${getServiceIdentifierName(serviceIdentifier)}" is not registered in "${this.displayName}", but found in parent container. Resolving from parent container.`,
