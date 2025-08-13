@@ -35,9 +35,9 @@ class AuthService {
 }
 
 class AppService {
-	public readonly userService = resolve(UserService);
-	public readonly databaseService = resolve(DatabaseService);
-	public readonly authService = resolve(AuthService);
+	public readonly userService = resolve<UserService>("UserService");
+	public readonly databaseService = resolve<DatabaseService>("DatabaseService");
+	public readonly authService = resolve<AuthService>("AuthService");
 
 	public bootstrap() {
 		return "Application bootstrapped successfully";
@@ -164,7 +164,7 @@ describe("Module System", () => {
 			const AppModule = createModule({
 				name: "AppModule",
 				imports: [
-					// UserModule,
+					UserModule,
 					DatabaseModule.withConfig({
 						type: "mysql",
 						host: "localhost",
@@ -172,7 +172,7 @@ describe("Module System", () => {
 						username: "root",
 						password: "123456",
 					}),
-					// AuthModule,
+					AuthModule,
 				],
 				declarations: [
 					{
@@ -183,8 +183,6 @@ describe("Module System", () => {
 			});
 
 			const app = createApplication(AppModule);
-
-			console.log(app.getServiceIdentifiers());
 
 			const appService = app.resolve("AppService") as AppService;
 			expect(appService).toBeInstanceOf(AppService);

@@ -26,9 +26,10 @@ export function createApplication(module: IModule): IContainer {
 	}
 
 	for (const it of module.imports ?? []) {
-		const module = getModuleByImport(it);
-		if (!module.container) {
-			(module as IInternalModule).setContainer(createApplication(module));
+		const importedModule = getModuleByImport(it);
+		if (!importedModule.container) {
+			const importedContainer = createApplication(importedModule);
+			(importedModule as IInternalModule).setContainer(importedContainer);
 		}
 		const aliasesMap: Map<
 			ServiceIdentifier<unknown>,
@@ -38,11 +39,12 @@ export function createApplication(module: IModule): IContainer {
 			return acc;
 		}, new Map());
 
-		for (const exported of module.exports ?? []) {
-			container.register(exported, {
-				useAlias: aliasesMap.get(exported) ?? exported,
+		for (const exported of importedModule.exports ?? []) {
+			container.register(aliasesMap.get(exported) ?? exported, {
+				useAlias: exported,
 				getContainer() {
-					return module.container as IContainer;
+					console.log("getContainer", importedModule.container);
+					return importedModule.container as IContainer;
 				},
 			});
 		}
