@@ -9,7 +9,7 @@ import type { Ref } from "@/types/ref.type";
 export class InstanceRef<T> implements Ref<T> {
 	private _current: T | undefined;
 	private _resolved = false;
-	private readonly _createInstance: () => T;
+	private _createInstance: (() => T) | null;
 
 	constructor(createInstance: () => T) {
 		this._createInstance = createInstance;
@@ -17,8 +17,13 @@ export class InstanceRef<T> implements Ref<T> {
 
 	get current(): T {
 		if (!this._resolved) {
-			this._current = this._createInstance();
+			// biome-ignore lint/style/noNonNullAssertion: <explanation>
+			this._current = this._createInstance!();
 			this._resolved = true;
+
+			// Ref 引用这里可以释放掉实例工厂
+			// 从而释放 resolveRecord 和 resolveContext
+			this._createInstance = null;
 		}
 
 		return this._current as T;
