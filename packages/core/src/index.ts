@@ -34,7 +34,10 @@ export type { IUnique } from "@/interfaces/unique.interface";
 export { globalMiddleware } from "@/shared/instances";
 export type { Constructor } from "@/types/constructor.type";
 export type { Ref } from "@/types/ref.type";
-export type { ServiceIdentifier } from "@/types/service-identifier.type";
+export type {
+	ServiceIdentifier,
+	ServiceIdentifierInstance,
+} from "@/types/service-identifier.type";
 export { resolve } from "@/utils/container.utils";
 export {
 	createServiceIdentifier,
