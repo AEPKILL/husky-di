@@ -245,7 +245,7 @@ export class Container extends Disposable implements IInternalContainer {
 		} finally {
 			if (isRootResolveRecord) {
 				resetResolveRecord();
-				this._internalResolveContext.current = undefined;
+				this._resolveContext.current = undefined;
 			}
 		}
 	}
@@ -475,7 +475,7 @@ export class Container extends Disposable implements IInternalContainer {
 				} as ResolveOptions<T>) as T;
 			} finally {
 				resetResolveRecord();
-				this._internalResolveContext.current = undefined;
+				this._resolveContext.current = undefined;
 			}
 		}) as ResolveInstance<T, O>;
 
