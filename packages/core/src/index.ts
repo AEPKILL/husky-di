@@ -10,7 +10,7 @@ export { LifecycleEnum } from "@/enums/lifecycle.enum";
 export { RegistrationTypeEnum } from "@/enums/registration-type.enum";
 export { ResolveRecordTypeEnum } from "@/enums/resolve-record-type.enum";
 export { ResolveException } from "@/exceptions/resolve.exception";
-export * from "@/factories/container.factory";
+export { createContainer } from "@/factories/container.factory";
 export type {
 	IContainer,
 	IsRegisteredOptions,
