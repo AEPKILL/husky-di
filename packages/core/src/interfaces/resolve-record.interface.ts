@@ -79,8 +79,8 @@ export interface IResolveRecord extends IUnique {
 }
 
 export interface IInternalResolveRecord extends IResolveRecord {
-	readonly currentStack: Array<ResolveRecordTreeNode<unknown>>;
-	setCurrent(node: ResolveRecordTreeNode<unknown>): void;
-	stashCurrent(): void;
-	restoreCurrent(): void;
+	readonly _internalCurrentStack: Array<ResolveRecordTreeNode<unknown>>;
+	_internalSetCurrent(node: ResolveRecordTreeNode<unknown>): void;
+	_internalStashCurrent(): void;
+	_internalRestoreCurrent(): void;
 }

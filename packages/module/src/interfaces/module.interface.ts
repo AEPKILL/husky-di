@@ -44,5 +44,5 @@ export interface IModule extends IUnique, IDisplayName {
 }
 
 export interface IInternalModule extends IModule {
-	setContainer(container: IContainer): void;
+	_internalSetContainer(container: IContainer): void;
 }

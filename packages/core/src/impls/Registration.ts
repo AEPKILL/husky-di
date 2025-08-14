@@ -117,7 +117,7 @@ export class Registration<T> implements IInternalRegistration<T>, IDisplayName {
 	 * 设置是否已解析
 	 * @param resolved 是否已解析
 	 */
-	public setResolved(resolved: boolean): void {
+	public _internalSetResolved(resolved: boolean): void {
 		this._resolved = resolved;
 	}
 
@@ -125,7 +125,7 @@ export class Registration<T> implements IInternalRegistration<T>, IDisplayName {
 	 * 设置实例
 	 * @param instance 实例对象
 	 */
-	public setInstance(instance: T): void {
+	public _internalSetInstance(instance: T): void {
 		this._instance = instance;
 	}
 

@@ -69,7 +69,7 @@ export class Module implements IInternalModule {
 		};
 	}
 
-	setContainer(container: IContainer): void {
+	_internalSetContainer(container: IContainer): void {
 		this._container = container;
 	}
 }

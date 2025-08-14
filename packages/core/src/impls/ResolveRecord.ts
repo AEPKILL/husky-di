@@ -35,7 +35,7 @@ export class ResolveRecord implements IInternalResolveRecord {
 		return this._id;
 	}
 
-	get currentStack() {
+	get _internalCurrentStack() {
 		return this._currentStack;
 	}
 
@@ -118,15 +118,15 @@ export class ResolveRecord implements IInternalResolveRecord {
 		return paths;
 	}
 
-	setCurrent(node: ResolveRecordTreeNode<unknown>) {
+	_internalSetCurrent(node: ResolveRecordTreeNode<unknown>) {
 		this._current = node;
 	}
 
-	stashCurrent() {
+	_internalStashCurrent() {
 		this._currentStack.push(this._current);
 	}
 
-	restoreCurrent() {
+	_internalRestoreCurrent() {
 		const current = this._currentStack.pop();
 		if (!current) {
 			throw new Error("No current to restore");
