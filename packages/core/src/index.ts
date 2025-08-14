@@ -32,6 +32,7 @@ export type {
 } from "@/interfaces/registration.interface";
 export type { IUnique } from "@/interfaces/unique.interface";
 export { globalMiddleware } from "@/shared/instances";
+export type { AbstractConstructor } from "@/types/abstract-constructor.type";
 export type { Constructor } from "@/types/constructor.type";
 export type { Ref } from "@/types/ref.type";
 export type {
