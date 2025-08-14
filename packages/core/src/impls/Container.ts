@@ -68,7 +68,7 @@ export class Container extends Disposable implements IInternalContainer {
 		return this._parent;
 	}
 
-	public get resolveContext(): MutableRef<ResolveContext> {
+	public get _internalResolveContext(): MutableRef<ResolveContext> {
 		return this._resolveContext;
 	}
 
@@ -245,7 +245,7 @@ export class Container extends Disposable implements IInternalContainer {
 		} finally {
 			if (isRootResolveRecord) {
 				resetResolveRecord();
-				this.resolveContext.current = undefined;
+				this._internalResolveContext.current = undefined;
 			}
 		}
 	}
@@ -361,7 +361,7 @@ export class Container extends Disposable implements IInternalContainer {
 		const instance = this._resolveMiddlewareChain.execute(params);
 
 		if (isSingleton) {
-			(registration as IInternalRegistration<T>).setInstance(instance);
+			(registration as IInternalRegistration<T>)._internalSetInstance(instance);
 		} else if (isResolution) {
 			resolveContext.set(registration, instance);
 		}
@@ -429,9 +429,9 @@ export class Container extends Disposable implements IInternalContainer {
 		operation: () => T,
 	): T {
 		try {
-			resolveRecord.stashCurrent();
+			resolveRecord._internalStashCurrent();
 			const instance = operation();
-			resolveRecord.restoreCurrent();
+			resolveRecord._internalRestoreCurrent();
 			return instance;
 		} catch (error: unknown) {
 			if (ResolveException.isResolveException(error)) {
@@ -468,14 +468,14 @@ export class Container extends Disposable implements IInternalContainer {
 			try {
 				this._resolveContext.current = resolveContext;
 				setResolveRecord(resolveRecord);
-				resolveRecord.setCurrent(current);
+				resolveRecord._internalSetCurrent(current);
 				return this.resolve(serviceIdentifier, {
 					...resolveOptions,
 					[refType]: false,
 				} as ResolveOptions<T>) as T;
 			} finally {
 				resetResolveRecord();
-				this.resolveContext.current = undefined;
+				this._internalResolveContext.current = undefined;
 			}
 		}) as ResolveInstance<T, O>;
 

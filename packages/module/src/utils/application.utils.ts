@@ -29,7 +29,9 @@ export function createApplication(module: IModule): IContainer {
 		const importedModule = getModuleByImport(it);
 		if (!importedModule.container) {
 			const importedContainer = createApplication(importedModule);
-			(importedModule as IInternalModule).setContainer(importedContainer);
+			(importedModule as IInternalModule)._internalSetContainer(
+				importedContainer,
+			);
 		}
 		const aliasesMap: Map<
 			ServiceIdentifier<unknown>,
