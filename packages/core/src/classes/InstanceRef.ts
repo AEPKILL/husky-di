@@ -17,7 +17,7 @@ export class InstanceRef<T> implements Ref<T> {
 
 	get current(): T {
 		if (!this._resolved) {
-			// biome-ignore lint/style/noNonNullAssertion: <explanation>
+			// biome-ignore lint/style/noNonNullAssertion: we promise the instance factory must be not null
 			this._current = this._createInstance!();
 			this._resolved = true;
 
