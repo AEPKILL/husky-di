@@ -30,6 +30,13 @@ export type {
 	CreateRegistrationOptions,
 	CreateValueRegistrationOptions,
 } from "@/interfaces/registration.interface";
+export type {
+	MessageResolveRecordNode,
+	ResolveRecordNode,
+	ResolveRecordTreeNode,
+	RootResolveRecordNode,
+	ServiceIdentifierResolveRecordNode,
+} from "@/interfaces/resolve-record.interface";
 export type { IUnique } from "@/interfaces/unique.interface";
 export { globalMiddleware } from "@/shared/instances";
 export type { AbstractConstructor } from "@/types/abstract-constructor.type";
@@ -41,9 +48,14 @@ export type {
 } from "@/types/service-identifier.type";
 export { resolve } from "@/utils/container.utils";
 export {
+	isEqualServiceIdentifierResolveRecord,
+	isResolveMessageRecord,
+	isResolveRootRecord,
+	isResolveServiceIdentifierRecord,
+} from "@/utils/resolve-record.utils";
+export {
 	createServiceIdentifier,
 	getServiceIdentifierName,
 } from "@/utils/service-identifier.utils";
 export { incrementalIdFactory } from "@/utils/uuid.utils";
-
 export const rootContainer = Container.rootContainer;
