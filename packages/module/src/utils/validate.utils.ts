@@ -9,7 +9,7 @@ import {
 	type ServiceIdentifier,
 } from "@husky-di/core";
 import type { IModule } from "@/interfaces/module.interface";
-import { getModuleByImport } from "./module.utils";
+import { getModuleByImport } from "@/utils/module.utils";
 
 export function validateModule(module: IModule) {
 	const { imports, declarations, exports } = module;
@@ -70,6 +70,15 @@ export function validateModule(module: IModule) {
 				type: ServiceSourceTypeEnum.import,
 				source: importModule.displayName,
 			});
+		}
+	}
+
+	// 检测 exports 中是否都是已声明的服务标识符
+	for (const exported of exports ?? []) {
+		if (!existingServiceIdentifiers.has(exported)) {
+			throw new Error(
+				`Service identifier "${getServiceIdentifierName(exported)}" is not declared in "${module.displayName}".`,
+			);
 		}
 	}
 }

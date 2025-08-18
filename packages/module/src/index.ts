@@ -9,4 +9,4 @@ export type {
 	CreateModuleOptions,
 	IModule,
 } from "@/interfaces/module.interface";
-export { createApplication } from "@/utils/application.utils";
+export { build } from "@/utils/module.utils";
