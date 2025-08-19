@@ -3,7 +3,7 @@
 	"changelog": [
 		"@changesets/changelog-github",
 		{
-			"repo": "aepkill/husky-di-refactor-v2"
+			"repo": "aepkill/husky-di"
 		}
 	],
 	"commit": false,
