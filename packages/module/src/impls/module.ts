@@ -16,14 +16,13 @@ import type {
 	Alias,
 	CreateModuleOptions,
 	Declaration,
-	IInternalModule,
 	IModule,
 	ModuleWithAliases,
 } from "@/interfaces/module.interface";
 import { build } from "@/utils/module.utils";
 import { createModuleId } from "@/utils/uuid.utils";
 
-export class Module implements IInternalModule {
+export class Module implements IModule {
 	get id() {
 		return this._id;
 	}
@@ -48,7 +47,7 @@ export class Module implements IInternalModule {
 		return `${String(this._name)}#${this._id}`;
 	}
 
-	readonly _internalContainer: IContainer;
+	readonly container: IContainer;
 
 	private _id: string;
 	private _name: string;
@@ -62,13 +61,13 @@ export class Module implements IInternalModule {
 		this._declarations = options.declarations;
 		this._imports = options.imports;
 		this._exports = options.exports;
-		this._internalContainer = build(this);
+		this.container = build(this);
 	}
 	public resolve<T, O extends ResolveOptions<T>>(
 		serviceIdentifier: ServiceIdentifier<T>,
 		options?: O,
 	): ResolveInstance<T, O> {
-		return this._internalContainer.resolve(
+		return this.container.resolve(
 			serviceIdentifier,
 			options as O,
 		) as ResolveInstance<T, O>;
@@ -78,18 +77,18 @@ export class Module implements IInternalModule {
 		serviceIdentifier: ServiceIdentifier<T>,
 		options?: IsRegisteredOptions,
 	): boolean {
-		return this._internalContainer.isRegistered(serviceIdentifier, options);
+		return this.container.isRegistered(serviceIdentifier, options);
 	}
 	getServiceIdentifiers(): ServiceIdentifier<unknown>[] {
-		return this._internalContainer.getServiceIdentifiers();
+		return this.container.getServiceIdentifiers();
 	}
 	// biome-ignore lint/suspicious/noExplicitAny: should use any type
 	use(middleware: ResolveMiddleware<any, any>): void {
-		this._internalContainer.use(middleware);
+		this.container.use(middleware);
 	}
 	// biome-ignore lint/suspicious/noExplicitAny: should use any type
 	unused(middleware: ResolveMiddleware<any, any>): void {
-		this._internalContainer.unused(middleware);
+		this.container.unused(middleware);
 	}
 
 	withAliases(aliases: Alias[]): ModuleWithAliases {

@@ -43,9 +43,6 @@ export interface IModule
 	readonly declarations?: Declaration<unknown>[];
 	readonly imports?: Array<IModule | ModuleWithAliases>;
 	readonly exports?: ServiceIdentifier<unknown>[];
+	readonly container: IContainer;
 	withAliases(aliases: Alias[]): ModuleWithAliases;
-}
-
-export interface IInternalModule extends IModule {
-	_internalContainer?: IContainer;
 }

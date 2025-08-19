@@ -14,7 +14,6 @@ import { createExportedGuardMiddlewareFactory } from "@/factories/exported-guard
 import { Module } from "@/impls/module";
 import type {
 	CreateModuleOptions,
-	IInternalModule,
 	IModule,
 	ModuleWithAliases,
 } from "@/interfaces/module.interface";
@@ -49,7 +48,7 @@ export function getModuleByImport(
  * @param module 要构建的模块
  * @returns 构建好的容器
  */
-export function build(module: IInternalModule): IContainer {
+export function build(module: IModule): IContainer {
 	const builder = new ModuleBuilder(module);
 	return builder.build();
 }
@@ -95,7 +94,7 @@ interface ConflictInfo {
  */
 export class ModuleBuilder {
 	/** 要构建的模块 */
-	private readonly module: IInternalModule;
+	private readonly module: IModule;
 
 	/** 服务标识符映射表（验证时构建，构建时复用） */
 	private readonly serviceIdentifierMap = new Map<
@@ -114,7 +113,7 @@ export class ModuleBuilder {
 		Map<ServiceIdentifier<unknown>, ServiceIdentifier<unknown>>
 	>();
 
-	constructor(module: IInternalModule) {
+	constructor(module: IModule) {
 		this.module = module;
 	}
 
@@ -129,8 +128,8 @@ export class ModuleBuilder {
 		this.validateAndCollectInfo();
 
 		// 如果已经构建过容器，直接返回
-		if (this.module._internalContainer) {
-			return this.module._internalContainer;
+		if (this.module.container) {
+			return this.module.container;
 		}
 
 		// 创建容器
@@ -464,12 +463,7 @@ export class ModuleBuilder {
 		if (!imports?.length) return;
 
 		for (const importModule of imports) {
-			const importedModule = getModuleByImport(importModule) as IInternalModule;
-
-			// 确保导入的模块已经构建
-			if (!importedModule._internalContainer) {
-				importedModule._internalContainer = build(importedModule);
-			}
+			const importedModule = getModuleByImport(importModule);
 
 			// 获取缓存的别名映射
 			const aliasesMap =
@@ -480,7 +474,7 @@ export class ModuleBuilder {
 				container.register(aliasesMap.get(exported) ?? exported, {
 					useAlias: exported,
 					getContainer(): IContainer {
-						return importedModule._internalContainer as IContainer;
+						return importedModule.container;
 					},
 				});
 			}
