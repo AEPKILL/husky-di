@@ -1,12 +1,11 @@
 import { createServiceIdentifier, resolve } from "@husky-di/core";
 import { describe, expect, it } from "vitest";
-import { createModule } from "../src/index";
-import type { IInternalModule } from "../src/interfaces/module.interface";
+import { createModule, type IModule } from "../src/index";
 import { ModuleBuilder } from "../src/utils/module.utils";
 
 // 创建可变的模块接口用于测试
-interface MutableTestModule extends Omit<IInternalModule, "imports"> {
-	imports?: Array<IInternalModule>;
+interface MutableTestModule extends Omit<IModule, "imports"> {
+	imports?: Array<IModule>;
 }
 
 interface IDatabaseConfig {
@@ -250,14 +249,14 @@ describe("Module System", () => {
 			displayName: "BModule#TEST-B",
 			declarations: [{ serviceIdentifier: "B", useValue: "B" }],
 			exports: ["B"],
-			imports: [mockModuleA as IInternalModule],
+			imports: [mockModuleA as IModule],
 		};
 
 		// 设置循环依赖：A 导入 B
-		mockModuleA.imports = [mockModuleB as IInternalModule];
+		mockModuleA.imports = [mockModuleB as IModule];
 
 		expect(() => {
-			const builder = new ModuleBuilder(mockModuleA as IInternalModule);
+			const builder = new ModuleBuilder(mockModuleA as IModule);
 			builder.validateAndCollectInfo();
 		}).toThrow(
 			/Circular dependency detected.*AModule#TEST-A.*BModule#TEST-B.*AModule#TEST-A/,
@@ -279,7 +278,7 @@ describe("Module System", () => {
 			displayName: "BModule#TEST-B",
 			declarations: [{ serviceIdentifier: "B", useValue: "B" }],
 			exports: ["B"],
-			imports: [mockModuleA as IInternalModule],
+			imports: [mockModuleA as IModule],
 		};
 
 		const mockModuleC: Partial<MutableTestModule> = {
@@ -287,14 +286,14 @@ describe("Module System", () => {
 			displayName: "CModule#TEST-C",
 			declarations: [{ serviceIdentifier: "C", useValue: "C" }],
 			exports: ["C"],
-			imports: [mockModuleB as IInternalModule],
+			imports: [mockModuleB as IModule],
 		};
 
 		// 设置循环依赖：A 导入 C
-		mockModuleA.imports = [mockModuleC as IInternalModule];
+		mockModuleA.imports = [mockModuleC as IModule];
 
 		expect(() => {
-			const builder = new ModuleBuilder(mockModuleA as IInternalModule);
+			const builder = new ModuleBuilder(mockModuleA as IModule);
 			builder.validateAndCollectInfo();
 		}).toThrow(
 			/Circular dependency detected.*AModule#TEST-A.*CModule#TEST-C.*BModule#TEST-B.*AModule#TEST-A/,
@@ -312,10 +311,10 @@ describe("Module System", () => {
 		};
 
 		// 设置自引用
-		mockSelfModule.imports = [mockSelfModule as IInternalModule];
+		mockSelfModule.imports = [mockSelfModule as IModule];
 
 		expect(() => {
-			const builder = new ModuleBuilder(mockSelfModule as IInternalModule);
+			const builder = new ModuleBuilder(mockSelfModule as IModule);
 			builder.validateAndCollectInfo();
 		}).toThrow(
 			/Circular dependency detected.*SelfModule#TEST-SELF.*SelfModule#TEST-SELF/,
