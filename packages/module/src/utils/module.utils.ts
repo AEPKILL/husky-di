@@ -160,11 +160,6 @@ class ModuleBuilder {
 	 * @throws {Error} 当模块配置无效时抛出错误
 	 */
 	public validateAndCollectInfo(): void {
-		// 清空之前的缓存
-		this.serviceIdentifierMap.clear();
-		this.availableServiceIdentifiers.clear();
-		this.importAliasesCache.clear();
-
 		// 验证导入模块的唯一性
 		this.validateImportUniqueness();
 
