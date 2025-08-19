@@ -24,13 +24,11 @@ export function createExportedGuardMiddlewareFactory(
 		executor(params, next) {
 			const { serviceIdentifier, container, resolveRecord } = params;
 
-			const preRequestContainer = findPreRequestContainer(
-				resolveRecord.getPaths(),
-			);
+			const previousContainer = findPreviousContainer(resolveRecord.getPaths());
 
 			// 检查是否是外部访问
 			// 检查方式: 如果上一个请求的容器是否是当前容器则可以断定是容器内部访问
-			if (preRequestContainer === container) return next(params);
+			if (previousContainer === container) return next(params);
 
 			// 检查是否是外部访问
 			if (!exportedSet.has(serviceIdentifier)) {
@@ -48,7 +46,7 @@ export function createExportedGuardMiddlewareFactory(
 }
 
 // 找到上一个请求的容器
-function findPreRequestContainer(
+function findPreviousContainer(
 	paths: Array<ResolveRecordTreeNode<unknown>>,
 ): IContainer | undefined {
 	let lastContainer: IContainer | undefined;
