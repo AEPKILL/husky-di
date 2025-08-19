@@ -1,6 +1,13 @@
 import { createServiceIdentifier, resolve } from "@husky-di/core";
 import { describe, expect, it } from "vitest";
 import { createModule } from "../src/index";
+import type { IInternalModule } from "../src/interfaces/module.interface";
+import { ModuleBuilder } from "../src/utils/module.utils";
+
+// 创建可变的模块接口用于测试
+interface MutableTestModule extends Omit<IInternalModule, "imports"> {
+	imports?: Array<IInternalModule>;
+}
 
 interface IDatabaseConfig {
 	type: string;
@@ -226,5 +233,92 @@ describe("Module System", () => {
 
 		expect(BModule.resolve("B")).toBe("A");
 		expect(BModule.isRegistered("A")).toBe(false);
+	});
+
+	it("should detect direct circular dependency", () => {
+		// 创建两个模块的循环依赖：A -> B -> A
+		const mockModuleA: Partial<MutableTestModule> = {
+			name: "AModule",
+			displayName: "AModule#TEST-A",
+			declarations: [{ serviceIdentifier: "A", useValue: "A" }],
+			exports: ["A"],
+			imports: [], // 稍后会被设置
+		};
+
+		const mockModuleB: Partial<MutableTestModule> = {
+			name: "BModule",
+			displayName: "BModule#TEST-B",
+			declarations: [{ serviceIdentifier: "B", useValue: "B" }],
+			exports: ["B"],
+			imports: [mockModuleA as IInternalModule],
+		};
+
+		// 设置循环依赖：A 导入 B
+		mockModuleA.imports = [mockModuleB as IInternalModule];
+
+		expect(() => {
+			const builder = new ModuleBuilder(mockModuleA as IInternalModule);
+			builder.validateAndCollectInfo();
+		}).toThrow(
+			/Circular dependency detected.*AModule#TEST-A.*BModule#TEST-B.*AModule#TEST-A/,
+		);
+	});
+
+	it("should detect indirect circular dependency", () => {
+		// 创建三个模块的循环依赖：A -> B -> C -> A
+		const mockModuleA: Partial<MutableTestModule> = {
+			name: "AModule",
+			displayName: "AModule#TEST-A",
+			declarations: [{ serviceIdentifier: "A", useValue: "A" }],
+			exports: ["A"],
+			imports: [], // 稍后会被设置
+		};
+
+		const mockModuleB: Partial<MutableTestModule> = {
+			name: "BModule",
+			displayName: "BModule#TEST-B",
+			declarations: [{ serviceIdentifier: "B", useValue: "B" }],
+			exports: ["B"],
+			imports: [mockModuleA as IInternalModule],
+		};
+
+		const mockModuleC: Partial<MutableTestModule> = {
+			name: "CModule",
+			displayName: "CModule#TEST-C",
+			declarations: [{ serviceIdentifier: "C", useValue: "C" }],
+			exports: ["C"],
+			imports: [mockModuleB as IInternalModule],
+		};
+
+		// 设置循环依赖：A 导入 C
+		mockModuleA.imports = [mockModuleC as IInternalModule];
+
+		expect(() => {
+			const builder = new ModuleBuilder(mockModuleA as IInternalModule);
+			builder.validateAndCollectInfo();
+		}).toThrow(
+			/Circular dependency detected.*AModule#TEST-A.*CModule#TEST-C.*BModule#TEST-B.*AModule#TEST-A/,
+		);
+	});
+
+	it("should detect self-dependency", () => {
+		// 创建自引用模块：Self -> Self
+		const mockSelfModule: Partial<MutableTestModule> = {
+			name: "SelfModule",
+			displayName: "SelfModule#TEST-SELF",
+			declarations: [{ serviceIdentifier: "Self", useValue: "self" }],
+			exports: ["Self"],
+			imports: [],
+		};
+
+		// 设置自引用
+		mockSelfModule.imports = [mockSelfModule as IInternalModule];
+
+		expect(() => {
+			const builder = new ModuleBuilder(mockSelfModule as IInternalModule);
+			builder.validateAndCollectInfo();
+		}).toThrow(
+			/Circular dependency detected.*SelfModule#TEST-SELF.*SelfModule#TEST-SELF/,
+		);
 	});
 });
