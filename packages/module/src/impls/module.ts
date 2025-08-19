@@ -22,9 +22,7 @@ import type {
 } from "@/interfaces/module.interface";
 import { build } from "@/utils/module.utils";
 import { createModuleId } from "@/utils/uuid.utils";
-import { validateModule } from "@/utils/validate.utils";
 
-let withAliasId: string | undefined;
 export class Module implements IInternalModule {
 	get id() {
 		return this._id;
@@ -59,12 +57,11 @@ export class Module implements IInternalModule {
 	private _exports?: ServiceIdentifier<unknown>[];
 
 	constructor(options: CreateModuleOptions) {
-		this._id = withAliasId ?? createModuleId();
+		this._id = createModuleId();
 		this._name = options.name;
 		this._declarations = options.declarations;
 		this._imports = options.imports;
 		this._exports = options.exports;
-		validateModule(this);
 		this._internalContainer = build(this);
 	}
 	public resolve<T, O extends ResolveOptions<T>>(
