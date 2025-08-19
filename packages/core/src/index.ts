@@ -4,6 +4,7 @@
  * @created 2025-07-30 22:40:39
  */
 
+import type { IContainer } from "@/interfaces/container.interface";
 import { Container } from "./impls/Container";
 
 export { LifecycleEnum } from "@/enums/lifecycle.enum";
@@ -57,5 +58,11 @@ export {
 	createServiceIdentifier,
 	getServiceIdentifierName,
 } from "@/utils/service-identifier.utils";
-export { incrementalIdFactory } from "@/utils/uuid.utils";
-export const rootContainer = Container.rootContainer;
+export {
+	createContainerId,
+	createRegistrationId,
+	createResolveRecordId,
+	type IdGenerator,
+	incrementalIdFactory,
+} from "@/utils/uuid.utils";
+export const rootContainer: IContainer = Container.rootContainer;
