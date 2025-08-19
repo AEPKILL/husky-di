@@ -97,7 +97,7 @@ interface ConflictInfo {
  *
  * 在验证过程中收集服务标识符信息，并在构建过程中复用这些信息
  */
-class ModuleBuilder {
+export class ModuleBuilder {
 	/** 要构建的模块 */
 	private readonly module: IInternalModule;
 
@@ -166,6 +166,9 @@ class ModuleBuilder {
 		// 验证导出服务标识符的唯一性
 		this.validateExportUniqueness();
 
+		// 验证循环依赖
+		this.validateCircularDependencies();
+
 		// 收集服务标识符信息并验证冲突
 		this.collectServiceInfoAndValidateConflicts();
 
@@ -222,6 +225,100 @@ class ModuleBuilder {
 			}
 			existingExportServiceIdentifiers.add(exported);
 		}
+	}
+
+	/**
+	 * 验证循环依赖
+	 *
+	 * 使用深度优先搜索（DFS）算法检测模块之间的循环依赖
+	 *
+	 * @throws {Error} 当检测到循环依赖时抛出错误
+	 */
+	private validateCircularDependencies(): void {
+		const visited = new Set<IModule>();
+		const visiting = new Set<IModule>();
+		const dependencyPath: IModule[] = [];
+
+		this.detectCircularDependency(
+			this.module,
+			visited,
+			visiting,
+			dependencyPath,
+		);
+	}
+
+	/**
+	 * 递归检测循环依赖的核心方法
+	 *
+	 * @param currentModule 当前检查的模块
+	 * @param visited 已完全访问过的模块集合（白色节点）
+	 * @param visiting 正在访问中的模块集合（灰色节点）
+	 * @param dependencyPath 当前依赖路径，用于构建错误信息
+	 * @throws {Error} 当检测到循环依赖时抛出错误
+	 */
+	private detectCircularDependency(
+		currentModule: IModule,
+		visited: Set<IModule>,
+		visiting: Set<IModule>,
+		dependencyPath: IModule[],
+	): void {
+		// 如果当前模块已经完全访问过，直接返回
+		if (visited.has(currentModule)) {
+			return;
+		}
+
+		// 如果当前模块正在访问中，说明找到了循环依赖
+		if (visiting.has(currentModule)) {
+			const cycleStartIndex = dependencyPath.findIndex(
+				(module) => module === currentModule,
+			);
+			const cyclePath = dependencyPath
+				.slice(cycleStartIndex)
+				.concat(currentModule)
+				.map((module) => module.displayName)
+				.join(" -> ");
+
+			throw new Error(
+				`Circular dependency detected: ${cyclePath}. Modules cannot have circular import relationships.`,
+			);
+		}
+
+		// 标记当前模块为正在访问
+		visiting.add(currentModule);
+		dependencyPath.push(currentModule);
+
+		// 递归检查所有导入的模块
+		const imports = currentModule.imports ?? [];
+		for (const importModule of imports) {
+			try {
+				const importedModule = getModuleByImport(importModule);
+				this.detectCircularDependency(
+					importedModule,
+					visited,
+					visiting,
+					dependencyPath,
+				);
+			} catch (error) {
+				// 如果是循环依赖错误，直接抛出
+				if (
+					error instanceof Error &&
+					error.message.includes("Circular dependency detected")
+				) {
+					throw error;
+				}
+				// 其他错误包装后抛出
+				throw new Error(
+					`Failed to validate circular dependencies for "${currentModule.displayName}": ${error instanceof Error ? error.message : "Unknown error"}`,
+				);
+			}
+		}
+
+		// 移除当前模块的访问标记
+		visiting.delete(currentModule);
+		dependencyPath.pop();
+
+		// 标记当前模块为已完全访问
+		visited.add(currentModule);
 	}
 
 	/**
