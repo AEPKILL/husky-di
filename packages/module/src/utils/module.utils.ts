@@ -44,7 +44,7 @@ export function getModuleByImport(
 }
 
 /**
- * 构建模块容器的公共函数（保持向后兼容性）
+ * 构建模块容器的公共函数
  *
  * @param module 要构建的模块
  * @returns 构建好的容器
@@ -53,8 +53,6 @@ export function build(module: IInternalModule): IContainer {
 	const builder = new ModuleBuilder(module);
 	return builder.build();
 }
-
-// ==================== 验证相关类型和枚举 ====================
 
 /**
  * 服务标识符来源类型枚举
@@ -89,8 +87,6 @@ interface ConflictInfo {
 	/** 目标模块名称 */
 	readonly targetModule: string;
 }
-
-// ==================== ModuleBuilder 类 ====================
 
 /**
  * 模块构建器类，整合模块验证和构建逻辑
