@@ -22,7 +22,6 @@ export type Alias = {
 
 export type CreateModuleOptions = {
 	readonly name: string;
-
 	readonly declarations?: Declaration<unknown>[];
 	readonly imports?: Array<IModule | ModuleWithAliases>;
 	readonly exports?: ServiceIdentifier<unknown>[];
@@ -33,16 +32,20 @@ export type ModuleWithAliases = {
 	aliases?: Alias[];
 };
 
-export interface IModule extends IUnique, IDisplayName {
+export interface IModule
+	extends IUnique,
+		IDisplayName,
+		Pick<
+			IContainer,
+			"resolve" | "isRegistered" | "getServiceIdentifiers" | "use" | "unused"
+		> {
 	readonly name: string;
 	readonly declarations?: Declaration<unknown>[];
 	readonly imports?: Array<IModule | ModuleWithAliases>;
 	readonly exports?: ServiceIdentifier<unknown>[];
-	readonly container?: IContainer;
-
 	withAliases(aliases: Alias[]): ModuleWithAliases;
 }
 
 export interface IInternalModule extends IModule {
-	_internalSetContainer(container: IContainer): void;
+	_internalContainer?: IContainer;
 }

@@ -1,6 +1,6 @@
 import { createServiceIdentifier, resolve } from "@husky-di/core";
 import { describe, expect, it } from "vitest";
-import { build, createModule } from "../src/index";
+import { createModule } from "../src/index";
 
 interface IDatabaseConfig {
 	type: string;
@@ -180,9 +180,11 @@ describe("Module System", () => {
 			exports: [IApp],
 		});
 
-		const appContainer = build(AppModule);
-		const app = appContainer.resolve(IApp);
+		const app = AppModule.resolve(IApp);
 
+		expect(() => DatabaseModule.resolve(IDatabaseConfig)).toThrow(
+			/Service identifier "IDatabaseConfig" is not exported from DatabaseModule#CONTAINER-\d+/,
+		);
 		expect(app.bootstrap()).toBe("Application bootstrapped successfully");
 		expect(app.userService.getUser()).toEqual({ id: 1, name: "test user" });
 		expect(app.databaseService.connect()).toBe(
@@ -192,8 +194,37 @@ describe("Module System", () => {
 			authenticated: true,
 			token: "test-token",
 		});
-		expect(() => appContainer.resolve(IDatabase)).toThrow(
+		expect(() => AppModule.resolve(IDatabase)).toThrow(
 			/Service identifier "IDatabase" is not exported from AppModule#CONTAINER-\d+./,
 		);
+	});
+
+	it("should alias service identifier", () => {
+		const AModule = createModule({
+			name: "AModule",
+			declarations: [
+				{
+					serviceIdentifier: "A",
+					useValue: "A",
+				},
+			],
+			exports: ["A"],
+		});
+
+		const BModule = createModule({
+			name: "BModule",
+			imports: [
+				AModule.withAliases([
+					{
+						serviceIdentifier: "A",
+						as: "B",
+					},
+				]),
+			],
+			exports: ["B"],
+		});
+
+		expect(BModule.resolve("B")).toBe("A");
+		expect(BModule.isRegistered("A")).toBe(false);
 	});
 });

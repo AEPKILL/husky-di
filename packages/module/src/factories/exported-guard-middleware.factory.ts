@@ -24,12 +24,12 @@ export function createExportedGuardMiddlewareFactory(
 		executor(params, next) {
 			const { serviceIdentifier, container, resolveRecord } = params;
 
-			// 检查是否是外部访问
 			const preRequestContainer = findPreRequestContainer(
 				resolveRecord.getPaths(),
 			);
 
-			// 容器内部访问，直接放行
+			// 检查是否是外部访问
+			// 检查方式: 如果上一个请求的容器是否是当前容器则可以断定是容器内部访问
 			if (preRequestContainer === container) return next(params);
 
 			// 检查是否是外部访问

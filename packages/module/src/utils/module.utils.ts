@@ -32,8 +32,8 @@ export function getModuleByImport(
 	throw new Error("Invalid module import");
 }
 
-export function build(module: IModule): IContainer {
-	if (module.container) return module.container;
+export function build(module: IInternalModule): IContainer {
+	if (module._internalContainer) return module._internalContainer;
 
 	const container = createContainer(module.name);
 	if (module.exports?.length) {
@@ -46,26 +46,25 @@ export function build(module: IModule): IContainer {
 	}
 
 	for (const it of module.imports ?? []) {
-		const importedModule = getModuleByImport(it);
-		if (!importedModule.container) {
-			const importedContainer = build(importedModule);
-			(importedModule as IInternalModule)._internalSetContainer(
-				importedContainer,
-			);
+		const importedModule = getModuleByImport(it) as IInternalModule;
+		if (!importedModule._internalContainer) {
+			importedModule._internalContainer = build(importedModule);
 		}
+
+		// 构建别名映射
 		const aliasesMap: Map<
 			ServiceIdentifier<unknown>,
 			ServiceIdentifier<unknown>
-		> = ((it as ModuleWithAliases)?.aliases || []).reduce((acc, alias) => {
-			acc.set(alias.serviceIdentifier, alias.as);
-			return acc;
-		}, new Map());
+		> = new Map();
+		for (const alias of (it as ModuleWithAliases)?.aliases || []) {
+			aliasesMap.set(alias.serviceIdentifier, alias.as);
+		}
 
 		for (const exported of importedModule.exports ?? []) {
 			container.register(aliasesMap.get(exported) ?? exported, {
 				useAlias: exported,
 				getContainer(): IContainer {
-					return importedModule.container as IContainer;
+					return importedModule._internalContainer as IContainer;
 				},
 			});
 		}
