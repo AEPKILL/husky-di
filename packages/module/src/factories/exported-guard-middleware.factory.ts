@@ -8,6 +8,7 @@ import {
 	getServiceIdentifierName,
 	type IContainer,
 	isResolveServiceIdentifierRecord,
+	ResolveException,
 	type ResolveMiddleware,
 	type ResolveRecordTreeNode,
 	type ServiceIdentifier,
@@ -34,8 +35,9 @@ export function createExportedGuardMiddlewareFactory(
 			// 检查是否是外部访问
 			if (!exportedSet.has(serviceIdentifier)) {
 				if (container.isRegistered(serviceIdentifier, { recursive: true })) {
-					throw new Error(
-						`Service identifier "${getServiceIdentifierName(serviceIdentifier)}" is not exported from  ${container.displayName}.`,
+					throw new ResolveException(
+						`Service identifier "${getServiceIdentifierName(serviceIdentifier)}" is not exported from ${container.displayName}.`,
+						resolveRecord,
 					);
 				}
 			}
@@ -46,7 +48,9 @@ export function createExportedGuardMiddlewareFactory(
 }
 
 // 找到上一个请求的容器
-function findPreRequestContainer(paths: Array<ResolveRecordTreeNode<unknown>>) {
+function findPreRequestContainer(
+	paths: Array<ResolveRecordTreeNode<unknown>>,
+): IContainer | undefined {
 	let lastContainer: IContainer | undefined;
 	for (const path of paths) {
 		if (isResolveServiceIdentifierRecord(path.value)) {
@@ -54,5 +58,4 @@ function findPreRequestContainer(paths: Array<ResolveRecordTreeNode<unknown>>) {
 			lastContainer = path.value.container;
 		}
 	}
-	return lastContainer;
 }

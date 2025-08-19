@@ -4,12 +4,14 @@
  * @created 2025-06-24 23:09:59
  */
 
+export type IdGenerator = () => string;
+
 /**
  * 创建一个递增ID生成器工厂函数
  * @param prefix - 用于ID的前缀
  * @returns 返回一个生成唯一ID的函数
  */
-export function incrementalIdFactory(prefix: string = "ID"): () => string {
+export function incrementalIdFactory(prefix: string = "ID"): IdGenerator {
 	let id = 0;
 	return () => {
 		id++;
@@ -24,16 +26,18 @@ export function incrementalIdFactory(prefix: string = "ID"): () => string {
  * 创建容器ID生成器
  * @returns 返回一个生成唯一ID的函数
  */
-export const createContainerId = incrementalIdFactory("CONTAINER");
+export const createContainerId: IdGenerator = incrementalIdFactory("CONTAINER");
 
 /**
  * 创建注册ID生成器
  * @returns 返回一个生成唯一ID的函数
  */
-export const createRegistrationId = incrementalIdFactory("REGISTRATION");
+export const createRegistrationId: IdGenerator =
+	incrementalIdFactory("REGISTRATION");
 
 /**
  * 创建解析记录ID生成器
  * @returns 返回一个生成唯一ID的函数
  */
-export const createResolveRecordId = incrementalIdFactory("RESOLVE_RECORD");
+export const createResolveRecordId: IdGenerator =
+	incrementalIdFactory("RESOLVE_RECORD");
