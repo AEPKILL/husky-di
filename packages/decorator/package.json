@@ -32,7 +32,6 @@
 		"typescript": "^5.9.2",
 		"vitest": "^3.2.4"
 	},
-	"private": true,
 	"peerDependencies": {
 		"reflect-metadata": "^0.2.2"
 	}
