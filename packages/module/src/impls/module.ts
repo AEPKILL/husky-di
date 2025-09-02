@@ -79,13 +79,16 @@ export class Module implements IModule {
 	): boolean {
 		return this.container.isRegistered(serviceIdentifier, options);
 	}
+
 	getServiceIdentifiers(): ServiceIdentifier<unknown>[] {
 		return this.container.getServiceIdentifiers();
 	}
+
 	// biome-ignore lint/suspicious/noExplicitAny: should use any type
 	use(middleware: ResolveMiddleware<any, any>): void {
 		this.container.use(middleware);
 	}
+
 	// biome-ignore lint/suspicious/noExplicitAny: should use any type
 	unused(middleware: ResolveMiddleware<any, any>): void {
 		this.container.unused(middleware);

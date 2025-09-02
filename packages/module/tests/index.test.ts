@@ -1,7 +1,7 @@
 import { createServiceIdentifier, resolve } from "@husky-di/core";
 import { describe, expect, it } from "vitest";
 import { createModule, type IModule } from "../src/index";
-import { ModuleBuilder } from "../src/utils/module.utils";
+import { build } from "../src/utils/module.utils";
 
 // 创建可变的模块接口用于测试
 interface MutableTestModule extends Omit<IModule, "imports"> {
@@ -256,8 +256,7 @@ describe("Module System", () => {
 		mockModuleA.imports = [mockModuleB as IModule];
 
 		expect(() => {
-			const builder = new ModuleBuilder(mockModuleA as IModule);
-			builder.validateAndCollectInfo();
+			build(mockModuleA as IModule);
 		}).toThrow(
 			/Circular dependency detected.*AModule#TEST-A.*BModule#TEST-B.*AModule#TEST-A/,
 		);
@@ -293,8 +292,7 @@ describe("Module System", () => {
 		mockModuleA.imports = [mockModuleC as IModule];
 
 		expect(() => {
-			const builder = new ModuleBuilder(mockModuleA as IModule);
-			builder.validateAndCollectInfo();
+			build(mockModuleA as IModule);
 		}).toThrow(
 			/Circular dependency detected.*AModule#TEST-A.*CModule#TEST-C.*BModule#TEST-B.*AModule#TEST-A/,
 		);
@@ -314,8 +312,7 @@ describe("Module System", () => {
 		mockSelfModule.imports = [mockSelfModule as IModule];
 
 		expect(() => {
-			const builder = new ModuleBuilder(mockSelfModule as IModule);
-			builder.validateAndCollectInfo();
+			build(mockSelfModule as IModule);
 		}).toThrow(
 			/Circular dependency detected.*SelfModule#TEST-SELF.*SelfModule#TEST-SELF/,
 		);
