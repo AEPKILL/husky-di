@@ -49,8 +49,7 @@ export function getModuleByImport(
  * @returns 构建好的容器
  */
 export function build(module: IModule): IContainer {
-	const builder = new ModuleBuilder(module);
-	return builder.build();
+	return new InternalModuleBuilder(module).build();
 }
 
 /**
@@ -88,11 +87,15 @@ interface ConflictInfo {
 }
 
 /**
- * 模块构建器类，整合模块验证和构建逻辑
+ * 优化的模块构建器类，针对一次性使用场景进行优化
  *
- * 在验证过程中收集服务标识符信息，并在构建过程中复用这些信息
+ * 主要优化点：
+ * 1. 减少不必要的对象创建
+ * 2. 简化缓存策略
+ * 3. 优化方法职责分离
+ * 4. 改进错误处理效率
  */
-export class ModuleBuilder {
+class InternalModuleBuilder {
 	/** 要构建的模块 */
 	private readonly module: IModule;
 
@@ -107,11 +110,11 @@ export class ModuleBuilder {
 		ServiceIdentifier<unknown>
 	>();
 
-	/** 导入模块的别名映射缓存 */
-	private readonly importAliasesCache = new Map<
+	/** 别名映射缓存（简化版本，仅在需要时创建） */
+	private aliasesCache: Map<
 		IModule,
 		Map<ServiceIdentifier<unknown>, ServiceIdentifier<unknown>>
-	>();
+	> | null = null;
 
 	constructor(module: IModule) {
 		this.module = module;
@@ -146,6 +149,9 @@ export class ModuleBuilder {
 		// 注册导入的服务
 		this.registerImports(container);
 
+		// 清理缓存，释放内存
+		this.cleanup();
+
 		return container;
 	}
 
@@ -154,20 +160,11 @@ export class ModuleBuilder {
 	 *
 	 * @throws {Error} 当模块配置无效时抛出错误
 	 */
-	public validateAndCollectInfo(): void {
-		// 验证导入模块的唯一性
+	private validateAndCollectInfo(): void {
 		this.validateImportUniqueness();
-
-		// 验证导出服务标识符的唯一性
 		this.validateExportUniqueness();
-
-		// 验证循环依赖
 		this.validateCircularDependencies();
-
-		// 收集服务标识符信息并验证冲突
 		this.collectServiceInfoAndValidateConflicts();
-
-		// 验证导出服务标识符的有效性
 		this.validateExportValidity();
 	}
 
@@ -285,27 +282,13 @@ export class ModuleBuilder {
 		// 递归检查所有导入的模块
 		const imports = currentModule.imports ?? [];
 		for (const importModule of imports) {
-			try {
-				const importedModule = getModuleByImport(importModule);
-				this.detectCircularDependency(
-					importedModule,
-					visited,
-					visiting,
-					dependencyPath,
-				);
-			} catch (error) {
-				// 如果是循环依赖错误，直接抛出
-				if (
-					error instanceof Error &&
-					error.message.includes("Circular dependency detected")
-				) {
-					throw error;
-				}
-				// 其他错误包装后抛出
-				throw new Error(
-					`Failed to validate circular dependencies for "${currentModule.displayName}": ${error instanceof Error ? error.message : "Unknown error"}`,
-				);
-			}
+			const importedModule = getModuleByImport(importModule);
+			this.detectCircularDependency(
+				importedModule,
+				visited,
+				visiting,
+				dependencyPath,
+			);
 		}
 
 		// 移除当前模块的访问标记
@@ -322,65 +305,79 @@ export class ModuleBuilder {
 	 * @throws {Error} 当存在服务标识符冲突时抛出错误
 	 */
 	private collectServiceInfoAndValidateConflicts(): void {
-		const { imports, declarations } = this.module;
+		this.collectDeclarationServices();
+		this.collectImportServices();
+	}
 
-		// 添加声明中的服务标识符
-		if (declarations?.length) {
-			for (const declaration of declarations) {
-				this.serviceIdentifierMap.set(declaration.serviceIdentifier, {
-					type: ServiceSourceTypeEnum.declaration,
-					source: "declarations",
-				});
-				this.availableServiceIdentifiers.add(declaration.serviceIdentifier);
-			}
+	/**
+	 * 收集声明中的服务标识符
+	 */
+	private collectDeclarationServices(): void {
+		const { declarations } = this.module;
+		if (!declarations?.length) return;
+
+		for (const declaration of declarations) {
+			this.serviceIdentifierMap.set(declaration.serviceIdentifier, {
+				type: ServiceSourceTypeEnum.declaration,
+				source: "declarations",
+			});
+			this.availableServiceIdentifiers.add(declaration.serviceIdentifier);
 		}
+	}
 
-		// 检查导入模块的导出服务是否与声明冲突，并收集可用服务
-		if (imports?.length) {
-			for (const importModule of imports) {
-				try {
-					const importedModule = getModuleByImport(importModule);
-					const exportedServices = importedModule.exports ?? [];
+	/**
+	 * 收集导入的服务标识符并验证冲突
+	 *
+	 * @throws {Error} 当存在服务标识符冲突时抛出错误
+	 */
+	private collectImportServices(): void {
+		const { imports } = this.module;
+		if (!imports?.length) return;
 
-					// 构建并缓存别名映射
-					const aliasesMap = this.buildAndCacheAliasesMap(
-						importModule,
-						importedModule,
-					);
+		for (const importModule of imports) {
+			try {
+				const importedModule = getModuleByImport(importModule);
+				const exportedServices = importedModule.exports ?? [];
 
-					for (const exported of exportedServices) {
-						// 检查冲突
-						const existing = this.serviceIdentifierMap.get(exported);
-						if (existing) {
-							const conflictInfo: ConflictInfo = {
+				// 构建别名映射（仅在需要时）
+				const aliasesMap = this.buildAliasesMapIfNeeded(
+					importModule,
+					importedModule,
+				);
+
+				for (const exported of exportedServices) {
+					// 检查冲突
+					const existing = this.serviceIdentifierMap.get(exported);
+					if (existing) {
+						throw new Error(
+							this.buildConflictMessage({
 								serviceName: getServiceIdentifierName(exported),
 								currentModule: importedModule.displayName,
 								existing,
 								targetModule: this.module.displayName,
-							};
-							throw new Error(this.buildConflictMessage(conflictInfo));
-						}
-
-						// 记录服务信息
-						this.serviceIdentifierMap.set(exported, {
-							type: ServiceSourceTypeEnum.import,
-							source: importedModule.displayName,
-						});
-
-						// 添加到可用服务集合（原始服务标识符）
-						this.availableServiceIdentifiers.add(exported);
-
-						// 如果有别名映射，也添加别名到可用服务集合
-						const alias = aliasesMap.get(exported);
-						if (alias) {
-							this.availableServiceIdentifiers.add(alias);
-						}
+							}),
+						);
 					}
-				} catch (error) {
-					throw new Error(
-						`Failed to validate imports in "${this.module.displayName}": ${error instanceof Error ? error.message : "Unknown error"}`,
-					);
+
+					// 记录服务信息
+					this.serviceIdentifierMap.set(exported, {
+						type: ServiceSourceTypeEnum.import,
+						source: importedModule.displayName,
+					});
+
+					// 添加到可用服务集合（原始服务标识符）
+					this.availableServiceIdentifiers.add(exported);
+
+					// 如果有别名映射，也添加别名到可用服务集合
+					const alias = aliasesMap?.get(exported);
+					if (alias) {
+						this.availableServiceIdentifiers.add(alias);
+					}
 				}
+			} catch (error) {
+				throw new Error(
+					`Failed to validate imports in "${this.module.displayName}": ${error instanceof Error ? error.message : "Unknown error"}`,
+				);
 			}
 		}
 	}
@@ -405,18 +402,31 @@ export class ModuleBuilder {
 	}
 
 	/**
-	 * 构建并缓存别名映射
+	 * 构建别名映射（仅在需要时）
 	 *
 	 * @param importModule 导入模块配置
 	 * @param importedModule 实际导入的模块
-	 * @returns 别名映射
+	 * @returns 别名映射，如果没有别名则返回 null
 	 */
-	private buildAndCacheAliasesMap(
+	private buildAliasesMapIfNeeded(
 		importModule: NonNullable<CreateModuleOptions["imports"]>[number],
 		importedModule: IModule,
-	): Map<ServiceIdentifier<unknown>, ServiceIdentifier<unknown>> {
+	): Map<ServiceIdentifier<unknown>, ServiceIdentifier<unknown>> | null {
+		// 检查是否有别名配置
+		const moduleWithAliases = importModule as ModuleWithAliases;
+		const aliases = moduleWithAliases.aliases;
+
+		if (!aliases?.length) {
+			return null;
+		}
+
+		// 延迟初始化缓存
+		if (!this.aliasesCache) {
+			this.aliasesCache = new Map();
+		}
+
 		// 检查缓存
-		const cached = this.importAliasesCache.get(importedModule);
+		const cached = this.aliasesCache.get(importedModule);
 		if (cached) return cached;
 
 		// 构建别名映射
@@ -425,15 +435,12 @@ export class ModuleBuilder {
 			ServiceIdentifier<unknown>
 		>();
 
-		const moduleWithAliases = importModule as ModuleWithAliases;
-		const aliases = moduleWithAliases.aliases ?? [];
-
 		for (const alias of aliases) {
 			aliasesMap.set(alias.serviceIdentifier, alias.as);
 		}
 
 		// 缓存映射
-		this.importAliasesCache.set(importedModule, aliasesMap);
+		this.aliasesCache.set(importedModule, aliasesMap);
 
 		return aliasesMap;
 	}
@@ -465,13 +472,12 @@ export class ModuleBuilder {
 		for (const importModule of imports) {
 			const importedModule = getModuleByImport(importModule);
 
-			// 获取缓存的别名映射
-			const aliasesMap =
-				this.importAliasesCache.get(importedModule) ?? new Map();
+			// 获取别名映射（仅在需要时）
+			const aliasesMap = this.aliasesCache?.get(importedModule) ?? null;
 
 			// 注册导入模块的导出服务
 			for (const exported of importedModule.exports ?? []) {
-				container.register(aliasesMap.get(exported) ?? exported, {
+				container.register(aliasesMap?.get(exported) ?? exported, {
 					useAlias: exported,
 					getContainer(): IContainer {
 						return importedModule.container;
@@ -497,5 +503,18 @@ export class ModuleBuilder {
 		const conflictSource = existing.source;
 
 		return `Service identifier conflict: "${serviceName}" is exported by "${currentModule}" and ${conflictType} "${conflictSource}" in "${targetModule}".`;
+	}
+
+	/**
+	 * 清理资源，释放内存
+	 */
+	private cleanup(): void {
+		// 清理缓存
+		this.aliasesCache?.clear();
+		this.aliasesCache = null;
+
+		// 清理集合和映射
+		this.serviceIdentifierMap.clear();
+		this.availableServiceIdentifiers.clear();
 	}
 }
