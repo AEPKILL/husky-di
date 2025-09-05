@@ -47,23 +47,29 @@ export class ResolveRecord implements IInternalResolveRecord {
 
 	constructor(container: IContainer) {
 		this._id = createResolveRecordId();
-		this._root = createResolveRecordTreeNode(this._getTreeNodeId(), {
-			type: ResolveRecordTypeEnum.root,
-			container,
-		});
+		this._root = {
+			id: this._getTreeNodeId(),
+			value: {
+				type: ResolveRecordTypeEnum.root,
+				container,
+			},
+			children: [],
+		};
 		this._current = this._root;
 	}
 
 	addRecordNode(node: ResolveRecordNode<unknown>): void {
 		const current = {
+			id: this._getTreeNodeId(),
+			value: node,
+			children: [],
 			parent: this._current,
-			...createResolveRecordTreeNode(this._getTreeNodeId(), node),
 		};
 		this._current.children.push(current);
 		this._current = current;
 	}
 
-	getCycleNodes(): undefined | CycleNodeInfo {
+	getCycleNode(): undefined | CycleNodeInfo {
 		const lastRecordNode = this._current;
 		if (!isResolveServiceIdentifierRecord(lastRecordNode.value))
 			return undefined;
@@ -71,12 +77,11 @@ export class ResolveRecord implements IInternalResolveRecord {
 		let tempRecordNode = lastRecordNode;
 		while (tempRecordNode.parent) {
 			tempRecordNode = tempRecordNode.parent;
+
 			if (!isResolveServiceIdentifierRecord(tempRecordNode.value)) continue;
 
-			if (
-				tempRecordNode.value.resolveOptions.dynamic ||
-				tempRecordNode.value.resolveOptions.ref
-			) {
+			const { dynamic, ref } = tempRecordNode.value.resolveOptions;
+			if (dynamic || ref) {
 				break;
 			}
 
@@ -96,12 +101,14 @@ export class ResolveRecord implements IInternalResolveRecord {
 	getCurrentContainer(): IContainer | undefined {
 		let current: ResolveRecordTreeNode<unknown> | undefined = this._current;
 		while (current) {
-			if (
-				isResolveServiceIdentifierRecord(current.value) ||
-				isResolveRootRecord(current.value)
-			) {
+			if (isResolveServiceIdentifierRecord(current.value)) {
 				return current.value.container;
 			}
+
+			if (isResolveRootRecord(current.value)) {
+				return current.value.container;
+			}
+
 			current = current.parent;
 		}
 	}
@@ -133,15 +140,4 @@ export class ResolveRecord implements IInternalResolveRecord {
 		}
 		this._current = current;
 	}
-}
-
-function createResolveRecordTreeNode<T>(
-	id: string,
-	value: ResolveRecordNode<T>,
-): ResolveRecordTreeNode<T> {
-	return {
-		id,
-		value,
-		children: [],
-	};
 }
