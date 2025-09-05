@@ -11,7 +11,7 @@ export class ResolveException extends Error {
 	private __isResolveException__ = true;
 
 	constructor(message: string, resolveRecord: IResolveRecord) {
-		const cycleNode = resolveRecord.getCycleNodes();
+		const cycleNode = resolveRecord.getCycleNode();
 		const paths = resolveRecord
 			.getPaths()
 			.map((it) => it.value)

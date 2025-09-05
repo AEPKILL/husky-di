@@ -194,7 +194,7 @@ export class Container extends Disposable implements IInternalContainer {
 					);
 				}
 
-				const cycleNodeInfo = resolveRecord.getCycleNodes();
+				const cycleNodeInfo = resolveRecord.getCycleNode();
 				if (cycleNodeInfo) {
 					throw new ResolveException(
 						`Circular dependency detected for service identifier "${getServiceIdentifierName(serviceIdentifier)}". To resolve this, use either the "ref" option to get a reference to the service or the "dynamic" option to defer resolution until the service is actually used.`,
