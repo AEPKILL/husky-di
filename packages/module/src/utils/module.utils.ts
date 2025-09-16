@@ -130,11 +130,6 @@ class InternalModuleBuilder {
 		// 先进行验证，同时收集信息
 		this.validateAndCollectInfo();
 
-		// 如果已经构建过容器，直接返回
-		if (this.module.container) {
-			return this.module.container;
-		}
-
 		// 创建容器
 		const container = createContainer(this.module.name);
 

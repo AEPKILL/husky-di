@@ -12,12 +12,12 @@ import type {
 } from "@husky-di/core";
 
 export type Declaration<T> = CreateRegistrationOptions<T> & {
-	serviceIdentifier: ServiceIdentifier<T> | string;
+	readonly serviceIdentifier: ServiceIdentifier<T>;
 };
 
 export type Alias = {
-	serviceIdentifier: ServiceIdentifier<unknown>;
-	as: ServiceIdentifier<unknown>;
+	readonly serviceIdentifier: ServiceIdentifier<unknown>;
+	readonly as: ServiceIdentifier<unknown>;
 };
 
 export type CreateModuleOptions = {
@@ -28,8 +28,8 @@ export type CreateModuleOptions = {
 };
 
 export type ModuleWithAliases = {
-	module: IModule;
-	aliases?: Alias[];
+	readonly module: IModule;
+	readonly aliases?: Alias[];
 };
 
 export interface IModule
