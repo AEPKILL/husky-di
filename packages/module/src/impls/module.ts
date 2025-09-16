@@ -63,6 +63,7 @@ export class Module implements IModule {
 		this._exports = options.exports;
 		this.container = build(this);
 	}
+
 	public resolve<T, O extends ResolveOptions<T>>(
 		serviceIdentifier: ServiceIdentifier<T>,
 		options?: O,
