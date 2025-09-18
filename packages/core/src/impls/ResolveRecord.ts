@@ -43,12 +43,12 @@ export class ResolveRecord implements IInternalResolveRecord {
 	private _current: ResolveRecordTreeNode<unknown>;
 	private _currentStack: Array<ResolveRecordTreeNode<unknown>> = [];
 	private _id: string;
-	private _getTreeNodeId = incrementalIdFactory("RESOLVE_RECORD_NODE");
+	private _generateTreeNodeId = incrementalIdFactory("RESOLVE_RECORD_NODE");
 
 	constructor(container: IContainer) {
 		this._id = createResolveRecordId();
 		this._root = {
-			id: this._getTreeNodeId(),
+			id: this._generateTreeNodeId(),
 			value: {
 				type: ResolveRecordTypeEnum.root,
 				container,
@@ -60,7 +60,7 @@ export class ResolveRecord implements IInternalResolveRecord {
 
 	addRecordNode(node: ResolveRecordNode<unknown>): void {
 		const current = {
-			id: this._getTreeNodeId(),
+			id: this._generateTreeNodeId(),
 			value: node,
 			children: [],
 			parent: this._current,
@@ -69,7 +69,7 @@ export class ResolveRecord implements IInternalResolveRecord {
 		this._current = current;
 	}
 
-	getCycleNode(): undefined | CycleNodeInfo {
+	getCycleNodeInfo(): undefined | CycleNodeInfo {
 		const lastRecordNode = this._current;
 		if (!isResolveServiceIdentifierRecord(lastRecordNode.value))
 			return undefined;

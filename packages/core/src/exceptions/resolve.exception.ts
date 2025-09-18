@@ -11,16 +11,18 @@ export class ResolveException extends Error {
 	private __isResolveException__ = true;
 
 	constructor(message: string, resolveRecord: IResolveRecord) {
-		const cycleNode = resolveRecord.getCycleNode();
+		const cycleNodeInfo = resolveRecord.getCycleNodeInfo();
+		const cycleNode = cycleNodeInfo?.cycleNode.value;
 		const paths = resolveRecord
 			.getPaths()
 			.map((it) => it.value)
 			.reverse();
+
 		super(
 			getResolveRecordMessage({
 				message,
 				paths,
-				cycleNode: cycleNode?.cycleNode.value,
+				cycleNode,
 			}),
 		);
 	}
