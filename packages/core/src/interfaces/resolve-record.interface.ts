@@ -71,7 +71,7 @@ export interface IResolveRecord extends IUnique {
 
 	addRecordNode(node: ResolveRecordNode<unknown>): void;
 
-	getCycleNode(): undefined | CycleNodeInfo;
+	getCycleNodeInfo(): undefined | CycleNodeInfo;
 
 	getPaths(): Array<ResolveRecordTreeNode<unknown>>;
 
