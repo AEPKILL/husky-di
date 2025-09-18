@@ -32,6 +32,7 @@ export function createExportedGuardMiddlewareFactory(
 
 			// 检查是否是外部访问
 			if (!exportedSet.has(serviceIdentifier)) {
+				// 如果没有注册到当前容器的话，也不算外部访问
 				if (container.isRegistered(serviceIdentifier, { recursive: true })) {
 					throw new ResolveException(
 						`Service identifier "${getServiceIdentifierName(serviceIdentifier)}" is not exported from ${container.displayName}.`,
