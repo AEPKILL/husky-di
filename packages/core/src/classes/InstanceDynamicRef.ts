@@ -6,6 +6,14 @@
 
 import type { Ref } from "@/types/ref.type";
 
+/**
+ * InstanceDynamicRef is a class that implements the dynamic Ref interface.
+ *
+ * @param T - The type of the instance.
+ * @param createInstance - The function to create the instance.
+ * @returns The instance.
+ *
+ */
 export class InstanceDynamicRef<T> implements Ref<T> {
 	private _resolved = false;
 	private readonly _createInstance: () => T;
