@@ -27,6 +27,10 @@ import type { IInternalResolveRecord } from "./resolve-record.interface";
  * - 当 multiple 为 false 时，defaultValue 必须是 T
  */
 export type ResolveOptions<T> = {
+	/**
+	 * 建议非特殊原因不要使用这个选项，因为指定了这个选项后实际上会创建一个 {InstanceDynamicRef} 实例，
+	 * 这个实例会创建一个闭包引用创建时的解析记录和上下文一直不会释放，从而导致内存泄漏
+	 */
 	dynamic?: boolean;
 	ref?: boolean;
 } & ( // 不需要多个实例，且不是可选的，不能有 defaultValue
