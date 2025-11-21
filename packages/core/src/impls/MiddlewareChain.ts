@@ -31,11 +31,11 @@ export class MiddlewareChain<Params, Result>
 
 	constructor(
 		defaultMiddlewareExecutor: MiddlewareExecutor<Params, Result>,
-		globalMiddlewares: IMiddlewareManager<Params, Result>,
+		globalMiddleware: IMiddlewareManager<Params, Result>,
 		middlewares: Middleware<Params, Result>[],
 	) {
 		super(middlewares);
-		this._globalMiddleware = globalMiddlewares;
+		this._globalMiddleware = globalMiddleware;
 		this._defaultMiddlewareExecutor = defaultMiddlewareExecutor;
 		this._middlewareExecutor = this.buildMiddlewareExecutor();
 		this.on("change", () => {

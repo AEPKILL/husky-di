@@ -96,10 +96,7 @@ export class Container extends Disposable implements IInternalContainer {
 	 * @param name 容器名称
 	 */
 	constructor(name: string = "DefaultContainer", parent?: IContainer) {
-		super(() => {
-			this._disposableRegistry.dispose();
-			this._registry.clear();
-		});
+		super();
 
 		this.id = createContainerId();
 		this._name = name;
@@ -331,6 +328,12 @@ export class Container extends Disposable implements IInternalContainer {
 	 */
 	public getServiceIdentifiers(): ServiceIdentifier<unknown>[] {
 		return this._registry.keys();
+	}
+
+	public dispose(): void {
+		this._disposableRegistry.dispose();
+		this._registry.clear();
+		super.dispose();
 	}
 
 	/**

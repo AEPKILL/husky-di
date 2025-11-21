@@ -23,18 +23,12 @@ export class TypedEvent<
 	// biome-ignore lint/suspicious/noExplicitAny: any
 	private listeners = new Map<keyof Events, Set<(...args: any[]) => void>>();
 
-	constructor() {
-		super(() => {
-			this.listeners.clear();
-		});
-	}
-
 	/**
 	 * 触发指定事件
 	 * @param eventName 事件名称
 	 * @param args 传递给监听器的参数
 	 */
-	emit<EventName extends keyof Events>(
+	public emit<EventName extends keyof Events>(
 		eventName: EventName,
 		...args: Parameters<Events[EventName]>
 	): void {
@@ -53,7 +47,7 @@ export class TypedEvent<
 	 * @param eventName 事件名称
 	 * @param listener 监听器函数
 	 */
-	on<EventName extends keyof Events>(
+	public on<EventName extends keyof Events>(
 		eventName: EventName,
 		listener: Events[EventName],
 	): void {
@@ -71,7 +65,7 @@ export class TypedEvent<
 	 * @param eventName 事件名称
 	 * @param listener 要移除的监听器函数
 	 */
-	off<EventName extends keyof Events>(
+	public off<EventName extends keyof Events>(
 		eventName: EventName,
 		listener: Events[EventName],
 	): void {
@@ -84,5 +78,10 @@ export class TypedEvent<
 				this.listeners.delete(eventName);
 			}
 		}
+	}
+
+	public dispose(): void {
+		this.listeners.clear();
+		super.dispose();
 	}
 }
