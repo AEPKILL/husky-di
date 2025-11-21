@@ -57,6 +57,7 @@ export interface IRegistration<T> extends IUnique {
 		| CreateFactoryRegistrationOptions<T>["useFactory"]
 		| CreateValueRegistrationOptions<T>["useValue"]
 		| CreateAliasRegistrationOptions<T>["useAlias"];
+
 	readonly getContainer?: () => IContainer;
 
 	/** 下列设计是给 Middleware 传递数据的 */
