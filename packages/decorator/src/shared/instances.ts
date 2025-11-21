@@ -10,9 +10,6 @@ import type { InjectionMetadata } from "@/types/injection-metadata.type";
 /**
  * this map is used to store the injection metadata of the class constructor params
  */
-/**
- * this map is used to store the injection metadata of the class constructor params
- */
 const InjectionMetadataMap = typeof WeakMap === "undefined" ? Map : WeakMap;
 export const injectionMetadataMap = new InjectionMetadataMap() as {
 	get<T>(target: Constructor<T>): InjectionMetadata<T>[];

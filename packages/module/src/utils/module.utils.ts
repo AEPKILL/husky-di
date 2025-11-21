@@ -134,9 +134,9 @@ class InternalModuleBuilder {
 		const container = createContainer(this.module.name);
 
 		// 添加导出守卫中间件
-		if (this.module.exports?.length) {
-			container.use(createExportedGuardMiddlewareFactory(this.module.exports));
-		}
+		container.use(
+			createExportedGuardMiddlewareFactory(this.module.exports ?? []),
+		);
 
 		// 注册声明的服务
 		this.registerDeclarations(container);
