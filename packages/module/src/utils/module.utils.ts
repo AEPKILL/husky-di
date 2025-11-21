@@ -360,13 +360,12 @@ class InternalModuleBuilder {
 						source: importedModule.displayName,
 					});
 
-					// 添加到可用服务集合（原始服务标识符）
-					this.availableServiceIdentifiers.add(exported);
-
-					// 如果有别名映射，也添加别名到可用服务集合
+					// 如果有别名，只添加别名到可用服务集合，否则添加原始服务标识符
 					const alias = aliasesMap?.get(exported);
 					if (alias) {
 						this.availableServiceIdentifiers.add(alias);
+					} else {
+						this.availableServiceIdentifiers.add(exported);
 					}
 				}
 			} catch (error) {

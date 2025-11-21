@@ -117,6 +117,42 @@ describe("Module System", () => {
 				exports: ["a"],
 			});
 		}).not.toThrow();
+
+		expect(() => {
+			const FooModule = createModule({
+				name: "FooModule",
+				declarations: [
+					{
+						serviceIdentifier: "a",
+						useValue: "a",
+					},
+				],
+				exports: ["a"],
+			});
+			createModule({
+				name: "TestModule",
+				imports: [FooModule.withAliases([{ serviceIdentifier: "a", as: "b" }])],
+				exports: ["b"],
+			});
+		}).not.toThrow();
+
+		expect(() => {
+			const FooModule = createModule({
+				name: "FooModule",
+				declarations: [
+					{
+						serviceIdentifier: "a",
+						useValue: "a",
+					},
+				],
+				exports: ["a"],
+			});
+			createModule({
+				name: "TestModule",
+				imports: [FooModule.withAliases([{ serviceIdentifier: "a", as: "b" }])],
+				exports: ["a"],
+			});
+		}).toThrow();
 	});
 
 	it("should not export undeclared service identifier", () => {
