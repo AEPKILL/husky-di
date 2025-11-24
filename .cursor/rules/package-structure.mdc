@@ -1,0 +1,29 @@
+---
+description: Package structure guidelines for monorepo packages
+globs: ["packages/**/*"]
+alwaysApply: true
+---
+
+# Package Structure Guidelines
+
+## Core Package (packages/core)
+
+- **Purpose**: Provide core functionality and utility functions
+- **Exports**: Support both ESM and CommonJS formats
+- **Types**: Must provide complete TypeScript type definitions
+- **Testing**: Use Vitest for unit testing
+
+## React Package (packages/react)
+
+- **Purpose**: Provide React component library
+- **Component Guidelines**:
+  - Use functional components and Hooks
+  - Support TypeScript type-safe props
+  - Provide Storybook documentation
+  - Include complete test coverage
+
+## Performance Optimization
+
+- Use React.memo to wrap pure components
+- Use useMemo and useCallback appropriately
+- Avoid creating new objects in render functions

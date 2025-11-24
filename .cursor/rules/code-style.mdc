@@ -1,0 +1,76 @@
+---
+description: Code style guidelines and formatting rules
+globs: ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"]
+alwaysApply: true
+---
+
+# Code Style Guidelines
+
+## General Rules
+
+### 1. Strict TypeScript Type Safety
+
+- Use explicit type declarations
+- Avoid using `any` type
+- Prefer `interface` over `type` for object type definitions
+
+### 2. Code Formatting
+
+- Use Tab indentation (following biome.json config)
+- Use double quotes for strings
+- Enable automatic import sorting
+- Follow Biome's recommended rules
+
+### 3. File and Directory Structure
+
+- Use kebab-case for file and directory naming
+- Use PascalCase.tsx for component files
+- Use `*.test.ts` or `*.test.tsx` for test files
+- Use index.ts for export files
+
+### 4. English Comments
+
+- All function comments (JSDoc) must be written in English
+- Inline comments should be in English
+- Documentation and README files should be in English
+- Variable and function names remain in English following naming conventions
+
+### 5. Error Messages and Runtime Prompts
+
+- All runtime error messages must be in English
+- All console.log, console.warn, console.error messages must be in English
+- All throw new Error() messages must be in English
+- All user-facing prompts and notifications must be in English
+- Only code comments and documentation can be in English
+
+### 6. Early Return Pattern
+
+- Use early return pattern to reduce nesting and improve code readability
+- Return early for edge cases and invalid conditions
+- Use continue in loops when conditions are met early
+- Avoid deep nesting by handling special cases first
+- Extract complex conditional logic into separate methods when appropriate
+- Extract complex conditions into descriptive variables for better readability
+
+## Import and Export Rules
+
+- Use explicit imports (avoid `import *`)
+- Organize imports: external packages first, then internal modules
+- Use index.ts files for clean public APIs
+- Avoid circular dependencies
+- Use type-only imports when appropriate (`import type`)
+
+## Error Handling
+
+- Always handle errors explicitly
+- Provide meaningful error messages in English
+- Use appropriate error types (Error, TypeError, etc.)
+- Log errors appropriately (avoid console.log except for errors)
+- Fail fast with clear error messages
+
+## Prohibited Practices
+
+- Don't modify dist directory directly
+- Don't use console.log in code (except for error handling)
+- Don't bypass TypeScript type checking
+- Don't use @ts-ignore in production code

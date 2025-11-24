@@ -1,0 +1,44 @@
+---
+description: Code generation templates and patterns
+alwaysApply: true
+---
+
+# Code Generation Rules
+
+## Creating New Components
+
+```typescript
+// Component file template (packages/react/src/ComponentName.tsx)
+import React, { memo } from "react";
+import "./ComponentName.css";
+
+export interface ComponentNameProps {
+  // Define props types
+}
+
+export const ComponentName: React.FC<ComponentNameProps> = memo((props) => {
+  // Component implementation
+});
+```
+
+## Creating New Utility Functions
+
+```typescript
+// Utility function template (packages/core/src/utils.ts)
+/**
+ * Description of the function
+ * @param param Description of the parameter
+ * @returns Description of the return value
+ */
+export const functionName = (param: Type): ReturnType => {
+  // Function implementation
+};
+```
+
+## Documentation Requirements
+
+- Every exported function/component needs JSDoc comments **in English**
+- Complex logic needs inline comments for explanation **in English**
+- Update relevant README.md files **in English**
+- Use proper English punctuation and formatting
+- Maintain technical accuracy while using clear English expressions
