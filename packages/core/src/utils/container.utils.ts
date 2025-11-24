@@ -22,13 +22,15 @@ function _resolve<T, Options extends ResolveOptions<T>>(
 	serviceIdentifier: ServiceIdentifier<T>,
 	options?: Options,
 ): ResolveInstance<T, Options> {
-	if (!resolveRecordRef.current) {
+	const resolveRecord = resolveRecordRef.current;
+
+	if (!resolveRecord) {
 		throw new Error(
 			`The "resolve" method can only be called within a resolve context. This typically happens when trying to resolve a service outside of a container's resolve process.`,
 		);
 	}
 
-	const currentContainer = resolveRecordRef.current.getCurrentContainer();
+	const currentContainer = resolveRecord.getCurrentContainer();
 
 	if (currentContainer) {
 		return currentContainer.resolve(
@@ -39,7 +41,7 @@ function _resolve<T, Options extends ResolveOptions<T>>(
 
 	throw new ResolveException(
 		`No container available in the current resolve context. This usually indicates that the resolve context has been corrupted or improperly initialized.`,
-		resolveRecordRef.current,
+		resolveRecord,
 	);
 }
 
