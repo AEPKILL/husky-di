@@ -4,24 +4,28 @@
  * @created 2025-07-26 23:58:33
  */
 
+import { DisposableRegistry } from "@/impls/DisposableRegistry";
+import type { IDisposable } from "@/interfaces/disposable.interface";
 import type { ITypedEvent } from "@/interfaces/typed-event.interface";
-import { createAssertNotDisposed } from "@/utils/disposable.utils";
-import { Disposable } from "./Disposable";
+import { createAssertNotDisposed, toDisposed } from "@/utils/disposable.utils";
 
 const assertNotDisposed = createAssertNotDisposed("TypedEvent");
 export class TypedEvent<
 		// biome-ignore lint/suspicious/noExplicitAny: any
 		Events extends Record<string | symbol, (...args: any[]) => void>,
 	>
-	extends Disposable
+	extends DisposableRegistry
 	implements ITypedEvent<Events>
 {
-	/**
-	 * 存储事件监听器的映射表
-	 * 键为事件名称，值为该事件的所有监听器数组
-	 */
 	// biome-ignore lint/suspicious/noExplicitAny: any
 	private listeners = new Map<keyof Events, Set<(...args: any[]) => void>>();
+
+	constructor() {
+		super();
+		this.addCleanup(() => {
+			this.listeners.clear();
+		});
+	}
 
 	/**
 	 * 触发指定事件
@@ -50,7 +54,7 @@ export class TypedEvent<
 	public on<EventName extends keyof Events>(
 		eventName: EventName,
 		listener: Events[EventName],
-	): void {
+	): IDisposable {
 		assertNotDisposed(this);
 
 		if (!this.listeners.has(eventName)) {
@@ -58,6 +62,8 @@ export class TypedEvent<
 		}
 		// biome-ignore lint/style/noNonNullAssertion: this.listeners.get(eventName) is not null
 		this.listeners.get(eventName)!.add(listener);
+
+		return toDisposed(() => this.off(eventName, listener));
 	}
 
 	/**
@@ -78,10 +84,5 @@ export class TypedEvent<
 				this.listeners.delete(eventName);
 			}
 		}
-	}
-
-	public dispose(): void {
-		this.listeners.clear();
-		super.dispose();
 	}
 }

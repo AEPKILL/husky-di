@@ -38,12 +38,16 @@ export class MiddlewareChain<Params, Result>
 		this._globalMiddleware = globalMiddleware;
 		this._defaultMiddlewareExecutor = defaultMiddlewareExecutor;
 		this._middlewareExecutor = this.buildMiddlewareExecutor();
+
 		this.on("change", () => {
 			this._middlewareExecutor = this.buildMiddlewareExecutor();
 		});
-		this._globalMiddleware.on("change", () => {
-			this._middlewareExecutor = this.buildMiddlewareExecutor();
-		});
+
+		this.addDisposable(
+			this._globalMiddleware.on("change", () => {
+				this._middlewareExecutor = this.buildMiddlewareExecutor();
+			}),
+		);
 	}
 
 	/**

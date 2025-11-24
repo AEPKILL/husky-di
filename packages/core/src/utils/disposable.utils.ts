@@ -4,6 +4,7 @@
  * @created 2025-07-29 22:36:34
  */
 
+import { Disposable } from "@/impls/Disposable";
 import type { IDisposable } from "@/interfaces/disposable.interface";
 
 export function createAssertNotDisposed(
@@ -18,4 +19,8 @@ export function createAssertNotDisposed(
 			throw new Error(`${name} is disposed`);
 		}
 	};
+}
+
+export function toDisposed(cleanup: () => void): IDisposable {
+	return new Disposable(cleanup);
 }

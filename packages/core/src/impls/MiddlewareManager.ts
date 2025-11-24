@@ -129,9 +129,4 @@ export class MiddlewareManager<Params, Result>
 	all(): Middleware<Params, Result>[] {
 		return [...this._middlewares];
 	}
-
-	dispose(): void {
-		if (this.disposed) return;
-		super.dispose();
-	}
 }
