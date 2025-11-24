@@ -4,8 +4,7 @@
  * @created 2025-07-29 22:36:34
  */
 
-import { Disposable } from "@/impls/Disposable";
-import type { IDisposable } from "@/interfaces/disposable.interface";
+import type { Cleanup, IDisposable } from "@/interfaces/disposable.interface";
 
 export function createAssertNotDisposed(
 	name: string,
@@ -21,6 +20,18 @@ export function createAssertNotDisposed(
 	};
 }
 
-export function toDisposed(cleanup: () => void): IDisposable {
-	return new Disposable(cleanup);
+export function toDisposed(cleanup: Cleanup): IDisposable {
+	let disposed = false;
+	return {
+		get disposed() {
+			return disposed;
+		},
+		dispose() {
+			if (disposed) {
+				return;
+			}
+			disposed = true;
+			cleanup();
+		},
+	};
 }
