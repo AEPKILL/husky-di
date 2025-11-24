@@ -1,0 +1,39 @@
+---
+description: Project overview and tech stack information
+alwaysApply: true
+---
+
+# Project Overview
+
+This is a TypeScript monorepo project containing core library and React component library. The project uses pnpm workspaces for management and rslib as the build tool.
+
+## Tech Stack
+
+- **Language**: TypeScript (v5.8.3+)
+- **Build Tool**: rslib (v0.10.2+)
+- **Package Manager**: pnpm (v10.12.2+)
+- **Code Formatter**: Biome (v2.0.5)
+- **Test Framework**: Vitest (v3.2.4+)
+- **React Version**: React 19.1.0+
+- **Storybook**: v9.0.11+
+- **Node Version**: >=23
+
+## Build and Development Workflow
+
+1. **Development mode**: `pnpm dev` starts watch mode
+2. **Build**: `pnpm build` generates dist files
+3. **Testing**: `pnpm test` runs all tests
+4. **Storybook**: `pnpm storybook` starts component documentation
+
+## Dependency Management Rules
+
+1. **Use pnpm for dependency installation**
+2. **Place dev dependencies in respective package's devDependencies**
+3. **Use peerDependencies for production dependencies (React package)**
+4. **Use ^ prefix for version constraints**
+
+## Git Commit Guidelines
+
+- Use Husky for Git hooks management
+- Automatically run lint-staged before commits
+- Use semantic commit message format

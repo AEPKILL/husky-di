@@ -1,0 +1,32 @@
+---
+description: AI assistant guidelines for code generation and modification
+alwaysApply: true
+---
+
+# AI Assistant Guidelines
+
+When generating or modifying code:
+
+- Always read existing code patterns before making changes
+- Maintain consistency with existing codebase style
+- Prefer refactoring over rewriting when possible
+- Ask for clarification if requirements are ambiguous
+- Generate complete, working code that follows all project rules
+- Include proper error handling and edge cases
+- Write tests for new functionality
+
+## File Operations
+
+- Always read existing files before modifying them
+- Use absolute paths when possible for file operations
+- Check for existing implementations before creating new ones
+- Preserve existing code structure and patterns
+- Update related files (tests, exports, documentation) when adding new features
+
+## Code Modification Best Practices
+
+- Make minimal, focused changes
+- Preserve existing functionality unless explicitly requested to change
+- Update tests when modifying behavior
+- Maintain backward compatibility when possible
+- Document breaking changes clearly

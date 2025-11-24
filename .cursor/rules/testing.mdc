@@ -1,0 +1,29 @@
+---
+description: Testing requirements and patterns
+globs: ["**/*.test.ts", "**/*.test.tsx", "**/tests/**/*"]
+alwaysApply: true
+---
+
+# Testing Requirements
+
+## Test File Template
+
+```typescript
+import { describe, it, expect } from "vitest";
+import { functionName } from "../src/index";
+
+describe("functionName", () => {
+  it("should work correctly", () => {
+    // Test implementation
+    expect(functionName()).toBe(expected);
+  });
+});
+```
+
+## Testing Guidelines
+
+- Write tests for all new functions and components
+- Maintain or improve test coverage
+- Use Vitest testing patterns consistent with existing tests
+- Test edge cases and error conditions
+- Ensure tests are deterministic and isolated
