@@ -39,11 +39,11 @@ This is a TypeScript monorepo project containing core library and React componen
    - Use _.test.ts or_.test.tsx for test files
    - Use index.ts for export files
 
-4. **Chinese Comments**
+4. **English Comments**
 
-   - All function comments (JSDoc) must be written in Chinese
-   - Inline comments should be in Chinese
-   - Documentation and README files should be in Chinese
+   - All function comments (JSDoc) must be written in English
+   - Inline comments should be in English
+   - Documentation and README files should be in English
    - Variable and function names remain in English following naming conventions
 
 5. **Error Messages and Runtime Prompts**
@@ -52,7 +52,7 @@ This is a TypeScript monorepo project containing core library and React componen
    - All console.log, console.warn, console.error messages must be in English
    - All throw new Error() messages must be in English
    - All user-facing prompts and notifications must be in English
-   - Only code comments and documentation can be in Chinese
+   - Only code comments and documentation can be in English
 
 6. **Early Return Pattern**
    - Use early return pattern to reduce nesting and improve code readability
@@ -103,12 +103,11 @@ export const ComponentName: React.FC<ComponentNameProps> = memo((props) => {
 ```typescript
 // Utility function template (packages/core/src/utils.ts)
 /**
- * 函数功能描述
- * @param param 参数描述
- * @returns 返回值描述
+ * Description of the function
+ * @param param Description of the parameter
+ * @returns Description of the return value
  */
 export const functionName = (param: Type): ReturnType => {
-  // 实现逻辑注释
   // Function implementation
 };
 ```
@@ -121,7 +120,6 @@ import { functionName } from "../src/index";
 
 describe("functionName", () => {
   it("should work correctly", () => {
-    // 测试实现
     // Test implementation
     expect(functionName()).toBe(expected);
   });
@@ -163,11 +161,11 @@ describe("functionName", () => {
 
 ### Documentation Requirements
 
-- Every exported function/component needs JSDoc comments **in Chinese**
-- Complex logic needs inline comments for explanation **in Chinese**
-- Update relevant README.md files **in Chinese**
-- Use proper Chinese punctuation and formatting
-- Maintain technical accuracy while using clear Chinese expressions
+- Every exported function/component needs JSDoc comments **in English**
+- Complex logic needs inline comments for explanation **in English**
+- Update relevant README.md files **in English**
+- Use proper English punctuation and formatting
+- Maintain technical accuracy while using clear English expressions
 
 ## Code Generation Guidelines
 

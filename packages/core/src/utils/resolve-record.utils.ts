@@ -9,10 +9,10 @@ import { ResolveRecord } from "@/impls/ResolveRecord";
 import type { IContainer } from "@/interfaces/container.interface";
 import type {
 	IInternalResolveRecord,
-	MessageResolveRecordNode,
-	ResolveRecordNode,
-	RootResolveRecordNode,
-	ServiceIdentifierResolveRecordNode,
+	MessageResolveRecordData,
+	ResolveRecordData,
+	RootResolveRecordData,
+	ServiceIdentifierResolveRecordData,
 } from "@/interfaces/resolve-record.interface";
 import { resolveRecordRef } from "@/shared/instances";
 import { getServiceIdentifierName } from "./service-identifier.utils";
@@ -39,7 +39,7 @@ export function setResolveRecord(resolveRecord: IInternalResolveRecord): void {
 }
 
 export function getResolveIdentifierRecordName<T>(
-	resolveIdentifierRecord: ServiceIdentifierResolveRecordNode<T>,
+	resolveIdentifierRecord: ServiceIdentifierResolveRecordData<T>,
 ): string {
 	const names = [];
 	const serviceIdentifierName = getServiceIdentifierName(
@@ -75,27 +75,27 @@ export function getResolveIdentifierRecordName<T>(
 }
 
 export function isResolveServiceIdentifierRecord<T>(
-	resolveRecord: ResolveRecordNode<T>,
-): resolveRecord is ServiceIdentifierResolveRecordNode<T> {
+	resolveRecord: ResolveRecordData<T>,
+): resolveRecord is ServiceIdentifierResolveRecordData<T> {
 	return resolveRecord.type === ResolveRecordTypeEnum.serviceIdentifier;
 }
 
 export function isResolveRootRecord(
-	resolveRecord: ResolveRecordNode<unknown>,
-): resolveRecord is RootResolveRecordNode {
+	resolveRecord: ResolveRecordData<unknown>,
+): resolveRecord is RootResolveRecordData {
 	return resolveRecord.type === ResolveRecordTypeEnum.root;
 }
 
 export function isResolveMessageRecord(
-	resolveRecord: ResolveRecordNode<unknown>,
-): resolveRecord is MessageResolveRecordNode {
+	resolveRecord: ResolveRecordData<unknown>,
+): resolveRecord is MessageResolveRecordData {
 	return resolveRecord.type === ResolveRecordTypeEnum.message;
 }
 
 // check two resolve record is equal, for check cycle reference
 export function isEqualServiceIdentifierResolveRecord(
-	aResolveRecord: ResolveRecordNode<unknown>,
-	bResolveRecord: ResolveRecordNode<unknown>,
+	aResolveRecord: ResolveRecordData<unknown>,
+	bResolveRecord: ResolveRecordData<unknown>,
 ): boolean {
 	const bothIsResolveIdentifierRecord =
 		isResolveServiceIdentifierRecord(aResolveRecord) &&
@@ -125,7 +125,7 @@ export function isEqualServiceIdentifierResolveRecord(
 }
 
 export function getResolveRecordName(
-	resolveRecord: ResolveRecordNode<unknown>,
+	resolveRecord: ResolveRecordData<unknown>,
 ) {
 	if (isResolveRootRecord(resolveRecord)) {
 		return "Start Resolve";
@@ -145,16 +145,16 @@ export function getResolveRecordName(
 const ResolvePathSeparator = " -> ";
 export interface GetResolveRecordMessageOptions {
 	message: string;
-	paths: Array<ResolveRecordNode<unknown>>;
-	cycleNode?: ResolveRecordNode<unknown>;
+	paths: Array<ResolveRecordData<unknown>>;
+	cycleNode?: ResolveRecordData<unknown>;
 }
 export function getResolveRecordMessage(
 	options: GetResolveRecordMessageOptions,
 ): string {
 	const { message, paths, cycleNode } = options;
 
-	const resolvePaths: Array<ServiceIdentifierResolveRecordNode<unknown>> = [];
-	const resolveDetails: Array<ResolveRecordNode<unknown>> = [];
+	const resolvePaths: Array<ServiceIdentifierResolveRecordData<unknown>> = [];
+	const resolveDetails: Array<ResolveRecordData<unknown>> = [];
 
 	for (const it of paths) {
 		if (isResolveServiceIdentifierRecord(it)) {
