@@ -168,5 +168,5 @@ export interface IContainer extends IUnique, IDisposable, IDisplayName {
 }
 
 export interface IInternalContainer extends IContainer {
-	readonly _internalResolveContext: MutableRef<ResolveContext>;
+	readonly _internalResolveContextRef: MutableRef<ResolveContext>;
 }
