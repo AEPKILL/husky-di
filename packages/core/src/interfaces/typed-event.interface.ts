@@ -17,7 +17,7 @@ export interface ITypedEvent<
 	on<EventName extends keyof Events>(
 		eventName: EventName,
 		listener: Events[EventName],
-	): void;
+	): IDisposable;
 	off<EventName extends keyof Events>(
 		eventName: EventName,
 		listener: Events[EventName],

@@ -8,7 +8,6 @@ import { LifecycleEnum } from "@/enums/lifecycle.enum";
 import { RegistrationTypeEnum } from "@/enums/registration-type.enum";
 import { ResolveRecordTypeEnum } from "@/enums/resolve-record-type.enum";
 import { ResolveException } from "@/exceptions/resolve.exception";
-import { Disposable } from "@/impls/Disposable";
 import { DisposableRegistry } from "@/impls/DisposableRegistry";
 import { InstanceDynamicRef } from "@/impls/InstanceDynamicRef";
 import { InstanceRef } from "@/impls/InstanceRef";
@@ -53,7 +52,10 @@ const assertNotDisposed = createAssertNotDisposed("Container");
  * 依赖注入容器实现类
  * 提供服务的注册、解析和管理功能
  */
-export class Container extends Disposable implements IInternalContainer {
+export class Container
+	extends DisposableRegistry
+	implements IInternalContainer
+{
 	public readonly id: string;
 
 	public get name(): string {
@@ -87,7 +89,7 @@ export class Container extends Disposable implements IInternalContainer {
 	 */
 	private readonly _resolveMiddlewareChain: MiddlewareChain<
 		ResolveMiddlewareParams<unknown, ResolveOptions<unknown>>,
-		// biome-ignore lint/suspicious/noExplicitAny: 需要支持任意类型的中间件返回值
+		// biome-ignore lint/suspicious/noExplicitAny: should use any type to avoid type errors
 		any
 	>;
 
@@ -103,7 +105,6 @@ export class Container extends Disposable implements IInternalContainer {
 		this._registry = new Registry();
 		this._parent = parent;
 
-		// 初始化默认的解析中间件链
 		this._resolveMiddlewareChain = new MiddlewareChain(
 			(params) => {
 				return this._resolveRegistration(params);
@@ -116,6 +117,11 @@ export class Container extends Disposable implements IInternalContainer {
 		this._resolveContext = {};
 
 		this._disposableRegistry.addDisposable(this._resolveMiddlewareChain);
+
+		this.addCleanup(() => {
+			this._disposableRegistry.dispose();
+			this._registry.clear();
+		});
 	}
 
 	/**
@@ -328,12 +334,6 @@ export class Container extends Disposable implements IInternalContainer {
 	 */
 	public getServiceIdentifiers(): ServiceIdentifier<unknown>[] {
 		return this._registry.keys();
-	}
-
-	public dispose(): void {
-		this._disposableRegistry.dispose();
-		this._registry.clear();
-		super.dispose();
 	}
 
 	/**

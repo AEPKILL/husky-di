@@ -45,12 +45,13 @@ alwaysApply: true
 
 ### 6. Early Return Pattern
 
-- Use early return pattern to reduce nesting and improve code readability
+- **Functions should prefer early returns** to reduce nesting and improve code readability
 - Return early for edge cases and invalid conditions
 - Use continue in loops when conditions are met early
 - Avoid deep nesting by handling special cases first
 - Extract complex conditional logic into separate methods when appropriate
 - Extract complex conditions into descriptive variables for better readability
+- Prefer early return over nested if-else statements
 
 ## Import and Export Rules
 

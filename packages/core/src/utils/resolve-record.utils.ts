@@ -92,7 +92,10 @@ export function isResolveMessageRecord(
 	return resolveRecord.type === ResolveRecordTypeEnum.message;
 }
 
-// check two resolve record is equal, for check cycle reference
+/**
+ * Checks if two service identifier resolve records are equal.
+ * Used for detecting circular dependencies during resolution.
+ */
 export function isEqualServiceIdentifierResolveRecord(
 	aResolveRecord: ResolveRecordData<unknown>,
 	bResolveRecord: ResolveRecordData<unknown>,

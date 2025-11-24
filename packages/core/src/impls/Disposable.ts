@@ -6,8 +6,15 @@
 
 import type { IDisposable } from "@/interfaces/disposable.interface";
 
+export type Cleanup = () => void;
+
 export class Disposable implements IDisposable {
 	private _disposed: boolean = false;
+	private _cleanup?: Cleanup;
+
+	constructor(cleanup?: Cleanup) {
+		this._cleanup = cleanup;
+	}
 
 	public get disposed(): boolean {
 		return this._disposed;
@@ -19,5 +26,6 @@ export class Disposable implements IDisposable {
 		}
 
 		this._disposed = true;
+		this._cleanup?.();
 	}
 }
