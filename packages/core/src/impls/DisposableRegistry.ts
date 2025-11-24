@@ -4,18 +4,15 @@
  * @created 2025-07-29 22:35:26
  */
 
-import { type Cleanup, Disposable } from "@/impls/Disposable";
-import type { IDisposable } from "@/interfaces/disposable.interface";
+import type { Cleanup, IDisposable } from "@/interfaces/disposable.interface";
 import { toDisposed } from "@/utils/disposable.utils";
 
-export class DisposableRegistry extends Disposable implements IDisposable {
+export class DisposableRegistry implements IDisposable {
+	private _disposed: boolean = false;
 	private _disposables: Set<IDisposable> = new Set();
 
-	constructor() {
-		super(() => {
-			this._disposables.forEach((disposable) => disposable.dispose());
-			this._disposables.clear();
-		});
+	public get disposed(): boolean {
+		return this._disposed;
 	}
 
 	public addDisposable(disposable: IDisposable): void {
@@ -24,5 +21,23 @@ export class DisposableRegistry extends Disposable implements IDisposable {
 
 	public addCleanup(cleanup: Cleanup): void {
 		this._disposables.add(toDisposed(cleanup));
+	}
+
+	public dispose(): void {
+		if (this._disposed) {
+			return;
+		}
+
+		this._disposed = true;
+
+		for (const disposable of this._disposables) {
+			if (disposable.disposed) {
+				continue;
+			}
+			try {
+				disposable.dispose();
+			} catch {}
+		}
+		this._disposables.clear();
 	}
 }
