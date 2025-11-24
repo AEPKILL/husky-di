@@ -9,7 +9,7 @@ import type { IContainer } from "@/interfaces/container.interface";
 import type {
 	CycleNodeInfo,
 	IInternalResolveRecord,
-	ResolveRecordNode,
+	ResolveRecordData,
 	ResolveRecordTreeNode,
 } from "@/interfaces/resolve-record.interface";
 import {
@@ -58,7 +58,7 @@ export class ResolveRecord implements IInternalResolveRecord {
 		this._current = this._root;
 	}
 
-	addRecordNode(node: ResolveRecordNode<unknown>): void {
+	addRecordNode(node: ResolveRecordData<unknown>): void {
 		const current = {
 			id: this._generateTreeNodeId(),
 			value: node,

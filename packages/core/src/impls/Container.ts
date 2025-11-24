@@ -4,14 +4,14 @@
  * @created 2025-07-29 22:30:35
  */
 
-import { DisposableRegistry } from "@/classes/DisposableRegistry";
-import { InstanceDynamicRef } from "@/classes/InstanceDynamicRef";
-import { InstanceRef } from "@/classes/InstanceRef";
 import { LifecycleEnum } from "@/enums/lifecycle.enum";
 import { RegistrationTypeEnum } from "@/enums/registration-type.enum";
 import { ResolveRecordTypeEnum } from "@/enums/resolve-record-type.enum";
 import { ResolveException } from "@/exceptions/resolve.exception";
 import { Disposable } from "@/impls/Disposable";
+import { DisposableRegistry } from "@/impls/DisposableRegistry";
+import { InstanceDynamicRef } from "@/impls/InstanceDynamicRef";
+import { InstanceRef } from "@/impls/InstanceRef";
 import { MiddlewareChain } from "@/impls/MiddlewareChain";
 import { Registration } from "@/impls/Registration";
 import { Registry } from "@/impls/Registry";

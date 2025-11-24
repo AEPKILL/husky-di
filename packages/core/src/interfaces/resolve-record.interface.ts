@@ -1,28 +1,28 @@
 /**
- * @overview 依赖解析记录相关的类型定义
+ * @overview Type definitions for dependency resolution records
  * @author AEPKILL
  * @created 2025-07-29 22:55:24
  *
- * 类型关系说明：
+ * Type relationship overview:
  *
- * 1. ResolveRecordNode<T> - 解析记录节点（叶子节点）
- *    - RootResolveRecordNode: 根节点，表示解析开始
- *    - MessageResolveRecordNode: 消息节点，用于记录解析过程中的消息
- *    - ServiceIdentifierResolveRecordNode<T>: 服务标识符节点，记录具体的服务解析
+ * 1. ResolveRecordData<T> - Resolution record data (data part)
+ *    - RootResolveRecordData: Root resolution record data, represents the start of resolution
+ *    - MessageResolveRecordData: Message resolution record data, used to record messages during resolution
+ *    - ServiceIdentifierResolveRecordData<T>: Service identifier resolution record data, records specific service resolution
  *
- * 2. ResolveRecordTreeNode<T> - 解析记录树节点（树结构）
- *    - 包含父子关系，形成树形结构
- *    - 每个节点包含一个 ResolveRecordNode<T> 作为值
- *    - 用于追踪依赖解析的完整路径
+ * 2. ResolveRecordTreeNode<T> - Resolution record tree node (tree structure)
+ *    - Contains parent-child relationships, forming a tree structure
+ *    - Each node contains a ResolveRecordData<T> as its value
+ *    - Used to track the complete path of dependency resolution
  *
- * 3. IResolveRecord - 解析记录接口
- *    - 管理整个解析过程的状态
- *    - 提供当前节点、根节点访问
- *    - 支持添加节点、检测循环引用、获取路径等功能
+ * 3. IResolveRecord - Resolution record interface
+ *    - Manages the state of the entire resolution process
+ *    - Provides access to current node and root node
+ *    - Supports adding nodes, detecting circular references, getting paths, etc.
  *
- * 4. IInternalResolveRecord - 内部解析记录接口
- *    - 扩展 IResolveRecord，添加设置当前节点的功能
- *    - 主要用于内部实现
+ * 4. IInternalResolveRecord - Internal resolution record interface
+ *    - Extends IResolveRecord, adds functionality to set current node
+ *    - Mainly used for internal implementation
  */
 
 import type { ResolveRecordTypeEnum } from "@/enums/resolve-record-type.enum";
@@ -33,32 +33,32 @@ import type {
 import type { IUnique } from "@/interfaces/unique.interface";
 import type { ServiceIdentifier } from "@/types/service-identifier.type";
 
-export type RootResolveRecordNode = {
+export type RootResolveRecordData = {
 	readonly type: ResolveRecordTypeEnum.root;
 	readonly container: IContainer;
 };
 
-export type MessageResolveRecordNode = {
+export type MessageResolveRecordData = {
 	readonly type: ResolveRecordTypeEnum.message;
 	readonly message: string;
 };
 
-export type ServiceIdentifierResolveRecordNode<T> = {
+export type ServiceIdentifierResolveRecordData<T> = {
 	readonly type: ResolveRecordTypeEnum.serviceIdentifier;
 	readonly serviceIdentifier: ServiceIdentifier<T>;
 	readonly resolveOptions: ResolveOptions<T>;
 	readonly container: IContainer;
 };
 
-export type ResolveRecordNode<T> =
-	| RootResolveRecordNode
-	| MessageResolveRecordNode
-	| ServiceIdentifierResolveRecordNode<T>;
+export type ResolveRecordData<T> =
+	| RootResolveRecordData
+	| MessageResolveRecordData
+	| ServiceIdentifierResolveRecordData<T>;
 
 export type ResolveRecordTreeNode<T> = {
 	readonly parent?: ResolveRecordTreeNode<T>;
 	readonly children: Array<ResolveRecordTreeNode<T>>;
-	readonly value: ResolveRecordNode<T>;
+	readonly value: ResolveRecordData<T>;
 } & IUnique;
 
 export type CycleNodeInfo = {
@@ -69,7 +69,7 @@ export interface IResolveRecord extends IUnique {
 	readonly current: ResolveRecordTreeNode<unknown>;
 	readonly root: ResolveRecordTreeNode<unknown>;
 
-	addRecordNode(node: ResolveRecordNode<unknown>): void;
+	addRecordNode(node: ResolveRecordData<unknown>): void;
 
 	getCycleNodeInfo(): undefined | CycleNodeInfo;
 

@@ -32,11 +32,11 @@ export type {
 	CreateValueRegistrationOptions,
 } from "@/interfaces/registration.interface";
 export type {
-	MessageResolveRecordNode,
-	ResolveRecordNode,
+	MessageResolveRecordData as MessageResolveRecordNode,
+	ResolveRecordData,
 	ResolveRecordTreeNode,
-	RootResolveRecordNode,
-	ServiceIdentifierResolveRecordNode,
+	RootResolveRecordData as RootResolveRecordNode,
+	ServiceIdentifierResolveRecordData as ServiceIdentifierResolveRecordNode,
 } from "@/interfaces/resolve-record.interface";
 export type { IUnique } from "@/interfaces/unique.interface";
 export { globalMiddleware } from "@/shared/instances";
