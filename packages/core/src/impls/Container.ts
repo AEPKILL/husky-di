@@ -70,8 +70,8 @@ export class Container
 		return this._parent;
 	}
 
-	public get _internalResolveContext(): MutableRef<ResolveContext> {
-		return this._resolveContext;
+	public get _internalResolveContextRef(): MutableRef<ResolveContext> {
+		return this._resolveContextRef;
 	}
 
 	private readonly _registry: Registry;
@@ -80,9 +80,7 @@ export class Container
 
 	private readonly _name: string;
 
-	private readonly _disposableRegistry: DisposableRegistry;
-
-	private readonly _resolveContext: MutableRef<ResolveContext>;
+	private readonly _resolveContextRef: MutableRef<ResolveContext>;
 
 	/**
 	 * 中间件
@@ -113,13 +111,10 @@ export class Container
 			[],
 		);
 
-		this._disposableRegistry = new DisposableRegistry();
-		this._resolveContext = {};
+		this._resolveContextRef = { current: undefined };
 
-		this._disposableRegistry.addDisposable(this._resolveMiddlewareChain);
-
+		this.addDisposable(this._resolveMiddlewareChain);
 		this.addCleanup(() => {
-			this._disposableRegistry.dispose();
 			this._registry.clear();
 		});
 	}
@@ -248,7 +243,7 @@ export class Container
 		} finally {
 			if (isRootResolveRecord) {
 				resetResolveRecord();
-				this._resolveContext.current = undefined;
+				this._resolveContextRef.current = undefined;
 			}
 		}
 	}
@@ -465,11 +460,11 @@ export class Container
 		refType: "ref" | "dynamic",
 	): ResolveInstance<T, O> {
 		const current = resolveRecord.current;
-		const resolveContext = this._resolveContext.current;
+		const resolveContext = this._resolveContextRef.current;
 
 		const instance = new RefClass(() => {
 			try {
-				this._resolveContext.current = resolveContext;
+				this._resolveContextRef.current = resolveContext;
 				setResolveRecord(resolveRecord);
 				resolveRecord._internalSetCurrent(current);
 				return this.resolve(serviceIdentifier, {
@@ -478,7 +473,7 @@ export class Container
 				} as ResolveOptions<T>) as T;
 			} finally {
 				resetResolveRecord();
-				this._resolveContext.current = undefined;
+				this._resolveContextRef.current = undefined;
 			}
 		}) as ResolveInstance<T, O>;
 
@@ -553,10 +548,10 @@ export class Container
 	}
 
 	private _getResolveContext(): ResolveContext {
-		if (!this._resolveContext.current) {
-			this._resolveContext.current = new Map();
+		if (!this._resolveContextRef.current) {
+			this._resolveContextRef.current = new Map();
 		}
-		return this._resolveContext.current;
+		return this._resolveContextRef.current;
 	}
 
 	static rootContainer: IContainer = new Container("Root");
