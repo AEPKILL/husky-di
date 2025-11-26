@@ -1,5 +1,5 @@
 {
-	"cSpell.words": ["impls", "paramtypes", "rslib"],
+	"cSpell.words": ["impls", "lifecycles", "paramtypes", "rslib"],
 	"editor.formatOnSave": true,
 	"editor.defaultFormatter": "biomejs.biome",
 	"editor.codeActionsOnSave": {
