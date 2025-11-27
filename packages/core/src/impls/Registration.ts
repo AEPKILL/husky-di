@@ -139,38 +139,4 @@ export class Registration<T> implements IInternalRegistration<T>, IDisplayName {
 	public _internalSetInstance(instance: T): void {
 		this._instance = instance;
 	}
-
-	/**
-	 * Gets an extra property value by key
-	 * @param key The property key
-	 * @returns The property value if found, otherwise undefined
-	 */
-	public getExtra<T>(key: string | symbol): T | undefined {
-		return this._extras.get(key) as T | undefined;
-	}
-
-	/**
-	 * Sets an extra property value
-	 * @param key The property key
-	 * @param value The property value
-	 */
-	public setExtra<T>(key: string | symbol, value: T): void {
-		this._extras.set(key, value);
-	}
-
-	/**
-	 * Deletes an extra property by key
-	 * @param key The property key to delete
-	 */
-	public deleteExtra(key: string | symbol): void {
-		this._extras.delete(key);
-	}
-
-	/**
-	 * Gets all extra property keys
-	 * @returns An array of all property keys
-	 */
-	public getExtraKeys(): Array<string | symbol> {
-		return Array.from(this._extras.keys());
-	}
 }

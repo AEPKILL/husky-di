@@ -59,12 +59,6 @@ export interface IRegistration<T> extends IUnique {
 		| CreateAliasRegistrationOptions<T>["useAlias"];
 
 	readonly getContainer?: () => IContainer;
-
-	/** 下列设计是给 Middleware 传递数据的 */
-	getExtra<T>(key: string | symbol): T | undefined;
-	setExtra<T>(key: string | symbol, value: T): void;
-	deleteExtra(key: string | symbol): void;
-	getExtraKeys(): Array<string | symbol>;
 }
 
 export interface IInternalRegistration<T> extends IRegistration<T> {
