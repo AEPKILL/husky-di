@@ -1,5 +1,11 @@
 /**
- * @overview 服务标识符工具函数
+ * Utility functions for service identifiers.
+ *
+ * @overview
+ * Provides helper functions for working with service identifiers, including
+ * creating type-safe identifiers, checking if values are valid identifiers,
+ * and extracting human-readable names from identifiers.
+ *
  * @author AEPKILL
  * @created 2025-06-24 23:06:55
  */
@@ -7,12 +13,11 @@
 import type { ServiceIdentifier } from "@/types/service-identifier.type";
 
 /**
- * 创建服务标识符
- * 将字符串或Symbol转换为类型安全的ServiceIdentifier
+ * Creates a type-safe service identifier from a string or symbol.
  *
- * @template T 服务类型
- * @param id 标识符，可以是字符串或Symbol
- * @returns 类型安全的服务标识符
+ * @typeParam T - The service type
+ * @param id - The identifier, either a string or symbol
+ * @returns A type-safe service identifier
  *
  * @example
  * ```typescript
@@ -27,17 +32,20 @@ export function createServiceIdentifier<T>(
 }
 
 /**
- * 检查值是否为有效的服务标识符
- * 类型守卫函数，用于运行时类型检查
+ * Type guard to check if a value is a valid service identifier.
  *
- * @template T 服务类型
- * @param serviceIdentifier 待检查的值
- * @returns 如果是有效的服务标识符返回true，否则返回false
+ * @remarks
+ * A type guard function for runtime type checking. Returns true if the value
+ * is a function, symbol, or string, which are the valid types for service identifiers.
+ *
+ * @typeParam T - The service type
+ * @param serviceIdentifier - The value to check
+ * @returns True if the value is a valid service identifier, false otherwise
  *
  * @example
  * ```typescript
  * if (isServiceIdentifier(someValue)) {
- *   // someValue 现在被推断为 ServiceIdentifier<T>
+ *   // someValue is now inferred as ServiceIdentifier<T>
  *   console.log('This is a valid service identifier');
  * }
  * ```
@@ -53,11 +61,15 @@ export function isServiceIdentifier<T>(
 }
 
 /**
- * 获取服务标识符的可读名称
- * 从不同类型的服务标识符中提取可读的字符串名称
+ * Gets a human-readable name from a service identifier.
  *
- * @param serviceIdentifier 服务标识符
- * @returns 服务标识符的字符串表示
+ * @remarks
+ * Extracts a readable string representation from different types of service
+ * identifiers. For functions, uses the function name; for symbols, uses the
+ * description or string representation; for strings, returns the string itself.
+ *
+ * @param serviceIdentifier - The service identifier
+ * @returns A string representation of the service identifier
  *
  * @example
  * ```typescript

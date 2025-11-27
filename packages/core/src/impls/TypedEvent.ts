@@ -1,5 +1,11 @@
 /**
+ * Typed event emitter implementation.
+ *
  * @overview
+ * Implements a type-safe event emitter that provides compile-time type checking
+ * for event names and their corresponding listener signatures. Extends
+ * DisposableRegistry to automatically clean up listeners on disposal.
+ *
  * @author AEPKILL
  * @created 2025-07-26 23:58:33
  */
@@ -10,6 +16,16 @@ import type { ITypedEvent } from "@/interfaces/typed-event.interface";
 import { createAssertNotDisposed, toDisposed } from "@/utils/disposable.utils";
 
 const assertNotDisposed = createAssertNotDisposed("TypedEvent");
+
+/**
+ * Type-safe event emitter implementation.
+ *
+ * @typeParam Events - A record mapping event names to their listener function signatures
+ *
+ * @remarks
+ * Provides type-safe event emission and listening. When disposed, all listeners
+ * are automatically cleared to prevent memory leaks.
+ */
 export class TypedEvent<
 		// biome-ignore lint/suspicious/noExplicitAny: any
 		Events extends Record<string | symbol, (...args: any[]) => void>,
@@ -28,9 +44,11 @@ export class TypedEvent<
 	}
 
 	/**
-	 * 触发指定事件
-	 * @param eventName 事件名称
-	 * @param args 传递给监听器的参数
+	 * Emits an event with the given name and arguments.
+	 *
+	 * @typeParam EventName - The name of the event to emit
+	 * @param eventName - The name of the event
+	 * @param args - The arguments to pass to event listeners
 	 */
 	public emit<EventName extends keyof Events>(
 		eventName: EventName,
@@ -47,9 +65,12 @@ export class TypedEvent<
 	}
 
 	/**
-	 * 注册事件监听器
-	 * @param eventName 事件名称
-	 * @param listener 监听器函数
+	 * Registers an event listener.
+	 *
+	 * @typeParam EventName - The name of the event to listen to
+	 * @param eventName - The name of the event
+	 * @param listener - The listener function to call when the event is emitted
+	 * @returns A disposable object that can be used to remove the listener
 	 */
 	public on<EventName extends keyof Events>(
 		eventName: EventName,
@@ -67,9 +88,11 @@ export class TypedEvent<
 	}
 
 	/**
-	 * 移除事件监听器
-	 * @param eventName 事件名称
-	 * @param listener 要移除的监听器函数
+	 * Removes an event listener.
+	 *
+	 * @typeParam EventName - The name of the event
+	 * @param eventName - The name of the event
+	 * @param listener - The listener function to remove
 	 */
 	public off<EventName extends keyof Events>(
 		eventName: EventName,
