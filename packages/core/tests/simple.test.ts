@@ -1,15 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
-	type CreateAliasRegistrationOptions,
-	type CreateClassRegistrationOptions,
-	type CreateFactoryRegistrationOptions,
-	type CreateValueRegistrationOptions,
 	createContainer,
 	createServiceIdentifier,
 	globalMiddleware,
 	type IContainer,
-	type IsRegisteredOptions,
-	type ResolveOptions,
 	rootContainer,
 } from "../src/index";
 import { clearContainer, clearMiddleware } from "./test.utils";
@@ -34,7 +28,7 @@ describe("Container", () => {
 
 			// Assert
 			expect(container).toBeDefined();
-			expect(container.name).toBe("DefaultContainer");
+			expect(container.name).toBe("AnonymousContainer");
 			expect(container.parent).toBe(rootContainer);
 		});
 
@@ -73,7 +67,9 @@ describe("Container", () => {
 			const container = createContainer(containerName);
 
 			// Assert
-			expect(container.displayName).toBe(`${containerName}#${container.id}`);
+			expect(container.displayName).toBe(
+				`${containerName}#${String(container.id)}`,
+			);
 		});
 
 		it("should correctly set parent containers", () => {
