@@ -319,7 +319,7 @@ describe("Decorator Module", () => {
 			expect(() => {
 				container.resolve(TestService);
 			}).toThrow(
-				/Failed to resolve service identifier "FailingService" in "DefaultContainer#CONTAINER-\d+": Service initialization failed/,
+				/Failed to resolve service identifier "FailingService" in "AnonymousContainer#CONTAINER-\d+": Service initialization failed/,
 			);
 		});
 

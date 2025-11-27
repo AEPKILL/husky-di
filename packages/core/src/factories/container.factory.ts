@@ -16,7 +16,7 @@ import type { IContainer } from "@/interfaces/container.interface";
 /**
  * Creates a new container instance.
  *
- * @param name - The display name for the container (default: "DefaultContainer")
+ * @param name - The display name for the container (default: "AnonymousContainer")
  * @param parent - Optional parent container. If not provided, uses the root container
  * @returns A new container instance
  *
@@ -30,7 +30,7 @@ import type { IContainer } from "@/interfaces/container.interface";
  * ```
  */
 export function createContainer(
-	name: string = "DefaultContainer",
+	name: string = "AnonymousContainer",
 	parent?: IContainer,
 ): IContainer {
 	return new Container(name, parent ?? Container.rootContainer);
