@@ -132,7 +132,7 @@ export class Container
 	 * @param name - Human-readable name for the container, used for debugging and error messages
 	 * @param parent - Optional parent container for hierarchical service resolution
 	 */
-	constructor(name: string = "DefaultContainer", parent?: IContainer) {
+	constructor(name: string = "AnonymousContainer", parent?: IContainer) {
 		super();
 
 		this.id = createContainerId();
