@@ -1,5 +1,12 @@
 /**
+ * Registry implementation for managing service registrations.
+ *
  * @overview
+ * Implements the IRegistry interface to store and manage service registrations
+ * in a dependency injection container. Supports multiple registrations per
+ * service identifier, allowing for scenarios where multiple implementations
+ * of the same service are registered.
+ *
  * @author AEPKILL
  * @created 2025-07-27 21:03:11
  */
@@ -9,13 +16,17 @@ import type { IRegistry } from "@/interfaces/registry.interface";
 import type { ServiceIdentifier } from "@/types/service-identifier.type";
 
 /**
- * 服务注册表实现类
- * 用于管理依赖注入容器的服务注册信息
+ * Registry implementation class.
+ *
+ * @remarks
+ * Manages service registrations using a Map structure where each service
+ * identifier can have multiple registrations. The get() method returns the
+ * most recently registered service (last in the array).
  */
 export class Registry implements IRegistry {
 	/**
-	 * 存储服务注册信息的 Map
-	 * key: ServiceIdentifier, value: Registration[]
+	 * Map storing service registrations.
+	 * Key: ServiceIdentifier, Value: Array of IRegistration
 	 */
 	private readonly _registrationMap = new Map<
 		ServiceIdentifier<unknown>,
@@ -23,9 +34,11 @@ export class Registry implements IRegistry {
 	>();
 
 	/**
-	 * 获取指定服务的注册信息
-	 * @param serviceIdentifier 服务标识符
-	 * @returns 服务注册信息
+	 * Gets the most recent registration for a service identifier.
+	 *
+	 * @typeParam T - The service type
+	 * @param serviceIdentifier - The service identifier to look up
+	 * @returns The most recent registration, or undefined if not found
 	 */
 	get<T>(
 		serviceIdentifier: ServiceIdentifier<T>,
@@ -38,8 +51,11 @@ export class Registry implements IRegistry {
 	}
 
 	/**
-	 * 获取所有已注册的服务信息
-	 * @returns 所有服务注册信息的数组
+	 * Gets all registrations for a service identifier.
+	 *
+	 * @typeParam T - The service type
+	 * @param serviceIdentifier - The service identifier to look up
+	 * @returns An array of all registrations for the identifier
 	 */
 	getAll<T>(serviceIdentifier: ServiceIdentifier<T>): Array<IRegistration<T>> {
 		const registrations = this._registrationMap.get(serviceIdentifier);
@@ -47,18 +63,22 @@ export class Registry implements IRegistry {
 	}
 
 	/**
-	 * 检查指定服务是否已注册
-	 * @param serviceIdentifier 服务标识符
-	 * @returns 是否已注册
+	 * Checks if a service identifier has any registrations.
+	 *
+	 * @typeParam T - The service type
+	 * @param serviceIdentifier - The service identifier to check
+	 * @returns True if the identifier has registrations, false otherwise
 	 */
 	has<T>(serviceIdentifier: ServiceIdentifier<T>): boolean {
 		return this._registrationMap.has(serviceIdentifier);
 	}
 
 	/**
-	 * 设置服务注册信息
-	 * @param serviceIdentifier 服务标识符
-	 * @param registration 服务注册信息
+	 * Adds a registration for a service identifier.
+	 *
+	 * @typeParam T - The service type
+	 * @param serviceIdentifier - The service identifier to register
+	 * @param registration - The registration to add
 	 */
 	set<T>(
 		serviceIdentifier: ServiceIdentifier<T>,
@@ -72,8 +92,11 @@ export class Registry implements IRegistry {
 	}
 
 	/**
-	 * 批量设置服务注册信息
-	 * @param registrations 服务注册信息数组
+	 * Sets all registrations for a service identifier, replacing existing ones.
+	 *
+	 * @typeParam T - The service type
+	 * @param serviceIdentifier - The service identifier to register
+	 * @param registrations - The array of registrations to set
 	 */
 	setAll<T>(
 		serviceIdentifier: ServiceIdentifier<T>,
@@ -83,23 +106,26 @@ export class Registry implements IRegistry {
 	}
 
 	/**
-	 * 移除指定服务的注册信息
-	 * @param serviceIdentifier 服务标识符
+	 * Removes all registrations for a service identifier.
+	 *
+	 * @typeParam T - The service type
+	 * @param serviceIdentifier - The service identifier to remove
 	 */
 	remove<T>(serviceIdentifier: ServiceIdentifier<T>): void {
 		this._registrationMap.delete(serviceIdentifier);
 	}
 
 	/**
-	 * 清空所有注册信息
+	 * Clears all registrations from the registry.
 	 */
 	clear(): void {
 		this._registrationMap.clear();
 	}
 
 	/**
-	 * 获取所有已注册的服务标识符
-	 * @returns 服务标识符数组
+	 * Gets all registered service identifiers.
+	 *
+	 * @returns An array of all service identifiers that have registrations
 	 */
 	keys(): ServiceIdentifier<unknown>[] {
 		return Array.from(this._registrationMap.keys());

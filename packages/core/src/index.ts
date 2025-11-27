@@ -1,5 +1,11 @@
 /**
+ * Core dependency injection library exports.
+ *
  * @overview
+ * This is the main entry point for the husky-di core package. It exports
+ * all public APIs including containers, types, interfaces, utilities, and
+ * factory functions needed to use the dependency injection system.
+ *
  * @author AEPKILL
  * @created 2025-07-30 22:40:39
  */
