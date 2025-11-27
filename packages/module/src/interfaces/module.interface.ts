@@ -40,9 +40,9 @@ export interface IModule
 			"resolve" | "isRegistered" | "getServiceIdentifiers" | "use" | "unused"
 		> {
 	readonly name: string;
-	readonly declarations?: Declaration<unknown>[];
-	readonly imports?: Array<IModule | ModuleWithAliases>;
-	readonly exports?: ServiceIdentifier<unknown>[];
+	readonly declarations?: ReadonlyArray<Declaration<unknown>>;
+	readonly imports?: ReadonlyArray<IModule | ModuleWithAliases>;
+	readonly exports?: ReadonlyArray<ServiceIdentifier<unknown>>;
 	readonly container: IContainer;
 	withAliases(aliases: Alias[]): ModuleWithAliases;
 }
