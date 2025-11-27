@@ -327,37 +327,35 @@ export class Module implements IModule {
 	private normalizeImports(
 		imports: ReadonlyArray<IModule | ModuleWithAliases>,
 	): NormalizedImport[] {
-		const result: NormalizedImport[] = [];
-
-		for (const item of imports) {
+		return imports.flatMap((item) => {
 			const module = this.isModuleWithAliases(item) ? item.module : item;
 			const aliases = this.isModuleWithAliases(item) ? item.aliases : undefined;
+			const aliasMap = this.buildAliasMap(aliases);
 
-			// Get exported services from the module
-			const exportedServices = module.exports ?? [];
+			return (module.exports ?? []).map((serviceIdentifier) => ({
+				module,
+				serviceIdentifier,
+				as: aliasMap.get(serviceIdentifier) ?? serviceIdentifier,
+			}));
+		});
+	}
 
-			// Build alias map if aliases exist
-			const aliasMap = new Map<
-				ServiceIdentifier<unknown>,
-				ServiceIdentifier<unknown>
-			>();
-			if (aliases && aliases.length > 0) {
-				for (const alias of aliases) {
-					aliasMap.set(alias.serviceIdentifier, alias.as);
-				}
-			}
-
-			// Add all exported services with their effective names (aliased or original)
-			for (const serviceIdentifier of exportedServices) {
-				result.push({
-					module,
-					serviceIdentifier,
-					as: aliasMap.get(serviceIdentifier) ?? serviceIdentifier,
-				});
-			}
-		}
-
-		return result;
+	/**
+	 * Builds a map of service identifier aliases from an alias array.
+	 *
+	 * @param aliases - Array of alias mappings
+	 * @returns Map from source service identifier to target service identifier
+	 *
+	 * @remarks
+	 * This method is used throughout the validation and registration process
+	 * to consistently apply alias transformations.
+	 */
+	private buildAliasMap(
+		aliases: Alias[] | undefined,
+	): Map<ServiceIdentifier<unknown>, ServiceIdentifier<unknown>> {
+		return new Map(
+			(aliases ?? []).map((alias) => [alias.serviceIdentifier, alias.as]),
+		);
 	}
 
 	/**
@@ -456,45 +454,23 @@ export class Module implements IModule {
 	 * This is used by validateExports to ensure only available services are exported.
 	 */
 	private collectAvailableServices(): Set<ServiceIdentifier<unknown>> {
-		const available = new Set<ServiceIdentifier<unknown>>();
+		// Collect local declarations
+		const localServices = (this._declarations ?? []).map(
+			(decl) => decl.serviceIdentifier,
+		);
 
-		// Add local declarations
-		if (this._declarations) {
-			for (const decl of this._declarations) {
-				available.add(decl.serviceIdentifier);
-			}
-		}
+		// Collect imported services with effective names (considering aliases)
+		const importedServices = (this._imports ?? []).flatMap((item) => {
+			const module = this.isModuleWithAliases(item) ? item.module : item;
+			const aliases = this.isModuleWithAliases(item) ? item.aliases : undefined;
+			const aliasMap = this.buildAliasMap(aliases);
 
-		// Add imported services (considering aliases)
-		if (this._imports) {
-			for (const item of this._imports) {
-				const module = this.isModuleWithAliases(item) ? item.module : item;
-				const aliases = this.isModuleWithAliases(item)
-					? item.aliases
-					: undefined;
+			return (module.exports ?? []).map(
+				(serviceId) => aliasMap.get(serviceId) ?? serviceId,
+			);
+		});
 
-				const exportedServices = module.exports ?? [];
-
-				// Build alias map if aliases exist
-				const aliasMap = new Map<
-					ServiceIdentifier<unknown>,
-					ServiceIdentifier<unknown>
-				>();
-				if (aliases && aliases.length > 0) {
-					for (const alias of aliases) {
-						aliasMap.set(alias.serviceIdentifier, alias.as);
-					}
-				}
-
-				// Add services with their effective names (aliased or original)
-				for (const serviceId of exportedServices) {
-					const effectiveName = aliasMap.get(serviceId) ?? serviceId;
-					available.add(effectiveName);
-				}
-			}
-		}
-
-		return available;
+		return new Set([...localServices, ...importedServices]);
 	}
 
 	/**
@@ -555,30 +531,22 @@ export class Module implements IModule {
 		}
 
 		// Collect all locally declared service identifiers
-		const localDeclarations = new Set<ServiceIdentifier<unknown>>();
-		for (const decl of this._declarations) {
-			localDeclarations.add(decl.serviceIdentifier);
-		}
+		const localDeclarations = new Set(
+			(this._declarations ?? []).map((decl) => decl.serviceIdentifier),
+		);
 
 		// Check each import for alias conflicts
-		for (const item of this._imports) {
-			if (!this.isModuleWithAliases(item)) {
-				continue;
-			}
+		const conflictingAlias = (this._imports ?? [])
+			.filter((item): item is ModuleWithAliases =>
+				this.isModuleWithAliases(item),
+			)
+			.flatMap((item) => item.aliases ?? [])
+			.find((alias) => localDeclarations.has(alias.as));
 
-			const { aliases } = item;
-			if (!aliases || aliases.length === 0) {
-				continue;
-			}
-
-			// Check if any alias name conflicts with local declarations
-			for (const alias of aliases) {
-				if (localDeclarations.has(alias.as)) {
-					throw new Error(
-						`Alias "${getServiceIdentifierName(alias.as)}" conflicts with local declaration in module "${this.displayName}".`,
-					);
-				}
-			}
+		if (conflictingAlias) {
+			throw new Error(
+				`Alias "${getServiceIdentifierName(conflictingAlias.as)}" conflicts with local declaration in module "${this.displayName}".`,
+			);
 		}
 	}
 
@@ -597,45 +565,32 @@ export class Module implements IModule {
 		}
 
 		// Map service identifiers to the modules that export them
-		const serviceToModules = new Map<ServiceIdentifier<unknown>, IModule[]>();
-
-		for (const item of this._imports) {
+		const serviceToModules = (this._imports ?? []).reduce((acc, item) => {
 			const module = this.isModuleWithAliases(item) ? item.module : item;
 			const aliases = this.isModuleWithAliases(item) ? item.aliases : undefined;
+			const aliasMap = this.buildAliasMap(aliases);
 
-			const exportedServices = module.exports ?? [];
-
-			// Build alias map for this import
-			const aliasMap = new Map<
-				ServiceIdentifier<unknown>,
-				ServiceIdentifier<unknown>
-			>();
-			if (aliases && aliases.length > 0) {
-				for (const alias of aliases) {
-					aliasMap.set(alias.serviceIdentifier, alias.as);
-				}
-			}
-
-			// Check each exported service
-			for (const serviceId of exportedServices) {
-				// Use aliased name if available, otherwise use original name
+			for (const serviceId of module.exports ?? []) {
 				const effectiveName = aliasMap.get(serviceId) ?? serviceId;
-
-				// Track which modules export this service (by effective name)
-				const modules = serviceToModules.get(effectiveName) ?? [];
+				const modules = acc.get(effectiveName) ?? [];
 				modules.push(module);
-				serviceToModules.set(effectiveName, modules);
+				acc.set(effectiveName, modules);
 			}
-		}
+
+			return acc;
+		}, new Map<ServiceIdentifier<unknown>, IModule[]>());
 
 		// Check for conflicts (same service name from multiple modules)
-		for (const [serviceId, modules] of serviceToModules.entries()) {
-			if (modules.length > 1) {
-				const moduleNames = modules.map((m) => `"${m.displayName}"`).join(", ");
-				throw new Error(
-					`Service identifier "${getServiceIdentifierName(serviceId)}" is exported by multiple imported modules: ${moduleNames}. Consider using aliases to resolve the conflict.`,
-				);
-			}
+		const conflicts = Array.from(serviceToModules.entries()).filter(
+			([, modules]) => modules.length > 1,
+		);
+
+		if (conflicts.length > 0) {
+			const [serviceId, modules] = conflicts[0];
+			const moduleNames = modules.map((m) => `"${m.displayName}"`).join(", ");
+			throw new Error(
+				`Service identifier "${getServiceIdentifierName(serviceId)}" is exported by multiple imported modules: ${moduleNames}. Consider using aliases to resolve the conflict.`,
+			);
 		}
 	}
 
