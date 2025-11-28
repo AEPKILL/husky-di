@@ -1320,8 +1320,8 @@ describe("SPEC 4.6: Middleware System", () => {
 		});
 	});
 
-	describe("M3: Global vs Local Middleware", () => {
-		it("should execute local middlewares before global middlewares in the chain", () => {
+	describe("M3: Global vs Local Middleware Strategy", () => {
+		it("should execute local middlewares before global middlewares (Local wraps Global)", () => {
 			// Arrange
 			const executionOrder: string[] = [];
 			globalMiddleware.use({
@@ -1343,7 +1343,8 @@ describe("SPEC 4.6: Middleware System", () => {
 			// Act
 			container.resolve(IServiceA);
 
-			// Assert - Local middleware executes before global in the chain
+			// Assert - Local middleware is outermost layer, executes first
+			// This follows LIFO: Local (later registered) wraps Global (earlier registered)
 			expect(executionOrder).toEqual(["local", "global"]);
 		});
 
@@ -1395,6 +1396,122 @@ describe("SPEC 4.6: Middleware System", () => {
 
 			// Cleanup
 			clearContainer(container2);
+		});
+
+		it("should allow local middleware to bypass global middleware (override capability)", () => {
+			// Arrange
+			const mockInstance = new ServiceA();
+			let globalExecuted = false;
+
+			globalMiddleware.use({
+				name: "globalAuthMw",
+				executor: (params, next) => {
+					globalExecuted = true;
+					// Simulate global authentication logic
+					return next(params);
+				},
+			});
+
+			container.use({
+				name: "localMockMw",
+				executor: (_params, _next) => {
+					// Local middleware bypasses global by not calling next()
+					// This is useful for testing/mocking scenarios
+					return mockInstance;
+				},
+			});
+
+			container.register(IServiceA, { useClass: ServiceA });
+
+			// Act
+			const instance = container.resolve(IServiceA);
+
+			// Assert - Local middleware short-circuited the chain
+			expect(instance).toBe(mockInstance);
+			expect(globalExecuted).toBe(false);
+		});
+
+		it("should allow local middleware to enrich context before passing to global", () => {
+			// Arrange
+			const contextModifications: string[] = [];
+
+			globalMiddleware.use({
+				name: "globalContextMw",
+				executor: (params, next) => {
+					// Global middleware sees the modified params
+					if (
+						params &&
+						typeof params === "object" &&
+						"enrichedByLocal" in params
+					) {
+						contextModifications.push("global-sees-enriched-context");
+					}
+					return next(params);
+				},
+			});
+
+			container.use({
+				name: "localEnrichMw",
+				executor: (params, next) => {
+					// Local middleware enriches context
+					contextModifications.push("local-enriches-context");
+					const enrichedParams = {
+						...params,
+						enrichedByLocal: true,
+					};
+					return next(enrichedParams);
+				},
+			});
+
+			container.register(IServiceA, { useClass: ServiceA });
+
+			// Act
+			container.resolve(IServiceA);
+
+			// Assert - Context flows from Local to Global
+			expect(contextModifications).toEqual([
+				"local-enriches-context",
+				"global-sees-enriched-context",
+			]);
+		});
+
+		it("should demonstrate isolation: child container does not inherit parent's local middlewares", () => {
+			// Arrange
+			const executionOrder: string[] = [];
+
+			const parentContainer = createContainer("ParentContainer");
+			const childContainer = createContainer("ChildContainer", parentContainer);
+
+			// Parent has its own local middleware
+			parentContainer.use({
+				name: "parentLocalMw",
+				executor: (params, next) => {
+					executionOrder.push("parent-local");
+					return next(params);
+				},
+			});
+
+			// Child has its own local middleware
+			childContainer.use({
+				name: "childLocalMw",
+				executor: (params, next) => {
+					executionOrder.push("child-local");
+					return next(params);
+				},
+			});
+
+			childContainer.register(IServiceA, { useClass: ServiceA });
+
+			// Act
+			childContainer.resolve(IServiceA);
+
+			// Assert - Only child's local middleware and global middleware execute
+			// Parent's local middleware is NOT inherited
+			expect(executionOrder).toEqual(["child-local"]);
+
+			// Cleanup
+			clearContainer(childContainer);
+			clearContainer(parentContainer);
 		});
 	});
 

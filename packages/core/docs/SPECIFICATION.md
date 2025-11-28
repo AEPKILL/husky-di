@@ -185,11 +185,31 @@ Each middleware **MUST** receive:
 1. A `params` object containing resolution context.
 2. A `next()` function to continue the middleware chain.
 
-**M3. Global vs Local Middleware**
+**M3. Global vs Local Middleware Strategy**
 
-- **Global middleware**: Applied to all containers.
-- **Local middleware**: Applied only to the specific container.
-- Execution order: Local middlewares execute **before** global middlewares in the resolution chain.
+- **Scope Definition**:
+
+  - **Global Middleware**: Applied to all containers across the entire application
+  - **Local Middleware**: Applied only to a specific container instance
+
+- **Registration API**: Implementations **MUST** provide distinct mechanisms to register middleware at different scopes:
+
+  - **Local Registration**: `container.use(middleware)` - Registers middleware for the specific container instance
+  - **Global Registration**: Accessed through a shared global middleware manager (e.g., `globalMiddleware.use(middleware)`) - Registers middleware for all containers
+
+- **Execution Order**: The composition follows strict LIFO order based on registration scope:
+
+  1. **Local Middlewares** (Executed First / Outermost Layer) - Container-specific context
+  2. **Global Middlewares** (Executed Next) - Application-wide cross-cutting concerns
+  3. **Core/Registration Provider** (Executed Last / Innermost Layer) - Base functionality
+
+- **Rationale**: This design follows pure LIFO semantics where later-registered middlewares (Local, typically registered when a container is configured) wrap earlier-registered middlewares (Global, typically registered during application initialization). This ensures that container-specific logic has the ability to intercept, inspect, or short-circuit the resolution process defined by global policies.
+
+- **Key Characteristics**:
+  - **Override Capability**: Local middlewares can completely bypass global logic by not calling `next()`, enabling powerful mocking and testing scenarios.
+  - **Context Enrichment**: Local middlewares can modify the resolution context before passing it to global middlewares.
+  - **Isolation**: Each container's local middlewares are independent; parent-child container relationships do not automatically inherit local middlewares.
+  - **Composition Flow**: `Local → Global → Provider` (simple two-layer model)
 
 **M4. Middleware Interception**  
 A middleware **MAY**:
