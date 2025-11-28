@@ -20,17 +20,23 @@ export const decoratorMiddleware: ResolveMiddleware<any, any> = {
 	executor: (params, next) => {
 		const { registration, resolveRecord } = params;
 
-		// 仅处理 class 类型的注册
+		// Only process class type registrations
 		if (registration.type !== RegistrationTypeEnum.class) {
 			return next(params);
 		}
 
 		const provider =
 			registration.provider as CreateClassRegistrationOptions<any>["useClass"];
+
+		// if the provider is a primitive constructor, return a new instance of the constructor
+		if (isPrimitiveConstructor(provider)) {
+			return new provider();
+		}
+
 		const parametersMetadata = injectionMetadataMap.get(provider);
 		if (!parametersMetadata) {
 			throw new ResolveException(
-				`The class ${provider.name} has no injection metadata, please make sure the class is decorated with @Injectable().`,
+				`Class '${provider.name}' must be decorated with @Injectable()`,
 				resolveRecord,
 			);
 		}
@@ -50,3 +56,13 @@ export const decoratorMiddleware: ResolveMiddleware<any, any> = {
 		return new provider(...parameters);
 	},
 };
+
+function isPrimitiveConstructor(value: unknown) {
+	return (
+		value === String ||
+		value === Number ||
+		value === Boolean ||
+		value === Symbol ||
+		value === BigInt
+	);
+}
