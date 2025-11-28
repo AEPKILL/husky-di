@@ -246,17 +246,23 @@ export type ResolveMiddlewareExecutor<
  * - Perform side effects (logging, caching, etc.)
  * - Short-circuit resolution by not calling next()
  *
+ * Middleware executes in LIFO (Last In, First Out) order, where the last
+ * registered middleware executes first in the resolution chain.
+ *
  * @typeParam T - The service instance type being resolved
  * @typeParam O - The resolve options type
  *
  * @example
  * ```typescript
  * // Logging middleware
- * const loggingMiddleware: ResolveMiddleware<any, any> = async (params, next) => {
- *   console.log(`Resolving ${params.serviceIdentifier}`);
- *   const result = await next();
- *   console.log(`Resolved ${params.serviceIdentifier}`);
- *   return result;
+ * const loggingMiddleware: ResolveMiddleware<any, any> = {
+ *   name: 'logging',
+ *   executor: (params, next) => {
+ *     console.log(`Resolving ${params.serviceIdentifier}`);
+ *     const result = next(params);
+ *     console.log(`Resolved ${params.serviceIdentifier}`);
+ *     return result;
+ *   }
  * };
  *
  * container.use(loggingMiddleware);
@@ -462,6 +468,10 @@ export interface IServiceRegistry {
  * for cross-cutting concerns such as logging, caching, validation,
  * and performance monitoring.
  *
+ * Middleware execution follows a LIFO (Last In, First Out) order,
+ * where the last registered middleware executes first, creating an
+ * onion-like execution model.
+ *
  * @see {@link ResolveMiddleware} for middleware function type
  */
 export interface IMiddlewareManager {
@@ -470,7 +480,10 @@ export interface IMiddlewareManager {
 	 *
 	 * @remarks
 	 * Adds a middleware function to the resolution pipeline. Middleware
-	 * will be executed in the order they are registered (FIFO).
+	 * will be executed in reverse registration order (LIFO - Last In, First Out).
+	 * This means the last registered middleware executes first in the chain,
+	 * creating an onion-like execution model where outer layers wrap inner layers.
+	 *
 	 * The same middleware instance can be registered multiple times.
 	 *
 	 * @param middleware - The middleware function to register
@@ -478,12 +491,17 @@ export interface IMiddlewareManager {
 	 * @example
 	 * ```typescript
 	 * // Add logging middleware
-	 * container.use(async (params, next) => {
-	 *   console.log(`Resolving: ${params.serviceIdentifier}`);
-	 *   const result = await next();
-	 *   console.log(`Resolved: ${params.serviceIdentifier}`);
-	 *   return result;
+	 * container.use({
+	 *   name: 'logging',
+	 *   executor: (params, next) => {
+	 *     console.log(`Resolving: ${params.serviceIdentifier}`);
+	 *     const result = next(params);
+	 *     console.log(`Resolved: ${params.serviceIdentifier}`);
+	 *     return result;
+	 *   }
 	 * });
+	 *
+	 * // If you register: [A, B, C], they execute in order: [C, B, A]
 	 * ```
 	 */
 	use(middleware: ResolveMiddleware<any, any>): void;
@@ -493,17 +511,19 @@ export interface IMiddlewareManager {
 	 *
 	 * @remarks
 	 * Removes a previously registered middleware function from the
-	 * resolution pipeline. If the middleware was registered multiple times,
-	 * only the first occurrence is removed.
-	 * If the middleware is not found, this method does nothing.
+	 * resolution pipeline, preventing it from executing in subsequent
+	 * resolutions. If the middleware is not found, this method does nothing.
 	 *
 	 * @param middleware - The middleware function to unregister
 	 *
 	 * @example
 	 * ```typescript
-	 * const loggingMiddleware = async (params, next) => {
-	 *   console.log(`Resolving: ${params.serviceIdentifier}`);
-	 *   return await next();
+	 * const loggingMiddleware = {
+	 *   name: 'logging',
+	 *   executor: (params, next) => {
+	 *     console.log(`Resolving: ${params.serviceIdentifier}`);
+	 *     return next(params);
+	 *   }
 	 * };
 	 *
 	 * container.use(loggingMiddleware);
@@ -562,7 +582,7 @@ export interface IContainerHierarchy {
  * This interface provides:
  * - Service resolution ({@link IServiceResolver})
  * - Service registration management ({@link IServiceRegistry})
- * - Middleware management ({@link IMiddlewareManager})
+ * - Middleware management ({@link IMiddlewareManager}) with LIFO execution order
  * - Hierarchical container relationships ({@link IContainerHierarchy})
  * - Unique identification ({@link IUnique})
  * - Resource disposal ({@link IDisposable})
@@ -580,14 +600,22 @@ export interface IContainerHierarchy {
  * // Resolve services
  * const service = container.resolve(MyService);
  *
- * // Add middleware
- * container.use(loggingMiddleware);
+ * // Add middleware (executes in LIFO order)
+ * container.use({
+ *   name: 'logging',
+ *   executor: (params, next) => {
+ *     console.log('Before resolution');
+ *     const result = next(params);
+ *     console.log('After resolution');
+ *     return result;
+ *   }
+ * });
  *
  * // Create child container
  * const childContainer = createContainer("child", container);
  *
  * // Dispose when done
- * await container.dispose();
+ * container.dispose();
  * ```
  */
 export interface IContainer
