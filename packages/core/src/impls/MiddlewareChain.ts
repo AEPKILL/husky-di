@@ -17,7 +17,7 @@ import type {
  *
  * Manages and executes a series of middlewares with support for chaining and event listening.
  * The middleware chain combines global middlewares and local middlewares, executing them in
- * reverse order (last added middleware executes first).
+ * reverse order following pure LIFO semantics.
  *
  * @example
  * ```typescript
@@ -39,15 +39,15 @@ import type {
  * @template Result The return type of the middleware chain execution
  *
  * @remarks
- * Execution Flow (Last-in-First-out):
+ * Execution Flow (Local wraps Global):
  * ```
  *   execute(params)
  *   |
  *  ▼
- *   A → B → C → Default
- *        │
- *        ▼
- *     Result
+ *   Local → Global → Default
+ *              │
+ *              ▼
+ *           Result
  * ```
  */
 export class MiddlewareChain<Params, Result>
@@ -110,28 +110,70 @@ export class MiddlewareChain<Params, Result>
 	}
 
 	/**
-	 * Builds the middleware executor function
+	 * Builds the middleware executor function with pure LIFO composition strategy.
 	 *
-	 * Combines global middlewares and local middlewares into a single execution chain.
-	 * The execution order is reverse: the last middleware added will be the first to execute.
+	 * Combines global middlewares and local middlewares into a single execution chain
+	 * following strict LIFO (Last-In-First-Out) semantics based on container hierarchy
+	 * and registration time.
 	 *
-	 * Execution flow:
-	 * 1. Global middlewares (in reverse order of addition)
-	 * 2. Local middlewares (in reverse order of addition)
-	 * 3. Default middleware executor (final handler)
+	 * **Composition Strategy: Local wraps Global**
 	 *
-	 * Each middleware can:
-	 * - Process the parameters before passing to next middleware
-	 * - Modify the result after receiving it from next middleware
-	 * - Skip calling next() to short-circuit the chain
+	 * The middleware chain follows the philosophy that:
+	 * - **Later-registered middlewares wrap earlier-registered ones**
+	 * - **More specific contexts (Local) wrap broader contexts (Global)**
+	 * - **Child containers can intercept and override parent behavior**
+	 *
+	 * **Execution Flow (Onion Model):**
+	 * ```
+	 *   Request enters chain
+	 *         ↓
+	 *   ┌─────────────────────────┐
+	 *   │  Local Middleware N     │ ← Outermost (Last registered, First executed)
+	 *   │  ┌───────────────────┐  │
+	 *   │  │ Local Middleware 1│  │
+	 *   │  │  ┌─────────────┐  │  │
+	 *   │  │  │ Global MW N │  │  │
+	 *   │  │  │  ┌────────┐ │  │  │
+	 *   │  │  │  │Global 1│ │  │  │
+	 *   │  │  │  │ ┌────┐ │ │  │  │
+	 *   │  │  │  │ │Core│ │ │  │  │ ← Innermost (Provider/Decorator)
+	 *   │  │  │  │ └────┘ │ │  │  │
+	 *   │  │  │  └────────┘ │  │  │
+	 *   │  │  └─────────────┘  │  │
+	 *   │  └───────────────────┘  │
+	 *   └─────────────────────────┘
+	 *         ↓
+	 *   Result returns through layers
+	 * ```
+	 *
+	 * **Array Order vs Execution Order:**
+	 * - Array: `[Global_1, Global_2, ..., Local_1, Local_2, ...]`
+	 * - Execution: `Local_2 → Local_1 → ... → Global_2 → Global_1 → Core`
+	 *
+	 * **Key Capabilities:**
+	 * 1. **Override**: Local middlewares can bypass global logic by not calling `next()`
+	 * 2. **Intercept**: Local middlewares see and can modify all parameters/results
+	 * 3. **Context Enrichment**: Local can inject context before passing to global
+	 * 4. **Testing/Mocking**: Child containers can completely replace parent behavior
+	 *
+	 * **Why This Order:**
+	 * - Global middlewares are typically registered when parent container is created (earlier in time)
+	 * - Local middlewares are registered when child container is created (later in time)
+	 * - Following LIFO: later registrations should wrap earlier registrations
+	 * - This gives child containers the power to control and override parent behavior
 	 *
 	 * @returns The composed middleware executor function
 	 *
 	 * @remarks
-	 * The reduce operation builds the chain from right to left:
-	 * - Starts with the default executor as the base
-	 * - Wraps each middleware around the previous chain
-	 * - Last middleware added becomes the outermost wrapper (executes first)
+	 * The reduce operation builds the chain from left to right in the array,
+	 * but each element wraps the previous accumulated chain, so the rightmost
+	 * element (last in array) becomes the outermost wrapper (first to execute).
+	 *
+	 * Example with [A, B, C]:
+	 * - Step 1: (params) => A.executor(params, default)
+	 * - Step 2: (params) => B.executor(params, step1)
+	 * - Step 3: (params) => C.executor(params, step2)
+	 * - Result: C wraps B wraps A wraps default → Execution: C → B → A → default
 	 */
 	buildMiddlewareExecutor(): MiddlewareExecutor<Params, Result> {
 		return [...this._globalMiddleware.middlewares, ...this.middlewares].reduce(
