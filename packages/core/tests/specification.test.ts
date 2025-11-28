@@ -443,137 +443,631 @@ describe("SPEC 4.3: Lifecycle Management", () => {
 	});
 
 	describe("L1: Transient Lifecycle", () => {
-		it("should create new instance every time service is resolved", () => {
-			// Arrange
-			container.register(IServiceA, {
-				useClass: ServiceA,
-				lifecycle: LifecycleEnum.transient,
+		describe("useClass with transient lifecycle (default)", () => {
+			it("should create new instance every time service is resolved", () => {
+				// Arrange
+				container.register(IServiceA, {
+					useClass: ServiceA,
+					lifecycle: LifecycleEnum.transient,
+				});
+
+				// Act
+				const instance1 = container.resolve(IServiceA);
+				const instance2 = container.resolve(IServiceA);
+				const instance3 = container.resolve(IServiceA);
+
+				// Assert - All instances should be different
+				expect(instance1).not.toBe(instance2);
+				expect(instance2).not.toBe(instance3);
+				expect(instance1).not.toBe(instance3);
+				expect(instance1).toBeInstanceOf(ServiceA);
+				expect(instance2).toBeInstanceOf(ServiceA);
+				expect(instance3).toBeInstanceOf(ServiceA);
 			});
 
-			// Act
-			const instance1 = container.resolve(IServiceA);
-			const instance2 = container.resolve(IServiceA);
-			const instance3 = container.resolve(IServiceA);
+			it("should use transient lifecycle by default when not specified", () => {
+				// Arrange
+				container.register(IServiceA, {
+					useClass: ServiceA,
+					// lifecycle not specified, should default to transient
+				});
 
-			// Assert
-			expect(instance1).not.toBe(instance2);
-			expect(instance2).not.toBe(instance3);
-			expect(instance1).not.toBe(instance3);
+				// Act
+				const instance1 = container.resolve(IServiceA);
+				const instance2 = container.resolve(IServiceA);
+
+				// Assert
+				expect(instance1).not.toBe(instance2);
+			});
+
+			it("should create new instances with dependencies", () => {
+				// Arrange
+				container.register(IServiceA, {
+					useClass: ServiceA,
+					lifecycle: LifecycleEnum.transient,
+				});
+				container.register(IServiceB, {
+					useFactory: (c) => new ServiceB(c.resolve(IServiceA)),
+					lifecycle: LifecycleEnum.transient,
+				});
+
+				// Act
+				const b1 = container.resolve(IServiceB);
+				const b2 = container.resolve(IServiceB);
+
+				// Assert - Both B instances and their A dependencies should be different
+				expect(b1).not.toBe(b2);
+				expect(b1.serviceA).not.toBe(b2.serviceA);
+			});
+		});
+
+		describe("useFactory with transient lifecycle", () => {
+			it("should call factory function every time service is resolved", () => {
+				// Arrange
+				let callCount = 0;
+				container.register(IServiceA, {
+					useFactory: () => {
+						callCount++;
+						return new ServiceA();
+					},
+					lifecycle: LifecycleEnum.transient,
+				});
+
+				// Act
+				const instance1 = container.resolve(IServiceA);
+				const instance2 = container.resolve(IServiceA);
+				const instance3 = container.resolve(IServiceA);
+
+				// Assert
+				expect(callCount).toBe(3);
+				expect(instance1).not.toBe(instance2);
+				expect(instance2).not.toBe(instance3);
+				expect(instance1).not.toBe(instance3);
+			});
+
+			it("should use transient lifecycle by default when not specified", () => {
+				// Arrange
+				let callCount = 0;
+				container.register(IServiceA, {
+					useFactory: () => {
+						callCount++;
+						return new ServiceA();
+					},
+					// lifecycle not specified, should default to transient
+				});
+
+				// Act
+				container.resolve(IServiceA);
+				container.resolve(IServiceA);
+
+				// Assert
+				expect(callCount).toBe(2);
+			});
+
+			it("should create fresh instances with each factory call", () => {
+				// Arrange
+				const timestamps: number[] = [];
+				container.register(IServiceA, {
+					useFactory: () => {
+						const instance = new ServiceA();
+						const timestamp = Date.now();
+						timestamps.push(timestamp);
+						(instance as ServiceA & { createdAt?: number }).createdAt =
+							timestamp;
+						return instance;
+					},
+					lifecycle: LifecycleEnum.transient,
+				});
+
+				// Act
+				const instance1 = container.resolve(IServiceA);
+				const instance2 = container.resolve(IServiceA);
+
+				// Assert
+				expect(timestamps).toHaveLength(2);
+				expect((instance1 as ServiceA & { createdAt?: number }).createdAt).toBe(
+					timestamps[0],
+				);
+				expect((instance2 as ServiceA & { createdAt?: number }).createdAt).toBe(
+					timestamps[1],
+				);
+			});
+
+			it("should not cache factory results across resolutions", () => {
+				// Arrange
+				let counter = 0;
+				container.register(IServiceA, {
+					useFactory: () => {
+						const instance = new ServiceA();
+						(instance as ServiceA & { id?: number }).id = ++counter;
+						return instance;
+					},
+					lifecycle: LifecycleEnum.transient,
+				});
+
+				// Act
+				const instance1 = container.resolve(IServiceA);
+				const instance2 = container.resolve(IServiceA);
+				const instance3 = container.resolve(IServiceA);
+
+				// Assert
+				expect((instance1 as ServiceA & { id?: number }).id).toBe(1);
+				expect((instance2 as ServiceA & { id?: number }).id).toBe(2);
+				expect((instance3 as ServiceA & { id?: number }).id).toBe(3);
+			});
+		});
+
+		describe("Transient with complex dependencies", () => {
+			it("should create new transient instances throughout dependency tree", () => {
+				// Arrange
+				let aCount = 0;
+				let bCount = 0;
+
+				container.register(IServiceA, {
+					useFactory: () => {
+						aCount++;
+						return new ServiceA();
+					},
+					lifecycle: LifecycleEnum.transient,
+				});
+
+				container.register(IServiceB, {
+					useFactory: (c) => {
+						bCount++;
+						return new ServiceB(c.resolve(IServiceA));
+					},
+					lifecycle: LifecycleEnum.transient,
+				});
+
+				const IServiceContainer = createServiceIdentifier<{
+					b1: ServiceB;
+					b2: ServiceB;
+					a: ServiceA;
+				}>("IServiceContainer");
+
+				container.register(IServiceContainer, {
+					useFactory: (c) => ({
+						b1: c.resolve(IServiceB),
+						b2: c.resolve(IServiceB),
+						a: c.resolve(IServiceA),
+					}),
+					lifecycle: LifecycleEnum.transient,
+				});
+
+				// Act
+				const container1 = container.resolve(IServiceContainer);
+				const container2 = container.resolve(IServiceContainer);
+
+				// Assert
+				expect(aCount).toBe(6); // 3 for container1 (b1.a, b2.a, a), 3 for container2 (b1.a, b2.a, a)
+				expect(bCount).toBe(4); // 2 for container1 (b1, b2), 2 for container2 (b1, b2)
+				expect(container1.b1).not.toBe(container1.b2);
+				expect(container1.b1.serviceA).not.toBe(container1.b2.serviceA);
+				expect(container1).not.toBe(container2);
+			});
 		});
 	});
 
 	describe("L2: Singleton Lifecycle", () => {
-		it("should create instance once and reuse for all subsequent resolutions", () => {
-			// Arrange
-			const singletonInstance = new ServiceA();
-			container.register(IServiceA, {
-				useValue: singletonInstance,
+		describe("useValue (implicit singleton)", () => {
+			it("should always return the same value instance", () => {
+				// Arrange
+				const singletonInstance = new ServiceA();
+				container.register(IServiceA, {
+					useValue: singletonInstance,
+				});
+
+				// Act
+				const instance1 = container.resolve(IServiceA);
+				const instance2 = container.resolve(IServiceA);
+				const instance3 = container.resolve(IServiceA);
+
+				// Assert - All instances should be the exact same object reference
+				expect(instance1).toBe(singletonInstance);
+				expect(instance2).toBe(singletonInstance);
+				expect(instance3).toBe(singletonInstance);
+				expect(instance1).toBe(instance2);
+				expect(instance2).toBe(instance3);
 			});
-
-			// Act
-			const instance1 = container.resolve(IServiceA);
-			const instance2 = container.resolve(IServiceA);
-			const instance3 = container.resolve(IServiceA);
-
-			// Assert - All instances should be the exact same object reference
-			expect(instance1).toBe(singletonInstance);
-			expect(instance2).toBe(singletonInstance);
-			expect(instance3).toBe(singletonInstance);
-			expect(instance1).toBe(instance2);
-			expect(instance2).toBe(instance3);
 		});
 
-		it("should maintain separate singleton instances per container", () => {
-			// Arrange
-			const container2 = createContainer("SecondContainer");
-			container.register(IServiceA, {
-				useClass: ServiceA,
-				lifecycle: LifecycleEnum.singleton,
+		describe("useClass with singleton lifecycle", () => {
+			it("should create instance once and reuse for all subsequent resolutions", () => {
+				// Arrange
+				container.register(IServiceA, {
+					useClass: ServiceA,
+					lifecycle: LifecycleEnum.singleton,
+				});
+
+				// Act
+				const instance1 = container.resolve(IServiceA);
+				const instance2 = container.resolve(IServiceA);
+				const instance3 = container.resolve(IServiceA);
+
+				// Assert - All instances should be the same object reference
+				expect(instance1).toBe(instance2);
+				expect(instance2).toBe(instance3);
+				expect(instance1).toBeInstanceOf(ServiceA);
 			});
-			container2.register(IServiceA, {
-				useClass: ServiceA,
-				lifecycle: LifecycleEnum.singleton,
+
+			it("should maintain separate singleton instances per container", () => {
+				// Arrange
+				const container2 = createContainer("SecondContainer");
+				container.register(IServiceA, {
+					useClass: ServiceA,
+					lifecycle: LifecycleEnum.singleton,
+				});
+				container2.register(IServiceA, {
+					useClass: ServiceA,
+					lifecycle: LifecycleEnum.singleton,
+				});
+
+				// Act
+				const instance1 = container.resolve(IServiceA);
+				const instance2 = container2.resolve(IServiceA);
+
+				// Assert - Different containers should have different singleton instances
+				expect(instance1).not.toBe(instance2);
+				expect(instance1).toBeInstanceOf(ServiceA);
+				expect(instance2).toBeInstanceOf(ServiceA);
+
+				// Cleanup
+				clearContainer(container2);
 			});
 
-			// Act
-			const instance1 = container.resolve(IServiceA);
-			const instance2 = container2.resolve(IServiceA);
+			it("should create singleton instance only once even with dependencies", () => {
+				// Arrange
+				let serviceAInstances = 0;
+				container.register(IServiceA, {
+					useFactory: () => {
+						serviceAInstances++;
+						return new ServiceA();
+					},
+					lifecycle: LifecycleEnum.singleton,
+				});
+				container.register(IServiceB, {
+					useFactory: (c) => {
+						const serviceA = c.resolve(IServiceA);
+						return new ServiceB(serviceA);
+					},
+					lifecycle: LifecycleEnum.transient,
+				});
 
-			// Assert
-			expect(instance1).not.toBe(instance2);
+				// Act
+				const serviceB1 = container.resolve(IServiceB);
+				const serviceB2 = container.resolve(IServiceB);
+				const serviceA1 = container.resolve(IServiceA);
 
-			// Cleanup
-			clearContainer(container2);
+				// Assert - ServiceA should only be created once
+				expect(serviceAInstances).toBe(1);
+				expect(serviceB1.serviceA).toBe(serviceB2.serviceA);
+				expect(serviceB1.serviceA).toBe(serviceA1);
+			});
+		});
+
+		describe("useFactory with singleton lifecycle", () => {
+			it("should create instance once and reuse for all subsequent resolutions", () => {
+				// Arrange
+				let instanceCount = 0;
+				container.register(IServiceA, {
+					useFactory: () => {
+						instanceCount++;
+						return new ServiceA();
+					},
+					lifecycle: LifecycleEnum.singleton,
+				});
+
+				// Act
+				const instance1 = container.resolve(IServiceA);
+				const instance2 = container.resolve(IServiceA);
+				const instance3 = container.resolve(IServiceA);
+
+				// Assert - Factory should only be called once
+				expect(instanceCount).toBe(1);
+				expect(instance1).toBe(instance2);
+				expect(instance2).toBe(instance3);
+				expect(instance1).toBeInstanceOf(ServiceA);
+			});
+
+			it("should maintain separate singleton instances per container", () => {
+				// Arrange
+				const container2 = createContainer("SecondContainer");
+				let count1 = 0;
+				let count2 = 0;
+
+				container.register(IServiceA, {
+					useFactory: () => {
+						count1++;
+						return new ServiceA();
+					},
+					lifecycle: LifecycleEnum.singleton,
+				});
+
+				container2.register(IServiceA, {
+					useFactory: () => {
+						count2++;
+						return new ServiceA();
+					},
+					lifecycle: LifecycleEnum.singleton,
+				});
+
+				// Act
+				const instance1a = container.resolve(IServiceA);
+				const instance1b = container.resolve(IServiceA);
+				const instance2a = container2.resolve(IServiceA);
+				const instance2b = container2.resolve(IServiceA);
+
+				// Assert
+				expect(count1).toBe(1);
+				expect(count2).toBe(1);
+				expect(instance1a).toBe(instance1b);
+				expect(instance2a).toBe(instance2b);
+				expect(instance1a).not.toBe(instance2a);
+
+				// Cleanup
+				clearContainer(container2);
+			});
+
+			it("should cache complex factory results as singleton", () => {
+				// Arrange
+				let factoryCallCount = 0;
+				container.register(IServiceA, {
+					useFactory: () => {
+						factoryCallCount++;
+						const instance = new ServiceA();
+						// Simulate complex initialization
+						(instance as ServiceA & { initialized?: boolean }).initialized =
+							true;
+						(instance as ServiceA & { timestamp?: number }).timestamp =
+							Date.now();
+						return instance;
+					},
+					lifecycle: LifecycleEnum.singleton,
+				});
+
+				// Act
+				const instance1 = container.resolve(IServiceA);
+				const instance2 = container.resolve(IServiceA);
+
+				// Assert
+				expect(factoryCallCount).toBe(1);
+				expect(instance1).toBe(instance2);
+				expect(
+					(instance1 as ServiceA & { initialized?: boolean }).initialized,
+				).toBe(true);
+				expect((instance1 as ServiceA & { timestamp?: number }).timestamp).toBe(
+					(instance2 as ServiceA & { timestamp?: number }).timestamp,
+				);
+			});
 		});
 	});
 
 	describe("L3: Resolution Lifecycle", () => {
-		it("should create instance once per resolution context", () => {
-			// Arrange
-			let instanceCount = 0;
-			container.register(IServiceA, {
-				useFactory: () => {
-					instanceCount++;
-					return new ServiceA();
-				},
-				lifecycle: LifecycleEnum.resolution,
-			});
-			container.register(IServiceB, {
-				useFactory: (container) => {
-					const serviceA = container.resolve(IServiceA);
-					return new ServiceB(serviceA);
-				},
-				lifecycle: LifecycleEnum.transient,
-			});
-			container.register(IServiceC, {
-				useFactory: (container) => {
-					// Resolve ServiceA again in same resolution context
-					container.resolve(IServiceA);
-					return new ServiceC();
-				},
-				lifecycle: LifecycleEnum.transient,
-			});
-			container.register(IServiceD, {
-				useClass: ServiceD,
-				lifecycle: LifecycleEnum.transient,
+		describe("useClass with resolution lifecycle", () => {
+			it("should create new instance per resolution chain", () => {
+				// Arrange
+				container.register(IServiceA, {
+					useClass: ServiceA,
+					lifecycle: LifecycleEnum.resolution,
+				});
+				container.register(IServiceB, {
+					useFactory: (c) => {
+						const serviceA = c.resolve(IServiceA);
+						return new ServiceB(serviceA);
+					},
+					lifecycle: LifecycleEnum.transient,
+				});
+				container.register(IServiceC, {
+					useFactory: (c) => {
+						// Resolve ServiceA again in same resolution context
+						c.resolve(IServiceA);
+						return new ServiceC();
+					},
+					lifecycle: LifecycleEnum.transient,
+				});
+
+				// Act - First resolution chain
+				const serviceB1 = container.resolve(IServiceB);
+				// Create separate resolution chain
+				container.resolve(IServiceC);
+
+				// Act - Second resolution chain
+				const serviceB2 = container.resolve(IServiceB);
+
+				// Assert - Should create new instance per resolution chain
+				expect(serviceB1.serviceA).not.toBe(serviceB2.serviceA);
+				expect(serviceB1.serviceA).toBeInstanceOf(ServiceA);
+				expect(serviceB2.serviceA).toBeInstanceOf(ServiceA);
 			});
 
-			// Act - First resolution chain
-			const serviceB1 = container.resolve(IServiceB);
+			it("should reuse same class instance within single resolution context", () => {
+				// Arrange
+				let constructorCallCount = 0;
+				const IServiceAWithCount =
+					createServiceIdentifier<ServiceA>("IServiceAWithCount");
 
-			// Act - Second resolution chain
-			const serviceB2 = container.resolve(IServiceB);
+				class ServiceAWithCount extends ServiceA {
+					constructor() {
+						super();
+						constructorCallCount++;
+					}
+				}
 
-			// Assert - Should create new instance per resolution chain
-			expect(serviceB1.serviceA).not.toBe(serviceB2.serviceA);
-			expect(instanceCount).toBe(2);
+				container.register(IServiceAWithCount, {
+					useClass: ServiceAWithCount,
+					lifecycle: LifecycleEnum.resolution,
+				});
+				container.register(IServiceB, {
+					useFactory: (c) => {
+						const serviceA = c.resolve(IServiceAWithCount);
+						return new ServiceB(serviceA);
+					},
+				});
+				container.register(IServiceC, {
+					useFactory: (c) => {
+						// Resolve ServiceA again in same resolution context
+						c.resolve(IServiceAWithCount);
+						return new ServiceC();
+					},
+				});
+
+				// Act - Two separate resolution chains
+				container.resolve(IServiceB);
+				container.resolve(IServiceC);
+
+				// Assert - ServiceA constructor should only be called once per resolution
+				expect(constructorCallCount).toBe(2); // Once for B chain, once for C chain
+			});
 		});
 
-		it("should reuse same instance within single resolution context", () => {
-			// Arrange
-			let instanceCount = 0;
-			container.register(IServiceA, {
-				useFactory: () => {
-					instanceCount++;
-					return new ServiceA();
-				},
-				lifecycle: LifecycleEnum.resolution,
-			});
-			container.register(IServiceD, { useClass: ServiceD });
-			container.register(IServiceB, {
-				useFactory: (container) => {
-					return new ServiceB(container.resolve(IServiceA));
-				},
-			});
-			container.register(IServiceE, { useClass: ServiceE });
+		describe("useFactory with resolution lifecycle", () => {
+			it("should create instance once per resolution context", () => {
+				// Arrange
+				let instanceCount = 0;
+				container.register(IServiceA, {
+					useFactory: () => {
+						instanceCount++;
+						return new ServiceA();
+					},
+					lifecycle: LifecycleEnum.resolution,
+				});
+				container.register(IServiceB, {
+					useFactory: (container) => {
+						const serviceA = container.resolve(IServiceA);
+						return new ServiceB(serviceA);
+					},
+					lifecycle: LifecycleEnum.transient,
+				});
+				container.register(IServiceC, {
+					useFactory: (container) => {
+						// Resolve ServiceA again in same resolution context
+						container.resolve(IServiceA);
+						return new ServiceC();
+					},
+					lifecycle: LifecycleEnum.transient,
+				});
 
-			// Act - Resolve ServiceE which depends on ServiceD which depends on ServiceB which depends on ServiceA
-			const serviceE = container.resolve(IServiceE);
-			const serviceB = serviceE.serviceD.serviceB;
+				// Act - First resolution chain
+				const serviceB1 = container.resolve(IServiceB);
 
-			// Assert - ServiceA should only be created once within this resolution context
-			expect(instanceCount).toBe(1);
-			expect(serviceB.serviceA).toBeInstanceOf(ServiceA);
+				// Act - Second resolution chain
+				const serviceB2 = container.resolve(IServiceB);
+
+				// Assert - Should create new instance per resolution chain
+				expect(serviceB1.serviceA).not.toBe(serviceB2.serviceA);
+				expect(instanceCount).toBe(2);
+			});
+
+			it("should reuse same factory instance within single resolution context", () => {
+				// Arrange
+				let instanceCount = 0;
+				container.register(IServiceA, {
+					useFactory: () => {
+						instanceCount++;
+						return new ServiceA();
+					},
+					lifecycle: LifecycleEnum.resolution,
+				});
+				container.register(IServiceD, { useClass: ServiceD });
+				container.register(IServiceB, {
+					useFactory: (container) => {
+						return new ServiceB(container.resolve(IServiceA));
+					},
+				});
+				container.register(IServiceE, { useClass: ServiceE });
+
+				// Act - Resolve ServiceE which depends on ServiceD which depends on ServiceB which depends on ServiceA
+				const serviceE = container.resolve(IServiceE);
+				const serviceB = serviceE.serviceD.serviceB;
+
+				// Assert - ServiceA should only be created once within this resolution context
+				expect(instanceCount).toBe(1);
+				expect(serviceB.serviceA).toBeInstanceOf(ServiceA);
+			});
+
+			it("should share resolution-scoped instance across complex dependency tree", () => {
+				// Arrange
+				let factoryCallCount = 0;
+				const instances: ServiceA[] = [];
+
+				container.register(IServiceA, {
+					useFactory: () => {
+						factoryCallCount++;
+						const instance = new ServiceA();
+						instances.push(instance);
+						return instance;
+					},
+					lifecycle: LifecycleEnum.resolution,
+				});
+
+				// Create multiple services that all depend on ServiceA
+				const IServiceX = createServiceIdentifier<{ a: ServiceA }>("IServiceX");
+				const IServiceY = createServiceIdentifier<{ a: ServiceA }>("IServiceY");
+				const IServiceZ = createServiceIdentifier<{
+					x: { a: ServiceA };
+					y: { a: ServiceA };
+					a: ServiceA;
+				}>("IServiceZ");
+
+				container.register(IServiceX, {
+					useFactory: (c) => ({ a: c.resolve(IServiceA) }),
+				});
+				container.register(IServiceY, {
+					useFactory: (c) => ({ a: c.resolve(IServiceA) }),
+				});
+				container.register(IServiceZ, {
+					useFactory: (c) => ({
+						x: c.resolve(IServiceX),
+						y: c.resolve(IServiceY),
+						a: c.resolve(IServiceA),
+					}),
+				});
+
+				// Act - Single resolution that triggers multiple ServiceA resolutions
+				const serviceZ = container.resolve(IServiceZ);
+
+				// Assert - All should reference the same ServiceA instance
+				expect(factoryCallCount).toBe(1);
+				expect(serviceZ.x.a).toBe(serviceZ.y.a);
+				expect(serviceZ.y.a).toBe(serviceZ.a);
+				expect(instances).toHaveLength(1);
+			});
+		});
+
+		describe("Mixed lifecycle behaviors", () => {
+			it("should respect resolution lifecycle for factory within singleton class", () => {
+				// Arrange
+				let resolutionScopedCount = 0;
+
+				container.register(IServiceA, {
+					useFactory: () => {
+						resolutionScopedCount++;
+						return new ServiceA();
+					},
+					lifecycle: LifecycleEnum.resolution,
+				});
+
+				const ISingletonService = createServiceIdentifier<{ a: ServiceA }>(
+					"ISingletonService",
+				);
+				container.register(ISingletonService, {
+					useFactory: (c) => {
+						return { a: c.resolve(IServiceA) };
+					},
+					lifecycle: LifecycleEnum.singleton,
+				});
+
+				// Act
+				const singleton1 = container.resolve(ISingletonService);
+				const singleton2 = container.resolve(ISingletonService);
+				const directA = container.resolve(IServiceA);
+
+				// Assert
+				expect(singleton1).toBe(singleton2); // Singleton behavior
+				expect(singleton1.a).toBe(singleton2.a); // Same instance in singleton
+				expect(singleton1.a).not.toBe(directA); // Different resolution context
+				expect(resolutionScopedCount).toBe(2); // Once for singleton creation, once for direct resolve
+			});
 		});
 	});
 });

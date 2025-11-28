@@ -440,6 +440,7 @@ export class Container
 		// Cache the instance according to its lifecycle
 		if (isSingleton) {
 			(registration as IInternalRegistration<T>)._internalSetInstance(instance);
+			(registration as IInternalRegistration<T>)._internalSetResolved(true);
 		} else if (isResolution) {
 			resolveContext.set(registration, instance);
 		}
