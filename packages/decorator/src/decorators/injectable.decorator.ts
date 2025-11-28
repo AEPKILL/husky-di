@@ -14,13 +14,13 @@ import type { InjectionMetadata } from "@/types/injection-metadata.type";
 
 /**
  * @description
- * markup a class as a injectable class
+ * Mark a class as an injectable class
  */
 export const injectable: () => ClassDecorator = () =>
 	((target: Constructor<unknown>) => {
 		if (injectionMetadataMap.has(target)) {
 			throw new Error(
-				`can't use  "@injectable()" decorate class "${target.name}" twice`,
+				`Class '${target.name}' is already decorated with @Injectable()`,
 			);
 		}
 
@@ -52,11 +52,11 @@ export const injectable: () => ClassDecorator = () =>
 			 */
 			if (typeof serviceIdentifier !== "function") {
 				throw new Error(
-					`only can inject class type in constructor "${target.name}" parameter #${index}`,
+					`Constructor '${target.name}' parameter #${index} must be a class type`,
 				);
 			}
 
-			// class type use LifecycleEnum.transient
+			// Class type uses LifecycleEnum.transient
 			metadata.push({ serviceIdentifier });
 		}
 
