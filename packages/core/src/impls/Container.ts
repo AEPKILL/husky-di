@@ -151,6 +151,18 @@ export class Container
 
 		this._resolveContextRef = { current: undefined };
 
+		this.addCleanup(() => {
+			for (const middleware of [
+				...globalMiddleware.middlewares,
+				...this._resolveMiddlewareChain.middlewares,
+			]) {
+				try {
+					middleware.onContainerDispose?.(this);
+				} catch {
+					// Ignore errors during cleanup
+				}
+			}
+		});
 		// Register cleanup handlers for proper disposal
 		this.addDisposable(this._resolveMiddlewareChain);
 		this.addCleanup(() => {

@@ -201,6 +201,14 @@ A middleware **MAY**:
 **M5. Middleware Removal**  
 A middleware **MAY** be removed using `unused()`. The middleware will be removed from the chain, preventing it from executing in subsequent resolutions.
 
+**M6. Middleware Disposal Hook**  
+A middleware **MAY** define an optional `onContainerDispose` callback that is invoked when a container is disposed.
+
+- The callback **MUST** receive the container instance as a parameter.
+- The callback **MUST** be called for both local and global middlewares when a container is disposed.
+- If the callback throws an error, the error **MUST** be caught and ignored to prevent disposal interruption.
+- The callback **SHOULD** be used for cleanup operations such as releasing resources, unsubscribing from events, or clearing caches.
+
 ### 4.7 Resource Disposal
 
 **D1. Disposal State**  
