@@ -10,6 +10,7 @@
  * @created 2025-07-26 21:55:06
  */
 
+import type { IContainer } from "./container.interface";
 import type { IDisposable } from "./disposable.interface";
 import type { ITypedEvent } from "./typed-event.interface";
 
@@ -40,6 +41,8 @@ export type Middleware<Params, Result> = {
 	name: string | symbol;
 	/** The middleware executor function */
 	executor: (params: Params, next: NextMiddleware<Params, Result>) => Result;
+	/** Optional callback invoked when the container is disposed */
+	onContainerDispose?: (container: IContainer) => void;
 };
 
 /**

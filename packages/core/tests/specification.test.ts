@@ -16,7 +16,6 @@ import {
 	type IContainer,
 	LifecycleEnum,
 	ResolveException,
-	type ResolveMiddleware,
 	resolve,
 } from "../src/index";
 import { clearContainer, clearMiddleware } from "./test.utils";
@@ -1492,6 +1491,172 @@ describe("SPEC 4.6: Middleware System", () => {
 
 			// Assert
 			expect(callCount).toBe(0);
+		});
+	});
+
+	describe("M6: Middleware Disposal Hook", () => {
+		it("should call onContainerDispose when container is disposed", () => {
+			// Arrange
+			let disposeCalled = false;
+			let disposedContainer: IContainer | null = null;
+			const middleware = {
+				name: "disposeMiddleware",
+				// biome-ignore lint/suspicious/noExplicitAny: Test middleware needs flexible typing
+				executor: (params: any, next: any) => next(params),
+				onContainerDispose: (container: IContainer) => {
+					disposeCalled = true;
+					disposedContainer = container;
+				},
+			};
+
+			container.use(middleware);
+
+			// Act
+			container.dispose();
+
+			// Assert
+			expect(disposeCalled).toBe(true);
+			expect(disposedContainer).toBe(container);
+		});
+
+		it("should call onContainerDispose for both local and global middlewares", () => {
+			// Arrange
+			let localDisposeCalled = false;
+			let globalDisposeCalled = false;
+
+			const localMiddleware = {
+				name: "localDisposeMiddleware",
+				// biome-ignore lint/suspicious/noExplicitAny: Test middleware needs flexible typing
+				executor: (params: any, next: any) => next(params),
+				onContainerDispose: () => {
+					localDisposeCalled = true;
+				},
+			};
+
+			const globalMiddlewareObj = {
+				name: "globalDisposeMiddleware",
+				// biome-ignore lint/suspicious/noExplicitAny: Test middleware needs flexible typing
+				executor: (params: any, next: any) => next(params),
+				onContainerDispose: () => {
+					globalDisposeCalled = true;
+				},
+			};
+
+			container.use(localMiddleware);
+			globalMiddleware.use(globalMiddlewareObj);
+
+			// Act
+			container.dispose();
+
+			// Assert
+			expect(localDisposeCalled).toBe(true);
+			expect(globalDisposeCalled).toBe(true);
+		});
+
+		it("should ignore errors thrown in onContainerDispose", () => {
+			// Arrange
+			const errorMiddleware = {
+				name: "errorDisposeMiddleware",
+				// biome-ignore lint/suspicious/noExplicitAny: Test middleware needs flexible typing
+				executor: (params: any, next: any) => next(params),
+				onContainerDispose: () => {
+					throw new Error("Disposal error");
+				},
+			};
+
+			const successMiddleware = {
+				name: "successDisposeMiddleware",
+				// biome-ignore lint/suspicious/noExplicitAny: Test middleware needs flexible typing
+				executor: (params: any, next: any) => next(params),
+				onContainerDispose: () => {
+					// This should still be called even if previous middleware throws
+				},
+			};
+
+			container.use(errorMiddleware);
+			container.use(successMiddleware);
+
+			// Act & Assert - Should not throw
+			expect(() => {
+				container.dispose();
+			}).not.toThrow();
+			expect(container.disposed).toBe(true);
+		});
+
+		it("should use onContainerDispose for cleanup operations", () => {
+			// Arrange
+			const cache = new Map<string, unknown>();
+			cache.set("key1", "value1");
+			cache.set("key2", "value2");
+
+			const cacheMiddleware = {
+				name: "cacheMiddleware",
+				// biome-ignore lint/suspicious/noExplicitAny: Test middleware needs flexible typing
+				executor: (params: any, next: any) => {
+					const result = next(params);
+					cache.set("cached", result);
+					return result;
+				},
+				onContainerDispose: () => {
+					// Cleanup cache
+					cache.clear();
+				},
+			};
+
+			container.use(cacheMiddleware);
+			container.register(IServiceA, { useClass: ServiceA });
+
+			// Populate cache
+			container.resolve(IServiceA);
+			expect(cache.size).toBeGreaterThan(0);
+
+			// Act
+			container.dispose();
+
+			// Assert - Cache should be cleared
+			expect(cache.size).toBe(0);
+		});
+
+		it("should not call onContainerDispose on parent when child is disposed", () => {
+			// Arrange
+			const parentContainer = createContainer("ParentContainer");
+			const childContainer = createContainer("ChildContainer", parentContainer);
+
+			let parentDisposeCalled = false;
+			let childDisposeCalled = false;
+
+			const parentMiddleware = {
+				name: "parentDisposeMiddleware",
+				// biome-ignore lint/suspicious/noExplicitAny: Test middleware needs flexible typing
+				executor: (params: any, next: any) => next(params),
+				onContainerDispose: () => {
+					parentDisposeCalled = true;
+				},
+			};
+
+			const childMiddleware = {
+				name: "childDisposeMiddleware",
+				// biome-ignore lint/suspicious/noExplicitAny: Test middleware needs flexible typing
+				executor: (params: any, next: any) => next(params),
+				onContainerDispose: () => {
+					childDisposeCalled = true;
+				},
+			};
+
+			parentContainer.use(parentMiddleware);
+			childContainer.use(childMiddleware);
+
+			// Act - Dispose only child
+			childContainer.dispose();
+
+			// Assert
+			expect(childDisposeCalled).toBe(true);
+			expect(parentDisposeCalled).toBe(false);
+			expect(childContainer.disposed).toBe(true);
+			expect(parentContainer.disposed).toBe(false);
+
+			// Cleanup
+			clearContainer(parentContainer);
 		});
 	});
 });
