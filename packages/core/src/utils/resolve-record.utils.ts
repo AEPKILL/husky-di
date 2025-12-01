@@ -25,15 +25,6 @@ import { resolveRecordRef } from "@/shared/instances";
 import { getServiceIdentifierName } from "./service-identifier.utils";
 
 /**
- * Gets the current resolution record.
- *
- * @returns The current resolution record, or undefined if no resolution is in progress
- */
-export function getResolveRecord(): IInternalResolveRecord | undefined {
-	return resolveRecordRef.current;
-}
-
-/**
  * Gets the current resolution record, creating one if it doesn't exist.
  *
  * @param container - The container to use for creating a new resolution record if needed

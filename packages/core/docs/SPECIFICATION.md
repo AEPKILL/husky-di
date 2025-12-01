@@ -211,6 +211,15 @@ Each middleware **MUST** receive:
   - **Isolation**: Each container's local middlewares are independent; parent-child container relationships do not automatically inherit local middlewares.
   - **Composition Flow**: `Local → Global → Provider` (simple two-layer model)
 
+**M7. Middleware Independence from Container Hierarchy**  
+Middleware execution **MUST** be independent of container parent-child relationships:
+
+- Local middlewares are specific to a single container instance and **MUST NOT** be inherited by child containers.
+- Global middlewares are shared across all container instances regardless of hierarchy.
+- A child container **MUST** have its own independent local middleware chain.
+- Parent container's local middlewares **MUST NOT** affect child container's resolution.
+- Service resolution follows parent-child hierarchy, but middleware execution does not.
+
 **M4. Middleware Interception**  
 A middleware **MAY**:
 
