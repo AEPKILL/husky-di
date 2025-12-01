@@ -32,35 +32,6 @@ export function createServiceIdentifier<T>(
 }
 
 /**
- * Type guard to check if a value is a valid service identifier.
- *
- * @remarks
- * A type guard function for runtime type checking. Returns true if the value
- * is a function, symbol, or string, which are the valid types for service identifiers.
- *
- * @typeParam T - The service type
- * @param serviceIdentifier - The value to check
- * @returns True if the value is a valid service identifier, false otherwise
- *
- * @example
- * ```typescript
- * if (isServiceIdentifier(someValue)) {
- *   // someValue is now inferred as ServiceIdentifier<T>
- *   console.log('This is a valid service identifier');
- * }
- * ```
- */
-export function isServiceIdentifier<T>(
-	serviceIdentifier: unknown,
-): serviceIdentifier is ServiceIdentifier<T> {
-	return (
-		typeof serviceIdentifier === "function" ||
-		typeof serviceIdentifier === "symbol" ||
-		typeof serviceIdentifier === "string"
-	);
-}
-
-/**
  * Gets a human-readable name from a service identifier.
  *
  * @remarks

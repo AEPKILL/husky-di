@@ -113,15 +113,13 @@ export class MiddlewareChain<Params, Result>
 	 * Builds the middleware executor function with pure LIFO composition strategy.
 	 *
 	 * Combines global middlewares and local middlewares into a single execution chain
-	 * following strict LIFO (Last-In-First-Out) semantics based on container hierarchy
-	 * and registration time.
+	 * following strict LIFO (Last-In-First-Out) semantics based on registration time.
 	 *
 	 * **Composition Strategy: Local wraps Global**
 	 *
 	 * The middleware chain follows the philosophy that:
 	 * - **Later-registered middlewares wrap earlier-registered ones**
-	 * - **More specific contexts (Local) wrap broader contexts (Global)**
-	 * - **Child containers can intercept and override parent behavior**
+	 * - **Container-specific context (Local) wraps application-wide context (Global)**
 	 *
 	 * **Execution Flow (Onion Model):**
 	 * ```
@@ -154,13 +152,19 @@ export class MiddlewareChain<Params, Result>
 	 * 1. **Override**: Local middlewares can bypass global logic by not calling `next()`
 	 * 2. **Intercept**: Local middlewares see and can modify all parameters/results
 	 * 3. **Context Enrichment**: Local can inject context before passing to global
-	 * 4. **Testing/Mocking**: Child containers can completely replace parent behavior
+	 * 4. **Testing/Mocking**: Container-specific middlewares can replace global behavior
 	 *
 	 * **Why This Order:**
-	 * - Global middlewares are typically registered when parent container is created (earlier in time)
-	 * - Local middlewares are registered when child container is created (later in time)
+	 * - Global middlewares are typically registered during application initialization (earlier in time)
+	 * - Local middlewares are registered when container is configured (later in time)
 	 * - Following LIFO: later registrations should wrap earlier registrations
-	 * - This gives child containers the power to control and override parent behavior
+	 * - This gives container-specific logic the power to control and override global behavior
+	 *
+	 * **Important: Middleware Independence from Container Hierarchy**
+	 * - Local middlewares belong to a specific container instance only
+	 * - Parent-child container relationships do NOT affect middleware execution
+	 * - Each container has its own independent local middleware chain
+	 * - Global middlewares are shared across all containers (not inherited through hierarchy)
 	 *
 	 * @returns The composed middleware executor function
 	 *

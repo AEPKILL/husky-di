@@ -68,11 +68,6 @@ export class Registration<T> implements IInternalRegistration<T>, IDisplayName {
 	}
 
 	/**
-	 * Storage for extra properties (used by middleware to pass data)
-	 */
-	private readonly _extras = new Map<string | symbol, unknown>();
-
-	/**
 	 * Creates a new registration instance
 	 * @param options Registration options specifying the service creation strategy
 	 */
