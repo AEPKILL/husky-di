@@ -1,5 +1,14 @@
 # @husky-di/decorator
 
+## 1.0.1
+
+### Patch Changes
+
+- Bug fixes and minor improvements across core, decorator, and module packages
+
+- Updated dependencies []:
+  - @husky-di/core@1.0.1
+
 ## 1.0.0
 
 ### Major Changes
