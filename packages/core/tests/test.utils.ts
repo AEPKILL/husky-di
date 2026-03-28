@@ -19,7 +19,7 @@ export function clearContainer(container: IContainer): void {
  * @param middleware The middleware manager to clean up
  */
 export function clearMiddleware(
-	// biome-ignore lint/suspicious/noExplicitAny: <explanation>
+	// biome-ignore lint/suspicious/noExplicitAny: generic middleware helper for tests
 	middleware: IMiddlewareManager<any, any>,
 ): void {
 	if (middleware && !middleware.disposed) {
