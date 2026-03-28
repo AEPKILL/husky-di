@@ -639,10 +639,9 @@ describe("Error Messages", () => {
 			});
 
 			// Act - 应该能够成功解析
-			// biome-ignore lint/suspicious/noExplicitAny: 工厂函数返回的动态对象类型
 			const dynamicFactoryServiceA = container.resolve(
 				"DynamicFactoryServiceA",
-			) as any;
+			) as unknown;
 
 			// Assert
 			expect(dynamicFactoryServiceA.name).toBe("DynamicFactoryServiceA");

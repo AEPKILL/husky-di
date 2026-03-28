@@ -30,6 +30,7 @@ describe("Decorator Module - Specification Compliance", () => {
 				expect(() => {
 					@injectable()
 					@injectable()
+					// biome-ignore lint/correctness/noUnusedVariables: test case for duplicate decorator
 					class TestService {}
 				}).toThrow(/already decorated with @injectable\(\)/i);
 			});
@@ -456,6 +457,7 @@ describe("Decorator Module - Specification Compliance", () => {
 				expect(() => {
 					@injectable()
 					@injectable()
+					// biome-ignore lint/correctness/noUnusedVariables: test case for duplicate decorator
 					class DuplicateService {}
 				}).toThrow(/already decorated with @injectable\(\)/i);
 			});
@@ -464,6 +466,7 @@ describe("Decorator Module - Specification Compliance", () => {
 				expect(() => {
 					@injectable()
 					@injectable()
+					// biome-ignore lint/correctness/noUnusedVariables: test case for duplicate decorator error message
 					class MyService {}
 				}).toThrow(/MyService/);
 			});
@@ -475,7 +478,7 @@ describe("Decorator Module - Specification Compliance", () => {
 				// which are valid function types, so they pass validation
 				@injectable()
 				class TestService {
-					constructor(value: number) {}
+					constructor(_value: number) {}
 				}
 
 				// The class is decorated successfully
@@ -553,7 +556,7 @@ describe("Decorator Module - Specification Compliance", () => {
 			class UserService {
 				constructor(
 					@inject(DatabaseService) private db: DatabaseService,
-					@inject(LoggerService) private logger: LoggerService,
+					@inject(LoggerService) _logger: LoggerService,
 				) {}
 
 				getUser(id: string) {

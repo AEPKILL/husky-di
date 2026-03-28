@@ -1,4 +1,3 @@
-import fs from "node:fs";
 import { resolve } from "node:path";
 import { defineConfig } from "vitest/config";
 import { tsDecoratorPlugin } from "./plugins/ts-decorator.plugin";
