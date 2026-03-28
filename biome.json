@@ -16,7 +16,12 @@
 		"enabled": true,
 		"rules": {
 			"recommended": true,
-			"nursery": {}
+			"nursery": {
+				"useExplicitType": "error"
+			},
+			"style": {
+				"useImportType": "error"
+			}
 		}
 	},
 	"javascript": {
