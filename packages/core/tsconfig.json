@@ -1,6 +1,6 @@
 {
 	"compilerOptions": {
-		"lib": ["ES2021"],
+		"lib": ["ES2021", "DOM"],
 		"module": "ESNext",
 		"target": "ES2015",
 		"noEmit": true,
@@ -11,6 +11,7 @@
 		"moduleResolution": "bundler",
 		"useDefineForClassFields": true,
 		"allowImportingTsExtensions": true,
+		"rootDir": "./src",
 		"paths": {
 			"@/*": ["./src/*"]
 		}
