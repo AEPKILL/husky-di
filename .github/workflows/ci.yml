@@ -43,6 +43,12 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Test code standard validator
+        run: pnpm test:code-standard
+
+      - name: Check code standard
+        run: pnpm check:code-standard
+
       - name: Lint code
         run: pnpm --filter @husky-di/* run format && pnpm --filter @husky-di/* run check
 
