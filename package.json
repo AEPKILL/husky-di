@@ -9,6 +9,8 @@
 		"prepare": "husky",
 		"build": "pnpm --filter './packages/*' build",
 		"test": "pnpm --filter './packages/*' test",
+		"lint:commit-message": "sh -c 'shift; commitlint --edit \"$1\"' --",
+		"test:commit-message": "pnpm --filter @husky-di/scripts test:commit-message",
 		"test:code-standard": "pnpm --filter @husky-di/scripts test:code-standard",
 		"check:code-standard": "pnpm exec biome check packages scripts && pnpm --filter @husky-di/scripts check:code-standard",
 		"changeset": "changeset",
@@ -28,6 +30,8 @@
 		"@biomejs/biome": "2.4.9",
 		"@changesets/changelog-github": "^0.6.0",
 		"@changesets/cli": "^2.30.0",
+		"@commitlint/cli": "^20.5.0",
+		"@commitlint/config-conventional": "^20.5.0",
 		"husky": "^9.1.7",
 		"lint-staged": "^16.4.0"
 	}
