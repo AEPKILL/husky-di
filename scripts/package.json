@@ -4,6 +4,7 @@
 	"private": true,
 	"type": "module",
 	"scripts": {
+		"test:commit-message": "node --import tsx --test tests/check-commit-message.test.ts",
 		"test:code-standard": "node --import tsx --test tests/check-code-standard.test.ts",
 		"check:code-standard": "node --import tsx src/check-code-standard.ts",
 		"typecheck": "tsc -p tsconfig.json --noEmit"
