@@ -1,0 +1,16 @@
+{
+	"name": "@husky-di/scripts",
+	"version": "1.0.0",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"test:code-standard": "node --import tsx --test tests/check-code-standard.test.ts",
+		"check:code-standard": "node --import tsx check-code-standard.ts",
+		"typecheck": "tsc -p tsconfig.json --noEmit"
+	},
+	"devDependencies": {
+		"@types/node": "^25.5.0",
+		"tsx": "^4.21.0",
+		"typescript": "^6.0.2"
+	}
+}

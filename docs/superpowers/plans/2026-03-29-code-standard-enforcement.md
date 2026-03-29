@@ -4,7 +4,7 @@
 
 **Goal:** Build a repository-wide `husky-di-code-standard` gate using `Biome` plus a TypeScript AST validator, normalize the current baseline, and enforce the gate in `pre-commit` and CI.
 
-**Architecture:** Keep `Biome` as the only formatter and general-purpose lint layer, and add a single repository-local validator at `scripts/check-code-standard.ts` for `husky-di`-specific hard rules. Unit test the validator with temporary workspaces under `scripts/tests`, then fix current repository violations before wiring the new gate into `.husky/pre-commit` and GitHub Actions.
+**Architecture:** Keep `Biome` as the only formatter and general-purpose lint layer, and add a single repository-local validator inside the private `@husky-di/scripts` workspace package at `scripts/check-code-standard.ts` for `husky-di`-specific hard rules. Unit test the validator with temporary workspaces under `scripts/tests`, then fix current repository violations before wiring the new gate into `.husky/pre-commit` and GitHub Actions.
 
 **Tech Stack:** pnpm, Biome, TypeScript compiler API, tsx, node:test, Husky, GitHub Actions
 
@@ -13,6 +13,7 @@
 ## File Structure
 
 - Create: `scripts/tsconfig.json`
+- Create: `scripts/package.json`
 - Create: `scripts/check-code-standard.ts`
 - Create: `scripts/tests/check-code-standard.test.ts`
 - Modify: `package.json`
@@ -36,14 +37,16 @@
 
 **Files:**
 - Create: `scripts/tsconfig.json`
+- Create: `scripts/package.json`
 - Create: `scripts/check-code-standard.ts`
 - Modify: `package.json`
 - Modify: `biome.json`
 
-- [ ] **Step 1: Install root dependencies for repository scripts**
+- [ ] **Step 1: Add a private workspace package for repository scripts**
 
-Run: `pnpm add -Dw typescript tsx @types/node`
-Expected: `package.json` and `pnpm-lock.yaml` include root development dependencies for TypeScript scripts and tests.
+Create `scripts/package.json` so the repository validator tooling lives in a private `@husky-di/scripts` workspace package with local `typescript`, `tsx`, and `@types/node` development dependencies.
+
+Expected: `scripts/package.json` and `pnpm-lock.yaml` capture the script-local runtime and type-checking dependencies without adding them to the root package.
 
 - [ ] **Step 2: Add root scripts for testing and running the validator**
 
@@ -53,10 +56,10 @@ Update `package.json` so the root scripts contain these exact entries:
 {
 	"scripts": {
 		"prepare": "husky",
-		"build": "pnpm --filter @husky-di/* build",
-		"test": "pnpm --filter @husky-di/* test",
-		"test:code-standard": "node --import tsx --test scripts/tests/check-code-standard.test.ts",
-		"check:code-standard": "pnpm exec biome check packages scripts && node --import tsx scripts/check-code-standard.ts",
+		"build": "pnpm --filter './packages/*' build",
+		"test": "pnpm --filter './packages/*' test",
+		"test:code-standard": "pnpm --filter @husky-di/scripts test:code-standard",
+		"check:code-standard": "pnpm exec biome check packages scripts && pnpm --filter @husky-di/scripts check:code-standard",
 		"changeset": "changeset",
 		"changeset:version": "changeset version",
 		"changeset:publish": "pnpm build && changeset publish",
