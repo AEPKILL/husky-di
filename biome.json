@@ -8,8 +8,18 @@
 	"files": {
 		"ignoreUnknown": false,
 		"includes": [
+			"*.css",
+			"*.js",
+			"*.json",
+			"*.jsx",
+			"*.less",
 			"packages/**/src/**",
 			"packages/**/tests/**",
+			"*.sass",
+			"*.scss",
+			"*.ts",
+			"*.tsx",
+			"scripts/**/*.json",
 			"scripts/**/*.ts"
 		]
 	},

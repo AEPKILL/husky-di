@@ -90,7 +90,7 @@ The first blocking rule set should include:
    - `@created`
 
 4. **Entrypoint shape**
-   Package `src/index.ts` files must act as export entrypoints and must not carry implementation-heavy logic.
+   Package `src/index.ts` files must act as export entrypoints and must not carry implementation-heavy logic. They may import symbols and forward stable exported constants when that matches the established public API shape.
 
 5. **Public API routing**
    Public exports must flow through the owning package `src/index.ts` rather than exposing implementation files directly by accident.

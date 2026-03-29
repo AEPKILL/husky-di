@@ -42,7 +42,7 @@
 
 - [ ] **Step 1: Install root dependencies for repository scripts**
 
-Run: `pnpm add -D typescript tsx @types/node`
+Run: `pnpm add -Dw typescript tsx @types/node`
 Expected: `package.json` and `pnpm-lock.yaml` include root development dependencies for TypeScript scripts and tests.
 
 - [ ] **Step 2: Add root scripts for testing and running the validator**
@@ -55,8 +55,8 @@ Update `package.json` so the root scripts contain these exact entries:
 		"prepare": "husky",
 		"build": "pnpm --filter @husky-di/* build",
 		"test": "pnpm --filter @husky-di/* test",
-		"test:code-standard": "pnpm exec tsx --test scripts/tests/check-code-standard.test.ts",
-		"check:code-standard": "pnpm exec biome check packages scripts && pnpm exec tsx scripts/check-code-standard.ts",
+		"test:code-standard": "node --import tsx --test scripts/tests/check-code-standard.test.ts",
+		"check:code-standard": "pnpm exec biome check packages scripts && node --import tsx scripts/check-code-standard.ts",
 		"changeset": "changeset",
 		"changeset:version": "changeset version",
 		"changeset:publish": "pnpm build && changeset publish",
@@ -260,14 +260,35 @@ export default function getValue(): number {
 		]);
 	});
 
-	it("reports implementation statements inside src/index.ts", () => {
+	it("allows stable constant forwarding inside src/index.ts", () => {
 		const rootDirectoryPath = createWorkspace({
 			"packages/core/src/index.ts": `/**
  * @overview Core package entrypoint.
  * @author AEPKILL
  * @created 2025-07-30 22:40:39
  */
-export const value = 1;
+import type { IContainer } from "@/interfaces/container.interface";
+import { Container } from "./impls/Container";
+
+export const rootContainer: IContainer = Container.rootContainer;
+`,
+		});
+
+		assert.deepEqual(getRuleIds(rootDirectoryPath), []);
+	});
+
+	it("reports implementation logic inside src/index.ts", () => {
+		const rootDirectoryPath = createWorkspace({
+			"packages/core/src/index.ts": `/**
+ * @overview Core package entrypoint.
+ * @author AEPKILL
+ * @created 2025-07-30 22:40:39
+ */
+function createValue(): number {
+	return 1;
+}
+
+export const value = createValue();
 `,
 		});
 
@@ -672,18 +693,30 @@ function validateEntrypointShape(
 		return [];
 	}
 
+	const importedBindingNames = getImportedBindingNames(sourceFile);
+
 	for (const statement of sourceFile.statements) {
-		if (!ts.isExportDeclaration(statement)) {
-			return [
-				createDiagnostic(
-					"entrypoint/export-only",
-					relativeFilePath,
-					sourceFile,
-					statement.getStart(sourceFile),
-					"src/index.ts must stay focused on export declarations.",
-				),
-			];
+		if (ts.isImportDeclaration(statement) || ts.isExportDeclaration(statement)) {
+			continue;
 		}
+
+		if (
+			ts.isVariableStatement(statement) &&
+			hasExportModifier(statement) &&
+			isStableForwardingVariableStatement(statement, importedBindingNames)
+		) {
+			continue;
+		}
+
+		return [
+			createDiagnostic(
+				"entrypoint/export-only",
+				relativeFilePath,
+				sourceFile,
+				statement.getStart(sourceFile),
+				"src/index.ts may only contain imports, export declarations, and stable constant forwarding.",
+			),
+		];
 	}
 
 	return [];
@@ -709,20 +742,108 @@ function validateImportSpecifiers(
 		const packagePathSegments = normalizedSpecifierText
 			.slice("@husky-di/".length)
 			.split("/");
-		if (packagePathSegments.length > 1) {
-			diagnostics.push(
-				createDiagnostic(
-					"imports/no-internal-package-path",
-					relativeFilePath,
-					sourceFile,
-					statement.moduleSpecifier.getStart(sourceFile),
-					"Cross-package imports must use the package root entrypoint, not internal source paths.",
-				),
-			);
+		if (packagePathSegments.length <= 1) {
+			continue;
 		}
+
+		diagnostics.push(
+			createDiagnostic(
+				"imports/no-internal-package-path",
+				relativeFilePath,
+				sourceFile,
+				statement.moduleSpecifier.getStart(sourceFile),
+				"Cross-package imports must use the package root entrypoint, not internal source paths.",
+			),
+		);
 	}
 
 	return diagnostics;
+}
+
+function getImportedBindingNames(sourceFile: ts.SourceFile): Set<string> {
+	const importedBindingNames = new Set<string>();
+
+	for (const statement of sourceFile.statements) {
+		if (!ts.isImportDeclaration(statement) || !statement.importClause) {
+			continue;
+		}
+
+		const { name, namedBindings } = statement.importClause;
+		if (name) {
+			importedBindingNames.add(name.text);
+		}
+
+		if (namedBindings && ts.isNamespaceImport(namedBindings)) {
+			importedBindingNames.add(namedBindings.name.text);
+		}
+
+		if (namedBindings && ts.isNamedImports(namedBindings)) {
+			for (const element of namedBindings.elements) {
+				importedBindingNames.add(element.name.text);
+			}
+		}
+	}
+
+	return importedBindingNames;
+}
+
+function hasExportModifier(statement: ts.Statement): boolean {
+	if (!ts.canHaveModifiers(statement)) {
+		return false;
+	}
+
+	const modifiers = ts.getModifiers(statement) ?? [];
+	return modifiers.some(
+		(modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword,
+	);
+}
+
+function isStableForwardingVariableStatement(
+	statement: ts.VariableStatement,
+	importedBindingNames: Set<string>,
+): boolean {
+	if (
+		(statement.declarationList.flags & ts.NodeFlags.Const) !== ts.NodeFlags.Const
+	) {
+		return false;
+	}
+
+	return statement.declarationList.declarations.every((declaration) => {
+		if (!ts.isIdentifier(declaration.name) || !declaration.initializer) {
+			return false;
+		}
+
+		return isStableForwardingExpression(
+			declaration.initializer,
+			importedBindingNames,
+		);
+	});
+}
+
+function isStableForwardingExpression(
+	expression: ts.Expression,
+	importedBindingNames: Set<string>,
+): boolean {
+	if (ts.isIdentifier(expression)) {
+		return importedBindingNames.has(expression.text);
+	}
+
+	if (ts.isPropertyAccessExpression(expression)) {
+		return isStableForwardingExpression(expression.expression, importedBindingNames);
+	}
+
+	if (ts.isAsExpression(expression) || ts.isSatisfiesExpression(expression)) {
+		return isStableForwardingExpression(expression.expression, importedBindingNames);
+	}
+
+	if (
+		ts.isNonNullExpression(expression) ||
+		ts.isParenthesizedExpression(expression)
+	) {
+		return isStableForwardingExpression(expression.expression, importedBindingNames);
+	}
+
+	return false;
 }
 
 function validateBiomeIgnoreComments(
