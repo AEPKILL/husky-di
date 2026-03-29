@@ -7,10 +7,10 @@
 	"private": true,
 	"scripts": {
 		"prepare": "husky",
-		"build": "pnpm --filter @husky-di/* build",
-		"test": "pnpm --filter @husky-di/* test",
-		"test:code-standard": "node --import tsx --test scripts/tests/check-code-standard.test.ts",
-		"check:code-standard": "pnpm exec biome check packages scripts && node --import tsx scripts/check-code-standard.ts",
+		"build": "pnpm --filter './packages/*' build",
+		"test": "pnpm --filter './packages/*' test",
+		"test:code-standard": "pnpm --filter @husky-di/scripts test:code-standard",
+		"check:code-standard": "pnpm exec biome check packages scripts && pnpm --filter @husky-di/scripts check:code-standard",
 		"changeset": "changeset",
 		"changeset:version": "changeset version",
 		"changeset:publish": "pnpm build && changeset publish",
@@ -28,10 +28,7 @@
 		"@biomejs/biome": "2.4.9",
 		"@changesets/changelog-github": "^0.6.0",
 		"@changesets/cli": "^2.30.0",
-		"@types/node": "^25.5.0",
 		"husky": "^9.1.7",
-		"lint-staged": "^16.4.0",
-		"tsx": "^4.21.0",
-		"typescript": "^6.0.2"
+		"lint-staged": "^16.4.0"
 	}
 }
