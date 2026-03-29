@@ -1,11 +1,14 @@
 /**
- * Specification Compliance Tests
+ * @overview Core container specification compliance tests.
  *
  * This test suite validates that the container implementation complies with
  * the behavioral contract defined in SPECIFICATION.md v1.0.0.
  *
  * Each test is labeled with its corresponding specification requirement ID
  * (e.g., R1, S2, L1, etc.) for traceability.
+ *
+ * @author AEPKILL
+ * @created 2025-11-28 17:39:24
  */
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";

@@ -1,3 +1,9 @@
+/**
+ * @overview Module package behavior and integration tests.
+ * @author AEPKILL
+ * @created 2025-08-06 21:39:35
+ */
+
 import { createServiceIdentifier, resolve } from "@husky-di/core";
 import { describe, expect, it } from "vitest";
 import { createModule } from "../src/index";

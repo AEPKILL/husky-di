@@ -1,12 +1,10 @@
 /**
- * Container interface definitions and type utilities.
+ * @overview Core container interfaces and related type utilities.
  *
- * @remarks
  * This module defines the core container interfaces following the
- * Interface Segregation Principle (ISP) from SOLID principles.
- * The main {@link IContainer} interface is composed of smaller,
- * focused interfaces that each handle a specific aspect of container
- * functionality.
+ * Interface Segregation Principle (ISP) from SOLID principles. The main
+ * {@link IContainer} interface is composed of smaller focused interfaces
+ * that each handle a specific aspect of container functionality.
  *
  * @author AEPKILL
  * @created 2025-06-25 23:27:49

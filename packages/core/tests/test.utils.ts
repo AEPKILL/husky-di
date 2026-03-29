@@ -1,3 +1,9 @@
+/**
+ * @overview Shared test utilities for core package tests.
+ * @author AEPKILL
+ * @created 2025-08-05 22:21:10
+ */
+
 import type { IContainer } from "../src/interfaces/container.interface";
 import type { IMiddlewareManager } from "../src/interfaces/middleware-chain.interface";
 

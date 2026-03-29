@@ -1,5 +1,5 @@
 /**
- * @overview
+ * @overview Module implementation.
  * @author AEPKILL
  * @created 2025-08-09 14:51:09
  */

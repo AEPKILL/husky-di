@@ -1,3 +1,9 @@
+/**
+ * @overview Core container edge case behavior tests.
+ * @author AEPKILL
+ * @created 2023-05-27 10:12:16
+ */
+
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
 	createContainer,
