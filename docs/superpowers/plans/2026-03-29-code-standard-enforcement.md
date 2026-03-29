@@ -4,7 +4,7 @@
 
 **Goal:** Build a repository-wide `husky-di-code-standard` gate using `Biome` plus a TypeScript AST validator, normalize the current baseline, and enforce the gate in `pre-commit` and CI.
 
-**Architecture:** Keep `Biome` as the only formatter and general-purpose lint layer, and add a single repository-local validator inside the private `@husky-di/scripts` workspace package at `scripts/check-code-standard.ts` for `husky-di`-specific hard rules. Unit test the validator with temporary workspaces under `scripts/tests`, then fix current repository violations before wiring the new gate into `.husky/pre-commit` and GitHub Actions.
+**Architecture:** Keep `Biome` as the only formatter and general-purpose lint layer, and add a single repository-local validator inside the private `@husky-di/scripts` workspace package at `scripts/src/check-code-standard.ts` for `husky-di`-specific hard rules. Unit test the validator with temporary workspaces under `scripts/tests`, then fix current repository violations before wiring the new gate into `.husky/pre-commit` and GitHub Actions.
 
 **Tech Stack:** pnpm, Biome, TypeScript compiler API, tsx, node:test, Husky, GitHub Actions
 
@@ -14,7 +14,7 @@
 
 - Create: `scripts/tsconfig.json`
 - Create: `scripts/package.json`
-- Create: `scripts/check-code-standard.ts`
+- Create: `scripts/src/check-code-standard.ts`
 - Create: `scripts/tests/check-code-standard.test.ts`
 - Modify: `package.json`
 - Modify: `biome.json`
@@ -38,7 +38,7 @@
 **Files:**
 - Create: `scripts/tsconfig.json`
 - Create: `scripts/package.json`
-- Create: `scripts/check-code-standard.ts`
+- Create: `scripts/src/check-code-standard.ts`
 - Modify: `package.json`
 - Modify: `biome.json`
 
@@ -107,7 +107,7 @@ Create `scripts/tsconfig.json` with this content:
 
 - [ ] **Step 5: Add the validator stub so tests can import it before TDD begins**
 
-Create `scripts/check-code-standard.ts` with this content:
+Create `scripts/src/check-code-standard.ts` with this content:
 
 ```ts
 /**
@@ -139,14 +139,14 @@ Expected: PASS with no TypeScript errors.
 - [ ] **Step 7: Commit**
 
 ```bash
-git add package.json pnpm-lock.yaml biome.json scripts/tsconfig.json scripts/check-code-standard.ts docs/superpowers/plans/2026-03-29-code-standard-enforcement.md
+git add package.json pnpm-lock.yaml biome.json scripts/tsconfig.json scripts/src/check-code-standard.ts docs/superpowers/plans/2026-03-29-code-standard-enforcement.md
 git commit -m "chore: add code standard validator scaffold"
 ```
 
 ### Task 2: Implement and test the TypeScript validator
 
 **Files:**
-- Modify: `scripts/check-code-standard.ts`
+- Modify: `scripts/src/check-code-standard.ts`
 - Create: `scripts/tests/check-code-standard.test.ts`
 
 - [ ] **Step 1: Write the failing validator tests**
@@ -165,7 +165,7 @@ import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, describe, it } from "node:test";
-import { validateCodeStandard } from "../check-code-standard";
+import { validateCodeStandard } from "../src/check-code-standard";
 
 const temporaryDirectoryPaths: string[] = [];
 
@@ -320,7 +320,7 @@ export function getContainerName(): string {
 
 	it("reports biome-ignore directives without reasons", () => {
 		const rootDirectoryPath = createWorkspace({
-			"scripts/check-code-standard.ts": `/**
+			"scripts/src/check-code-standard.ts": `/**
  * @overview Repository code standard validator.
  * @author AEPKILL
  * @created 2026-03-29 21:35:00
@@ -344,7 +344,7 @@ Expected: FAIL because `validateCodeStandard()` still returns an empty diagnosti
 
 - [ ] **Step 3: Replace the stub with the real validator implementation**
 
-Update `scripts/check-code-standard.ts` to this content:
+Update `scripts/src/check-code-standard.ts` to this content:
 
 ```ts
 /**
@@ -987,7 +987,7 @@ Expected: PASS with no TypeScript errors.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add scripts/check-code-standard.ts scripts/tests/check-code-standard.test.ts docs/superpowers/plans/2026-03-29-code-standard-enforcement.md
+git add scripts/src/check-code-standard.ts scripts/tests/check-code-standard.test.ts docs/superpowers/plans/2026-03-29-code-standard-enforcement.md
 git commit -m "feat: add code standard validator"
 ```
 

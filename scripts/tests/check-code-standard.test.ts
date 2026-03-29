@@ -9,7 +9,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, describe, it } from "node:test";
-import { validateCodeStandard } from "../check-code-standard";
+import { validateCodeStandard } from "../src/check-code-standard";
 
 const temporaryDirectoryPaths: string[] = [];
 
@@ -164,7 +164,7 @@ export function getContainerName(): string {
 
 	it("reports biome-ignore directives without reasons", () => {
 		const rootDirectoryPath = createWorkspace({
-			"scripts/check-code-standard.ts": `/**
+			"scripts/src/check-code-standard.ts": `/**
  * @overview Repository code standard validator.
  * @author AEPKILL
  * @created 2026-03-29 21:35:00

@@ -57,7 +57,7 @@ The following are explicitly out of scope for the blocking gate:
 
 Configuration files are excluded because the repository already uses normal tool-native patterns there, including default exports and lightweight file structure. Forcing those files into the same blocking rules would create avoidable conflict with how those tools expect configuration to be authored.
 
-Repository scripts are included because the enforcement implementation itself lives in the private `@husky-di/scripts` workspace package under `scripts/**/*.ts`, and those files must satisfy the same repository standard they are responsible for validating elsewhere.
+Repository scripts are included because the enforcement implementation itself lives in the private `@husky-di/scripts` workspace package under `scripts/src/**/*.ts`, and those files must satisfy the same repository standard they are responsible for validating elsewhere.
 
 ## Blocking Rules For V1
 
