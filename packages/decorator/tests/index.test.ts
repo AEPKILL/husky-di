@@ -1,7 +1,10 @@
 /**
- * @overview
- * Test suite for @husky-di/decorator based on SPECIFICATION.md
+ * @overview Decorator package specification compliance tests.
+ *
+ * Test suite for @husky-di/decorator based on SPECIFICATION.md.
+ *
  * @author AEPKILL
+ * @created 2025-08-06 21:39:35
  */
 
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";

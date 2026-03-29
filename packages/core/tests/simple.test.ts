@@ -1,3 +1,9 @@
+/**
+ * @overview Core container smoke and basic behavior tests.
+ * @author AEPKILL
+ * @created 2025-08-04 23:35:48
+ */
+
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
 	createContainer,

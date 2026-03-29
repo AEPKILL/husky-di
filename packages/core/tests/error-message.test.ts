@@ -1,3 +1,9 @@
+/**
+ * @overview Core container error message behavior tests.
+ * @author AEPKILL
+ * @created 2025-08-05 23:32:34
+ */
+
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { ResolveException } from "../src/exceptions/resolve.exception";
 import {
