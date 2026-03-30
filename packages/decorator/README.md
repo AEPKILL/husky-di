@@ -178,7 +178,7 @@ console.log(result); // "Logged: Executing: SELECT * FROM users WHERE id = 123"
 1. **重复使用 @injectable()**
 
    ```typescript
-   // ❌ 错误：不能对同一个类使用两次 @injectable()
+   // 错误：不能对同一个类使用两次 @injectable()
    @injectable()
    @injectable()
    class TestService {}
@@ -187,7 +187,7 @@ console.log(result); // "Logged: Executing: SELECT * FROM users WHERE id = 123"
 2. **注入非可注入类**
 
    ```typescript
-   // ❌ 错误：依赖的类没有使用 @injectable()
+   // 错误：依赖的类没有使用 @injectable()
    class NonInjectableService {}
 
    @injectable()
@@ -199,7 +199,7 @@ console.log(result); // "Logged: Executing: SELECT * FROM users WHERE id = 123"
 3. **循环依赖**
 
    ```typescript
-   // ❌ 错误：检测到循环依赖
+   // 错误：检测到循环依赖
    @injectable()
    class ServiceA {
      constructor(@inject(ServiceB) public serviceB: ServiceB) {}

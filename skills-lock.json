@@ -11,6 +11,11 @@
 			"sourceType": "github",
 			"computedHash": "e21044ae7496fc285f1df9ff3fb518a3a20bea6f5216c1f59f4987e12c769a0a"
 		},
+		"documentation-writer": {
+			"source": "github/awesome-copilot",
+			"sourceType": "github",
+			"computedHash": "ee53d65b163cd7eb953a930c95841cfe398cc2c0bd24c06508bbaa07c432be35"
+		},
 		"executing-plans": {
 			"source": "obra/superpowers",
 			"sourceType": "github",
