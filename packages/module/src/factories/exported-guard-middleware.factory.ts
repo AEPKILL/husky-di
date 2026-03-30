@@ -40,6 +40,10 @@ import {
  *
  * Note: Services not registered in the container are not considered external access,
  * as they will be resolved from parent containers or fail with a different error.
+ *
+ * @important Do not remove this middleware from the container once registered.
+ * Removing this middleware will disable export protection and allow external access
+ * to non-exported services.
  */
 export function createExportedGuardMiddlewareFactory(
 	exports: ReadonlyArray<ServiceIdentifier<unknown>>,
