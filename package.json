@@ -9,6 +9,8 @@
 		"prepare": "husky",
 		"build": "pnpm --filter './packages/*' build",
 		"test": "pnpm --filter './packages/*' test",
+		"dev:website": "pnpm --filter @husky-di/website dev",
+		"build:website": "pnpm --filter @husky-di/website build",
 		"lint:commit-message": "sh -c 'shift; commitlint --edit \"$1\"' --",
 		"test:commit-message": "pnpm --filter @husky-di/scripts test:commit-message",
 		"test:code-standard": "pnpm --filter @husky-di/scripts test:code-standard",
