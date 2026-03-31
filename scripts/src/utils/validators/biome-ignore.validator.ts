@@ -11,15 +11,15 @@
 
 import * as ts from "typescript";
 import { CodeStandardRuleIdEnum } from "../../enums/code-standard-rule-id.enum";
-import type { ICodeStandardDiagnostic } from "../../interfaces/code-standard-diagnostic.interface";
+import type { CodeStandardDiagnostic } from "../../interfaces/code-standard-diagnostic.interface";
 import { createDiagnostic } from "../create-diagnostic.utils";
 
 export function validateBiomeIgnoreComments(
 	relativeFilePath: string,
 	sourceFile: ts.SourceFile,
 	sourceText: string,
-): ICodeStandardDiagnostic[] {
-	const diagnostics: ICodeStandardDiagnostic[] = [];
+): CodeStandardDiagnostic[] {
+	const diagnostics: CodeStandardDiagnostic[] = [];
 	const scanner = ts.createScanner(
 		ts.ScriptTarget.Latest,
 		false,

@@ -3,6 +3,9 @@
 	"version": "1.0.0",
 	"private": true,
 	"type": "module",
+	"imports": {
+		"@/*": "./src/*"
+	},
 	"scripts": {
 		"test:commit-message": "node --import tsx --test tests/check-commit-message.test.ts",
 		"test:code-standard": "node --import tsx --test tests/check-code-standard.test.ts",

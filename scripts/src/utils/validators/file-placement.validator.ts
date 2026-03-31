@@ -15,13 +15,13 @@ import {
 	REQUIRED_SUFFIX_BY_SOURCE_DIRECTORY,
 } from "../../constants/file-placement.const";
 import { CodeStandardRuleIdEnum } from "../../enums/code-standard-rule-id.enum";
-import type { ICodeStandardDiagnostic } from "../../interfaces/code-standard-diagnostic.interface";
+import type { CodeStandardDiagnostic } from "../../interfaces/code-standard-diagnostic.interface";
 import { createDiagnostic } from "../create-diagnostic.utils";
 
 export function validateFilePlacement(
 	relativeFilePath: string,
 	sourceFile: ts.SourceFile,
-): ICodeStandardDiagnostic[] {
+): CodeStandardDiagnostic[] {
 	const pathSegments = relativeFilePath.split("/");
 	const fileName = pathSegments[pathSegments.length - 1];
 

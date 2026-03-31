@@ -11,7 +11,7 @@
 
 import type * as ts from "typescript";
 import type { CodeStandardRuleIdEnum } from "@/enums/code-standard-rule-id.enum";
-import type { ICodeStandardDiagnostic } from "@/interfaces/code-standard-diagnostic.interface";
+import type { CodeStandardDiagnostic } from "@/interfaces/code-standard-diagnostic.interface";
 
 export function createDiagnostic(
 	ruleId: CodeStandardRuleIdEnum,
@@ -19,7 +19,7 @@ export function createDiagnostic(
 	sourceFile: ts.SourceFile,
 	position: number,
 	message: string,
-): ICodeStandardDiagnostic {
+): CodeStandardDiagnostic {
 	const location = sourceFile.getLineAndCharacterOfPosition(position);
 	return {
 		ruleId,
