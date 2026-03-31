@@ -13,10 +13,10 @@ import type * as ts from "typescript";
 import {
 	ALLOWED_SOURCE_DIRECTORY_NAMES,
 	REQUIRED_SUFFIX_BY_SOURCE_DIRECTORY,
-} from "../../constants/file-placement.const.js";
-import { CodeStandardRuleIdEnum } from "../../enums/code-standard-rule-id.enum.js";
-import type { ICodeStandardDiagnostic } from "../../interfaces/code-standard-diagnostic.interface.js";
-import { createDiagnostic } from "../create-diagnostic.utils.js";
+} from "../../constants/file-placement.const";
+import { CodeStandardRuleIdEnum } from "../../enums/code-standard-rule-id.enum";
+import type { ICodeStandardDiagnostic } from "../../interfaces/code-standard-diagnostic.interface";
+import { createDiagnostic } from "../create-diagnostic.utils";
 
 export function validateFilePlacement(
 	relativeFilePath: string,

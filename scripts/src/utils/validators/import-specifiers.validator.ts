@@ -10,9 +10,9 @@
  */
 
 import * as ts from "typescript";
-import { CodeStandardRuleIdEnum } from "../../enums/code-standard-rule-id.enum.js";
-import type { ICodeStandardDiagnostic } from "../../interfaces/code-standard-diagnostic.interface.js";
-import { createDiagnostic } from "../create-diagnostic.utils.js";
+import { CodeStandardRuleIdEnum } from "../../enums/code-standard-rule-id.enum";
+import type { ICodeStandardDiagnostic } from "../../interfaces/code-standard-diagnostic.interface";
+import { createDiagnostic } from "../create-diagnostic.utils";
 
 export function validateImportSpecifiers(
 	relativeFilePath: string,
