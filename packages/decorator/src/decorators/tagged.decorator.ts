@@ -4,7 +4,7 @@
  * @created 2021-10-03 21:16:18
  */
 
-import { InjectionMetadataKeyConst } from "@/constants/metadata-key.const";
+import { INJECTION_METADATA_KEY } from "@/constants/metadata-key.const";
 
 import type { InjectionMetadata } from "@/types/injection-metadata.type";
 
@@ -13,14 +13,10 @@ export const tagged = <T>(
 ): ParameterDecorator => {
 	return (target, _propertyKey, parameterIndex) => {
 		const parametersMetadata =
-			Reflect.getMetadata(InjectionMetadataKeyConst, target) || [];
+			Reflect.getMetadata(INJECTION_METADATA_KEY, target) || [];
 
 		parametersMetadata[parameterIndex] = metadata;
 
-		Reflect.defineMetadata(
-			InjectionMetadataKeyConst,
-			parametersMetadata,
-			target,
-		);
+		Reflect.defineMetadata(INJECTION_METADATA_KEY, parametersMetadata, target);
 	};
 };

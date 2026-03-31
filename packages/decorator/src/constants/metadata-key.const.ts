@@ -10,7 +10,7 @@
  *
  * @see {@link https://www.typescriptlang.org/tsconfig/#Language_and_Environment_6254}
  */
-export const ParamsMetadataKeyConst = "design:paramtypes";
+export const PARAMS_METADATA_KEY = "design:paramtypes";
 
 /**
  * Custom metadata key for storing injection metadata of a class.
@@ -21,4 +21,4 @@ export const ParamsMetadataKeyConst = "design:paramtypes";
  * Stores: `Array<InjectionMetadata<T> | undefined>`
  *
  */
-export const InjectionMetadataKeyConst = "husky-di.injection-metadata";
+export const INJECTION_METADATA_KEY = "husky-di.injection-metadata";
