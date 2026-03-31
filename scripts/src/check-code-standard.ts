@@ -11,7 +11,7 @@
 
 import process from "node:process";
 import { pathToFileURL } from "node:url";
-import { validateCodeStandard } from "./utils/validate-code-standard.utils.js";
+import { validateCodeStandard } from "./utils/validate-code-standard.utils";
 
 function runCli(): number {
 	const diagnostics = validateCodeStandard(process.cwd());
