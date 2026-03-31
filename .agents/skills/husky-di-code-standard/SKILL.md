@@ -111,11 +111,11 @@ Do not invent new suffixes when an existing suffix already fits.
 - classes: `PascalCase`
 - interfaces: `I` prefix, such as `IContainer`
 - type aliases: `PascalCase`
-- enums: `PascalCaseEnum`
+- enums: `PascalCaseEnum` (e.g., `LifecycleEnum`, `CodeStandardRuleIdEnum`)
 - factory functions: `createXxx`
 - utility functions: clear verb-led names such as `getXxx`, `setXxx`, `resetXxx`, or `createXxx`
 - service identifiers: repository-style interface names such as `IServiceA`
-- exported constants: semantic `camelCase` by default; do not jump to screaming snake case unless an external convention requires it
+- exported constants in `*.const.ts` files: `SCREAMING_SNAKE_CASE` (e.g., `MODULE_ERROR_CODES`)
 - private fields: leading underscore, such as `_name`
 - internal escape hatches: existing `_internalXxx` pattern only when truly internal
 - generic parameters: keep them short and conventional unless a longer name materially improves clarity
