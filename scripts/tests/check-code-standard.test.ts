@@ -9,7 +9,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, describe, it } from "node:test";
-import { validateCodeStandard } from "../src/check-code-standard";
+import { validateCodeStandard } from "../src/utils/validate-code-standard.utils.js";
 
 const temporaryDirectoryPaths: string[] = [];
 
@@ -177,5 +177,85 @@ export function run(): void {}
 		assert.deepEqual(getRuleIds(rootDirectoryPath), [
 			"comments/biome-ignore-reason",
 		]);
+	});
+
+	it("reports enums without Enum suffix", () => {
+		const rootDirectoryPath = createWorkspace({
+			"packages/core/src/enums/status.enum.ts": `/**
+ * @overview Status enum.
+ * @author AEPKILL
+ * @created 2025-08-09 14:55:21
+ */
+export enum Status {
+	Active = 0,
+	Inactive = 1,
+}
+`,
+		});
+
+		assert.deepEqual(getRuleIds(rootDirectoryPath), ["naming/enum-name"]);
+	});
+
+	it("allows enums with Enum suffix", () => {
+		const rootDirectoryPath = createWorkspace({
+			"packages/core/src/enums/status.enum.ts": `/**
+ * @overview Status enum.
+ * @author AEPKILL
+ * @created 2025-08-09 14:55:21
+ */
+export enum StatusEnum {
+	Active = 0,
+	Inactive = 1,
+}
+`,
+		});
+
+		assert.deepEqual(getRuleIds(rootDirectoryPath), []);
+	});
+
+	it("reports constants without SCREAMING_SNAKE_CASE in .const.ts files", () => {
+		const rootDirectoryPath = createWorkspace({
+			"packages/core/src/constants/error-codes.const.ts": `/**
+ * @overview Error codes constant.
+ * @author AEPKILL
+ * @created 2025-08-09 14:55:21
+ */
+export const errorCodes = {
+	NOT_FOUND: "NOT_FOUND",
+} as const;
+`,
+		});
+
+		assert.deepEqual(getRuleIds(rootDirectoryPath), ["naming/constant-name"]);
+	});
+
+	it("allows constants with SCREAMING_SNAKE_CASE in .const.ts files", () => {
+		const rootDirectoryPath = createWorkspace({
+			"packages/core/src/constants/error-codes.const.ts": `/**
+ * @overview Error codes constant.
+ * @author AEPKILL
+ * @created 2025-08-09 14:55:21
+ */
+export const ERROR_CODES = {
+	NOT_FOUND: "NOT_FOUND",
+} as const;
+`,
+		});
+
+		assert.deepEqual(getRuleIds(rootDirectoryPath), []);
+	});
+
+	it("ignores constants in non-.const.ts files", () => {
+		const rootDirectoryPath = createWorkspace({
+			"packages/core/src/utils/value.utils.ts": `/**
+ * @overview Value utility.
+ * @author AEPKILL
+ * @created 2025-08-09 14:55:21
+ */
+export const valueName = "test";
+`,
+		});
+
+		assert.deepEqual(getRuleIds(rootDirectoryPath), []);
 	});
 });
