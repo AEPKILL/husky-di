@@ -10,9 +10,9 @@
  */
 
 import * as ts from "typescript";
-import { CodeStandardRuleIdEnum } from "../../enums/code-standard-rule-id.enum";
-import type { CodeStandardDiagnostic } from "../../interfaces/code-standard-diagnostic.type";
-import { createDiagnostic } from "../create-diagnostic.utils";
+import { CodeStandardRuleIdEnum } from "@/enums/code-standard-rule-id.enum";
+import type { CodeStandardDiagnostic } from "@/interfaces/code-standard-diagnostic.type";
+import { createDiagnostic } from "@/utils/create-diagnostic.utils";
 
 const SCREAMING_SNAKE_CASE_REGEX = /^[A-Z][A-Z0-9]*(_[A-Z0-9]+)*$/;
 
