@@ -8,7 +8,12 @@
 		"skipLibCheck": true,
 		"moduleResolution": "bundler",
 		"types": ["node"],
-		"allowImportingTsExtensions": true
+		"allowImportingTsExtensions": true,
+		"baseUrl": ".",
+		"paths": {
+			"@/*": ["src/*"]
+		},
+		"ignoreDeprecations": "6.0"
 	},
 	"include": ["."]
 }

@@ -10,8 +10,8 @@
  */
 
 import type * as ts from "typescript";
-import type { CodeStandardRuleIdEnum } from "../enums/code-standard-rule-id.enum";
-import type { ICodeStandardDiagnostic } from "../interfaces/code-standard-diagnostic.interface";
+import type { CodeStandardRuleIdEnum } from "@/enums/code-standard-rule-id.enum";
+import type { ICodeStandardDiagnostic } from "@/interfaces/code-standard-diagnostic.interface";
 
 export function createDiagnostic(
 	ruleId: CodeStandardRuleIdEnum,
