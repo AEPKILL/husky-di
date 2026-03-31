@@ -10,24 +10,25 @@
  */
 
 import type * as ts from "typescript";
-import {
-	ALLOWED_SOURCE_DIRECTORY_NAMES,
-	REQUIRED_SUFFIX_BY_SOURCE_DIRECTORY,
-} from "@/constants/file-placement.const";
+import { DEFAULT_CONFIG } from "@/config/code-standard.config";
 import { CodeStandardRuleIdEnum } from "@/enums/code-standard-rule-id.enum";
 import type { CodeStandardDiagnostic } from "@/types/code-standard-diagnostic.type";
+import type { CodeStandardConfig } from "@/types/config.type";
 import { createDiagnostic } from "@/utils/create-diagnostic.utils";
 import { extractFileName, getPathSegments } from "@/utils/path.utils";
 
 export function validateFilePlacement(
 	relativeFilePath: string,
 	sourceFile: ts.SourceFile,
+	config: CodeStandardConfig = DEFAULT_CONFIG,
 ): CodeStandardDiagnostic[] {
 	const pathSegments = getPathSegments(relativeFilePath);
 	const fileName = extractFileName(relativeFilePath);
 
-	if (pathSegments[0] === "scripts") {
-		return [];
+	for (const exemptName of config.exemptDirectoryNames) {
+		if (pathSegments[0] === exemptName) {
+			return [];
+		}
 	}
 
 	const packageArea = pathSegments[2];
@@ -47,7 +48,7 @@ export function validateFilePlacement(
 		];
 	}
 
-	if (pathSegments.length === 4) {
+	if (pathSegments.length === config.minimumPathSegments) {
 		if (fileName === "index.ts") {
 			return [];
 		}
@@ -63,8 +64,20 @@ export function validateFilePlacement(
 		];
 	}
 
+	if (pathSegments.length < config.minimumPathSegments) {
+		return [
+			createDiagnostic(
+				CodeStandardRuleIdEnum.PlacementSourceDirectory,
+				relativeFilePath,
+				sourceFile,
+				0,
+				"Package source files must live in an existing semantic directory or be src/index.ts.",
+			),
+		];
+	}
+
 	const sourceDirectoryName = pathSegments[3];
-	if (!ALLOWED_SOURCE_DIRECTORY_NAMES.has(sourceDirectoryName)) {
+	if (!config.sourceDirectoryNames.includes(sourceDirectoryName)) {
 		return [
 			createDiagnostic(
 				CodeStandardRuleIdEnum.PlacementSourceDirectory,
@@ -92,15 +105,18 @@ export function validateFilePlacement(
 		];
 	}
 
-	const requiredSuffix = getRequiredSuffix(sourceDirectoryName);
-	if (requiredSuffix && !fileName.endsWith(requiredSuffix)) {
+	const allowedSuffixes = getRequiredSuffixes(
+		sourceDirectoryName,
+		config.requiredSuffixBySourceDirectoryName,
+	);
+	if (allowedSuffixes && !matchesFilePattern(fileName, allowedSuffixes)) {
 		return [
 			createDiagnostic(
 				CodeStandardRuleIdEnum.PlacementSourceDirectorySuffix,
 				relativeFilePath,
 				sourceFile,
 				0,
-				`src/${sourceDirectoryName} may only contain files with suffix ${requiredSuffix}.`,
+				`src/${sourceDirectoryName} may only contain files with suffix ${formatSuffixList(allowedSuffixes)}.`,
 			),
 		];
 	}
@@ -108,8 +124,38 @@ export function validateFilePlacement(
 	return [];
 }
 
-function getRequiredSuffix(sourceDirectoryName: string): string | undefined {
-	return REQUIRED_SUFFIX_BY_SOURCE_DIRECTORY.get(sourceDirectoryName);
+function getRequiredSuffixes(
+	sourceDirectoryName: string,
+	requiredSuffixBySourceDirectoryName: ReadonlyMap<
+		string,
+		readonly (string | RegExp)[]
+	>,
+): readonly (string | RegExp)[] | undefined {
+	return requiredSuffixBySourceDirectoryName.get(sourceDirectoryName);
+}
+
+function matchesFilePattern(
+	fileName: string,
+	patterns: readonly (string | RegExp)[],
+): boolean {
+	for (const pattern of patterns) {
+		if (pattern instanceof RegExp) {
+			if (pattern.test(fileName)) {
+				return true;
+			}
+		} else if (fileName.endsWith(pattern)) {
+			return true;
+		}
+	}
+	return false;
+}
+
+function formatSuffixList(patterns: readonly (string | RegExp)[]): string {
+	return patterns
+		.map((pattern) =>
+			pattern instanceof RegExp ? pattern.toString() : pattern,
+		)
+		.join(" or ");
 }
 
 function isPascalCaseTypeScriptFile(fileName: string): boolean {

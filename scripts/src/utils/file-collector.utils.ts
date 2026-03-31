@@ -10,46 +10,42 @@
  */
 
 import { existsSync, readdirSync, statSync } from "node:fs";
-import { join, relative, sep } from "node:path";
+import { join, sep } from "node:path";
+import { DEFAULT_CONFIG } from "@/config/code-standard.config";
+import type { CodeStandardConfig } from "@/types/config.type";
 
-const ignoredDirectoryNames = new Set([
-	".agents",
-	".git",
-	"coverage",
-	"dist",
-	"docs",
-	"node_modules",
-]);
-
-export function collectInScopeFiles(rootDirectoryPath: string): string[] {
+export function collectInScopeFiles(
+	rootDirectoryPath: string,
+	config: CodeStandardConfig = DEFAULT_CONFIG,
+): string[] {
 	const filePaths: string[] = [];
 
-	const packagesDirectoryPath = join(rootDirectoryPath, "packages");
-	if (existsSync(packagesDirectoryPath)) {
-		filePaths.push(...collectDirectoryFiles(packagesDirectoryPath));
-	}
-
-	const scriptsDirectoryPath = join(rootDirectoryPath, "scripts");
-	if (existsSync(scriptsDirectoryPath)) {
-		filePaths.push(...collectDirectoryFiles(scriptsDirectoryPath));
+	for (const packageRootName of config.packageRootNames) {
+		const packageDirectoryPath = join(rootDirectoryPath, packageRootName);
+		if (existsSync(packageDirectoryPath)) {
+			filePaths.push(...collectDirectoryFiles(packageDirectoryPath, config));
+		}
 	}
 
 	return filePaths
-		.filter((filePath) => isInScopeFile(rootDirectoryPath, filePath))
+		.filter((filePath) => isInScopeFile(rootDirectoryPath, filePath, config))
 		.sort((left, right) => left.localeCompare(right));
 }
 
-export function collectDirectoryFiles(directoryPath: string): string[] {
+export function collectDirectoryFiles(
+	directoryPath: string,
+	config: CodeStandardConfig = DEFAULT_CONFIG,
+): string[] {
 	const filePaths: string[] = [];
 
 	for (const directoryEntry of readdirSync(directoryPath)) {
-		if (ignoredDirectoryNames.has(directoryEntry)) {
+		if (config.ignoredDirectoryNames.includes(directoryEntry)) {
 			continue;
 		}
 
 		const entryPath = join(directoryPath, directoryEntry);
 		if (statSync(entryPath).isDirectory()) {
-			filePaths.push(...collectDirectoryFiles(entryPath));
+			filePaths.push(...collectDirectoryFiles(entryPath, config));
 			continue;
 		}
 
@@ -62,9 +58,10 @@ export function collectDirectoryFiles(directoryPath: string): string[] {
 export function isInScopeFile(
 	rootDirectoryPath: string,
 	filePath: string,
+	config: CodeStandardConfig = DEFAULT_CONFIG,
 ): boolean {
 	const relativeFilePath = toPortablePath(
-		relative(rootDirectoryPath, filePath),
+		filePath.slice(rootDirectoryPath.length + 1),
 	);
 
 	if (!relativeFilePath.endsWith(".ts")) {
@@ -72,15 +69,29 @@ export function isInScopeFile(
 	}
 
 	const pathSegments = relativeFilePath.split("/");
-	if (pathSegments[0] === "scripts") {
-		return true;
+
+	for (const exemptName of config.exemptDirectoryNames) {
+		if (pathSegments[0] === exemptName) {
+			return true;
+		}
 	}
 
-	if (pathSegments[0] !== "packages" || pathSegments.length < 4) {
-		return false;
+	for (const packageRootName of config.packageRootNames) {
+		if (pathSegments[0] === packageRootName) {
+			if (pathSegments.length < config.minimumPathSegments) {
+				return false;
+			}
+
+			const sourceDirectoryName = pathSegments[2];
+			return (
+				sourceDirectoryName === "src" ||
+				sourceDirectoryName === "tests" ||
+				config.sourceDirectoryNames.includes(sourceDirectoryName)
+			);
+		}
 	}
 
-	return pathSegments[2] === "src" || pathSegments[2] === "tests";
+	return false;
 }
 
 function toPortablePath(filePath: string): string {

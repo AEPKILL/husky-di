@@ -11,7 +11,9 @@
 
 import { readFileSync } from "node:fs";
 import * as ts from "typescript";
+import { DEFAULT_CONFIG } from "@/config/code-standard.config";
 import type { CodeStandardDiagnostic } from "@/types/code-standard-diagnostic.type";
+import type { CodeStandardConfig } from "@/types/config.type";
 import { validateBiomeIgnoreComments } from "../validators/biome-ignore.validator";
 import { validateConstantNaming } from "../validators/constant-naming.validator";
 import { validateDefaultExports } from "../validators/default-exports.validator";
@@ -27,12 +29,15 @@ import { collectInScopeFiles } from "./file-collector.utils";
 
 export type { CodeStandardDiagnostic } from "@/types/code-standard-diagnostic.type";
 
+export type { CodeStandardConfig } from "@/types/config.type";
+
 export function validateCodeStandard(
 	rootDirectoryPath: string,
+	config: CodeStandardConfig = DEFAULT_CONFIG,
 ): CodeStandardDiagnostic[] {
 	const diagnostics: CodeStandardDiagnostic[] = [];
 
-	for (const filePath of collectInScopeFiles(rootDirectoryPath)) {
+	for (const filePath of collectInScopeFiles(rootDirectoryPath, config)) {
 		const sourceText = readFileSync(filePath, "utf8");
 		const sourceFile = ts.createSourceFile(
 			filePath,
@@ -48,7 +53,9 @@ export function validateCodeStandard(
 		diagnostics.push(
 			...validateHeaderMetadata(relativeFilePath, sourceFile, sourceText),
 		);
-		diagnostics.push(...validateFilePlacement(relativeFilePath, sourceFile));
+		diagnostics.push(
+			...validateFilePlacement(relativeFilePath, sourceFile, config),
+		);
 		diagnostics.push(...validateEnumNaming(relativeFilePath, sourceFile));
 		diagnostics.push(...validateConstantNaming(relativeFilePath, sourceFile));
 		diagnostics.push(...validateInterfaceNaming(relativeFilePath, sourceFile));
@@ -56,7 +63,9 @@ export function validateCodeStandard(
 		diagnostics.push(...validateTypeFileExports(relativeFilePath, sourceFile));
 		diagnostics.push(...validateDefaultExports(relativeFilePath, sourceFile));
 		diagnostics.push(...validateEntrypointShape(relativeFilePath, sourceFile));
-		diagnostics.push(...validateImportSpecifiers(relativeFilePath, sourceFile));
+		diagnostics.push(
+			...validateImportSpecifiers(relativeFilePath, sourceFile, config),
+		);
 		diagnostics.push(
 			...validateBiomeIgnoreComments(relativeFilePath, sourceFile, sourceText),
 		);
