@@ -6,8 +6,8 @@
 
 import type { Constructor, ServiceIdentifier } from "@husky-di/core";
 import {
-	InjectionMetadataKeyConst,
-	ParamsMetadataKeyConst,
+	INJECTION_METADATA_KEY,
+	PARAMS_METADATA_KEY,
 } from "@/constants/metadata-key.const";
 import { injectionMetadataMap } from "@/shared/instances";
 import type { InjectionMetadata } from "@/types/injection-metadata.type";
@@ -25,9 +25,9 @@ export const injectable: () => ClassDecorator = () =>
 		}
 
 		const parametersServiceIdentifiers: Array<ServiceIdentifier<unknown>> =
-			Reflect.getMetadata(ParamsMetadataKeyConst, target) || [];
+			Reflect.getMetadata(PARAMS_METADATA_KEY, target) || [];
 		const parametersMetadata: Array<InjectionMetadata<unknown>> =
-			Reflect.getMetadata(InjectionMetadataKeyConst, target) || [];
+			Reflect.getMetadata(INJECTION_METADATA_KEY, target) || [];
 		const metadata: InjectionMetadata<unknown>[] = [];
 		const parametersMetadataLength = Math.max(
 			parametersServiceIdentifiers.length,
