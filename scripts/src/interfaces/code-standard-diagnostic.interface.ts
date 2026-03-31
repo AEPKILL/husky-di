@@ -9,7 +9,7 @@
  * @created 2026-03-30 20:22:20
  */
 
-export interface ICodeStandardDiagnostic {
+export interface CodeStandardDiagnostic {
 	readonly ruleId: string;
 	readonly filePath: string;
 	readonly line: number;

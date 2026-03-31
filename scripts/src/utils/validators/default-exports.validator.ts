@@ -11,14 +11,14 @@
 
 import * as ts from "typescript";
 import { CodeStandardRuleIdEnum } from "../../enums/code-standard-rule-id.enum";
-import type { ICodeStandardDiagnostic } from "../../interfaces/code-standard-diagnostic.interface";
+import type { CodeStandardDiagnostic } from "../../interfaces/code-standard-diagnostic.interface";
 import { createDiagnostic } from "../create-diagnostic.utils";
 
 export function validateDefaultExports(
 	relativeFilePath: string,
 	sourceFile: ts.SourceFile,
-): ICodeStandardDiagnostic[] {
-	const diagnostics: ICodeStandardDiagnostic[] = [];
+): CodeStandardDiagnostic[] {
+	const diagnostics: CodeStandardDiagnostic[] = [];
 
 	for (const statement of sourceFile.statements) {
 		let hasDefaultExport = false;

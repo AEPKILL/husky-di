@@ -11,7 +11,7 @@
 
 import * as ts from "typescript";
 import { CodeStandardRuleIdEnum } from "../../enums/code-standard-rule-id.enum";
-import type { ICodeStandardDiagnostic } from "../../interfaces/code-standard-diagnostic.interface";
+import type { CodeStandardDiagnostic } from "../../interfaces/code-standard-diagnostic.interface";
 import { createDiagnostic } from "../create-diagnostic.utils";
 
 const SCREAMING_SNAKE_CASE_REGEX = /^[A-Z][A-Z0-9]*(_[A-Z0-9]+)*$/;
@@ -19,8 +19,8 @@ const SCREAMING_SNAKE_CASE_REGEX = /^[A-Z][A-Z0-9]*(_[A-Z0-9]+)*$/;
 export function validateConstantNaming(
 	relativeFilePath: string,
 	sourceFile: ts.SourceFile,
-): ICodeStandardDiagnostic[] {
-	const diagnostics: ICodeStandardDiagnostic[] = [];
+): CodeStandardDiagnostic[] {
+	const diagnostics: CodeStandardDiagnostic[] = [];
 
 	if (!relativeFilePath.endsWith(".const.ts")) {
 		return diagnostics;

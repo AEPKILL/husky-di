@@ -11,14 +11,14 @@
 
 import * as ts from "typescript";
 import { CodeStandardRuleIdEnum } from "../../enums/code-standard-rule-id.enum";
-import type { ICodeStandardDiagnostic } from "../../interfaces/code-standard-diagnostic.interface";
+import type { CodeStandardDiagnostic } from "../../interfaces/code-standard-diagnostic.interface";
 import { createDiagnostic } from "../create-diagnostic.utils";
 
 export function validateHeaderMetadata(
 	relativeFilePath: string,
 	sourceFile: ts.SourceFile,
 	sourceText: string,
-): ICodeStandardDiagnostic[] {
+): CodeStandardDiagnostic[] {
 	const commentRanges = ts.getLeadingCommentRanges(sourceText, 0) ?? [];
 	if (commentRanges.length === 0) {
 		return [
