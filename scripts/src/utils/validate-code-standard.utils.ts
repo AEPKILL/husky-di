@@ -21,6 +21,8 @@ import { validateEnumNaming } from "./validators/enum-naming.validator";
 import { validateFilePlacement } from "./validators/file-placement.validator";
 import { validateHeaderMetadata } from "./validators/header-metadata.validator";
 import { validateImportSpecifiers } from "./validators/import-specifiers.validator";
+import { validateInterfaceNaming } from "./validators/interface-naming.validator";
+import { validateTypePlacement } from "./validators/type-placement.validator";
 
 export type { CodeStandardDiagnostic } from "@/interfaces/code-standard-diagnostic.type";
 
@@ -48,6 +50,8 @@ export function validateCodeStandard(
 		diagnostics.push(...validateFilePlacement(relativeFilePath, sourceFile));
 		diagnostics.push(...validateEnumNaming(relativeFilePath, sourceFile));
 		diagnostics.push(...validateConstantNaming(relativeFilePath, sourceFile));
+		diagnostics.push(...validateInterfaceNaming(relativeFilePath, sourceFile));
+		diagnostics.push(...validateTypePlacement(relativeFilePath, sourceFile));
 		diagnostics.push(...validateDefaultExports(relativeFilePath, sourceFile));
 		diagnostics.push(...validateEntrypointShape(relativeFilePath, sourceFile));
 		diagnostics.push(...validateImportSpecifiers(relativeFilePath, sourceFile));

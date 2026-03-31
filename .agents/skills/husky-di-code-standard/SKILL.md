@@ -58,12 +58,12 @@ Do not apply it to:
 
 Match the existing package structure.
 
-- `interfaces`: structural contracts and public-facing interfaces
-- `types`: aliases, unions, mapped types, conditional types, and type helpers
+- `interfaces`: structural contracts and public-facing interfaces (files must be `*.interface.ts`, interfaces must start with `I` prefix)
+- `types`: type aliases, unions, mapped types, conditional types, and type helpers (files must be `*.type.ts`)
 - `impls`: concrete implementations
 - `utils`: mostly stateless helper functions
 - `factories`: creation-oriented functions that assemble and return values or objects
-- `constants`: shared constants
+- `constants` or `consts`: shared constants
 - `enums`: named closed sets already modeled as enums in this repository
 - `exceptions`: custom error classes
 - `decorators`: decorator functions
@@ -82,6 +82,7 @@ Additional placement rules:
 - keep repository-level scripts under `scripts/` unless a skill or package already owns a more local `scripts/` directory
 - keep config files at the nearest package or repository root that already owns the tool configuration
 - `shared` is not a dumping ground; only place intentionally shared state or shared instances there
+- type aliases must be placed in `types/` directory or in `*.type.ts` files
 
 ## File Naming
 
@@ -109,8 +110,8 @@ Do not invent new suffixes when an existing suffix already fits.
 ## Symbol Naming
 
 - classes: `PascalCase`
-- interfaces: `I` prefix, such as `IContainer`
-- type aliases: `PascalCase`
+- interfaces in `interfaces/`: must use `I` prefix (e.g., `IContainer`, `IServiceResolver`)
+- type aliases: `PascalCase` without prefix
 - enums: `PascalCaseEnum` (e.g., `LifecycleEnum`, `CodeStandardRuleIdEnum`)
 - factory functions: `createXxx`
 - utility functions: clear verb-led names such as `getXxx`, `setXxx`, `resetXxx`, or `createXxx`
