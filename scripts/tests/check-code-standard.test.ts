@@ -72,7 +72,10 @@ export interface IContainer {}
 `,
 		});
 
-		assert.deepEqual(getRuleIds(rootDirectoryPath), ["naming/file-name"]);
+		assert.deepEqual(getRuleIds(rootDirectoryPath), [
+			"naming/file-name",
+			"naming/interface-file-name",
+		]);
 	});
 
 	it("reports invalid impl file names", () => {
@@ -253,6 +256,102 @@ export const ERROR_CODES = {
  * @created 2025-08-09 14:55:21
  */
 export const valueName = "test";
+`,
+		});
+
+		assert.deepEqual(getRuleIds(rootDirectoryPath), []);
+	});
+
+	it("reports interfaces without I prefix in interfaces/ directory", () => {
+		const rootDirectoryPath = createWorkspace({
+			"packages/core/src/interfaces/container.interface.ts": `/**
+ * @overview Container interface.
+ * @author AEPKILL
+ * @created 2025-08-09 14:55:21
+ */
+export interface Container {
+	name: string;
+}
+`,
+		});
+
+		assert.deepEqual(getRuleIds(rootDirectoryPath), ["naming/interface-name"]);
+	});
+
+	it("reports interface files without .interface.ts suffix", () => {
+		const rootDirectoryPath = createWorkspace({
+			"packages/core/src/interfaces/container.ts": `/**
+ * @overview Container interface.
+ * @author AEPKILL
+ * @created 2025-08-09 14:55:21
+ */
+export interface IContainer {
+	name: string;
+}
+`,
+		});
+
+		assert.deepEqual(getRuleIds(rootDirectoryPath), [
+			"naming/file-name",
+			"naming/interface-file-name",
+		]);
+	});
+
+	it("allows interfaces with I prefix and .interface.ts suffix", () => {
+		const rootDirectoryPath = createWorkspace({
+			"packages/core/src/interfaces/container.interface.ts": `/**
+ * @overview Container interface.
+ * @author AEPKILL
+ * @created 2025-08-09 14:55:21
+ */
+export interface IContainer {
+	name: string;
+}
+`,
+		});
+
+		assert.deepEqual(getRuleIds(rootDirectoryPath), []);
+	});
+
+	it("reports type aliases outside types/ directory", () => {
+		const rootDirectoryPath = createWorkspace({
+			"packages/core/src/impls/value.ts": `/**
+ * @overview Value implementation.
+ * @author AEPKILL
+ * @created 2025-08-09 14:55:21
+ */
+export type ValueType = string | number;
+`,
+		});
+
+		assert.deepEqual(getRuleIds(rootDirectoryPath), [
+			"naming/file-name",
+			"placement/type",
+		]);
+	});
+
+	it("allows type aliases in types/ directory", () => {
+		const rootDirectoryPath = createWorkspace({
+			"packages/core/src/types/value.type.ts": `/**
+ * @overview Value type.
+ * @author AEPKILL
+ * @created 2025-08-09 14:55:21
+ */
+export type ValueType = string | number;
+`,
+		});
+
+		assert.deepEqual(getRuleIds(rootDirectoryPath), []);
+	});
+
+	it("allows type aliases in .type.ts files", () => {
+		const rootDirectoryPath = createWorkspace({
+			"packages/core/src/types/value.type.ts": `/**
+ * @overview Value type.
+ * @author AEPKILL
+ * @created 2025-08-09 14:55:21
+ */
+export type ValueType = string | number;
 `,
 		});
 
