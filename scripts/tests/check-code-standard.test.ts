@@ -73,8 +73,8 @@ export interface IContainer {}
 		});
 
 		assert.deepEqual(getRuleIds(rootDirectoryPath), [
-			"naming/file-name",
 			"naming/interface-file-name",
+			"placement/source-directory-suffix",
 		]);
 	});
 
@@ -292,8 +292,8 @@ export interface IContainer {
 		});
 
 		assert.deepEqual(getRuleIds(rootDirectoryPath), [
-			"naming/file-name",
 			"naming/interface-file-name",
+			"placement/source-directory-suffix",
 		]);
 	});
 
@@ -313,10 +313,10 @@ export interface IContainer {
 		assert.deepEqual(getRuleIds(rootDirectoryPath), []);
 	});
 
-	it("reports type aliases outside types/ directory", () => {
+	it("reports .type.ts files outside types/ directory", () => {
 		const rootDirectoryPath = createWorkspace({
-			"packages/core/src/impls/value.ts": `/**
- * @overview Value implementation.
+			"packages/core/src/utils/value.type.ts": `/**
+ * @overview Value type.
  * @author AEPKILL
  * @created 2025-08-09 14:55:21
  */
@@ -325,9 +325,24 @@ export type ValueType = string | number;
 		});
 
 		assert.deepEqual(getRuleIds(rootDirectoryPath), [
-			"naming/file-name",
+			"placement/source-directory-suffix",
 			"placement/type",
 		]);
+	});
+
+	it("allows type aliases in non-type files", () => {
+		const rootDirectoryPath = createWorkspace({
+			"packages/core/src/utils/value.utils.ts": `/**
+ * @overview Value utility.
+ * @author AEPKILL
+ * @created 2025-08-09 14:55:21
+ */
+export type ValueType = string | number;
+export const createValue = (): string => "value";
+`,
+		});
+
+		assert.deepEqual(getRuleIds(rootDirectoryPath), []);
 	});
 
 	it("allows type aliases in types/ directory", () => {
@@ -356,5 +371,86 @@ export type ValueType = string | number;
 		});
 
 		assert.deepEqual(getRuleIds(rootDirectoryPath), []);
+	});
+
+	it("reports runtime values in .type.ts files", () => {
+		const rootDirectoryPath = createWorkspace({
+			"packages/core/src/types/invalid.type.ts": `/**
+ * @overview Invalid type file.
+ * @author AEPKILL
+ * @created 2025-08-09 14:55:21
+ */
+export type ValueType = string | number;
+export const value = 42;
+`,
+		});
+
+		assert.deepEqual(getRuleIds(rootDirectoryPath), ["type-file/exports-only"]);
+	});
+
+	it("allows interfaces in .type.ts files", () => {
+		const rootDirectoryPath = createWorkspace({
+			"packages/core/src/types/value.type.ts": `/**
+ * @overview Value type.
+ * @author AEPKILL
+ * @created 2025-08-09 14:55:21
+ */
+export interface IValue {
+	name: string;
+}
+export type ValueType = string | number;
+`,
+		});
+
+		assert.deepEqual(getRuleIds(rootDirectoryPath), []);
+	});
+
+	it("reports non-.type.ts files in types/ directory", () => {
+		const rootDirectoryPath = createWorkspace({
+			"packages/core/src/types/invalid.ts": `/**
+ * @overview Invalid file.
+ * @author AEPKILL
+ * @created 2025-08-09 14:55:21
+ */
+export const value = 42;
+`,
+		});
+
+		assert.deepEqual(getRuleIds(rootDirectoryPath), [
+			"placement/source-directory-suffix",
+		]);
+	});
+
+	it("reports non-.interface.ts files in interfaces/ directory", () => {
+		const rootDirectoryPath = createWorkspace({
+			"packages/core/src/interfaces/invalid.ts": `/**
+ * @overview Invalid file.
+ * @author AEPKILL
+ * @created 2025-08-09 14:55:21
+ */
+export const value = 42;
+`,
+		});
+
+		assert.deepEqual(getRuleIds(rootDirectoryPath), [
+			"naming/interface-file-name",
+			"placement/source-directory-suffix",
+		]);
+	});
+
+	it("reports non-.utils.ts files in utils/ directory", () => {
+		const rootDirectoryPath = createWorkspace({
+			"packages/core/src/utils/invalid.ts": `/**
+ * @overview Invalid file.
+ * @author AEPKILL
+ * @created 2025-08-09 14:55:21
+ */
+export const value = 42;
+`,
+		});
+
+		assert.deepEqual(getRuleIds(rootDirectoryPath), [
+			"placement/source-directory-suffix",
+		]);
 	});
 });

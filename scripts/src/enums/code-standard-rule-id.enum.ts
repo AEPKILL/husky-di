@@ -18,8 +18,10 @@ export enum CodeStandardRuleIdEnum {
 	NamingInterfaceName = "naming/interface-name",
 	PlacementSourceDirectory = "placement/source-directory",
 	PlacementType = "placement/type",
+	PlacementSourceDirectorySuffix = "placement/source-directory-suffix",
 	ExportsNoDefaultExport = "exports/no-default-export",
 	EntrypointExportOnly = "entrypoint/export-only",
 	ImportsNoInternalPackagePath = "imports/no-internal-package-path",
 	CommentsBiomeIgnoreReason = "comments/biome-ignore-reason",
+	TypeFileExportsOnly = "type-file/exports-only",
 }

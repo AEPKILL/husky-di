@@ -15,15 +15,16 @@ import {
 	REQUIRED_SUFFIX_BY_SOURCE_DIRECTORY,
 } from "@/constants/file-placement.const";
 import { CodeStandardRuleIdEnum } from "@/enums/code-standard-rule-id.enum";
-import type { CodeStandardDiagnostic } from "@/interfaces/code-standard-diagnostic.type";
+import type { CodeStandardDiagnostic } from "@/types/code-standard-diagnostic.type";
 import { createDiagnostic } from "@/utils/create-diagnostic.utils";
+import { extractFileName, getPathSegments } from "@/utils/path.utils";
 
 export function validateFilePlacement(
 	relativeFilePath: string,
 	sourceFile: ts.SourceFile,
 ): CodeStandardDiagnostic[] {
-	const pathSegments = relativeFilePath.split("/");
-	const fileName = pathSegments[pathSegments.length - 1];
+	const pathSegments = getPathSegments(relativeFilePath);
+	const fileName = extractFileName(relativeFilePath);
 
 	if (pathSegments[0] === "scripts") {
 		return [];
@@ -91,21 +92,24 @@ export function validateFilePlacement(
 		];
 	}
 
-	const requiredSuffix =
-		REQUIRED_SUFFIX_BY_SOURCE_DIRECTORY.get(sourceDirectoryName);
+	const requiredSuffix = getRequiredSuffix(sourceDirectoryName);
 	if (requiredSuffix && !fileName.endsWith(requiredSuffix)) {
 		return [
 			createDiagnostic(
-				CodeStandardRuleIdEnum.NamingFileName,
+				CodeStandardRuleIdEnum.PlacementSourceDirectorySuffix,
 				relativeFilePath,
 				sourceFile,
 				0,
-				`Files in src/${sourceDirectoryName} must end with ${requiredSuffix}.`,
+				`src/${sourceDirectoryName} may only contain files with suffix ${requiredSuffix}.`,
 			),
 		];
 	}
 
 	return [];
+}
+
+function getRequiredSuffix(sourceDirectoryName: string): string | undefined {
+	return REQUIRED_SUFFIX_BY_SOURCE_DIRECTORY.get(sourceDirectoryName);
 }
 
 function isPascalCaseTypeScriptFile(fileName: string): boolean {

@@ -11,7 +11,7 @@
 
 import type * as ts from "typescript";
 import type { CodeStandardRuleIdEnum } from "@/enums/code-standard-rule-id.enum";
-import type { CodeStandardDiagnostic } from "@/interfaces/code-standard-diagnostic.type";
+import type { CodeStandardDiagnostic } from "@/types/code-standard-diagnostic.type";
 
 export function createDiagnostic(
 	ruleId: CodeStandardRuleIdEnum,
