@@ -11,7 +11,7 @@
 
 import * as ts from "typescript";
 import { CodeStandardRuleIdEnum } from "../../enums/code-standard-rule-id.enum";
-import type { CodeStandardDiagnostic } from "../../interfaces/code-standard-diagnostic.interface";
+import type { CodeStandardDiagnostic } from "../../interfaces/code-standard-diagnostic.type";
 import { createDiagnostic } from "../create-diagnostic.utils";
 
 export function validateEntrypointShape(

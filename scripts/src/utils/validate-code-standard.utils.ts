@@ -11,7 +11,7 @@
 
 import { readFileSync } from "node:fs";
 import * as ts from "typescript";
-import type { CodeStandardDiagnostic } from "@/interfaces/code-standard-diagnostic.interface";
+import type { CodeStandardDiagnostic } from "@/interfaces/code-standard-diagnostic.type";
 import { collectInScopeFiles } from "./file-collector.utils";
 import { validateBiomeIgnoreComments } from "./validators/biome-ignore.validator";
 import { validateConstantNaming } from "./validators/constant-naming.validator";
@@ -22,7 +22,7 @@ import { validateFilePlacement } from "./validators/file-placement.validator";
 import { validateHeaderMetadata } from "./validators/header-metadata.validator";
 import { validateImportSpecifiers } from "./validators/import-specifiers.validator";
 
-export type { CodeStandardDiagnostic } from "@/interfaces/code-standard-diagnostic.interface";
+export type { CodeStandardDiagnostic } from "@/interfaces/code-standard-diagnostic.type";
 
 export function validateCodeStandard(
 	rootDirectoryPath: string,
