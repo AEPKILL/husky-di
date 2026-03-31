@@ -46,7 +46,7 @@ export type CodeStandardConfig = {
 	readonly packageScopePrefix: string;
 
 	/**
-	 * Minimum path segments for a file to be considered in scope.
+	 * Names of source directories to scan (e.g., ["src", "tests"]).
 	 */
-	readonly minimumPathSegments: number;
+	readonly sourceDirectories: readonly string[];
 };

@@ -17,7 +17,6 @@ export enum CodeStandardRuleIdEnum {
 	NamingInterfaceFileName = "naming/interface-file-name",
 	NamingInterfaceName = "naming/interface-name",
 	PlacementSourceDirectory = "placement/source-directory",
-	PlacementType = "placement/type",
 	PlacementSourceDirectorySuffix = "placement/source-directory-suffix",
 	ExportsNoDefaultExport = "exports/no-default-export",
 	EntrypointExportOnly = "entrypoint/export-only",

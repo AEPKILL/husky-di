@@ -9,6 +9,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, describe, it } from "node:test";
+import { createConfig } from "../src/config/code-standard.config.js";
 import { validateCodeStandard } from "../src/utils/validate-code-standard.utils.js";
 
 const temporaryDirectoryPaths: string[] = [];
@@ -326,7 +327,6 @@ export type ValueType = string | number;
 
 		assert.deepEqual(getRuleIds(rootDirectoryPath), [
 			"placement/source-directory-suffix",
-			"placement/type",
 		]);
 	});
 
@@ -451,6 +451,68 @@ export const value = 42;
 
 		assert.deepEqual(getRuleIds(rootDirectoryPath), [
 			"placement/source-directory-suffix",
+		]);
+	});
+});
+
+describe("createConfig", () => {
+	it("creates a valid config with default values", () => {
+		const config = createConfig({});
+		assert.ok(config.sourceDirectoryNames.length > 0);
+		assert.ok(config.requiredSuffixBySourceDirectoryName.size > 0);
+	});
+
+	it("throws when suffix config key is not in sourceDirectoryNames", () => {
+		assert.throws(
+			() =>
+				createConfig({
+					requiredSuffixBySourceDirectoryName: new Map([
+						["invalid_dir", [".ts"]],
+					]),
+				}),
+			/which is not in sourceDirectoryNames/,
+		);
+	});
+
+	it("throws when suffix pattern array is empty", () => {
+		assert.throws(
+			() =>
+				createConfig({
+					requiredSuffixBySourceDirectoryName: new Map([["utils", []]]),
+				}),
+			/must have at least one suffix pattern/,
+		);
+	});
+
+	it("throws when suffix pattern is an empty string", () => {
+		assert.throws(
+			() =>
+				createConfig({
+					requiredSuffixBySourceDirectoryName: new Map([["utils", [""]]]),
+				}),
+			/is an empty string/,
+		);
+	});
+
+	it("accepts RegExp patterns", () => {
+		const config = createConfig({
+			requiredSuffixBySourceDirectoryName: new Map([
+				["utils", [/^\.utils\.ts$/]],
+			]),
+		});
+		const patterns = config.requiredSuffixBySourceDirectoryName.get("utils");
+		assert.ok(patterns?.[0] instanceof RegExp);
+	});
+
+	it("accepts valid config with multiple suffix patterns", () => {
+		const config = createConfig({
+			requiredSuffixBySourceDirectoryName: new Map([
+				["types", [".type.ts", ".d.ts"]],
+			]),
+		});
+		assert.deepEqual(config.requiredSuffixBySourceDirectoryName.get("types"), [
+			".type.ts",
+			".d.ts",
 		]);
 	});
 });
