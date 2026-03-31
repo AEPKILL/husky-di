@@ -12,17 +12,17 @@
 import { readFileSync } from "node:fs";
 import * as ts from "typescript";
 import type { CodeStandardDiagnostic } from "@/interfaces/code-standard-diagnostic.type";
+import { validateBiomeIgnoreComments } from "../validators/biome-ignore.validator";
+import { validateConstantNaming } from "../validators/constant-naming.validator";
+import { validateDefaultExports } from "../validators/default-exports.validator";
+import { validateEntrypointShape } from "../validators/entrypoint-shape.validator";
+import { validateEnumNaming } from "../validators/enum-naming.validator";
+import { validateFilePlacement } from "../validators/file-placement.validator";
+import { validateHeaderMetadata } from "../validators/header-metadata.validator";
+import { validateImportSpecifiers } from "../validators/import-specifiers.validator";
+import { validateInterfaceNaming } from "../validators/interface-naming.validator";
+import { validateTypePlacement } from "../validators/type-placement.validator";
 import { collectInScopeFiles } from "./file-collector.utils";
-import { validateBiomeIgnoreComments } from "./validators/biome-ignore.validator";
-import { validateConstantNaming } from "./validators/constant-naming.validator";
-import { validateDefaultExports } from "./validators/default-exports.validator";
-import { validateEntrypointShape } from "./validators/entrypoint-shape.validator";
-import { validateEnumNaming } from "./validators/enum-naming.validator";
-import { validateFilePlacement } from "./validators/file-placement.validator";
-import { validateHeaderMetadata } from "./validators/header-metadata.validator";
-import { validateImportSpecifiers } from "./validators/import-specifiers.validator";
-import { validateInterfaceNaming } from "./validators/interface-naming.validator";
-import { validateTypePlacement } from "./validators/type-placement.validator";
 
 export type { CodeStandardDiagnostic } from "@/interfaces/code-standard-diagnostic.type";
 
