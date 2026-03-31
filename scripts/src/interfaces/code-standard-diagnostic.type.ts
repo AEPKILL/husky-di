@@ -1,5 +1,5 @@
 /**
- * Code standard diagnostic interface.
+ * Code standard diagnostic type.
  *
  * @overview
  * Defines the structure for code standard violation diagnostics.
@@ -9,10 +9,10 @@
  * @created 2026-03-30 20:22:20
  */
 
-export interface CodeStandardDiagnostic {
+export type CodeStandardDiagnostic = {
 	readonly ruleId: string;
 	readonly filePath: string;
 	readonly line: number;
 	readonly column: number;
 	readonly message: string;
-}
+};
