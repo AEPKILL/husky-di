@@ -24,12 +24,9 @@ import { validateHeaderMetadata } from "../validators/header-metadata.validator"
 import { validateImportSpecifiers } from "../validators/import-specifiers.validator";
 import { validateInterfaceNaming } from "../validators/interface-naming.validator";
 import { validateTypeFileExports } from "../validators/type-file-exports.validator";
-import { validateTypePlacement } from "../validators/type-placement.validator";
 import { collectInScopeFiles } from "./file-collector.utils";
 
 export type { CodeStandardDiagnostic } from "@/types/code-standard-diagnostic.type";
-
-export type { CodeStandardConfig } from "@/types/config.type";
 
 export function validateCodeStandard(
 	rootDirectoryPath: string,
@@ -59,7 +56,6 @@ export function validateCodeStandard(
 		diagnostics.push(...validateEnumNaming(relativeFilePath, sourceFile));
 		diagnostics.push(...validateConstantNaming(relativeFilePath, sourceFile));
 		diagnostics.push(...validateInterfaceNaming(relativeFilePath, sourceFile));
-		diagnostics.push(...validateTypePlacement(relativeFilePath, sourceFile));
 		diagnostics.push(...validateTypeFileExports(relativeFilePath, sourceFile));
 		diagnostics.push(...validateDefaultExports(relativeFilePath, sourceFile));
 		diagnostics.push(...validateEntrypointShape(relativeFilePath, sourceFile));

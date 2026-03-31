@@ -70,28 +70,49 @@ export function isInScopeFile(
 
 	const pathSegments = relativeFilePath.split("/");
 
-	for (const exemptName of config.exemptDirectoryNames) {
-		if (pathSegments[0] === exemptName) {
+	for (const packageRootName of config.packageRootNames) {
+		if (pathSegments[0] !== packageRootName) {
+			continue;
+		}
+
+		const sourceIndex = findFirstSegmentIndex(
+			pathSegments,
+			config.sourceDirectories,
+		);
+
+		if (sourceIndex === -1) {
+			return false;
+		}
+
+		const nextSegment = pathSegments[sourceIndex + 1];
+		if (!nextSegment) {
+			return false;
+		}
+
+		if (nextSegment.endsWith(".ts")) {
 			return true;
 		}
-	}
 
-	for (const packageRootName of config.packageRootNames) {
-		if (pathSegments[0] === packageRootName) {
-			if (pathSegments.length < config.minimumPathSegments) {
-				return false;
-			}
-
-			const sourceDirectoryName = pathSegments[2];
-			return (
-				sourceDirectoryName === "src" ||
-				sourceDirectoryName === "tests" ||
-				config.sourceDirectoryNames.includes(sourceDirectoryName)
-			);
-		}
+		return (
+			config.sourceDirectories.includes(nextSegment) ||
+			config.sourceDirectoryNames.includes(nextSegment)
+		);
 	}
 
 	return false;
+}
+
+function findFirstSegmentIndex(
+	pathSegments: string[],
+	targetDirectories: readonly string[],
+): number {
+	for (const targetName of targetDirectories) {
+		const index = pathSegments.indexOf(targetName);
+		if (index !== -1) {
+			return index;
+		}
+	}
+	return -1;
 }
 
 function toPortablePath(filePath: string): string {

@@ -19,11 +19,3 @@ export function getPathSegments(filePath: string): string[] {
 	const normalizedPath = posix.normalize(filePath);
 	return normalizedPath.split(posix.sep).filter(Boolean);
 }
-
-export function isInDirectory(
-	filePath: string,
-	directoryName: string,
-): boolean {
-	const segments = getPathSegments(filePath);
-	return segments.includes(directoryName);
-}

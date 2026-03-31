@@ -25,14 +25,17 @@ export function validateFilePlacement(
 	const pathSegments = getPathSegments(relativeFilePath);
 	const fileName = extractFileName(relativeFilePath);
 
-	for (const exemptName of config.exemptDirectoryNames) {
-		if (pathSegments[0] === exemptName) {
-			return [];
-		}
+	const sourceIndex = findFirstSegmentIndex(
+		pathSegments,
+		config.sourceDirectories,
+	);
+
+	if (sourceIndex === -1) {
+		return [];
 	}
 
-	const packageArea = pathSegments[2];
-	if (packageArea === "tests") {
+	const packageArea = pathSegments[sourceIndex];
+	if (packageArea === getTestsDirectoryName(config.sourceDirectories)) {
 		if (fileName === "test.utils.ts" || fileName.endsWith(".test.ts")) {
 			return [];
 		}
@@ -43,40 +46,16 @@ export function validateFilePlacement(
 				relativeFilePath,
 				sourceFile,
 				0,
-				"Files in package tests must be named *.test.ts or test.utils.ts.",
+				`Files in package tests must be named *.test.ts or test.utils.ts.`,
 			),
 		];
 	}
 
-	if (pathSegments.length === config.minimumPathSegments) {
-		if (fileName === "index.ts") {
-			return [];
-		}
-
-		return [
-			createDiagnostic(
-				CodeStandardRuleIdEnum.PlacementSourceDirectory,
-				relativeFilePath,
-				sourceFile,
-				0,
-				"Package source files must live in an existing semantic directory or be src/index.ts.",
-			),
-		];
+	if (pathSegments.length === sourceIndex + 2) {
+		return [];
 	}
 
-	if (pathSegments.length < config.minimumPathSegments) {
-		return [
-			createDiagnostic(
-				CodeStandardRuleIdEnum.PlacementSourceDirectory,
-				relativeFilePath,
-				sourceFile,
-				0,
-				"Package source files must live in an existing semantic directory or be src/index.ts.",
-			),
-		];
-	}
-
-	const sourceDirectoryName = pathSegments[3];
+	const sourceDirectoryName = pathSegments[sourceIndex + 1];
 	if (!config.sourceDirectoryNames.includes(sourceDirectoryName)) {
 		return [
 			createDiagnostic(
@@ -116,12 +95,36 @@ export function validateFilePlacement(
 				relativeFilePath,
 				sourceFile,
 				0,
-				`src/${sourceDirectoryName} may only contain files with suffix ${formatSuffixList(allowedSuffixes)}.`,
+				`${getSourceDirectoryName(config.sourceDirectories)}/${sourceDirectoryName} may only contain files with suffix ${formatSuffixList(allowedSuffixes)}.`,
 			),
 		];
 	}
 
 	return [];
+}
+
+function findFirstSegmentIndex(
+	pathSegments: string[],
+	targetNames: readonly string[],
+): number {
+	for (const targetName of targetNames) {
+		const index = pathSegments.indexOf(targetName);
+		if (index !== -1) {
+			return index;
+		}
+	}
+	return -1;
+}
+
+function getSourceDirectoryName(names: readonly string[]): string {
+	return names[0] ?? "src";
+}
+
+function getTestsDirectoryName(names: readonly string[]): string | undefined {
+	return (
+		names.find((name) => name === "tests") ??
+		names.find((name) => name !== "src")
+	);
 }
 
 function getRequiredSuffixes(

@@ -51,14 +51,52 @@ export const DEFAULT_CONFIG: CodeStandardConfig = {
 	]),
 	exemptDirectoryNames: ["scripts"],
 	packageScopePrefix: "@husky-di/",
-	minimumPathSegments: 4,
+	sourceDirectories: ["src", "tests"],
 };
 
 export function createConfig(
 	overrides: Partial<CodeStandardConfig>,
 ): CodeStandardConfig {
-	return {
+	const config = {
 		...DEFAULT_CONFIG,
 		...overrides,
 	};
+
+	validateConfig(config);
+
+	return config;
+}
+
+function validateConfig(config: CodeStandardConfig): void {
+	const { sourceDirectoryNames, requiredSuffixBySourceDirectoryName } = config;
+
+	const sourceDirectorySet = new Set(sourceDirectoryNames);
+
+	for (const [key, suffixes] of requiredSuffixBySourceDirectoryName.entries()) {
+		if (!sourceDirectorySet.has(key)) {
+			throw new Error(
+				`Invalid config: requiredSuffixBySourceDirectoryName contains key "${key}" which is not in sourceDirectoryNames.`,
+			);
+		}
+
+		if (suffixes.length === 0) {
+			throw new Error(
+				`Invalid config: requiredSuffixBySourceDirectoryName["${key}"] must have at least one suffix pattern.`,
+			);
+		}
+
+		for (const [index, suffix] of suffixes.entries()) {
+			if (typeof suffix === "string" && suffix.length === 0) {
+				throw new Error(
+					`Invalid config: requiredSuffixBySourceDirectoryName["${key}"][${index}] is an empty string.`,
+				);
+			}
+
+			if (suffix instanceof RegExp && suffix.source.length === 0) {
+				throw new Error(
+					`Invalid config: requiredSuffixBySourceDirectoryName["${key}"][${index}] is an empty regular expression.`,
+				);
+			}
+		}
+	}
 }
