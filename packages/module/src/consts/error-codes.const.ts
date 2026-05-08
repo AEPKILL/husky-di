@@ -36,6 +36,12 @@ export const MODULE_ERROR_CODES = {
 	E_IMPORT_COLLISION: "E_IMPORT_COLLISION",
 
 	/**
+	 * Imported ServiceIdentifier conflicts with a local declaration in the importing module.
+	 * @see SPECIFICATION.md Section 4.2 I4
+	 */
+	E_IMPORT_CONFLICT_LOCAL: "E_IMPORT_CONFLICT_LOCAL",
+
+	/**
 	 * Alias source ServiceIdentifier is not exported by the source module.
 	 * @see SPECIFICATION.md Section 5.1 Resolution Logic
 	 */
@@ -44,6 +50,8 @@ export const MODULE_ERROR_CODES = {
 	/**
 	 * Alias target conflicts with a local declaration in the importing module.
 	 * @see SPECIFICATION.md Section 5.1 Resolution Logic
+	 *
+	 * @deprecated Use E_IMPORT_CONFLICT_LOCAL for Import Scope conflicts.
 	 */
 	E_ALIAS_CONFLICT_LOCAL: "E_ALIAS_CONFLICT_LOCAL",
 

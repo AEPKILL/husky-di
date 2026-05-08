@@ -24,14 +24,15 @@ import type {
 } from "@/interfaces/module.interface";
 import type { ImportScope } from "@/types/import-scope.type";
 import {
-	detectCircularDependencies as detectCircularDependenciesUtil,
-	validateAliasConflictsWithDeclarations as validateAliasConflictsWithDeclarationsUtil,
-	validateAliases as validateAliasesUtil,
-	validateDeclarations as validateDeclarationsUtil,
-	validateExportAvailability as validateExportAvailabilityUtil,
-	validateExportUniqueness as validateExportUniquenessUtil,
-	validateImportNamingConflicts as validateImportNamingConflictsUtil,
-	validateImportUniqueness as validateImportUniquenessUtil,
+	detectCircularDependencies,
+	validateAliases,
+	validateDeclarations,
+	validateExportAvailability,
+	validateExportUniqueness,
+	validateImportAliases,
+	validateImportConflictsWithDeclarations,
+	validateImportNamingConflicts,
+	validateImportUniqueness,
 } from "@/utils/module-validator.utils";
 import { createModuleId } from "@/utils/uuid.utils";
 
@@ -62,12 +63,12 @@ export class Module implements IModule {
 
 	readonly container: IContainer;
 
-	private _id: string;
-	private _name: string;
-	private _declarations?: Declaration<unknown>[];
-	private _imports?: Array<IModule | ModuleWithAliases>;
-	private _exports?: ServiceIdentifier<unknown>[];
-	private _importScope: ImportScope;
+	private readonly _id: string;
+	private readonly _name: string;
+	private readonly _declarations?: Declaration<unknown>[];
+	private readonly _imports?: Array<IModule | ModuleWithAliases>;
+	private readonly _exports?: ServiceIdentifier<unknown>[];
+	private readonly _importScope: ImportScope;
 
 	constructor(options: CreateModuleOptions) {
 		this._id = createModuleId();
@@ -77,12 +78,8 @@ export class Module implements IModule {
 		this._exports = options.exports;
 		this._importScope = createImportScope(this._imports);
 
-		// Validate configuration (order is important!)
-		this.validateDeclarations();
-		this.validateImports();
-		this.validateExports();
+		this.validateConfiguration();
 
-		// Build container
 		this.container = this.buildContainer();
 		this.container.use(
 			createExportedGuardMiddlewareFactory(this.exports ?? []),
@@ -121,7 +118,7 @@ export class Module implements IModule {
 	}
 
 	withAliases(aliases: Alias[]): ModuleWithAliases {
-		validateAliasesUtil(this.displayName, aliases, this._exports);
+		validateAliases(this.displayName, aliases, this._exports);
 		return {
 			module: this,
 			aliases,
@@ -135,19 +132,26 @@ export class Module implements IModule {
 		return container;
 	}
 
+	private validateConfiguration(): void {
+		validateDeclarations(this.displayName, this._declarations);
+		this.validateImports();
+		this.validateExports();
+	}
+
 	private validateImports(): void {
 		if (!this._imports || this._imports.length === 0) {
 			return;
 		}
 
-		validateImportUniquenessUtil(this.displayName, this._imports);
-		detectCircularDependenciesUtil(this);
-		validateAliasConflictsWithDeclarationsUtil(
+		validateImportUniqueness(this.displayName, this._imports);
+		validateImportAliases(this._imports);
+		detectCircularDependencies(this);
+		validateImportConflictsWithDeclarations(
 			this.displayName,
-			this._imports,
+			this._importScope,
 			this._declarations,
 		);
-		validateImportNamingConflictsUtil(this.displayName, this._importScope);
+		validateImportNamingConflicts(this.displayName, this._importScope);
 	}
 
 	private registerDeclarations(container: IContainer): void {
@@ -162,27 +166,16 @@ export class Module implements IModule {
 	}
 
 	private registerImports(container: IContainer): void {
-		if (!this._imports || this._imports.length === 0) {
+		if (this._importScope.bindings.length === 0) {
 			return;
 		}
 
 		for (const binding of this._importScope.bindings) {
-			if (binding.sourceServiceIdentifier !== binding.localServiceIdentifier) {
-				container.register(binding.localServiceIdentifier, {
-					useAlias: binding.sourceServiceIdentifier,
-					getContainer: () => binding.sourceModule.container,
-				});
-			} else {
-				container.register(binding.sourceServiceIdentifier, {
-					useAlias: binding.sourceServiceIdentifier,
-					getContainer: () => binding.sourceModule.container,
-				});
-			}
+			container.register(binding.localServiceIdentifier, {
+				useAlias: binding.sourceServiceIdentifier,
+				getContainer: () => binding.sourceModule.container,
+			});
 		}
-	}
-
-	private validateDeclarations(): void {
-		validateDeclarationsUtil(this.displayName, this._declarations);
 	}
 
 	private validateExports(): void {
@@ -190,8 +183,8 @@ export class Module implements IModule {
 			return;
 		}
 
-		validateExportUniquenessUtil(this.displayName, this._exports);
-		validateExportAvailabilityUtil(
+		validateExportUniqueness(this.displayName, this._exports);
+		validateExportAvailability(
 			this.displayName,
 			this._exports,
 			this._declarations,

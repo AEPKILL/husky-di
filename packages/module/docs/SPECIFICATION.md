@@ -87,6 +87,11 @@ If two or more imported modules export a service with the same `ServiceIdentifie
 - _Error Code:_ `E_IMPORT_COLLISION`
 - _Note:_ Unlike ESM (which might allow import but fail on access), this spec enforces strict static collision detection to prevent runtime ambiguity.
 
+**I4. Local Declaration Collision**
+If an imported service is available in the target module's Import Scope with the same `ServiceIdentifier` as a local declaration, the implementation **MUST** raise an error. The imported service **MUST** be aliased to a unique local name before it can coexist with the local declaration.
+
+- _Error Code:_ `E_IMPORT_CONFLICT_LOCAL`
+
 ### 4.3 Exports
 
 **E1. Export Source Validity**
@@ -117,8 +122,8 @@ When a module $M_{source}$ is imported into $M_{target}$ with a set of aliases $
 
 1. **Existence Check**: For every alias mapping $\{ s \to t \} \in A$, the identifier $s$ **MUST** exist in the `exports` list of $M_{source}$.
    - _Error:_ `E_ALIAS_SOURCE_NOT_EXPORTED`
-2. **Local Conflict Check**: The target identifier $t$ **MUST NOT** collide with any identifier defined in the `declarations` of $M_{target}$.
-   - _Error:_ `E_ALIAS_CONFLICT_LOCAL`
+2. **Local Conflict Check**: The target identifier $t$ participates in the target module's Import Scope and **MUST NOT** collide with any identifier defined in the `declarations` of $M_{target}$.
+   - _Error:_ `E_IMPORT_CONFLICT_LOCAL`
 3. **Mapping Uniqueness**: The source identifier $s$ **MUST NOT** be mapped more than once within the same import statement.
    - _Error:_ `E_DUPLICATE_ALIAS_MAP`
 
@@ -181,6 +186,7 @@ The following features are explicitly **excluded** from this version of the spec
 | `E_DUPLICATE_IMPORT_MODULE`   | `Duplicate import module: "{0}" in "{1}".`                                                          |
 | `E_CIRCULAR_DEPENDENCY`       | `Circular dependency detected: {0} -> ... -> {0}.`                                                  |
 | `E_IMPORT_COLLISION`          | `Service identifier "{0}" is exported by multiple imported modules: {1}.`                           |
+| `E_IMPORT_CONFLICT_LOCAL`     | `Imported service identifier "{0}" conflicts with local declaration in module "{1}".`               |
 | `E_ALIAS_SOURCE_NOT_EXPORTED` | `Cannot alias "{0}" from module "{1}": it is not exported.`                                         |
 | `E_ALIAS_CONFLICT_LOCAL`      | `Alias "{0}" conflicts with local declaration in module "{1}".`                                     |
 | `E_EXPORT_NOT_FOUND`          | `Cannot export "{0}" from "{1}": not declared or imported.`                                         |

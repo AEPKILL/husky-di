@@ -1064,8 +1064,8 @@ const AppModule = createModule({
 | `E_DUPLICATE_IMPORT_MODULE` | 重复导入同一模块 | 每个模块只导入一次 |
 | `E_CIRCULAR_DEPENDENCY` | 循环依赖 | 重构模块依赖关系 |
 | `E_IMPORT_COLLISION` | 导入命名冲突 | 使用 withAliases() 重命名 |
+| `E_IMPORT_CONFLICT_LOCAL` | 导入服务与本地声明冲突 | 使用 withAliases() 重命名导入服务 |
 | `E_ALIAS_SOURCE_NOT_EXPORTED` | 别名源未导出 | 确保源服务在 exports 中 |
-| `E_ALIAS_CONFLICT_LOCAL` | 别名与本地声明冲突 | 使用不同的别名名称 |
 | `E_DUPLICATE_ALIAS_MAP` | 重复的别名映射 | 每个源服务只映射一次 |
 | `E_EXPORT_NOT_FOUND` | 导出未声明的服务 | 添加声明或从导入模块获取 |
 | `E_DUPLICATE_EXPORT` | 重复导出同一服务 | 每个服务只导出一次 |

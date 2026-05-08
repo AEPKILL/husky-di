@@ -103,6 +103,7 @@
 - 模块 declarations 不能重复，imports 不能重复，exports 不能重复。
 - 模块 import graph 不应出现循环依赖。
 - 多个 imported modules 导出同名服务时，必须通过 alias 消除冲突。
+- Import Scope 中的服务标识符不能与本地 declaration 重名；如果导入服务与本地 declaration 重名，必须通过 alias 重命名导入服务。
 - 模块只能 export 本地 declaration、显式 import 的 export，或 alias 后可用的服务。
 
 ## 包边界

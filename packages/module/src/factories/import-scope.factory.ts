@@ -15,6 +15,7 @@ import type {
 	ModuleWithAliases,
 } from "@/interfaces/module.interface";
 import type { ImportScope } from "@/types/import-scope.type";
+import { isModuleWithAliases } from "@/utils/module-import.utils";
 
 export function createImportScope(
 	imports?: ReadonlyArray<IModule | ModuleWithAliases>,
@@ -32,6 +33,7 @@ export function createImportScope(
 				sourceModule,
 				sourceServiceIdentifier,
 				localServiceIdentifier,
+				isAliased: aliasMap.has(sourceServiceIdentifier),
 			};
 		});
 	});
@@ -48,10 +50,4 @@ function createAliasMap(
 	aliases: ReadonlyArray<Alias>,
 ): Map<ServiceIdentifier<unknown>, ServiceIdentifier<unknown>> {
 	return new Map(aliases.map((alias) => [alias.serviceIdentifier, alias.as]));
-}
-
-function isModuleWithAliases(
-	item: IModule | ModuleWithAliases,
-): item is ModuleWithAliases {
-	return "module" in item;
 }

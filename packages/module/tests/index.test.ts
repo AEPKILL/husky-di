@@ -111,16 +111,19 @@ describe("Module System - SPECIFICATION.md v1.0.0", () => {
 					sourceModule: SharedModule,
 					sourceServiceIdentifier: "utils",
 					localServiceIdentifier: "sharedUtils",
+					isAliased: true,
 				},
 				{
 					sourceModule: SharedModule,
 					sourceServiceIdentifier: "constants",
 					localServiceIdentifier: "constants",
+					isAliased: false,
 				},
 				{
 					sourceModule: SharedModule,
 					sourceServiceIdentifier: "helpers",
 					localServiceIdentifier: "helpers",
+					isAliased: false,
 				},
 			]);
 		});
@@ -244,6 +247,28 @@ describe("Module System - SPECIFICATION.md v1.0.0", () => {
 						imports: [ModuleA, ModuleB],
 					}),
 				).not.toThrow();
+			});
+
+			it("should validate manually constructed ModuleWithAliases imports", () => {
+				const ModuleA = createModule({
+					name: "ModuleA",
+					declarations: [{ serviceIdentifier: "foo", useValue: "foo" }],
+					exports: ["foo"],
+				});
+
+				expect(() =>
+					createModule({
+						name: "ModuleB",
+						imports: [
+							{
+								module: ModuleA,
+								aliases: [{ serviceIdentifier: "bar", as: "baz" }],
+							},
+						],
+					}),
+				).toThrow(
+					/Cannot alias service identifier "bar" from module "ModuleA#MODULE-\d+": it is not exported from that module\./,
+				);
 			});
 		});
 
@@ -446,6 +471,44 @@ describe("Module System - SPECIFICATION.md v1.0.0", () => {
 					}),
 				).not.toThrow();
 			});
+
+			it("should throw E_IMPORT_CONFLICT_LOCAL when imported service conflicts with local declaration", () => {
+				const ModuleA = createModule({
+					name: "ModuleA",
+					declarations: [{ serviceIdentifier: "foo", useValue: "foo" }],
+					exports: ["foo"],
+				});
+
+				expect(() =>
+					createModule({
+						name: "ModuleB",
+						declarations: [{ serviceIdentifier: "foo", useValue: "local foo" }],
+						imports: [ModuleA],
+					}),
+				).toThrow(
+					/Imported service identifier "foo" conflicts with local declaration in module "ModuleB#MODULE-\d+". Use an alias to resolve the conflict\./,
+				);
+			});
+
+			it("should allow local declaration conflict resolution using aliases", () => {
+				const ModuleA = createModule({
+					name: "ModuleA",
+					declarations: [{ serviceIdentifier: "foo", useValue: "foo" }],
+					exports: ["foo"],
+				});
+
+				expect(() =>
+					createModule({
+						name: "ModuleB",
+						declarations: [{ serviceIdentifier: "foo", useValue: "local foo" }],
+						imports: [
+							ModuleA.withAliases([
+								{ serviceIdentifier: "foo", as: "importedFoo" },
+							]),
+						],
+					}),
+				).not.toThrow();
+			});
 		});
 	});
 
@@ -582,7 +645,7 @@ describe("Module System - SPECIFICATION.md v1.0.0", () => {
 				);
 			});
 
-			it("should throw E_ALIAS_CONFLICT_LOCAL when alias conflicts with local declaration", () => {
+			it("should throw E_IMPORT_CONFLICT_LOCAL when alias conflicts with local declaration", () => {
 				const ModuleA = createModule({
 					name: "ModuleA",
 					declarations: [{ serviceIdentifier: "foo", useValue: "foo" }],
@@ -598,7 +661,7 @@ describe("Module System - SPECIFICATION.md v1.0.0", () => {
 						],
 					}),
 				).toThrow(
-					/Alias "bar" conflicts with local declaration in module "ModuleB#MODULE-\d+"\./,
+					/Imported service identifier "bar" conflicts with local declaration in module "ModuleB#MODULE-\d+". Use an alias to resolve the conflict\./,
 				);
 			});
 
