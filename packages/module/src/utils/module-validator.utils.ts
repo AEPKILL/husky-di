@@ -14,12 +14,7 @@ import type {
 	IModule,
 	ModuleWithAliases,
 } from "@/interfaces/module.interface";
-
-type NormalizedImport = {
-	module: IModule;
-	serviceIdentifier: ServiceIdentifier<unknown>;
-	as: ServiceIdentifier<unknown>;
-};
+import type { ImportScope } from "@/types/import-scope.type";
 
 export function validateDeclarations(
 	moduleName: string,
@@ -160,24 +155,16 @@ export function validateAliasConflictsWithDeclarations(
 
 export function validateImportNamingConflicts(
 	_moduleName: string,
-	imports?: Array<IModule | ModuleWithAliases>,
+	importScope: ImportScope,
 ): void {
-	if (!imports || imports.length === 0) {
+	if (importScope.bindings.length === 0) {
 		return;
 	}
 
-	const serviceToModules = imports.reduce((acc, item) => {
-		const module = isModuleWithAliases(item) ? item.module : item;
-		const aliases = isModuleWithAliases(item) ? (item.aliases ?? []) : [];
-		const aliasMap = buildAliasMap(aliases);
-
-		for (const serviceId of module.exports ?? []) {
-			const effectiveName = aliasMap.get(serviceId) ?? serviceId;
-			const modules = acc.get(effectiveName) ?? [];
-			modules.push(module);
-			acc.set(effectiveName, modules);
-		}
-
+	const serviceToModules = importScope.bindings.reduce((acc, binding) => {
+		const modules = acc.get(binding.localServiceIdentifier) ?? [];
+		modules.push(binding.sourceModule);
+		acc.set(binding.localServiceIdentifier, modules);
 		return acc;
 	}, new Map<ServiceIdentifier<unknown>, IModule[]>());
 
@@ -215,36 +202,29 @@ export function validateExportUniqueness(
 
 export function collectAvailableServices(
 	declarations?: Declaration<unknown>[],
-	imports?: Array<IModule | ModuleWithAliases>,
+	importScope?: ImportScope,
 ): Set<ServiceIdentifier<unknown>> {
 	const localServices = (declarations ?? []).map(
 		(decl) => decl.serviceIdentifier,
 	);
 
-	const importedServices = (imports ?? []).flatMap((item) => {
-		const module = isModuleWithAliases(item) ? item.module : item;
-		const aliases = isModuleWithAliases(item) ? (item.aliases ?? []) : [];
-		const aliasMap = buildAliasMap(aliases);
-
-		return (module.exports ?? []).map(
-			(serviceId) => aliasMap.get(serviceId) ?? serviceId,
-		);
-	});
-
-	return new Set([...localServices, ...importedServices]);
+	return new Set([
+		...localServices,
+		...(importScope?.visibleServiceIdentifiers ?? []),
+	]);
 }
 
 export function validateExportAvailability(
 	moduleName: string,
 	exports?: ServiceIdentifier<unknown>[],
 	declarations?: Declaration<unknown>[],
-	imports?: Array<IModule | ModuleWithAliases>,
+	importScope?: ImportScope,
 ): void {
 	if (!exports || exports.length === 0) {
 		return;
 	}
 
-	const availableServices = collectAvailableServices(declarations, imports);
+	const availableServices = collectAvailableServices(declarations, importScope);
 
 	for (const exportId of exports) {
 		if (!availableServices.has(exportId)) {
@@ -253,30 +233,6 @@ export function validateExportAvailability(
 			);
 		}
 	}
-}
-
-export function normalizeImports(
-	imports: ReadonlyArray<IModule | ModuleWithAliases>,
-): NormalizedImport[] {
-	return imports.flatMap((item) => {
-		const module = isModuleWithAliases(item) ? item.module : item;
-		const aliases = isModuleWithAliases(item) ? (item.aliases ?? []) : [];
-		const aliasMap = buildAliasMap(aliases);
-
-		return (module.exports ?? []).map((serviceIdentifier) => ({
-			module,
-			serviceIdentifier,
-			as: aliasMap.get(serviceIdentifier) ?? serviceIdentifier,
-		}));
-	});
-}
-
-function buildAliasMap(
-	aliases: Alias[] | undefined,
-): Map<ServiceIdentifier<unknown>, ServiceIdentifier<unknown>> {
-	return new Map(
-		(aliases ?? []).map((alias) => [alias.serviceIdentifier, alias.as]),
-	);
 }
 
 function isModuleWithAliases(

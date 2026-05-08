@@ -14,6 +14,7 @@ import {
 	type ServiceIdentifier,
 } from "@husky-di/core";
 import { createExportedGuardMiddlewareFactory } from "@/factories/exported-guard-middleware.factory";
+import { createImportScope } from "@/factories/import-scope.factory";
 import type {
 	Alias,
 	CreateModuleOptions,
@@ -21,9 +22,9 @@ import type {
 	IModule,
 	ModuleWithAliases,
 } from "@/interfaces/module.interface";
+import type { ImportScope } from "@/types/import-scope.type";
 import {
 	detectCircularDependencies as detectCircularDependenciesUtil,
-	normalizeImports as normalizeImportsUtil,
 	validateAliasConflictsWithDeclarations as validateAliasConflictsWithDeclarationsUtil,
 	validateAliases as validateAliasesUtil,
 	validateDeclarations as validateDeclarationsUtil,
@@ -66,6 +67,7 @@ export class Module implements IModule {
 	private _declarations?: Declaration<unknown>[];
 	private _imports?: Array<IModule | ModuleWithAliases>;
 	private _exports?: ServiceIdentifier<unknown>[];
+	private _importScope: ImportScope;
 
 	constructor(options: CreateModuleOptions) {
 		this._id = createModuleId();
@@ -73,6 +75,7 @@ export class Module implements IModule {
 		this._declarations = options.declarations;
 		this._imports = options.imports;
 		this._exports = options.exports;
+		this._importScope = createImportScope(this._imports);
 
 		// Validate configuration (order is important!)
 		this.validateDeclarations();
@@ -144,7 +147,7 @@ export class Module implements IModule {
 			this._imports,
 			this._declarations,
 		);
-		validateImportNamingConflictsUtil(this.displayName, this._imports);
+		validateImportNamingConflictsUtil(this.displayName, this._importScope);
 	}
 
 	private registerDeclarations(container: IContainer): void {
@@ -163,22 +166,16 @@ export class Module implements IModule {
 			return;
 		}
 
-		const normalizedImports = normalizeImportsUtil(this._imports);
-
-		for (const {
-			module: sourceModule,
-			serviceIdentifier,
-			as,
-		} of normalizedImports) {
-			if (serviceIdentifier !== as) {
-				container.register(as, {
-					useAlias: serviceIdentifier,
-					getContainer: () => sourceModule.container,
+		for (const binding of this._importScope.bindings) {
+			if (binding.sourceServiceIdentifier !== binding.localServiceIdentifier) {
+				container.register(binding.localServiceIdentifier, {
+					useAlias: binding.sourceServiceIdentifier,
+					getContainer: () => binding.sourceModule.container,
 				});
 			} else {
-				container.register(serviceIdentifier, {
-					useAlias: serviceIdentifier,
-					getContainer: () => sourceModule.container,
+				container.register(binding.sourceServiceIdentifier, {
+					useAlias: binding.sourceServiceIdentifier,
+					getContainer: () => binding.sourceModule.container,
 				});
 			}
 		}
@@ -198,7 +195,7 @@ export class Module implements IModule {
 			this.displayName,
 			this._exports,
 			this._declarations,
-			this._imports,
+			this._importScope,
 		);
 	}
 }
