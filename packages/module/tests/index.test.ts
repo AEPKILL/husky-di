@@ -6,6 +6,7 @@
 
 import { createServiceIdentifier, resolve } from "@husky-di/core";
 import { describe, expect, it } from "vitest";
+import { createImportScope } from "../src/factories/import-scope.factory";
 import { createModule } from "../src/index";
 
 /**
@@ -81,6 +82,50 @@ class AppService implements IApp {
  * Based on SPECIFICATION.md v1.0.0
  */
 describe("Module System - SPECIFICATION.md v1.0.0", () => {
+	describe("Import Scope", () => {
+		it("should treat aliases as renames while preserving unaliased exports", () => {
+			const SharedModule = createModule({
+				name: "SharedModule",
+				declarations: [
+					{ serviceIdentifier: "utils", useValue: "utils" },
+					{ serviceIdentifier: "constants", useValue: "constants" },
+					{ serviceIdentifier: "helpers", useValue: "helpers" },
+				],
+				exports: ["utils", "constants", "helpers"],
+			});
+
+			const importScope = createImportScope([
+				SharedModule.withAliases([
+					{ serviceIdentifier: "utils", as: "sharedUtils" },
+				]),
+			]);
+
+			expect(importScope.visibleServiceIdentifiers.has("sharedUtils")).toBe(
+				true,
+			);
+			expect(importScope.visibleServiceIdentifiers.has("constants")).toBe(true);
+			expect(importScope.visibleServiceIdentifiers.has("helpers")).toBe(true);
+			expect(importScope.visibleServiceIdentifiers.has("utils")).toBe(false);
+			expect(importScope.bindings).toEqual([
+				{
+					sourceModule: SharedModule,
+					sourceServiceIdentifier: "utils",
+					localServiceIdentifier: "sharedUtils",
+				},
+				{
+					sourceModule: SharedModule,
+					sourceServiceIdentifier: "constants",
+					localServiceIdentifier: "constants",
+				},
+				{
+					sourceModule: SharedModule,
+					sourceServiceIdentifier: "helpers",
+					localServiceIdentifier: "helpers",
+				},
+			]);
+		});
+	});
+
 	/**
 	 * Section 4.1: Declarations Validation
 	 * Tests for Rule D1 (Uniqueness) and Rule D2 (Validity)
