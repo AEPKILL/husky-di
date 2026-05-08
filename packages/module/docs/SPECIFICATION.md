@@ -135,6 +135,7 @@ $$
 - Services explicitly aliased are available under their **new name** ($t$).
 - The **original names** ($s$) of aliased services are **hidden** (shadowed) and not imported.
 - Services _not_ mentioned in the alias list are imported under their **original name**.
+- `withAliases()` is a renaming mechanism, not a partial-import mechanism. An alias list **MUST NOT** be interpreted as the complete list of services to import.
 
 ---
 

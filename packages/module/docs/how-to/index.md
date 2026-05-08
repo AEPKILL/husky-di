@@ -287,13 +287,13 @@ const config = AppModule.resolve("appConfig");
 
 ---
 
-### 如何部分导入模块的服务
+### withAliases() 是否可以部分导入模块的服务
 
-**问题：** 我只想导入模块中的部分服务，而不是全部。
+**问题：** 我想用 `withAliases()` 只导入模块中的部分服务。
 
 **解决方案：**
 
-使用 `withAliases()` 选择性地映射需要的服务，未映射的服务不会导入：
+`withAliases()` 只负责重命名导入项，不负责筛选导入项。未被 alias 映射的导出服务仍会按原服务标识符导入：
 
 ```typescript
 const SharedModule = createModule({
@@ -306,28 +306,28 @@ const SharedModule = createModule({
   exports: ["utils", "constants", "helpers"],
 });
 
-// 只导入 utils 和 constants，不导入 helpers
+// 重命名 utils，constants 和 helpers 仍会按原名导入
 const MyModule = createModule({
   name: "MyModule",
   imports: [
     SharedModule.withAliases([
-      { serviceIdentifier: "utils", as: "utils" },
-      { serviceIdentifier: "constants", as: "constants" },
-      // helpers 未被映射，不会导入
+      { serviceIdentifier: "utils", as: "sharedUtils" },
     ]),
   ],
 });
 
-MyModule.resolve("utils");      // 成功
-MyModule.resolve("constants");  // 成功
-MyModule.resolve("helpers");    // 错误：未导入
+MyModule.resolve("sharedUtils"); // 成功
+MyModule.resolve("constants");   // 成功，未 alias 的 export 仍按原名导入
+MyModule.resolve("helpers");     // 成功，未 alias 的 export 仍按原名导入
+MyModule.resolve("utils");       // 错误：被 alias 后原名不再可用
 ```
 
 **步骤：**
 
-1. 确定需要导入的服务列表
-2. 在 `withAliases()` 中只映射这些服务
-3. 未映射的服务不会被导入到当前模块
+1. 确定需要重命名的服务
+2. 在 `withAliases()` 中添加 `{ serviceIdentifier, as }` 映射
+3. 使用新服务标识符解析被重命名的服务
+4. 使用原服务标识符解析未被 alias 映射的导出服务
 
 ---
 

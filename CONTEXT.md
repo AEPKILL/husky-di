@@ -85,6 +85,7 @@
 - **Import**：导入其他模块暴露的服务。
 - **Export**：向外暴露本模块声明或转发导入的服务。
 - **Alias**：导入时重命名服务标识符，类似 `import { foo as bar }`。
+- **Import Scope**：某个 Module 从 imports 中获得的可见服务集合。alias 只重命名被映射的导入项；未被 alias 映射的 imported exports 仍以原服务标识符进入 Import Scope。
 - **Export Guard**：模块容器上的保护中间件，用来阻止外部解析未导出的服务。
 
 模块系统借鉴 ESM 语义：导入必须明确，导出边界必须明确，命名冲突应在创建模块时暴露，而不是留到运行时变成歧义。
