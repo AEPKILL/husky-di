@@ -16,6 +16,7 @@ export type ImportBinding = {
 	readonly sourceModule: IModule;
 	readonly sourceServiceIdentifier: ServiceIdentifier<unknown>;
 	readonly localServiceIdentifier: ServiceIdentifier<unknown>;
+	readonly isAliased: boolean;
 };
 
 export type ImportScope = {

@@ -1012,24 +1012,25 @@ ModuleA.withAliases([
 
 ---
 
-### E_ALIAS_CONFLICT_LOCAL
+### E_IMPORT_CONFLICT_LOCAL
 
-别名与导入模块中的本地声明冲突。
+导入服务与当前模块的本地声明冲突。
 
 **错误代码：**
 
 ```typescript
-E_ALIAS_CONFLICT_LOCAL: "E_ALIAS_CONFLICT_LOCAL"
+E_IMPORT_CONFLICT_LOCAL: "E_IMPORT_CONFLICT_LOCAL"
 ```
 
 **触发条件：**
 
-- 别名的目标名称与模块的本地声明重复
+- Import Scope 中的服务标识符与模块的本地声明重复
+- 未使用 alias 重命名冲突的导入服务
 
 **错误信息格式：**
 
 ```
-Alias "<alias>" conflicts with local declaration in module "<displayName>".
+Imported service identifier "<identifier>" conflicts with local declaration in module "<displayName>". Use an alias to resolve the conflict.
 ```
 
 **使用示例：**
@@ -1044,12 +1045,20 @@ const ModuleA = createModule({
 // 错误示例
 createModule({
   name: 'ModuleB',
+  declarations: [{ serviceIdentifier: 'foo', useValue: 'local foo' }],
+  imports: [ModuleA] // 导入的 'foo' 与本地声明冲突
+});
+// 抛出：Imported service identifier "foo" conflicts with local declaration in module "ModuleB#...". Use an alias to resolve the conflict.
+
+// 错误示例：alias 目标同样不能与本地声明冲突
+createModule({
+  name: 'ModuleB',
   declarations: [{ serviceIdentifier: 'bar', useValue: 'bar' }],
   imports: [
     ModuleA.withAliases([{ serviceIdentifier: 'foo', as: 'bar' }]) // 与本地声明冲突
   ]
 });
-// 抛出：Alias "bar" conflicts with local declaration in module "ModuleB#..."
+// 抛出：Imported service identifier "bar" conflicts with local declaration in module "ModuleB#...". Use an alias to resolve the conflict.
 
 // 正确示例
 createModule({
@@ -1065,6 +1074,8 @@ createModule({
 
 - [`withAliases()`](#withaliases-方法) - 创建带别名的模块
 - [`Declaration`](#declaration) - 声明类型
+
+> `E_ALIAS_CONFLICT_LOCAL` 是旧版 alias-local 冲突错误码；Import Scope 与本地声明的冲突应使用 `E_IMPORT_CONFLICT_LOCAL`。
 
 ---
 

@@ -15,6 +15,7 @@ import type {
 	ModuleWithAliases,
 } from "@/interfaces/module.interface";
 import type { ImportScope } from "@/types/import-scope.type";
+import { isModuleWithAliases } from "@/utils/module-import.utils";
 
 export function validateDeclarations(
 	moduleName: string,
@@ -70,6 +71,22 @@ export function validateImportUniqueness(
 	}
 }
 
+export function validateImportAliases(
+	imports: ReadonlyArray<IModule | ModuleWithAliases>,
+): void {
+	for (const item of imports) {
+		if (!isModuleWithAliases(item)) {
+			continue;
+		}
+
+		validateAliases(
+			item.module.displayName,
+			item.aliases ?? [],
+			item.module.exports,
+		);
+	}
+}
+
 export function detectCircularDependencies(
 	module: IModule,
 	visitedModules = new Set<string | symbol>(),
@@ -99,8 +116,8 @@ export function detectCircularDependencies(
 
 export function validateAliases(
 	moduleName: string,
-	aliases: Alias[],
-	exports?: ServiceIdentifier<unknown>[],
+	aliases: ReadonlyArray<Alias>,
+	exports?: ReadonlyArray<ServiceIdentifier<unknown>>,
 ): void {
 	if (!aliases || aliases.length === 0) {
 		return;
@@ -128,12 +145,12 @@ export function validateAliases(
 	}
 }
 
-export function validateAliasConflictsWithDeclarations(
+export function validateImportConflictsWithDeclarations(
 	moduleName: string,
-	imports?: Array<IModule | ModuleWithAliases>,
+	importScope: ImportScope,
 	declarations?: Declaration<unknown>[],
 ): void {
-	if (!imports || !declarations) {
+	if (!declarations) {
 		return;
 	}
 
@@ -141,14 +158,13 @@ export function validateAliasConflictsWithDeclarations(
 		(declarations ?? []).map((decl) => decl.serviceIdentifier),
 	);
 
-	const conflictingAlias = imports
-		.filter((item): item is ModuleWithAliases => isModuleWithAliases(item))
-		.flatMap((item) => item.aliases ?? [])
-		.find((alias) => localDeclarations.has(alias.as));
+	const conflictingImport = importScope.bindings.find((binding) =>
+		localDeclarations.has(binding.localServiceIdentifier),
+	);
 
-	if (conflictingAlias) {
+	if (conflictingImport) {
 		throw new Error(
-			`Alias "${getServiceIdentifierName(conflictingAlias.as)}" conflicts with local declaration in module "${moduleName}".`,
+			`Imported service identifier "${getServiceIdentifierName(conflictingImport.localServiceIdentifier)}" conflicts with local declaration in module "${moduleName}". Use an alias to resolve the conflict.`,
 		);
 	}
 }
@@ -233,10 +249,4 @@ export function validateExportAvailability(
 			);
 		}
 	}
-}
-
-function isModuleWithAliases(
-	item: IModule | ModuleWithAliases,
-): item is ModuleWithAliases {
-	return "module" in item;
 }
