@@ -10,6 +10,7 @@
  * @created 2023-05-24 09:32:03
  */
 
+import { CodedException } from "@/exceptions/coded.exception";
 import type { IResolveRecord } from "@/interfaces/resolve-record.interface";
 import { getResolveRecordMessage } from "@/utils/resolve-record.utils";
 
@@ -22,17 +23,19 @@ import { getResolveRecordMessage } from "@/utils/resolve-record.utils";
  * other resolution errors occur. The error message includes the full
  * resolution path and cycle information for debugging.
  */
-export class ResolveException extends Error {
+export class ResolveException extends CodedException<string> {
 	/** Internal marker to identify ResolveException instances across frames. */
 	private __isResolveException__ = true;
 
 	/**
 	 * Creates a new ResolveException.
 	 *
+	 * @param code - The stable error code for the resolution failure
 	 * @param message - The error message describing the resolution failure
 	 * @param resolveRecord - The resolve record containing the resolution path and cycle information
 	 */
-	constructor(message: string, resolveRecord: IResolveRecord) {
+	constructor(code: string, message: string, resolveRecord: IResolveRecord);
+	constructor(code: string, message: string, resolveRecord: IResolveRecord) {
 		const cycleNodeInfo = resolveRecord.getCycleNodeInfo();
 		const cycleNode = cycleNodeInfo?.cycleNode.value;
 		const paths = resolveRecord
@@ -41,6 +44,7 @@ export class ResolveException extends Error {
 			.reverse();
 
 		super(
+			code,
 			getResolveRecordMessage({
 				message,
 				paths,

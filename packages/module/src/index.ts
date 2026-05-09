@@ -5,10 +5,7 @@
  */
 
 export { ModuleErrorCodeEnum } from "@/enums/module-error-code.enum";
-export {
-	formatModuleErrorMessage,
-	ModuleException,
-} from "@/exceptions/module.exception";
+export { ModuleException } from "@/exceptions/module.exception";
 export { createModule } from "@/factories/module.factory";
 export type {
 	CreateModuleOptions,

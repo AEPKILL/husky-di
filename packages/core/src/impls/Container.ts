@@ -6,9 +6,11 @@
  */
 /** biome-ignore-all lint/suspicious/noExplicitAny: Required for flexible middleware and registration system */
 
+import { CoreErrorCodeEnum } from "@/enums/core-error-code.enum";
 import { LifecycleEnum } from "@/enums/lifecycle.enum";
 import { RegistrationTypeEnum } from "@/enums/registration-type.enum";
 import { ResolveRecordTypeEnum } from "@/enums/resolve-record-type.enum";
+import { CodedException } from "@/exceptions/coded.exception";
 import { ResolveException } from "@/exceptions/resolve.exception";
 import { DisposableRegistry } from "@/impls/DisposableRegistry";
 import { InstanceDynamicRef } from "@/impls/InstanceDynamicRef";
@@ -208,6 +210,7 @@ export class Container
 				// Validate that ref and dynamic options are not used together
 				if (dynamic && ref) {
 					throw new ResolveException(
+						CoreErrorCodeEnum.E_INVALID_OPTIONS,
 						`Cannot use both "dynamic" and "ref" options simultaneously for service identifier "${getServiceIdentifierName(serviceIdentifier)}". These options are mutually exclusive. Please choose either "dynamic" or "ref", but not both.`,
 						resolveRecord,
 					);
@@ -259,6 +262,7 @@ export class Container
 				const cycleNodeInfo = resolveRecord.getCycleNodeInfo();
 				if (cycleNodeInfo) {
 					throw new ResolveException(
+						CoreErrorCodeEnum.E_CIRCULAR_DEPENDENCY,
 						`Circular dependency detected for service identifier "${getServiceIdentifierName(serviceIdentifier)}". To resolve this, use either the "ref" option to get a reference to the service or the "dynamic" option to defer resolution until the service is actually used.`,
 						resolveRecord,
 					);
@@ -511,8 +515,10 @@ export class Container
 					return containerRef.resolve(provider, resolveOptions) as T;
 				}
 				default:
-					throw new Error(
+					throw new ResolveException(
+						CoreErrorCodeEnum.E_INVALID_PROVIDER,
 						`Unsupported registration type: ${registration.type}`,
+						params.resolveRecord,
 					);
 			}
 		});
@@ -548,8 +554,17 @@ export class Container
 				throw error;
 			}
 
+			if (error instanceof CodedException) {
+				throw new ResolveException(
+					error.code as CoreErrorCodeEnum,
+					error.detail,
+					resolveRecord,
+				);
+			}
+
 			// Wrap other errors with resolution context for better debugging
 			throw new ResolveException(
+				CoreErrorCodeEnum.E_RESOLUTION_FAILED,
 				`Failed to resolve service identifier "${getServiceIdentifierName(serviceIdentifier)}" in "${this.displayName}": ${error instanceof Error ? error.message : String(error)}`,
 				resolveRecord,
 			);
@@ -674,6 +689,7 @@ export class Container
 
 		// Strategy 4: Throw exception if no fallback is available
 		throw new ResolveException(
+			CoreErrorCodeEnum.E_SERVICE_NOT_FOUND,
 			`Service identifier "${getServiceIdentifierName(serviceIdentifier)}" is not registered in this container. Please register it first or set the "optional" option to true if this service is optional.`,
 			resolveRecord,
 		);

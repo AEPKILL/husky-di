@@ -14,8 +14,32 @@ import {
 	globalMiddleware,
 	type IContainer,
 	type Ref,
+	ResolveException,
 } from "@husky-di/core";
-import { decoratorMiddleware, inject, injectable, tagged } from "../src/index";
+import {
+	DecoratorErrorCodeEnum,
+	DecoratorException,
+	decoratorMiddleware,
+	inject,
+	injectable,
+	tagged,
+} from "../src/index";
+
+function expectDecoratorException(
+	operation: () => unknown,
+	code: string,
+	message: RegExp,
+): void {
+	try {
+		operation();
+		throw new Error("Expected operation to throw.");
+	} catch (error) {
+		expect(error).toBeInstanceOf(DecoratorException);
+		expect(DecoratorException.isDecoratorException(error)).toBe(true);
+		expect((error as DecoratorException).code).toBe(code);
+		expect((error as Error).message).toMatch(message);
+	}
+}
 
 describe("Decorator Module - Specification Compliance", () => {
 	beforeAll(() => {
@@ -29,6 +53,19 @@ describe("Decorator Module - Specification Compliance", () => {
 
 	describe("4.1 @injectable() Decorator", () => {
 		describe("M1. Single Application", () => {
+			it("should expose E_DUPLICATE_INJECTABLE as the structured code and message prefix", () => {
+				expectDecoratorException(
+					() => {
+						@injectable()
+						@injectable()
+						// biome-ignore lint/correctness/noUnusedVariables: test case for duplicate decorator
+						class TestService {}
+					},
+					DecoratorErrorCodeEnum.E_DUPLICATE_INJECTABLE,
+					/^E_DUPLICATE_INJECTABLE: Class 'TestService' is already decorated with @Injectable\(\)$/,
+				);
+			});
+
 			it("should throw E_DUPLICATE_INJECTABLE when applied more than once", () => {
 				expect(() => {
 					@injectable()
@@ -353,6 +390,41 @@ describe("Decorator Module - Specification Compliance", () => {
 		});
 
 		describe("T2. Complete Metadata", () => {
+			it("should expose E_MISSING_SERVICE_IDENTIFIER when metadata omits serviceIdentifier", () => {
+				expectDecoratorException(
+					() =>
+						tagged({
+							// biome-ignore lint/suspicious/noExplicitAny: testing invalid metadata
+						} as any),
+					DecoratorErrorCodeEnum.E_MISSING_SERVICE_IDENTIFIER,
+					/^E_MISSING_SERVICE_IDENTIFIER: Injection metadata must include a serviceIdentifier$/,
+				);
+			});
+
+			it("should expose E_INVALID_SERVICE_IDENTIFIER when metadata uses an invalid serviceIdentifier", () => {
+				expectDecoratorException(
+					() =>
+						tagged({
+							serviceIdentifier: "",
+						}),
+					DecoratorErrorCodeEnum.E_INVALID_SERVICE_IDENTIFIER,
+					/^E_INVALID_SERVICE_IDENTIFIER: Invalid service identifier: $/,
+				);
+			});
+
+			it("should expose E_CONFLICTING_OPTIONS when metadata uses dynamic and ref together", () => {
+				expectDecoratorException(
+					() =>
+						tagged({
+							serviceIdentifier: "Service",
+							dynamic: true,
+							ref: true,
+						}),
+					DecoratorErrorCodeEnum.E_CONFLICTING_OPTIONS,
+					/^E_CONFLICTING_OPTIONS: Cannot use both "dynamic" and "ref" options simultaneously$/,
+				);
+			});
+
 			it("should accept metadata with serviceIdentifier", () => {
 				@injectable()
 				class DependencyService {}
@@ -398,6 +470,31 @@ describe("Decorator Module - Specification Compliance", () => {
 
 	describe("5. Validation Rules", () => {
 		describe("V1. Injectable Requirement", () => {
+			it("should expose E_NOT_INJECTABLE as the structured resolve code and message prefix", () => {
+				class NonInjectableService {}
+
+				@injectable()
+				class TestService {
+					constructor(
+						@inject(NonInjectableService)
+						public dep: NonInjectableService,
+					) {}
+				}
+
+				try {
+					container.resolve(TestService);
+					throw new Error("Expected resolve to throw.");
+				} catch (error) {
+					expect(error).toBeInstanceOf(ResolveException);
+					expect((error as ResolveException).code).toBe(
+						DecoratorErrorCodeEnum.E_NOT_INJECTABLE,
+					);
+					expect((error as Error).message).toContain(
+						"E_NOT_INJECTABLE: Class 'NonInjectableService' must be decorated with @Injectable()",
+					);
+				}
+			});
+
 			it("should throw E_NOT_INJECTABLE when resolving non-injectable class", () => {
 				class NonInjectableService {}
 

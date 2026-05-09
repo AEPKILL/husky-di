@@ -4,8 +4,10 @@
  * @created 2025-07-29 22:27:57
  */
 
+import { CoreErrorCodeEnum } from "@/enums/core-error-code.enum";
 import { LifecycleEnum } from "@/enums/lifecycle.enum";
 import { RegistrationTypeEnum } from "@/enums/registration-type.enum";
+import { CoreException } from "@/exceptions/core.exception";
 import type { IContainer } from "@/interfaces/container.interface";
 import type { IDisplayName } from "@/interfaces/display-name.interface";
 import type {
@@ -92,7 +94,10 @@ export class Registration<T> implements IInternalRegistration<T>, IDisplayName {
 			this.lifecycle = LifecycleEnum.transient;
 			this.getContainer = options.getContainer;
 		} else {
-			throw new Error("Unsupported registration options");
+			throw new CoreException(
+				CoreErrorCodeEnum.E_INVALID_PROVIDER,
+				"Unsupported registration options",
+			);
 		}
 
 		if (this.type === RegistrationTypeEnum.value) {

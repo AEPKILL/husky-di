@@ -292,11 +292,13 @@ When `defaultValue` is specified:
 
 | Code                    | Description                                                               |
 | :---------------------- | :------------------------------------------------------------------------ |
-| `E_INVALID_PROVIDER`    | Registration must specify exactly one provider strategy.                  |
-| `E_SERVICE_NOT_FOUND`   | Service "{0}" is not registered in the container or its parent hierarchy. |
-| `E_CIRCULAR_DEPENDENCY` | Circular dependency detected: {path}.                                     |
-| `E_CONTAINER_DISPOSED`  | Cannot operate on a disposed container.                                   |
-| `E_INVALID_OPTIONS`     | Invalid resolve options: {reason}.                                        |
+| `E_INVALID_PROVIDER`    | `E_INVALID_PROVIDER: Registration must specify exactly one provider strategy.` |
+| `E_SERVICE_NOT_FOUND`   | `E_SERVICE_NOT_FOUND: Service identifier "{0}" is not registered in this container.` |
+| `E_CIRCULAR_DEPENDENCY` | `E_CIRCULAR_DEPENDENCY: Circular dependency detected: {path}.`            |
+| `E_CONTAINER_DISPOSED`  | `E_CONTAINER_DISPOSED: Cannot operate on a disposed container.`           |
+| `E_INVALID_OPTIONS`     | `E_INVALID_OPTIONS: Invalid resolve options: {reason}.`                  |
+| `E_RESOLUTION_FAILED`   | `E_RESOLUTION_FAILED: Failed to resolve service identifier "{0}" in "{1}": {reason}` |
+| `E_RESOLVE_CONTEXT_UNAVAILABLE` | `E_RESOLVE_CONTEXT_UNAVAILABLE: No resolve context is available.` |
 
 ---
 
