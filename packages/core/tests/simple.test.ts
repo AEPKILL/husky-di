@@ -74,7 +74,7 @@ describe("Container", () => {
 
 			// Assert
 			expect(container.displayName).toBe(
-				`${containerName}#${String(container.id)}`,
+				`${containerName}/${String(container.id)}`,
 			);
 		});
 

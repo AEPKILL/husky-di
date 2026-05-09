@@ -82,7 +82,7 @@ export class Container
 	 * Display name combining name and ID for debugging purposes
 	 */
 	public get displayName(): string {
-		return `${this.name}#${this.id}`;
+		return `${this.name}/${this.id}`;
 	}
 
 	/**

@@ -161,7 +161,7 @@ describe("Module System - SPECIFICATION.md v1.0.0", () => {
 						],
 					}),
 				ModuleErrorCodeEnum.E_DUPLICATE_DECLARATION,
-				/^E_DUPLICATE_DECLARATION: Duplicate declaration of service identifier "foo" in module "TestModule#MODULE-\d+"\.$/,
+				/^E_DUPLICATE_DECLARATION: Duplicate declaration of service identifier "foo" in module "TestModule\/MODULE-\d+"\.$/,
 			);
 		});
 
@@ -174,7 +174,7 @@ describe("Module System - SPECIFICATION.md v1.0.0", () => {
 						declarations: [{ serviceIdentifier: "foo" } as any],
 					}),
 				ModuleErrorCodeEnum.E_INVALID_REGISTRATION,
-				/^E_INVALID_REGISTRATION: Invalid registration options for service identifier "foo" in module "TestModule#MODULE-\d+": must specify useClass, useFactory, useValue, or useAlias\.$/,
+				/^E_INVALID_REGISTRATION: Invalid registration options for service identifier "foo" in module "TestModule\/MODULE-\d+": must specify useClass, useFactory, useValue, or useAlias\.$/,
 			);
 		});
 
@@ -188,7 +188,7 @@ describe("Module System - SPECIFICATION.md v1.0.0", () => {
 						imports: [ModuleA, ModuleA],
 					}),
 				ModuleErrorCodeEnum.E_DUPLICATE_IMPORT_MODULE,
-				/^E_DUPLICATE_IMPORT_MODULE: Duplicate import module: "A#MODULE-\d+" in "TestModule#MODULE-\d+"\.$/,
+				/^E_DUPLICATE_IMPORT_MODULE: Duplicate import module: "A\/MODULE-\d+" in "TestModule\/MODULE-\d+"\.$/,
 			);
 		});
 
@@ -204,7 +204,7 @@ describe("Module System - SPECIFICATION.md v1.0.0", () => {
 						imports: [ModuleA],
 					}),
 				ModuleErrorCodeEnum.E_CIRCULAR_DEPENDENCY,
-				/^E_CIRCULAR_DEPENDENCY: Circular dependency detected: ModuleA#MODULE-\d+ → ModuleA#MODULE-\d+$/,
+				/^E_CIRCULAR_DEPENDENCY: Circular dependency detected: ModuleA\/MODULE-\d+ → ModuleA\/MODULE-\d+$/,
 			);
 		});
 
@@ -228,7 +228,7 @@ describe("Module System - SPECIFICATION.md v1.0.0", () => {
 						imports: [ModuleA, ModuleB],
 					}),
 				ModuleErrorCodeEnum.E_IMPORT_COLLISION,
-				/^E_IMPORT_COLLISION: Service identifier "foo" is exported by multiple imported modules: "ModuleA#MODULE-\d+", "ModuleB#MODULE-\d+"\. Consider using aliases to resolve the conflict\.$/,
+				/^E_IMPORT_COLLISION: Service identifier "foo" is exported by multiple imported modules: "ModuleA\/MODULE-\d+", "ModuleB\/MODULE-\d+"\. Consider using aliases to resolve the conflict\.$/,
 			);
 		});
 
@@ -247,7 +247,7 @@ describe("Module System - SPECIFICATION.md v1.0.0", () => {
 						imports: [ModuleA],
 					}),
 				ModuleErrorCodeEnum.E_IMPORT_CONFLICT_LOCAL,
-				/^E_IMPORT_CONFLICT_LOCAL: Imported service identifier "foo" conflicts with local declaration in module "ModuleB#MODULE-\d+". Use an alias to resolve the conflict\.$/,
+				/^E_IMPORT_CONFLICT_LOCAL: Imported service identifier "foo" conflicts with local declaration in module "ModuleB\/MODULE-\d+". Use an alias to resolve the conflict\.$/,
 			);
 		});
 
@@ -261,7 +261,7 @@ describe("Module System - SPECIFICATION.md v1.0.0", () => {
 			expectModuleException(
 				() => ModuleA.withAliases([{ serviceIdentifier: "bar", as: "baz" }]),
 				ModuleErrorCodeEnum.E_ALIAS_SOURCE_NOT_EXPORTED,
-				/^E_ALIAS_SOURCE_NOT_EXPORTED: Cannot alias service identifier "bar" from module "ModuleA#MODULE-\d+": it is not exported from that module\.$/,
+				/^E_ALIAS_SOURCE_NOT_EXPORTED: Cannot alias service identifier "bar" from module "ModuleA\/MODULE-\d+": it is not exported from that module\.$/,
 			);
 		});
 
@@ -279,7 +279,7 @@ describe("Module System - SPECIFICATION.md v1.0.0", () => {
 						{ serviceIdentifier: "foo", as: "baz" },
 					]),
 				ModuleErrorCodeEnum.E_DUPLICATE_ALIAS_MAP,
-				/^E_DUPLICATE_ALIAS_MAP: Duplicate alias mapping for service identifier "foo" in module "ModuleA#MODULE-\d+"\.$/,
+				/^E_DUPLICATE_ALIAS_MAP: Duplicate alias mapping for service identifier "foo" in module "ModuleA\/MODULE-\d+"\.$/,
 			);
 		});
 
@@ -291,7 +291,7 @@ describe("Module System - SPECIFICATION.md v1.0.0", () => {
 						exports: ["nonexistent"],
 					}),
 				ModuleErrorCodeEnum.E_EXPORT_NOT_FOUND,
-				/^E_EXPORT_NOT_FOUND: Cannot export service identifier "nonexistent" from "TestModule#MODULE-\d+": it is not declared in this module or imported from any imported module\.$/,
+				/^E_EXPORT_NOT_FOUND: Cannot export service identifier "nonexistent" from "TestModule\/MODULE-\d+": it is not declared in this module or imported from any imported module\.$/,
 			);
 		});
 
@@ -304,7 +304,7 @@ describe("Module System - SPECIFICATION.md v1.0.0", () => {
 						exports: ["foo", "foo"],
 					}),
 				ModuleErrorCodeEnum.E_DUPLICATE_EXPORT,
-				/^E_DUPLICATE_EXPORT: Duplicate export of service identifier "foo" in module "TestModule#MODULE-\d+"\.$/,
+				/^E_DUPLICATE_EXPORT: Duplicate export of service identifier "foo" in module "TestModule\/MODULE-\d+"\.$/,
 			);
 		});
 	});
@@ -325,7 +325,7 @@ describe("Module System - SPECIFICATION.md v1.0.0", () => {
 						],
 					}),
 				).toThrow(
-					/Duplicate declaration of service identifier "foo" in module "TestModule#MODULE-\d+"\./,
+					/Duplicate declaration of service identifier "foo" in module "TestModule\/MODULE-\d+"\./,
 				);
 			});
 
@@ -351,7 +351,7 @@ describe("Module System - SPECIFICATION.md v1.0.0", () => {
 						declarations: [{ serviceIdentifier: "foo" } as any],
 					}),
 				).toThrow(
-					/Invalid registration options for service identifier "foo" in module "TestModule#MODULE-\d+": must specify useClass, useFactory, useValue, or useAlias\./,
+					/Invalid registration options for service identifier "foo" in module "TestModule\/MODULE-\d+": must specify useClass, useFactory, useValue, or useAlias\./,
 				);
 			});
 
@@ -413,7 +413,7 @@ describe("Module System - SPECIFICATION.md v1.0.0", () => {
 						imports: [ModuleA, ModuleA],
 					}),
 				).toThrow(
-					/Duplicate import module: "A#MODULE-\d+" in "TestModule#MODULE-\d+"\./,
+					/Duplicate import module: "A\/MODULE-\d+" in "TestModule\/MODULE-\d+"\./,
 				);
 			});
 
@@ -447,7 +447,7 @@ describe("Module System - SPECIFICATION.md v1.0.0", () => {
 						],
 					}),
 				).toThrow(
-					/Cannot alias service identifier "bar" from module "ModuleA#MODULE-\d+": it is not exported from that module\./,
+					/Cannot alias service identifier "bar" from module "ModuleA\/MODULE-\d+": it is not exported from that module\./,
 				);
 			});
 		});
@@ -601,7 +601,7 @@ describe("Module System - SPECIFICATION.md v1.0.0", () => {
 						imports: [ModuleA, ModuleB],
 					}),
 				).toThrow(
-					/Service identifier "foo" is exported by multiple imported modules: "ModuleA#MODULE-\d+", "ModuleB#MODULE-\d+"\. Consider using aliases to resolve the conflict\./,
+					/Service identifier "foo" is exported by multiple imported modules: "ModuleA\/MODULE-\d+", "ModuleB\/MODULE-\d+"\. Consider using aliases to resolve the conflict\./,
 				);
 			});
 
@@ -666,7 +666,7 @@ describe("Module System - SPECIFICATION.md v1.0.0", () => {
 						imports: [ModuleA],
 					}),
 				).toThrow(
-					/Imported service identifier "foo" conflicts with local declaration in module "ModuleB#MODULE-\d+". Use an alias to resolve the conflict\./,
+					/Imported service identifier "foo" conflicts with local declaration in module "ModuleB\/MODULE-\d+". Use an alias to resolve the conflict\./,
 				);
 			});
 
@@ -705,7 +705,7 @@ describe("Module System - SPECIFICATION.md v1.0.0", () => {
 						exports: ["nonexistent"],
 					}),
 				).toThrow(
-					/Cannot export service identifier "nonexistent" from "TestModule#MODULE-\d+": it is not declared in this module or imported from any imported module\./,
+					/Cannot export service identifier "nonexistent" from "TestModule\/MODULE-\d+": it is not declared in this module or imported from any imported module\./,
 				);
 			});
 
@@ -769,7 +769,7 @@ describe("Module System - SPECIFICATION.md v1.0.0", () => {
 						exports: ["foo"], // 'foo' is not available, only 'bar' is
 					}),
 				).toThrow(
-					/Cannot export service identifier "foo" from "ModuleB#MODULE-\d+": it is not declared in this module or imported from any imported module\./,
+					/Cannot export service identifier "foo" from "ModuleB\/MODULE-\d+": it is not declared in this module or imported from any imported module\./,
 				);
 			});
 		});
@@ -783,7 +783,7 @@ describe("Module System - SPECIFICATION.md v1.0.0", () => {
 						exports: ["foo", "foo"],
 					}),
 				).toThrow(
-					/Duplicate export of service identifier "foo" in module "TestModule#MODULE-\d+"\./,
+					/Duplicate export of service identifier "foo" in module "TestModule\/MODULE-\d+"\./,
 				);
 			});
 
@@ -821,7 +821,7 @@ describe("Module System - SPECIFICATION.md v1.0.0", () => {
 				expect(() =>
 					ModuleA.withAliases([{ serviceIdentifier: "bar", as: "baz" }]),
 				).toThrow(
-					/Cannot alias service identifier "bar" from module "ModuleA#MODULE-\d+": it is not exported from that module\./,
+					/Cannot alias service identifier "bar" from module "ModuleA\/MODULE-\d+": it is not exported from that module\./,
 				);
 			});
 
@@ -841,7 +841,7 @@ describe("Module System - SPECIFICATION.md v1.0.0", () => {
 						],
 					}),
 				).toThrow(
-					/Imported service identifier "bar" conflicts with local declaration in module "ModuleB#MODULE-\d+". Use an alias to resolve the conflict\./,
+					/Imported service identifier "bar" conflicts with local declaration in module "ModuleB\/MODULE-\d+". Use an alias to resolve the conflict\./,
 				);
 			});
 
@@ -858,7 +858,7 @@ describe("Module System - SPECIFICATION.md v1.0.0", () => {
 						{ serviceIdentifier: "foo", as: "baz" },
 					]),
 				).toThrow(
-					/Duplicate alias mapping for service identifier "foo" in module "ModuleA#MODULE-\d+"\./,
+					/Duplicate alias mapping for service identifier "foo" in module "ModuleA\/MODULE-\d+"\./,
 				);
 			});
 
@@ -1020,7 +1020,7 @@ describe("Module System - SPECIFICATION.md v1.0.0", () => {
 
 			// Verify export guards work correctly
 			expect(() => DatabaseModule.resolve(IDatabaseConfig)).toThrow(
-				/Service identifier "IDatabaseConfig" is not exported from DatabaseModule#CONTAINER-\d+/,
+				/Service identifier "IDatabaseConfig" is not exported from DatabaseModule\/CONTAINER-\d+/,
 			);
 
 			// Verify application works correctly
@@ -1036,7 +1036,7 @@ describe("Module System - SPECIFICATION.md v1.0.0", () => {
 
 			// Verify AppModule doesn't expose transitive dependencies
 			expect(() => AppModule.resolve(IDatabase)).toThrow(
-				/Service identifier "IDatabase" is not exported from AppModule#CONTAINER-\d+\./,
+				/Service identifier "IDatabase" is not exported from AppModule\/CONTAINER-\d+\./,
 			);
 		});
 
