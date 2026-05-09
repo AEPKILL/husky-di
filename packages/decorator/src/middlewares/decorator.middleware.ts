@@ -13,6 +13,7 @@ import {
 	ResolveRecordTypeEnum,
 	resolve,
 } from "@husky-di/core";
+import { DecoratorErrorCodeEnum } from "@/enums/decorator-error-code.enum";
 import { injectionMetadataMap } from "@/shared/instances";
 
 export const decoratorMiddleware: ResolveMiddleware<any, any> = {
@@ -36,6 +37,7 @@ export const decoratorMiddleware: ResolveMiddleware<any, any> = {
 		const parametersMetadata = injectionMetadataMap.get(provider);
 		if (!parametersMetadata) {
 			throw new ResolveException(
+				DecoratorErrorCodeEnum.E_NOT_INJECTABLE,
 				`Class '${provider.name}' must be decorated with @Injectable()`,
 				resolveRecord,
 			);

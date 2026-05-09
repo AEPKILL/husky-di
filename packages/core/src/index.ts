@@ -13,9 +13,15 @@
 import type { IContainer } from "@/interfaces/container.interface";
 import { Container } from "./impls/Container";
 
+export { CoreErrorCodeEnum } from "@/enums/core-error-code.enum";
 export { LifecycleEnum } from "@/enums/lifecycle.enum";
 export { RegistrationTypeEnum } from "@/enums/registration-type.enum";
 export { ResolveRecordTypeEnum } from "@/enums/resolve-record-type.enum";
+export {
+	CodedException,
+	formatCodedErrorMessage,
+} from "@/exceptions/coded.exception";
+export { CoreException } from "@/exceptions/core.exception";
 export { ResolveException } from "@/exceptions/resolve.exception";
 export { createContainer } from "@/factories/container.factory";
 export type {

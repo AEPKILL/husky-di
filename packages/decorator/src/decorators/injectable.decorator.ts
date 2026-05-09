@@ -9,6 +9,8 @@ import {
 	INJECTION_METADATA_KEY,
 	PARAMS_METADATA_KEY,
 } from "@/constants/metadata-key.const";
+import { DecoratorErrorCodeEnum } from "@/enums/decorator-error-code.enum";
+import { DecoratorException } from "@/exceptions/decorator.exception";
 import { injectionMetadataMap } from "@/shared/instances";
 import type { InjectionMetadata } from "@/types/injection-metadata.type";
 
@@ -19,7 +21,8 @@ import type { InjectionMetadata } from "@/types/injection-metadata.type";
 export const injectable: () => ClassDecorator = () =>
 	((target: Constructor<unknown>) => {
 		if (injectionMetadataMap.has(target)) {
-			throw new Error(
+			throw new DecoratorException(
+				DecoratorErrorCodeEnum.E_DUPLICATE_INJECTABLE,
 				`Class '${target.name}' is already decorated with @Injectable()`,
 			);
 		}
@@ -51,13 +54,21 @@ export const injectable: () => ClassDecorator = () =>
 			 * actually, we will use `new String()` to create a string instance
 			 */
 			if (typeof serviceIdentifier !== "function") {
-				throw new Error(
+				throw new DecoratorException(
+					DecoratorErrorCodeEnum.E_NON_CLASS_PARAMETER,
 					`Constructor '${target.name}' parameter #${index} must be a class type`,
 				);
 			}
 
 			// Class type uses LifecycleEnum.transient
 			metadata.push({ serviceIdentifier });
+		}
+
+		if (metadata.length !== parametersMetadataLength) {
+			throw new DecoratorException(
+				DecoratorErrorCodeEnum.E_INCOMPLETE_METADATA,
+				`Constructor '${target.name}' has incomplete injection metadata`,
+			);
 		}
 
 		injectionMetadataMap.set(target, metadata);

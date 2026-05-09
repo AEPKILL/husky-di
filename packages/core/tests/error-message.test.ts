@@ -5,6 +5,8 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { CoreErrorCodeEnum } from "../src/enums/core-error-code.enum";
+import { CoreException } from "../src/exceptions/core.exception";
 import { ResolveException } from "../src/exceptions/resolve.exception";
 import {
 	createContainer,
@@ -103,6 +105,22 @@ describe("Error Messages", () => {
 	});
 
 	describe("Unregistered Service Errors", () => {
+		it("should expose E_SERVICE_NOT_FOUND as the structured code and message prefix", () => {
+			try {
+				container.resolve("NonExistentService");
+				throw new Error("Expected resolve to throw.");
+			} catch (error) {
+				expect(error).toBeInstanceOf(ResolveException);
+				expect(ResolveException.isResolveException(error)).toBe(true);
+				expect((error as ResolveException).code).toBe(
+					CoreErrorCodeEnum.E_SERVICE_NOT_FOUND,
+				);
+				expect((error as Error).message).toContain(
+					'E_SERVICE_NOT_FOUND: Service identifier "NonExistentService" is not registered in this container.',
+				);
+			}
+		});
+
 		it("should throw error with correct message for unregistered string identifier", () => {
 			// Act & Assert
 			expect(() => {
@@ -147,6 +165,28 @@ describe("Error Messages", () => {
 	});
 
 	describe("Invalid Resolve Options Errors", () => {
+		it("should expose E_INVALID_OPTIONS as the structured code and message prefix", () => {
+			container.register("TestService", {
+				useValue: "test",
+			});
+
+			try {
+				container.resolve("TestService", {
+					dynamic: true,
+					ref: true,
+				});
+				throw new Error("Expected resolve to throw.");
+			} catch (error) {
+				expect(error).toBeInstanceOf(ResolveException);
+				expect((error as ResolveException).code).toBe(
+					CoreErrorCodeEnum.E_INVALID_OPTIONS,
+				);
+				expect((error as Error).message).toContain(
+					'E_INVALID_OPTIONS: Cannot use both "dynamic" and "ref" options simultaneously',
+				);
+			}
+		});
+
 		it("should throw error when both dynamic and ref options are used", () => {
 			// Arrange
 			container.register("TestService", {
@@ -303,6 +343,28 @@ describe("Error Messages", () => {
 	});
 
 	describe("Circular Dependency Detection", () => {
+		it("should expose E_CIRCULAR_DEPENDENCY as the structured code and message prefix", () => {
+			container.register(IServiceA, {
+				useClass: ServiceA,
+			});
+			container.register(IServiceB, {
+				useClass: ServiceB,
+			});
+
+			try {
+				container.resolve(IServiceA);
+				throw new Error("Expected resolve to throw.");
+			} catch (error) {
+				expect(error).toBeInstanceOf(ResolveException);
+				expect((error as ResolveException).code).toBe(
+					CoreErrorCodeEnum.E_CIRCULAR_DEPENDENCY,
+				);
+				expect((error as Error).message).toContain(
+					'E_CIRCULAR_DEPENDENCY: Circular dependency detected for service identifier "IServiceA".',
+				);
+			}
+		});
+
 		it("should throw ResolveException for circular dependency between two services", () => {
 			// Arrange
 			container.register(IServiceA, {
@@ -659,6 +721,27 @@ describe("Error Messages", () => {
 	});
 
 	describe("useFactory Exception Handling", () => {
+		it("should expose E_RESOLUTION_FAILED when a provider throws", () => {
+			container.register("FactoryService", {
+				useFactory: () => {
+					throw new Error("Factory function error");
+				},
+			});
+
+			try {
+				container.resolve("FactoryService");
+				throw new Error("Expected resolve to throw.");
+			} catch (error) {
+				expect(error).toBeInstanceOf(ResolveException);
+				expect((error as ResolveException).code).toBe(
+					CoreErrorCodeEnum.E_RESOLUTION_FAILED,
+				);
+				expect((error as Error).message).toContain(
+					'E_RESOLUTION_FAILED: Failed to resolve service identifier "FactoryService"',
+				);
+			}
+		});
+
 		it("should throw error when factory function throws an exception", () => {
 			// Arrange
 			const errorMessage = "Factory function error";
@@ -831,6 +914,26 @@ describe("Error Messages", () => {
 			expect(() => {
 				container.resolve("ResolveExceptionClassService");
 			}).toThrow("Class constructor resolve exception");
+		});
+	});
+
+	describe("CoreException", () => {
+		it("should expose E_CONTAINER_DISPOSED as the structured code and message prefix", () => {
+			container.dispose();
+
+			try {
+				container.resolve("TestService");
+				throw new Error("Expected resolve to throw.");
+			} catch (error) {
+				expect(error).toBeInstanceOf(CoreException);
+				expect(CoreException.isCoreException(error)).toBe(true);
+				expect((error as CoreException).code).toBe(
+					CoreErrorCodeEnum.E_CONTAINER_DISPOSED,
+				);
+				expect((error as Error).message).toBe(
+					"E_CONTAINER_DISPOSED: Container is disposed",
+				);
+			}
 		});
 	});
 });

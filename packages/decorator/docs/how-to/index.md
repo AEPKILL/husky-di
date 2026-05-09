@@ -538,7 +538,7 @@ class TestService {
 
 **错误信息：**
 ```
-Class 'XXX' must be decorated with @Injectable()
+E_NOT_INJECTABLE: Class 'XXX' must be decorated with @Injectable()
 ```
 
 **问题原因：**
@@ -707,7 +707,7 @@ class ServiceB {
 
 **错误信息：**
 ```
-Class 'XXX' is already decorated with @Injectable()
+E_DUPLICATE_INJECTABLE: Class 'XXX' is already decorated with @Injectable()
 ```
 
 **问题原因：**

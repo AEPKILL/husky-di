@@ -181,7 +181,7 @@ class UserService {
 @injectable()
 @injectable()
 class DuplicateService {} 
-// 抛出：Class 'DuplicateService' is already decorated with @Injectable()
+// 抛出：E_DUPLICATE_INJECTABLE: Class 'DuplicateService' is already decorated with @Injectable()
 ```
 
 ### @inject() 装饰器 - 构造函数参数注入

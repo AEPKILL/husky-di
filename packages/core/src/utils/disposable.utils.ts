@@ -10,6 +10,8 @@
  * @created 2025-07-29 22:36:34
  */
 
+import { CoreErrorCodeEnum } from "@/enums/core-error-code.enum";
+import { CoreException } from "@/exceptions/core.exception";
 import type { Cleanup, IDisposable } from "@/interfaces/disposable.interface";
 
 /**
@@ -33,7 +35,10 @@ export function createAssertNotDisposed(
 		disposed: false;
 	} => {
 		if (disposable.disposed) {
-			throw new Error(`${name} is disposed`);
+			throw new CoreException(
+				CoreErrorCodeEnum.E_CONTAINER_DISPOSED,
+				`${name} is disposed`,
+			);
 		}
 	};
 }

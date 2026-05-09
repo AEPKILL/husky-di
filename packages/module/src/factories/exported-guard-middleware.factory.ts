@@ -26,7 +26,6 @@ import {
 	type ServiceIdentifier,
 } from "@husky-di/core";
 import { ModuleErrorCodeEnum } from "@/enums/module-error-code.enum";
-import { formatModuleErrorMessage } from "@/exceptions/module.exception";
 
 /**
  * Creates a middleware factory that guards against accessing non-exported services.
@@ -72,10 +71,8 @@ export function createExportedGuardMiddlewareFactory(
 			if (!exportedSet.has(serviceIdentifier)) {
 				if (container.isRegistered(serviceIdentifier, { recursive: true })) {
 					throw new ResolveException(
-						formatModuleErrorMessage(
-							ModuleErrorCodeEnum.E_EXPORT_NOT_FOUND,
-							`Service identifier "${getServiceIdentifierName(serviceIdentifier)}" is not exported from ${container.displayName}.`,
-						),
+						ModuleErrorCodeEnum.E_EXPORT_NOT_FOUND,
+						`Service identifier "${getServiceIdentifierName(serviceIdentifier)}" is not exported from ${container.displayName}.`,
 						resolveRecord,
 					);
 				}

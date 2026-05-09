@@ -226,43 +226,43 @@ An implementation **MUST** detect and report the following error conditions:
 
 - **Code**: `E_DUPLICATE_INJECTABLE`
 - **Condition**: `@injectable()` applied more than once to the same class
-- **Message Template**: `"Class '{0}' is already decorated with @injectable()"`
+- **Message Template**: `E_DUPLICATE_INJECTABLE: Class '{0}' is already decorated with @Injectable()`
 
 ### 7.2 E2. Non-Class Parameter Type
 
 - **Code**: `E_NON_CLASS_PARAMETER`
 - **Condition**: Constructor parameter without explicit metadata has non-function inferred type
-- **Message Template**: `"Constructor '{0}' parameter #{1} must be a class type"`
+- **Message Template**: `E_NON_CLASS_PARAMETER: Constructor '{0}' parameter #{1} must be a class type`
 
 ### 7.3 E3. Not Injectable
 
 - **Code**: `E_NOT_INJECTABLE`
 - **Condition**: Attempting to resolve a class not decorated with `@injectable()`
-- **Message Template**: `"Class '{0}' must be decorated with @injectable()"`
+- **Message Template**: `E_NOT_INJECTABLE: Class '{0}' must be decorated with @Injectable()`
 
 ### 7.4 E4. Missing Service Identifier
 
 - **Code**: `E_MISSING_SERVICE_IDENTIFIER`
 - **Condition**: `@tagged()` called without a `serviceIdentifier` in metadata
-- **Message Template**: `"Injection metadata must include a serviceIdentifier"`
+- **Message Template**: `E_MISSING_SERVICE_IDENTIFIER: Injection metadata must include a serviceIdentifier`
 
 ### 7.5 E5. Invalid Service Identifier
 
 - **Code**: `E_INVALID_SERVICE_IDENTIFIER`
 - **Condition**: `serviceIdentifier` is not a function, symbol, or non-empty string
-- **Message Template**: `"Invalid service identifier: {0}"`
+- **Message Template**: `E_INVALID_SERVICE_IDENTIFIER: Invalid service identifier: {0}`
 
 ### 7.6 E6. Conflicting Options
 
 - **Code**: `E_CONFLICTING_OPTIONS`
 - **Condition**: Both `dynamic` and `ref` are `true`
-- **Message Template**: `"Cannot use both 'dynamic' and 'ref' options simultaneously"`
+- **Message Template**: `E_CONFLICTING_OPTIONS: Cannot use both "dynamic" and "ref" options simultaneously`
 
 ### 7.7 E7. Incomplete Metadata
 
 - **Code**: `E_INCOMPLETE_METADATA`
 - **Condition**: After `@injectable()` processing, some parameters lack metadata
-- **Message Template**: `"Constructor '{0}' has incomplete injection metadata"`
+- **Message Template**: `E_INCOMPLETE_METADATA: Constructor '{0}' has incomplete injection metadata`
 
 ## 8. TypeScript Configuration Requirements
 
@@ -346,15 +346,15 @@ For a parameter with metadata $m$:
 
 ## 11. Appendix B: Error Reference Table
 
-| Code                           | Condition                              | When Detected    |
-| :----------------------------- | :------------------------------------- | :--------------- |
-| `E_DUPLICATE_INJECTABLE`       | Multiple `@injectable()` on same class | Decoration phase |
-| `E_NON_CLASS_PARAMETER`        | Parameter type is not a function       | Decoration phase |
-| `E_NOT_INJECTABLE`             | Resolving non-injectable class         | Resolution phase |
-| `E_MISSING_SERVICE_IDENTIFIER` | `serviceIdentifier` not in metadata    | Decoration phase |
-| `E_INVALID_SERVICE_IDENTIFIER` | Invalid identifier type                | Decoration phase |
-| `E_CONFLICTING_OPTIONS`        | Both `dynamic` and `ref` are true      | Decoration phase |
-| `E_INCOMPLETE_METADATA`        | Missing metadata after consolidation   | Decoration phase |
+| Code                           | Message Template                                                                       | When Detected    |
+| :----------------------------- | :------------------------------------------------------------------------------------- | :--------------- |
+| `E_DUPLICATE_INJECTABLE`       | `E_DUPLICATE_INJECTABLE: Class '{0}' is already decorated with @Injectable()`          | Decoration phase |
+| `E_NON_CLASS_PARAMETER`        | `E_NON_CLASS_PARAMETER: Constructor '{0}' parameter #{1} must be a class type`         | Decoration phase |
+| `E_NOT_INJECTABLE`             | `E_NOT_INJECTABLE: Class '{0}' must be decorated with @Injectable()`                   | Resolution phase |
+| `E_MISSING_SERVICE_IDENTIFIER` | `E_MISSING_SERVICE_IDENTIFIER: Injection metadata must include a serviceIdentifier`    | Decoration phase |
+| `E_INVALID_SERVICE_IDENTIFIER` | `E_INVALID_SERVICE_IDENTIFIER: Invalid service identifier: {0}`                        | Decoration phase |
+| `E_CONFLICTING_OPTIONS`        | `E_CONFLICTING_OPTIONS: Cannot use both "dynamic" and "ref" options simultaneously`    | Decoration phase |
+| `E_INCOMPLETE_METADATA`        | `E_INCOMPLETE_METADATA: Constructor '{0}' has incomplete injection metadata`           | Decoration phase |
 
 ## 12. Appendix C: Example Metadata States
 

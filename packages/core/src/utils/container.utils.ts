@@ -10,6 +10,8 @@
  * @created 2025-07-30 22:53:06
  */
 
+import { CoreErrorCodeEnum } from "@/enums/core-error-code.enum";
+import { CoreException } from "@/exceptions/core.exception";
 import { ResolveException } from "@/exceptions/resolve.exception";
 import type {
 	IContainer,
@@ -58,7 +60,8 @@ function _resolve<T, Options extends ResolveOptions<T>>(
 	const resolveRecord = resolveRecordRef.current;
 
 	if (!resolveRecord) {
-		throw new Error(
+		throw new CoreException(
+			CoreErrorCodeEnum.E_RESOLVE_CONTEXT_UNAVAILABLE,
 			`The "resolve" method can only be called within a resolve context. This typically happens when trying to resolve a service outside of a container's resolve process.`,
 		);
 	}
@@ -73,6 +76,7 @@ function _resolve<T, Options extends ResolveOptions<T>>(
 	}
 
 	throw new ResolveException(
+		CoreErrorCodeEnum.E_RESOLVE_CONTEXT_UNAVAILABLE,
 		`No container available in the current resolve context. This usually indicates that the resolve context has been corrupted or improperly initialized.`,
 		resolveRecord,
 	);

@@ -494,7 +494,7 @@ console.log(paramTypes);
 #### 错误信息模板
 
 ```
-Class '{className}' is already decorated with @injectable()
+E_DUPLICATE_INJECTABLE: Class '{className}' is already decorated with @Injectable()
 ```
 
 #### 触发条件
@@ -514,7 +514,7 @@ import { injectable } from "@husky-di/decorator";
 @injectable()
 @injectable()
 class DuplicateService {}
-// 抛出：Class 'DuplicateService' is already decorated with @injectable()
+// 抛出：E_DUPLICATE_INJECTABLE: Class 'DuplicateService' is already decorated with @Injectable()
 ```
 
 #### 解决方案
@@ -587,7 +587,7 @@ class ValidService {
 #### 错误信息模板
 
 ```
-Class '{className}' must be decorated with @injectable()
+E_NOT_INJECTABLE: Class '{className}' must be decorated with @Injectable()
 ```
 
 #### 触发条件
@@ -756,7 +756,7 @@ class ValidService {
 #### 错误信息模板
 
 ```
-Cannot use both 'dynamic' and 'ref' options simultaneously
+E_CONFLICTING_OPTIONS: Cannot use both "dynamic" and "ref" options simultaneously
 ```
 
 #### 触发条件
