@@ -129,6 +129,16 @@ When `ref: true` or `dynamic: true` is specified:
 **S6. Alias Resolution**  
 For `useAlias` registrations, resolution **MUST** delegate to the target ServiceIdentifier. If `getContainer` is provided, resolution **MUST** use the returned container; otherwise, the current container **MUST** be used.
 
+**S7. Provider Failure Reporting**  
+If a provider throws while a service is being resolved, the container **MUST** wrap the failure in a `ResolveException` while preserving the active `ResolveRecord` path.
+
+- _Error Code:_ `E_RESOLUTION_FAILED`
+
+**S8. Resolve Context Availability**  
+The package-level `resolve()` helper **MUST** only be used while a resolution context is active. If no active `ResolveRecord` or current container is available, the implementation **MUST** reject the call.
+
+- _Error Code:_ `E_RESOLVE_CONTEXT_UNAVAILABLE`
+
 ### 4.3 Lifecycle Management
 
 **L1. Transient Lifecycle (`LifecycleEnum.transient`)**  
@@ -285,6 +295,9 @@ When `defaultValue` is specified:
 - `optional` **MUST** be `true`.
 - If `multiple: true`, `defaultValue` **MUST** be an array.
 - If `multiple` is false/undefined, `defaultValue` **MUST** be a single value.
+- The `dynamic` and `ref` options **MUST NOT** both be `true`.
+
+- _Error Code:_ `E_INVALID_OPTIONS`
 
 ---
 
