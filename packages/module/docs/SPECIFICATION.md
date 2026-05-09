@@ -181,12 +181,13 @@ The following features are explicitly **excluded** from this version of the spec
 
 | Code                          | Message Template                                                                                    |
 | :---------------------------- | :-------------------------------------------------------------------------------------------------- |
-| `E_DUPLICATE_DECLARATION`     | `Duplicate declaration of service identifier "{0}" in module "{1}".`                                |
-| `E_INVALID_REGISTRATION`      | `Invalid registration options for "{0}". Must specify useClass, useFactory, useValue, or useAlias.` |
-| `E_DUPLICATE_IMPORT_MODULE`   | `Duplicate import module: "{0}" in "{1}".`                                                          |
-| `E_CIRCULAR_DEPENDENCY`       | `Circular dependency detected: {0} -> ... -> {0}.`                                                  |
-| `E_IMPORT_COLLISION`          | `Service identifier "{0}" is exported by multiple imported modules: {1}.`                           |
-| `E_IMPORT_CONFLICT_LOCAL`     | `Imported service identifier "{0}" conflicts with local declaration in module "{1}".`               |
-| `E_ALIAS_SOURCE_NOT_EXPORTED` | `Cannot alias "{0}" from module "{1}": it is not exported.`                                         |
-| `E_ALIAS_CONFLICT_LOCAL`      | `Alias "{0}" conflicts with local declaration in module "{1}".`                                     |
-| `E_EXPORT_NOT_FOUND`          | `Cannot export "{0}" from "{1}": not declared or imported.`                                         |
+| `E_DUPLICATE_DECLARATION`     | `E_DUPLICATE_DECLARATION: Duplicate declaration of service identifier "{0}" in module "{1}".`                                |
+| `E_INVALID_REGISTRATION`      | `E_INVALID_REGISTRATION: Invalid registration options for service identifier "{0}" in module "{1}": must specify useClass, useFactory, useValue, or useAlias.` |
+| `E_DUPLICATE_IMPORT_MODULE`   | `E_DUPLICATE_IMPORT_MODULE: Duplicate import module: "{0}" in "{1}".`                                                          |
+| `E_CIRCULAR_DEPENDENCY`       | `E_CIRCULAR_DEPENDENCY: Circular dependency detected: {0} -> ... -> {0}.`                                                  |
+| `E_IMPORT_COLLISION`          | `E_IMPORT_COLLISION: Service identifier "{0}" is exported by multiple imported modules: {1}.`                           |
+| `E_IMPORT_CONFLICT_LOCAL`     | `E_IMPORT_CONFLICT_LOCAL: Imported service identifier "{0}" conflicts with local declaration in module "{1}".`               |
+| `E_ALIAS_SOURCE_NOT_EXPORTED` | `E_ALIAS_SOURCE_NOT_EXPORTED: Cannot alias service identifier "{0}" from module "{1}": it is not exported from that module.`                                         |
+| `E_DUPLICATE_ALIAS_MAP`       | `E_DUPLICATE_ALIAS_MAP: Duplicate alias mapping for service identifier "{0}" in module "{1}".`                                     |
+| `E_EXPORT_NOT_FOUND`          | `E_EXPORT_NOT_FOUND: Cannot export service identifier "{0}" from "{1}": it is not declared in this module or imported from any imported module.`                                         |
+| `E_DUPLICATE_EXPORT`          | `E_DUPLICATE_EXPORT: Duplicate export of service identifier "{0}" in module "{1}".`                                         |

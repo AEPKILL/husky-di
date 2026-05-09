@@ -714,7 +714,7 @@ E_DUPLICATE_DECLARATION: "E_DUPLICATE_DECLARATION"
 **错误信息格式：**
 
 ```
-Duplicate declaration of service identifier "<identifier>" in module "<displayName>".
+E_DUPLICATE_DECLARATION: Duplicate declaration of service identifier "<identifier>" in module "<displayName>".
 ```
 
 **使用示例：**
@@ -728,7 +728,7 @@ createModule({
     { serviceIdentifier: 'foo', useValue: 2 } // 重复声明
   ]
 });
-// 抛出：Duplicate declaration of service identifier "foo" in module "TestModule#..."
+// 抛出：E_DUPLICATE_DECLARATION: Duplicate declaration of service identifier "foo" in module "TestModule#..."
 
 // 正确示例
 createModule({
@@ -764,7 +764,7 @@ E_INVALID_REGISTRATION: "E_INVALID_REGISTRATION"
 **错误信息格式：**
 
 ```
-Invalid registration options for service identifier "<identifier>" in module "<displayName>": must specify useClass, useFactory, useValue, or useAlias.
+E_INVALID_REGISTRATION: Invalid registration options for service identifier "<identifier>" in module "<displayName>": must specify useClass, useFactory, useValue, or useAlias.
 ```
 
 **使用示例：**
@@ -777,7 +777,7 @@ createModule({
     { serviceIdentifier: 'foo' } // 缺少注册策略
   ]
 });
-// 抛出：Invalid registration options for service identifier "foo"...
+// 抛出：E_INVALID_REGISTRATION: Invalid registration options for service identifier "foo"...
 
 // 正确示例
 createModule({
@@ -812,7 +812,7 @@ E_DUPLICATE_IMPORT_MODULE: "E_DUPLICATE_IMPORT_MODULE"
 **错误信息格式：**
 
 ```
-Duplicate import module: "<displayName>" in "<targetDisplayName>".
+E_DUPLICATE_IMPORT_MODULE: Duplicate import module: "<displayName>" in "<targetDisplayName>".
 ```
 
 **使用示例：**
@@ -825,7 +825,7 @@ createModule({
   name: 'TestModule',
   imports: [ModuleA, ModuleA] // 重复导入
 });
-// 抛出：Duplicate import module: "ModuleA#..." in "TestModule#..."
+// 抛出：E_DUPLICATE_IMPORT_MODULE: Duplicate import module: "ModuleA#..." in "TestModule#..."
 
 // 正确示例
 createModule({
@@ -857,7 +857,7 @@ E_CIRCULAR_DEPENDENCY: "E_CIRCULAR_DEPENDENCY"
 **错误信息格式：**
 
 ```
-Circular dependency detected: <moduleChain>
+E_CIRCULAR_DEPENDENCY: Circular dependency detected: <moduleChain>
 ```
 
 **使用示例：**
@@ -918,7 +918,7 @@ E_IMPORT_COLLISION: "E_IMPORT_COLLISION"
 **错误信息格式：**
 
 ```
-Service identifier "<identifier>" is exported by multiple imported modules: <moduleList>. Consider using aliases to resolve the conflict.
+E_IMPORT_COLLISION: Service identifier "<identifier>" is exported by multiple imported modules: <moduleList>. Consider using aliases to resolve the conflict.
 ```
 
 **使用示例：**
@@ -941,7 +941,7 @@ createModule({
   name: 'ModuleC',
   imports: [ModuleA, ModuleB] // 冲突：两个模块都导出 'foo'
 });
-// 抛出：Service identifier "foo" is exported by multiple imported modules...
+// 抛出：E_IMPORT_COLLISION: Service identifier "foo" is exported by multiple imported modules...
 
 // 正确示例 - 使用别名解决冲突
 createModule({
@@ -978,7 +978,7 @@ E_ALIAS_SOURCE_NOT_EXPORTED: "E_ALIAS_SOURCE_NOT_EXPORTED"
 **错误信息格式：**
 
 ```
-Cannot alias service identifier "<identifier>" from module "<displayName>": it is not exported from that module.
+E_ALIAS_SOURCE_NOT_EXPORTED: Cannot alias service identifier "<identifier>" from module "<displayName>": it is not exported from that module.
 ```
 
 **使用示例：**
@@ -997,7 +997,7 @@ const ModuleA = createModule({
 ModuleA.withAliases([
   { serviceIdentifier: 'bar', as: 'baz' } // 'bar' 未导出
 ]);
-// 抛出：Cannot alias service identifier "bar" from module "ModuleA#..."
+// 抛出：E_ALIAS_SOURCE_NOT_EXPORTED: Cannot alias service identifier "bar" from module "ModuleA#..."
 
 // 正确示例
 ModuleA.withAliases([
@@ -1030,7 +1030,7 @@ E_IMPORT_CONFLICT_LOCAL: "E_IMPORT_CONFLICT_LOCAL"
 **错误信息格式：**
 
 ```
-Imported service identifier "<identifier>" conflicts with local declaration in module "<displayName>". Use an alias to resolve the conflict.
+E_IMPORT_CONFLICT_LOCAL: Imported service identifier "<identifier>" conflicts with local declaration in module "<displayName>". Use an alias to resolve the conflict.
 ```
 
 **使用示例：**
@@ -1048,7 +1048,7 @@ createModule({
   declarations: [{ serviceIdentifier: 'foo', useValue: 'local foo' }],
   imports: [ModuleA] // 导入的 'foo' 与本地声明冲突
 });
-// 抛出：Imported service identifier "foo" conflicts with local declaration in module "ModuleB#...". Use an alias to resolve the conflict.
+// 抛出：E_IMPORT_CONFLICT_LOCAL: Imported service identifier "foo" conflicts with local declaration in module "ModuleB#...". Use an alias to resolve the conflict.
 
 // 错误示例：alias 目标同样不能与本地声明冲突
 createModule({
@@ -1058,7 +1058,7 @@ createModule({
     ModuleA.withAliases([{ serviceIdentifier: 'foo', as: 'bar' }]) // 与本地声明冲突
   ]
 });
-// 抛出：Imported service identifier "bar" conflicts with local declaration in module "ModuleB#...". Use an alias to resolve the conflict.
+// 抛出：E_IMPORT_CONFLICT_LOCAL: Imported service identifier "bar" conflicts with local declaration in module "ModuleB#...". Use an alias to resolve the conflict.
 
 // 正确示例
 createModule({
@@ -1075,7 +1075,48 @@ createModule({
 - [`withAliases()`](#withaliases-方法) - 创建带别名的模块
 - [`Declaration`](#declaration) - 声明类型
 
-> `E_ALIAS_CONFLICT_LOCAL` 是旧版 alias-local 冲突错误码；Import Scope 与本地声明的冲突应使用 `E_IMPORT_CONFLICT_LOCAL`。
+---
+
+### E_DUPLICATE_ALIAS_MAP
+
+同一源服务标识符在单个 alias 列表中被映射多次。
+
+**错误代码：**
+
+```typescript
+E_DUPLICATE_ALIAS_MAP: "E_DUPLICATE_ALIAS_MAP"
+```
+
+**触发条件：**
+
+- 同一个 `serviceIdentifier` 在 `withAliases()` 的 alias 列表中出现多次
+
+**错误信息格式：**
+
+```
+E_DUPLICATE_ALIAS_MAP: Duplicate alias mapping for service identifier "<identifier>" in module "<displayName>".
+```
+
+**使用示例：**
+
+```typescript
+const ModuleA = createModule({
+  name: 'ModuleA',
+  declarations: [{ serviceIdentifier: 'foo', useValue: 'foo' }],
+  exports: ['foo']
+});
+
+ModuleA.withAliases([
+  { serviceIdentifier: 'foo', as: 'bar' },
+  { serviceIdentifier: 'foo', as: 'baz' }
+]);
+// 抛出：E_DUPLICATE_ALIAS_MAP: Duplicate alias mapping for service identifier "foo" in module "ModuleA#..."
+```
+
+**相关 API：**
+
+- [`withAliases()`](#withaliases-方法) - 创建带别名的模块
+- [`Alias`](#alias) - 别名类型
 
 ---
 
@@ -1096,7 +1137,7 @@ E_EXPORT_NOT_FOUND: "E_EXPORT_NOT_FOUND"
 **错误信息格式：**
 
 ```
-Cannot export service identifier "<identifier>" from "<displayName>": it is not declared in this module or imported from any imported module.
+E_EXPORT_NOT_FOUND: Cannot export service identifier "<identifier>" from "<displayName>": it is not declared in this module or imported from any imported module.
 ```
 
 **使用示例：**
@@ -1107,7 +1148,7 @@ createModule({
   name: 'TestModule',
   exports: ['nonexistent'] // 未声明也未导入
 });
-// 抛出：Cannot export service identifier "nonexistent" from "TestModule#..."
+// 抛出：E_EXPORT_NOT_FOUND: Cannot export service identifier "nonexistent" from "TestModule#..."
 
 // 正确示例 - 导出本地声明
 createModule({
@@ -1128,6 +1169,43 @@ createModule({
   imports: [ModuleA],
   exports: ['foo'] // 重新导出
 });
+```
+
+**相关 API：**
+
+- [`CreateModuleOptions`](#createmoduleoptions) - 创建模块选项
+
+---
+
+### E_DUPLICATE_EXPORT
+
+同一个服务标识符在模块 exports 列表中被导出多次。
+
+**错误代码：**
+
+```typescript
+E_DUPLICATE_EXPORT: "E_DUPLICATE_EXPORT"
+```
+
+**触发条件：**
+
+- exports 列表中包含重复的服务标识符
+
+**错误信息格式：**
+
+```
+E_DUPLICATE_EXPORT: Duplicate export of service identifier "<identifier>" in module "<displayName>".
+```
+
+**使用示例：**
+
+```typescript
+createModule({
+  name: 'TestModule',
+  declarations: [{ serviceIdentifier: 'foo', useValue: 'foo' }],
+  exports: ['foo', 'foo']
+});
+// 抛出：E_DUPLICATE_EXPORT: Duplicate export of service identifier "foo" in module "TestModule#..."
 ```
 
 **相关 API：**

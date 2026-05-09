@@ -7,7 +7,11 @@
 import { createServiceIdentifier, resolve } from "@husky-di/core";
 import { describe, expect, it } from "vitest";
 import { createImportScope } from "../src/factories/import-scope.factory";
-import { createModule } from "../src/index";
+import {
+	createModule,
+	ModuleErrorCodeEnum,
+	ModuleException,
+} from "../src/index";
 
 /**
  * Test fixtures - Service interfaces and implementations
@@ -77,6 +81,22 @@ class AppService implements IApp {
 	}
 }
 
+function expectModuleException(
+	operation: () => unknown,
+	code: string,
+	message: RegExp,
+): void {
+	try {
+		operation();
+		throw new Error("Expected operation to throw.");
+	} catch (error) {
+		expect(error).toBeInstanceOf(ModuleException);
+		expect(ModuleException.isModuleException(error)).toBe(true);
+		expect((error as ModuleException).code).toBe(code);
+		expect((error as Error).message).toMatch(message);
+	}
+}
+
 /**
  * Comprehensive test suite for the Module System
  * Based on SPECIFICATION.md v1.0.0
@@ -126,6 +146,166 @@ describe("Module System - SPECIFICATION.md v1.0.0", () => {
 					isAliased: false,
 				},
 			]);
+		});
+	});
+
+	describe("ModuleException", () => {
+		it("should expose E_DUPLICATE_DECLARATION as the structured code and message prefix", () => {
+			expectModuleException(
+				() =>
+					createModule({
+						name: "TestModule",
+						declarations: [
+							{ serviceIdentifier: "foo", useValue: 1 },
+							{ serviceIdentifier: "foo", useValue: 2 },
+						],
+					}),
+				ModuleErrorCodeEnum.E_DUPLICATE_DECLARATION,
+				/^E_DUPLICATE_DECLARATION: Duplicate declaration of service identifier "foo" in module "TestModule#MODULE-\d+"\.$/,
+			);
+		});
+
+		it("should expose E_INVALID_REGISTRATION as the structured code and message prefix", () => {
+			expectModuleException(
+				() =>
+					createModule({
+						name: "TestModule",
+						// biome-ignore lint/suspicious/noExplicitAny: testing invalid input
+						declarations: [{ serviceIdentifier: "foo" } as any],
+					}),
+				ModuleErrorCodeEnum.E_INVALID_REGISTRATION,
+				/^E_INVALID_REGISTRATION: Invalid registration options for service identifier "foo" in module "TestModule#MODULE-\d+": must specify useClass, useFactory, useValue, or useAlias\.$/,
+			);
+		});
+
+		it("should expose E_DUPLICATE_IMPORT_MODULE as the structured code and message prefix", () => {
+			const ModuleA = createModule({ name: "A" });
+
+			expectModuleException(
+				() =>
+					createModule({
+						name: "TestModule",
+						imports: [ModuleA, ModuleA],
+					}),
+				ModuleErrorCodeEnum.E_DUPLICATE_IMPORT_MODULE,
+				/^E_DUPLICATE_IMPORT_MODULE: Duplicate import module: "A#MODULE-\d+" in "TestModule#MODULE-\d+"\.$/,
+			);
+		});
+
+		it("should expose E_CIRCULAR_DEPENDENCY as the structured code and message prefix", () => {
+			const ModuleA = createModule({ name: "ModuleA" });
+			// biome-ignore lint/suspicious/noExplicitAny: testing defensive validation against invalid runtime module graphs
+			(ModuleA as any)._imports = [ModuleA];
+
+			expectModuleException(
+				() =>
+					createModule({
+						name: "ModuleB",
+						imports: [ModuleA],
+					}),
+				ModuleErrorCodeEnum.E_CIRCULAR_DEPENDENCY,
+				/^E_CIRCULAR_DEPENDENCY: Circular dependency detected: ModuleA#MODULE-\d+ → ModuleA#MODULE-\d+$/,
+			);
+		});
+
+		it("should expose E_IMPORT_COLLISION as the structured code and message prefix", () => {
+			const ModuleA = createModule({
+				name: "ModuleA",
+				declarations: [{ serviceIdentifier: "foo", useValue: "foo from A" }],
+				exports: ["foo"],
+			});
+
+			const ModuleB = createModule({
+				name: "ModuleB",
+				declarations: [{ serviceIdentifier: "foo", useValue: "foo from B" }],
+				exports: ["foo"],
+			});
+
+			expectModuleException(
+				() =>
+					createModule({
+						name: "ModuleC",
+						imports: [ModuleA, ModuleB],
+					}),
+				ModuleErrorCodeEnum.E_IMPORT_COLLISION,
+				/^E_IMPORT_COLLISION: Service identifier "foo" is exported by multiple imported modules: "ModuleA#MODULE-\d+", "ModuleB#MODULE-\d+"\. Consider using aliases to resolve the conflict\.$/,
+			);
+		});
+
+		it("should expose E_IMPORT_CONFLICT_LOCAL as the structured code and message prefix", () => {
+			const ModuleA = createModule({
+				name: "ModuleA",
+				declarations: [{ serviceIdentifier: "foo", useValue: "foo" }],
+				exports: ["foo"],
+			});
+
+			expectModuleException(
+				() =>
+					createModule({
+						name: "ModuleB",
+						declarations: [{ serviceIdentifier: "foo", useValue: "local foo" }],
+						imports: [ModuleA],
+					}),
+				ModuleErrorCodeEnum.E_IMPORT_CONFLICT_LOCAL,
+				/^E_IMPORT_CONFLICT_LOCAL: Imported service identifier "foo" conflicts with local declaration in module "ModuleB#MODULE-\d+". Use an alias to resolve the conflict\.$/,
+			);
+		});
+
+		it("should expose E_ALIAS_SOURCE_NOT_EXPORTED as the structured code and message prefix", () => {
+			const ModuleA = createModule({
+				name: "ModuleA",
+				declarations: [{ serviceIdentifier: "foo", useValue: "foo" }],
+				exports: ["foo"],
+			});
+
+			expectModuleException(
+				() => ModuleA.withAliases([{ serviceIdentifier: "bar", as: "baz" }]),
+				ModuleErrorCodeEnum.E_ALIAS_SOURCE_NOT_EXPORTED,
+				/^E_ALIAS_SOURCE_NOT_EXPORTED: Cannot alias service identifier "bar" from module "ModuleA#MODULE-\d+": it is not exported from that module\.$/,
+			);
+		});
+
+		it("should expose E_DUPLICATE_ALIAS_MAP as the structured code and message prefix", () => {
+			const ModuleA = createModule({
+				name: "ModuleA",
+				declarations: [{ serviceIdentifier: "foo", useValue: "foo" }],
+				exports: ["foo"],
+			});
+
+			expectModuleException(
+				() =>
+					ModuleA.withAliases([
+						{ serviceIdentifier: "foo", as: "bar" },
+						{ serviceIdentifier: "foo", as: "baz" },
+					]),
+				ModuleErrorCodeEnum.E_DUPLICATE_ALIAS_MAP,
+				/^E_DUPLICATE_ALIAS_MAP: Duplicate alias mapping for service identifier "foo" in module "ModuleA#MODULE-\d+"\.$/,
+			);
+		});
+
+		it("should expose E_EXPORT_NOT_FOUND as the structured code and message prefix", () => {
+			expectModuleException(
+				() =>
+					createModule({
+						name: "TestModule",
+						exports: ["nonexistent"],
+					}),
+				ModuleErrorCodeEnum.E_EXPORT_NOT_FOUND,
+				/^E_EXPORT_NOT_FOUND: Cannot export service identifier "nonexistent" from "TestModule#MODULE-\d+": it is not declared in this module or imported from any imported module\.$/,
+			);
+		});
+
+		it("should expose E_DUPLICATE_EXPORT as the structured code and message prefix", () => {
+			expectModuleException(
+				() =>
+					createModule({
+						name: "TestModule",
+						declarations: [{ serviceIdentifier: "foo", useValue: "foo" }],
+						exports: ["foo", "foo"],
+					}),
+				ModuleErrorCodeEnum.E_DUPLICATE_EXPORT,
+				/^E_DUPLICATE_EXPORT: Duplicate export of service identifier "foo" in module "TestModule#MODULE-\d+"\.$/,
+			);
 		});
 	});
 

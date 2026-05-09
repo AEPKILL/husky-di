@@ -8,6 +8,8 @@ import {
 	getServiceIdentifierName,
 	type ServiceIdentifier,
 } from "@husky-di/core";
+import { ModuleErrorCodeEnum } from "@/enums/module-error-code.enum";
+import { ModuleException } from "@/exceptions/module.exception";
 import type {
 	Alias,
 	Declaration,
@@ -31,7 +33,8 @@ export function validateDeclarations(
 		const { serviceIdentifier } = decl;
 
 		if (seen.has(serviceIdentifier)) {
-			throw new Error(
+			throw new ModuleException(
+				ModuleErrorCodeEnum.E_DUPLICATE_DECLARATION,
 				`Duplicate declaration of service identifier "${getServiceIdentifierName(serviceIdentifier)}" in module "${moduleName}".`,
 			);
 		}
@@ -44,7 +47,8 @@ export function validateDeclarations(
 			"useAlias" in decl;
 
 		if (!hasValidOption) {
-			throw new Error(
+			throw new ModuleException(
+				ModuleErrorCodeEnum.E_INVALID_REGISTRATION,
 				`Invalid registration options for service identifier "${getServiceIdentifierName(serviceIdentifier)}" in module "${moduleName}": must specify useClass, useFactory, useValue, or useAlias.`,
 			);
 		}
@@ -62,7 +66,8 @@ export function validateImportUniqueness(
 		const moduleId = importedModule.id;
 
 		if (seenModules.has(moduleId)) {
-			throw new Error(
+			throw new ModuleException(
+				ModuleErrorCodeEnum.E_DUPLICATE_IMPORT_MODULE,
 				`Duplicate import module: "${importedModule.displayName}" in "${moduleName}".`,
 			);
 		}
@@ -95,7 +100,10 @@ export function detectCircularDependencies(
 	if (visitStack.includes(module)) {
 		const cycle = [...visitStack.slice(visitStack.indexOf(module)), module];
 		const cyclePath = cycle.map((m) => m.displayName).join(" → ");
-		throw new Error(`Circular dependency detected: ${cyclePath}`);
+		throw new ModuleException(
+			ModuleErrorCodeEnum.E_CIRCULAR_DEPENDENCY,
+			`Circular dependency detected: ${cyclePath}`,
+		);
 	}
 
 	if (visitedModules.has(module.id)) {
@@ -130,13 +138,15 @@ export function validateAliases(
 		const { serviceIdentifier } = alias;
 
 		if (!exportedSet.has(serviceIdentifier)) {
-			throw new Error(
+			throw new ModuleException(
+				ModuleErrorCodeEnum.E_ALIAS_SOURCE_NOT_EXPORTED,
 				`Cannot alias service identifier "${getServiceIdentifierName(serviceIdentifier)}" from module "${moduleName}": it is not exported from that module.`,
 			);
 		}
 
 		if (mappedServices.has(serviceIdentifier)) {
-			throw new Error(
+			throw new ModuleException(
+				ModuleErrorCodeEnum.E_DUPLICATE_ALIAS_MAP,
 				`Duplicate alias mapping for service identifier "${getServiceIdentifierName(serviceIdentifier)}" in module "${moduleName}".`,
 			);
 		}
@@ -163,7 +173,8 @@ export function validateImportConflictsWithDeclarations(
 	);
 
 	if (conflictingImport) {
-		throw new Error(
+		throw new ModuleException(
+			ModuleErrorCodeEnum.E_IMPORT_CONFLICT_LOCAL,
 			`Imported service identifier "${getServiceIdentifierName(conflictingImport.localServiceIdentifier)}" conflicts with local declaration in module "${moduleName}". Use an alias to resolve the conflict.`,
 		);
 	}
@@ -191,7 +202,8 @@ export function validateImportNamingConflicts(
 	if (conflicts.length > 0) {
 		const [serviceId, modules] = conflicts[0];
 		const moduleNames = modules.map((m) => `"${m.displayName}"`).join(", ");
-		throw new Error(
+		throw new ModuleException(
+			ModuleErrorCodeEnum.E_IMPORT_COLLISION,
 			`Service identifier "${getServiceIdentifierName(serviceId)}" is exported by multiple imported modules: ${moduleNames}. Consider using aliases to resolve the conflict.`,
 		);
 	}
@@ -208,7 +220,8 @@ export function validateExportUniqueness(
 	const seen = new Set<ServiceIdentifier<unknown>>();
 	for (const exportId of exports) {
 		if (seen.has(exportId)) {
-			throw new Error(
+			throw new ModuleException(
+				ModuleErrorCodeEnum.E_DUPLICATE_EXPORT,
 				`Duplicate export of service identifier "${getServiceIdentifierName(exportId)}" in module "${moduleName}".`,
 			);
 		}
@@ -244,7 +257,8 @@ export function validateExportAvailability(
 
 	for (const exportId of exports) {
 		if (!availableServices.has(exportId)) {
-			throw new Error(
+			throw new ModuleException(
+				ModuleErrorCodeEnum.E_EXPORT_NOT_FOUND,
 				`Cannot export service identifier "${getServiceIdentifierName(exportId)}" from "${moduleName}": it is not declared in this module or imported from any imported module.`,
 			);
 		}
