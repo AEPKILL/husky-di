@@ -739,7 +739,7 @@ const MyModule = createModule({
 **错误信息：**
 
 ```
-E_DUPLICATE_DECLARATION: Module 'MyModule' contains multiple declarations with the same ServiceIdentifier 'logger'
+E_DUPLICATE_DECLARATION: Duplicate declaration of service identifier "logger" in module "MyModule#...".
 ```
 
 **解决方案：**
@@ -793,7 +793,7 @@ const MyModule = createModule({
 **错误信息：**
 
 ```
-E_EXPORT_NOT_FOUND: Export 'service2' references a ServiceIdentifier that is neither declared locally nor imported
+E_EXPORT_NOT_FOUND: Cannot export service identifier "service2" from "MyModule#...": it is not declared in this module or imported from any imported module.
 ```
 
 **解决方案：**
@@ -866,7 +866,7 @@ const ModuleC = createModule({
 **错误信息：**
 
 ```
-E_CIRCULAR_DEPENDENCY: Circular dependency detected in module import graph: ModuleA -> ModuleB -> ModuleC -> ModuleA
+E_CIRCULAR_DEPENDENCY: Circular dependency detected: ModuleA#... → ModuleB#... → ModuleC#... → ModuleA#...
 ```
 
 **解决方案：**
@@ -955,7 +955,7 @@ const AppModule = createModule({
 **错误信息：**
 
 ```
-E_IMPORT_COLLISION: Multiple imported modules export the same ServiceIdentifier 'logger' without alias resolution
+E_IMPORT_COLLISION: Service identifier "logger" is exported by multiple imported modules: "LoggerModule1#...", "LoggerModule2#...". Consider using aliases to resolve the conflict.
 ```
 
 **解决方案：**
@@ -1013,7 +1013,7 @@ const AppModule = createModule({
 **错误信息：**
 
 ```
-E_ALIAS_SOURCE_NOT_EXPORTED: Alias source 'internalService' is not exported by the source module 'MyModule'
+E_ALIAS_SOURCE_NOT_EXPORTED: Cannot alias service identifier "internalService" from module "MyModule#...": it is not exported from that module.
 ```
 
 **解决方案：**
