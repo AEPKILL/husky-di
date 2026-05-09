@@ -234,7 +234,7 @@ describe("Error Messages", () => {
 			expect(() => {
 				console.log("refTestService", refTestService.current);
 			}).toThrow(
-				/Failed to resolve service identifier "TestService" in "TestContainer#CONTAINER-\d+": test/,
+				/Failed to resolve service identifier "TestService" in "TestContainer\/CONTAINER-\d+": test/,
 			);
 		});
 	});
@@ -550,7 +550,7 @@ describe("Error Messages", () => {
 			expect(() => {
 				serviceWithRef.throwingServiceRef.current;
 			}).toThrow(
-				/Failed to resolve service identifier "ThrowingService" in "TestContainer#CONTAINER-\d+": Service construction failed/,
+				/Failed to resolve service identifier "ThrowingService" in "TestContainer\/CONTAINER-\d+": Service construction failed/,
 			);
 		});
 
@@ -585,7 +585,7 @@ describe("Error Messages", () => {
 			expect(() => {
 				serviceWithDynamic.throwingServiceDynamic.current;
 			}).toThrow(
-				/Failed to resolve service identifier "ThrowingService" in "TestContainer#CONTAINER-\d+": Dynamic service construction failed/,
+				/Failed to resolve service identifier "ThrowingService" in "TestContainer\/CONTAINER-\d+": Dynamic service construction failed/,
 			);
 		});
 
@@ -709,7 +709,7 @@ describe("Error Messages", () => {
 			// Act - 应该能够成功解析
 			const dynamicFactoryServiceA = container.resolve(
 				"DynamicFactoryServiceA",
-			) as unknown;
+			) as any;
 
 			// Assert
 			expect(dynamicFactoryServiceA.name).toBe("DynamicFactoryServiceA");

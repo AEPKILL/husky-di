@@ -58,7 +58,7 @@ export class Module implements IModule {
 	}
 
 	get displayName(): string {
-		return `${String(this._name)}#${this._id}`;
+		return `${String(this._name)}/${this._id}`;
 	}
 
 	readonly container: IContainer;
