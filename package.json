@@ -7,8 +7,8 @@
 	"private": true,
 	"scripts": {
 		"prepare": "husky",
-		"build": "pnpm --filter './packages/*' build",
-		"test": "pnpm --filter './packages/*' test",
+		"build": "turbo run build --filter='./packages/*'",
+		"test": "turbo run test --filter='./packages/*'",
 		"dev:website": "pnpm --filter @husky-di/website dev",
 		"build:website": "pnpm --filter @husky-di/website build",
 		"lint:commit-message": "sh -c 'shift; commitlint --edit \"$1\"' --",
@@ -35,6 +35,7 @@
 		"@commitlint/cli": "^20.5.0",
 		"@commitlint/config-conventional": "^20.5.0",
 		"husky": "^9.1.7",
-		"lint-staged": "^16.4.0"
+		"lint-staged": "^16.4.0",
+		"turbo": "^2.9.12"
 	}
 }
