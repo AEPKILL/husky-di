@@ -509,11 +509,17 @@ export class Container
 			resolveContext,
 		} = params;
 
+		const identifierName = getServiceIdentifierName(serviceIdentifier);
+
 		return this._withResolveRecord(serviceIdentifier, resolveRecord, () => {
 			switch (registration.type) {
 				case RegistrationTypeEnum.class: {
 					const provider =
 						registration.provider as CreateClassRegistrationOptions<T>["useClass"];
+					resolveRecord.addRecordNode({
+						type: ResolveRecordTypeEnum.message,
+						message: `Constructing class for "${identifierName}"`,
+					});
 					return new provider();
 				}
 				case RegistrationTypeEnum.value:
@@ -521,11 +527,21 @@ export class Container
 				case RegistrationTypeEnum.factory: {
 					const provider =
 						registration.provider as CreateFactoryRegistrationOptions<T>["useFactory"];
+					resolveRecord.addRecordNode({
+						type: ResolveRecordTypeEnum.message,
+						message: `Invoking factory for "${identifierName}"`,
+					});
 					return provider(container, resolveContext);
 				}
 				case RegistrationTypeEnum.alias: {
 					const provider =
 						registration.provider as CreateAliasRegistrationOptions<T>["useAlias"];
+					resolveRecord.addRecordNode({
+						type: ResolveRecordTypeEnum.message,
+						message: registration.getContainer
+							? `Resolving alias container for "${identifierName}"`
+							: `Resolving alias "${identifierName}" via current container`,
+					});
 					const containerRef = registration.getContainer
 						? registration.getContainer()
 						: container;
