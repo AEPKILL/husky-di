@@ -197,25 +197,43 @@ export class Container
 	): ResolveInstance<T, O> {
 		assertNotDisposed(this);
 
-		const resolveRecord = getEnsureResolveRecord(this);
-		const resolveContext = this._getResolveContext();
 		const resolveOptions = options || ({} as ResolveOptions<T>);
-		const { dynamic, ref, multiple } = resolveOptions;
+		const { defaultValue, dynamic, ref, multiple, optional } = resolveOptions;
+		const resolveRecord = getEnsureResolveRecord(this);
+
+		if (dynamic && ref) {
+			throw new ResolveException(
+				CoreErrorCodeEnum.E_INVALID_OPTIONS,
+				`Cannot use both "dynamic" and "ref" options simultaneously for service identifier "${getServiceIdentifierName(serviceIdentifier)}". These options are mutually exclusive. Please choose either "dynamic" or "ref", but not both.`,
+				resolveRecord,
+			);
+		}
+		if ("defaultValue" in resolveOptions && optional !== true) {
+			throw new ResolveException(
+				CoreErrorCodeEnum.E_INVALID_OPTIONS,
+				`Cannot specify "defaultValue" without setting "optional" to true for service identifier "${getServiceIdentifierName(serviceIdentifier)}".`,
+				resolveRecord,
+			);
+		}
+		if (
+			"defaultValue" in resolveOptions &&
+			multiple &&
+			!Array.isArray(defaultValue)
+		) {
+			throw new ResolveException(
+				CoreErrorCodeEnum.E_INVALID_OPTIONS,
+				`When "multiple" is true, "defaultValue" must be an array for service identifier "${getServiceIdentifierName(serviceIdentifier)}".`,
+				resolveRecord,
+			);
+		}
+
+		const resolveContext = this._getResolveContext();
 		const registrations = this._registry.getAll(serviceIdentifier);
 		const isRootResolveRecord =
 			resolveRecord.current.value.type === ResolveRecordTypeEnum.root;
 
 		try {
 			return this._withResolveRecord(serviceIdentifier, resolveRecord, () => {
-				// Validate that ref and dynamic options are not used together
-				if (dynamic && ref) {
-					throw new ResolveException(
-						CoreErrorCodeEnum.E_INVALID_OPTIONS,
-						`Cannot use both "dynamic" and "ref" options simultaneously for service identifier "${getServiceIdentifierName(serviceIdentifier)}". These options are mutually exclusive. Please choose either "dynamic" or "ref", but not both.`,
-						resolveRecord,
-					);
-				}
-
 				// Record the resolution attempt for debugging and error reporting
 				if (multiple) {
 					resolveRecord.addRecordNode({
@@ -641,7 +659,7 @@ export class Container
 		resolveRecord: IInternalResolveRecord,
 		resolveContext: ResolveContext,
 	): ResolveInstance<T, O> {
-		const { optional, defaultValue } = resolveOptions;
+		const { multiple, optional, defaultValue } = resolveOptions;
 
 		// Strategy 1: Try to resolve from parent container
 		const registeredInParent =
@@ -684,6 +702,10 @@ export class Container
 
 		// Strategy 3: Return default value if service is optional
 		if (optional) {
+			if (multiple && !("defaultValue" in resolveOptions)) {
+				return [] as ResolveInstance<T, O>;
+			}
+
 			return defaultValue as ResolveInstance<T, O>;
 		}
 

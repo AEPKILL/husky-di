@@ -14,6 +14,15 @@ import { DecoratorException } from "@/exceptions/decorator.exception";
 import { injectionMetadataMap } from "@/shared/instances";
 import type { InjectionMetadata } from "@/types/injection-metadata.type";
 
+const NON_CLASS_PARAMETER_TYPES = new Set<unknown>([
+	String,
+	Number,
+	Boolean,
+	BigInt,
+	Symbol,
+	Object,
+]);
+
 /**
  * @description
  * Mark a class as an injectable class
@@ -45,15 +54,10 @@ export const injectable: () => ClassDecorator = () =>
 
 			const serviceIdentifier = parametersServiceIdentifiers[index];
 
-			/**
-			 * can inject primary type
-			 *
-			 * e.g.:
-			 * constructor(name: string) {}
-			 *
-			 * actually, we will use `new String()` to create a string instance
-			 */
-			if (typeof serviceIdentifier !== "function") {
+			if (
+				typeof serviceIdentifier !== "function" ||
+				NON_CLASS_PARAMETER_TYPES.has(serviceIdentifier)
+			) {
 				throw new DecoratorException(
 					DecoratorErrorCodeEnum.E_NON_CLASS_PARAMETER,
 					`Constructor '${target.name}' parameter #${index} must be a class type`,
