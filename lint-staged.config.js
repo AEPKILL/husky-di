@@ -14,7 +14,7 @@ const toRelativePath = (file) =>
 const createBiomeTask = (files) => {
 	const scopedFiles = files.filter((file) => {
 		const relativeFile = toRelativePath(file).replaceAll("\\", "/");
-		return !relativeFile.startsWith(".agents/");
+		return !relativeFile.includes("/") && !relativeFile.startsWith(".agents/");
 	});
 
 	if (scopedFiles.length === 0) {

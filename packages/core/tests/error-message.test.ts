@@ -12,6 +12,7 @@ import {
 	createContainer,
 	createServiceIdentifier,
 	type IContainer,
+	type Ref,
 	resolve,
 } from "../src/index";
 import { clearContainer } from "./test.utils";
@@ -661,6 +662,16 @@ describe("Error Messages", () => {
 		});
 
 		it("should handle ref resolution with factory functions", () => {
+			type FactoryServiceB = {
+				readonly factoryServiceA: unknown;
+				readonly name: "FactoryServiceB";
+			};
+
+			type FactoryServiceA = {
+				readonly factoryServiceB: Ref<FactoryServiceB>;
+				readonly name: "FactoryServiceA";
+			};
+
 			// Arrange - 使用工厂函数创建循环依赖
 			container.register("FactoryServiceA", {
 				useFactory: (container) => ({
@@ -677,8 +688,8 @@ describe("Error Messages", () => {
 			});
 
 			// Act - 应该能够成功解析
-			// biome-ignore lint/suspicious/noExplicitAny: 工厂函数返回的动态对象类型
-			const factoryServiceA = container.resolve("FactoryServiceA") as any;
+			const factoryServiceA =
+				container.resolve<FactoryServiceA>("FactoryServiceA");
 
 			// Assert
 			expect(factoryServiceA.name).toBe("FactoryServiceA");
@@ -689,6 +700,16 @@ describe("Error Messages", () => {
 		});
 
 		it("should handle dynamic resolution with factory functions", () => {
+			type DynamicFactoryServiceB = {
+				readonly dynamicFactoryServiceA: unknown;
+				readonly name: "DynamicFactoryServiceB";
+			};
+
+			type DynamicFactoryServiceA = {
+				readonly dynamicFactoryServiceB: Ref<DynamicFactoryServiceB>;
+				readonly name: "DynamicFactoryServiceA";
+			};
+
 			// Arrange - 使用工厂函数创建循环依赖
 			container.register("DynamicFactoryServiceA", {
 				useFactory: (container) => ({
@@ -707,9 +728,9 @@ describe("Error Messages", () => {
 			});
 
 			// Act - 应该能够成功解析
-			const dynamicFactoryServiceA = container.resolve(
+			const dynamicFactoryServiceA = container.resolve<DynamicFactoryServiceA>(
 				"DynamicFactoryServiceA",
-			) as any;
+			);
 
 			// Assert
 			expect(dynamicFactoryServiceA.name).toBe("DynamicFactoryServiceA");
