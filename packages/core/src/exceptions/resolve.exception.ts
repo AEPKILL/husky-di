@@ -34,7 +34,6 @@ export class ResolveException extends CodedException<string> {
 	 * @param message - The error message describing the resolution failure
 	 * @param resolveRecord - The resolve record containing the resolution path and cycle information
 	 */
-	constructor(code: string, message: string, resolveRecord: IResolveRecord);
 	constructor(code: string, message: string, resolveRecord: IResolveRecord) {
 		const cycleNodeInfo = resolveRecord.getCycleNodeInfo();
 		const cycleNode = cycleNodeInfo?.cycleNode.value;

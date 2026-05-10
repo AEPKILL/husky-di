@@ -930,6 +930,258 @@ describe("Error Messages", () => {
 		});
 	});
 
+	describe("Provider Failure Error Messages", () => {
+		it("should include class construction context in resolve record for constructor error", () => {
+			class FaultyClass {
+				constructor() {
+					throw new Error("Broken dependency");
+				}
+			}
+			container.register("FaultyService", {
+				useClass: FaultyClass,
+			});
+
+			try {
+				container.resolve("FaultyService");
+				throw new Error("Expected resolve to throw.");
+			} catch (error) {
+				expect(error).toBeInstanceOf(ResolveException);
+				expect((error as ResolveException).code).toBe(
+					CoreErrorCodeEnum.E_RESOLUTION_FAILED,
+				);
+				expect((error as Error).message).toMatch(
+					/^E_RESOLUTION_FAILED: Failed to resolve service identifier "FaultyService" in "TestContainer\/CONTAINER-\d+": Broken dependency/,
+				);
+				expect((error as Error).message).toContain(
+					'Constructing class for "FaultyService"',
+				);
+			}
+		});
+
+		it("should include factory invocation context in resolve record for factory error", () => {
+			container.register("FactoryFault", {
+				useFactory: () => {
+					throw new Error("Factory exploded");
+				},
+			});
+
+			try {
+				container.resolve("FactoryFault");
+				throw new Error("Expected resolve to throw.");
+			} catch (error) {
+				expect(error).toBeInstanceOf(ResolveException);
+				expect((error as ResolveException).code).toBe(
+					CoreErrorCodeEnum.E_RESOLUTION_FAILED,
+				);
+				expect((error as Error).message).toMatch(
+					/^E_RESOLUTION_FAILED: Failed to resolve service identifier "FactoryFault" in "TestContainer\/CONTAINER-\d+": Factory exploded/,
+				);
+				expect((error as Error).message).toContain(
+					'Invoking factory for "FactoryFault"',
+				);
+			}
+		});
+
+		it("should include alias container context in resolve record for getContainer error", () => {
+			container.register("AliasTarget", {
+				useValue: "target",
+			});
+			container.register("AliasFault", {
+				useAlias: "AliasTarget",
+				getContainer: () => {
+					throw new Error("getContainer failed");
+				},
+			});
+
+			try {
+				container.resolve("AliasFault");
+				throw new Error("Expected resolve to throw.");
+			} catch (error) {
+				expect(error).toBeInstanceOf(ResolveException);
+				expect((error as ResolveException).code).toBe(
+					CoreErrorCodeEnum.E_RESOLUTION_FAILED,
+				);
+				expect((error as Error).message).toMatch(
+					/^E_RESOLUTION_FAILED: Failed to resolve service identifier "AliasFault" in "TestContainer\/CONTAINER-\d+": getContainer failed/,
+				);
+				expect((error as Error).message).toContain(
+					'Resolving alias container for "AliasFault"',
+				);
+			}
+		});
+
+		it("should include alias current-container context in resolve record for normal alias", () => {
+			container.register("AliasTarget3", {
+				useValue: "target3",
+			});
+			container.register("AliasNormal", {
+				useAlias: "AliasTarget3",
+			});
+
+			const instance = container.resolve("AliasNormal");
+			expect(instance).toBe("target3");
+		});
+
+		it("should preserve original error code when constructor throws ResolveException", () => {
+			class CircularA {
+				constructor() {
+					container.resolve("CircularB");
+				}
+			}
+			class CircularB {
+				constructor() {
+					container.resolve("CircularA");
+				}
+			}
+
+			container.register("CircularA", { useClass: CircularA });
+			container.register("CircularB", { useClass: CircularB });
+
+			try {
+				container.resolve("CircularA");
+				throw new Error("Expected resolve to throw.");
+			} catch (error) {
+				expect(error).toBeInstanceOf(ResolveException);
+				expect((error as ResolveException).code).toBe(
+					CoreErrorCodeEnum.E_CIRCULAR_DEPENDENCY,
+				);
+				expect((error as Error).message).toContain(
+					'Constructing class for "CircularA"',
+				);
+			}
+		});
+
+		it("should preserve original error code when factory throws ResolveException", () => {
+			container.register("FaultServiceB", {
+				useFactory: (container) => ({
+					serviceA: container.resolve("FaultServiceA"),
+				}),
+			});
+
+			container.register("FaultServiceA", {
+				useFactory: (container) => ({
+					serviceB: container.resolve("FaultServiceB"),
+				}),
+			});
+
+			try {
+				container.resolve("FaultServiceA");
+				throw new Error("Expected resolve to throw.");
+			} catch (error) {
+				expect(error).toBeInstanceOf(ResolveException);
+				expect((error as ResolveException).code).toBe(
+					CoreErrorCodeEnum.E_CIRCULAR_DEPENDENCY,
+				);
+				expect((error as Error).message).toContain(
+					'Invoking factory for "FaultServiceA"',
+				);
+			}
+		});
+
+		it("should preserve original error code when constructor throws CoreException", () => {
+			const disposedContainer = createContainer("DisposedContainer");
+			disposedContainer.dispose();
+
+			class UsesDisposedContainer {
+				constructor() {
+					disposedContainer.resolve("Anything");
+				}
+			}
+
+			container.register("UsesDisposed", {
+				useClass: UsesDisposedContainer,
+			});
+
+			try {
+				container.resolve("UsesDisposed");
+				throw new Error("Expected resolve to throw.");
+			} catch (error) {
+				expect(error).toBeInstanceOf(ResolveException);
+				expect((error as ResolveException).code).toBe(
+					CoreErrorCodeEnum.E_CONTAINER_DISPOSED,
+				);
+				expect((error as Error).message).toContain("Container is disposed");
+				expect((error as Error).message).toContain(
+					'Constructing class for "UsesDisposed"',
+				);
+			}
+		});
+
+		it("should handle non-Error throw from constructor", () => {
+			class StringThrower {
+				constructor() {
+					throw "raw string error";
+				}
+			}
+
+			container.register("StringThrower", {
+				useClass: StringThrower,
+			});
+
+			try {
+				container.resolve("StringThrower");
+				throw new Error("Expected resolve to throw.");
+			} catch (error) {
+				expect(error).toBeInstanceOf(ResolveException);
+				expect((error as ResolveException).code).toBe(
+					CoreErrorCodeEnum.E_RESOLUTION_FAILED,
+				);
+				expect((error as Error).message).toContain("raw string error");
+				expect((error as Error).message).toContain(
+					'Constructing class for "StringThrower"',
+				);
+			}
+		});
+
+		it("should handle non-Error throw from factory", () => {
+			container.register("StringFactory", {
+				useFactory: () => {
+					throw "factory raw string";
+				},
+			});
+
+			try {
+				container.resolve("StringFactory");
+				throw new Error("Expected resolve to throw.");
+			} catch (error) {
+				expect(error).toBeInstanceOf(ResolveException);
+				expect((error as ResolveException).code).toBe(
+					CoreErrorCodeEnum.E_RESOLUTION_FAILED,
+				);
+				expect((error as Error).message).toContain("factory raw string");
+				expect((error as Error).message).toContain(
+					'Invoking factory for "StringFactory"',
+				);
+			}
+		});
+
+		it("should handle non-Error throw from getContainer", () => {
+			container.register("AliasTarget2", {
+				useValue: "target2",
+			});
+			container.register("AliasStringThrow", {
+				useAlias: "AliasTarget2",
+				getContainer: () => {
+					throw 42;
+				},
+			});
+
+			try {
+				container.resolve("AliasStringThrow");
+				throw new Error("Expected resolve to throw.");
+			} catch (error) {
+				expect(error).toBeInstanceOf(ResolveException);
+				expect((error as ResolveException).code).toBe(
+					CoreErrorCodeEnum.E_RESOLUTION_FAILED,
+				);
+				expect((error as Error).message).toContain("42");
+				expect((error as Error).message).toContain(
+					'Resolving alias container for "AliasStringThrow"',
+				);
+			}
+		});
+	});
+
 	describe("CoreException", () => {
 		it("should expose E_CONTAINER_DISPOSED as the structured code and message prefix", () => {
 			container.dispose();
