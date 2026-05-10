@@ -593,6 +593,7 @@ export class Container
 					error.code as CoreErrorCodeEnum,
 					error.detail,
 					resolveRecord,
+					error,
 				);
 			}
 
@@ -601,6 +602,7 @@ export class Container
 				CoreErrorCodeEnum.E_RESOLUTION_FAILED,
 				`Failed to resolve service identifier "${getServiceIdentifierName(serviceIdentifier)}" in "${this.displayName}": ${error instanceof Error ? error.message : String(error)}`,
 				resolveRecord,
+				error,
 			);
 		}
 	}
