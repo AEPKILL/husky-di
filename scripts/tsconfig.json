@@ -9,9 +9,8 @@
 		"moduleResolution": "bundler",
 		"types": ["node"],
 		"allowImportingTsExtensions": true,
-		"baseUrl": ".",
 		"paths": {
-			"@/*": ["src/*"]
+			"@/*": ["./src/*"]
 		}
 	},
 	"include": ["."]

@@ -21,7 +21,9 @@ const createBiomeTask = (files) => {
 		return [];
 	}
 
-	return [`biome check --write ${scopedFiles.join(" ")}`];
+	return [
+		`biome check --write --no-errors-on-unmatched ${scopedFiles.join(" ")}`,
+	];
 };
 
 export default {
