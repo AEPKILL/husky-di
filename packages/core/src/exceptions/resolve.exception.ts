@@ -27,14 +27,23 @@ export class ResolveException extends CodedException<string> {
 	/** Internal marker to identify ResolveException instances across frames. */
 	private __isResolveException__ = true;
 
+	/** The original error object that triggered this resolution failure, if any. */
+	readonly cause: unknown;
+
 	/**
 	 * Creates a new ResolveException.
 	 *
 	 * @param code - The stable error code for the resolution failure
 	 * @param message - The error message describing the resolution failure
 	 * @param resolveRecord - The resolve record containing the resolution path and cycle information
+	 * @param cause - Optional original error that triggered the resolution failure
 	 */
-	constructor(code: string, message: string, resolveRecord: IResolveRecord) {
+	constructor(
+		code: string,
+		message: string,
+		resolveRecord: IResolveRecord,
+		cause?: unknown,
+	) {
 		const cycleNodeInfo = resolveRecord.getCycleNodeInfo();
 		const cycleNode = cycleNodeInfo?.cycleNode.value;
 		const paths = resolveRecord
@@ -50,6 +59,8 @@ export class ResolveException extends CodedException<string> {
 				cycleNode,
 			}),
 		);
+
+		this.cause = cause;
 	}
 
 	/**
