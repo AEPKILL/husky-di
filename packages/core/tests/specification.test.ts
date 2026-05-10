@@ -13,6 +13,7 @@
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
+	CoreErrorCodeEnum,
 	createContainer,
 	createServiceIdentifier,
 	globalMiddleware,
@@ -96,6 +97,25 @@ describe("SPEC 4.1: Service Registration", () => {
 
 	afterEach(() => {
 		clearContainer(container);
+	});
+
+	describe("R1: Provider Exclusivity", () => {
+		it("should throw E_INVALID_PROVIDER when no provider strategy is specified", () => {
+			expect(() => {
+				container.register(IServiceA, {
+					// biome-ignore lint/suspicious/noExplicitAny: testing invalid registration shape
+				} as any);
+			}).toThrow(/E_INVALID_PROVIDER/);
+		});
+
+		it("should throw E_INVALID_PROVIDER when multiple provider strategies are specified", () => {
+			expect(() => {
+				container.register(IServiceA, {
+					useClass: ServiceA,
+					useValue: new ServiceA(),
+				});
+			}).toThrow(/E_INVALID_PROVIDER/);
+		});
 	});
 
 	describe("R2: Multiple Registration", () => {
@@ -281,7 +301,7 @@ describe("SPEC 4.2: Service Resolution", () => {
 			expect(instances).toHaveLength(2);
 		});
 
-		it("should return undefined when no instances found and multiple: true, optional: true without defaultValue", () => {
+		it("should return empty array when no instances found and multiple: true, optional: true without defaultValue", () => {
 			// Act
 			const instances = childContainer.resolve(IUnregisteredService, {
 				multiple: true,
@@ -289,7 +309,7 @@ describe("SPEC 4.2: Service Resolution", () => {
 			});
 
 			// Assert
-			expect(instances).toBeUndefined();
+			expect(instances).toEqual([]);
 		});
 
 		it("should return defaultValue when no instances found and multiple: true with defaultValue", () => {
@@ -424,6 +444,36 @@ describe("SPEC 4.2: Service Resolution", () => {
 
 			// Assert
 			expect(instance).toBe(currentService);
+		});
+	});
+
+	describe("S7: Provider Failure Reporting", () => {
+		it("should wrap provider failures in ResolveException with E_RESOLUTION_FAILED", () => {
+			childContainer.register(IServiceA, {
+				useFactory: () => {
+					throw new Error("Factory failed");
+				},
+			});
+
+			try {
+				childContainer.resolve(IServiceA);
+				throw new Error("Expected resolve to throw.");
+			} catch (error) {
+				expect(error).toBeInstanceOf(ResolveException);
+				expect((error as ResolveException).code).toBe(
+					CoreErrorCodeEnum.E_RESOLUTION_FAILED,
+				);
+				expect((error as Error).message).toContain("Factory failed");
+				expect((error as Error).message).toContain("IServiceA");
+			}
+		});
+	});
+
+	describe("S8: Resolve Context Availability", () => {
+		it("should reject package-level resolve() outside an active resolution context", () => {
+			expect(() => {
+				resolve(IServiceA);
+			}).toThrow(/E_RESOLVE_CONTEXT_UNAVAILABLE/);
 		});
 	});
 });
@@ -1886,12 +1936,38 @@ describe("SPEC 5: Validation Rules", () => {
 		clearContainer(container);
 	});
 
+	describe("V1: Provider Validation", () => {
+		it("should reject registrations that specify zero or multiple provider strategies", () => {
+			expect(() => {
+				container.register(IServiceA, {
+					// biome-ignore lint/suspicious/noExplicitAny: testing invalid registration shape
+				} as any);
+			}).toThrow(/E_INVALID_PROVIDER/);
+
+			expect(() => {
+				container.register(IServiceA, {
+					useClass: ServiceA,
+					useFactory: () => new ServiceA(),
+				});
+			}).toThrow(/E_INVALID_PROVIDER/);
+		});
+	});
+
 	describe("V2: Class Provider Validation", () => {
 		it("should accept valid constructor function for useClass", () => {
 			// Act & Assert
 			expect(() => {
 				container.register(IServiceA, { useClass: ServiceA });
 			}).not.toThrow();
+		});
+
+		it("should reject non-function useClass providers", () => {
+			expect(() => {
+				container.register(IServiceA, {
+					// biome-ignore lint/suspicious/noExplicitAny: testing invalid provider type
+					useClass: "ServiceA" as any,
+				});
+			}).toThrow(/E_INVALID_PROVIDER/);
 		});
 	});
 
@@ -1903,6 +1979,15 @@ describe("SPEC 5: Validation Rules", () => {
 					useFactory: () => new ServiceA(),
 				});
 			}).not.toThrow();
+		});
+
+		it("should reject non-function useFactory providers", () => {
+			expect(() => {
+				container.register(IServiceA, {
+					// biome-ignore lint/suspicious/noExplicitAny: testing invalid provider type
+					useFactory: "factory" as any,
+				});
+			}).toThrow(/E_INVALID_PROVIDER/);
 		});
 	});
 
@@ -1932,6 +2017,25 @@ describe("SPEC 5: Validation Rules", () => {
 
 			// Cleanup
 			clearContainer(targetContainer);
+		});
+
+		it("should reject invalid useAlias service identifiers", () => {
+			expect(() => {
+				container.register(IAliasTarget, {
+					// biome-ignore lint/suspicious/noExplicitAny: testing invalid service identifier
+					useAlias: "" as any,
+				});
+			}).toThrow(/E_INVALID_PROVIDER/);
+		});
+
+		it("should reject non-function getContainer values", () => {
+			expect(() => {
+				container.register(IAliasTarget, {
+					useAlias: IServiceA,
+					// biome-ignore lint/suspicious/noExplicitAny: testing invalid getContainer type
+					getContainer: "container" as any,
+				});
+			}).toThrow(/E_INVALID_PROVIDER/);
 		});
 	});
 
@@ -1986,6 +2090,15 @@ describe("SPEC 5: Validation Rules", () => {
 			expect(result).toBe(defaultValue);
 		});
 
+		it("should reject defaultValue when optional is not true", () => {
+			expect(() => {
+				container.resolve(IServiceA, {
+					defaultValue: new ServiceA(),
+					// biome-ignore lint/suspicious/noExplicitAny: use any
+				} as any);
+			}).toThrow(/E_INVALID_OPTIONS/);
+		});
+
 		it("should require defaultValue to be array when multiple: true", () => {
 			// Arrange
 			const defaultValue = [new ServiceA(), new ServiceA()];
@@ -2000,6 +2113,25 @@ describe("SPEC 5: Validation Rules", () => {
 			// Assert
 			expect(result).toBe(defaultValue);
 			expect(Array.isArray(result)).toBe(true);
+		});
+
+		it("should reject non-array defaultValue when multiple is true", () => {
+			expect(() => {
+				container.resolve(IServiceA, {
+					multiple: true,
+					optional: true,
+					defaultValue: new ServiceA() as unknown as [],
+				});
+			}).toThrow(/E_INVALID_OPTIONS/);
+		});
+
+		it("should reject dynamic and ref options used together", () => {
+			expect(() => {
+				container.resolve(IServiceA, {
+					dynamic: true,
+					ref: true,
+				});
+			}).toThrow(/E_INVALID_OPTIONS/);
 		});
 	});
 });

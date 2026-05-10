@@ -805,16 +805,12 @@ describe("Error Messages", () => {
 		});
 
 		it("should throw error when factory function is not a function", () => {
-			// Arrange
-			container.register("InvalidFactoryService", {
-				// biome-ignore lint/suspicious/noExplicitAny: 测试用例需要故意使用错误的类型
-				useFactory: "not a function" as any,
-			});
-
-			// Act & Assert
 			expect(() => {
-				container.resolve("InvalidFactoryService");
-			}).toThrow();
+				container.register("InvalidFactoryService", {
+					// biome-ignore lint/suspicious/noExplicitAny: 测试用例需要故意使用错误的类型
+					useFactory: "not a function" as any,
+				});
+			}).toThrow(/E_INVALID_PROVIDER/);
 		});
 
 		it("should handle factory function that throws ResolveException", () => {
@@ -867,16 +863,12 @@ describe("Error Messages", () => {
 		});
 
 		it("should throw ResolveException when class is not a constructor", () => {
-			// Arrange
-			container.register("InvalidClassService", {
-				// biome-ignore lint/suspicious/noExplicitAny: 测试用例需要故意使用错误的类型
-				useClass: "not a class" as any,
-			});
-
-			// Act & Assert
 			expect(() => {
-				container.resolve("InvalidClassService");
-			}).toThrow();
+				container.register("InvalidClassService", {
+					// biome-ignore lint/suspicious/noExplicitAny: 测试用例需要故意使用错误的类型
+					useClass: "not a class" as any,
+				});
+			}).toThrow(/E_INVALID_PROVIDER/);
 		});
 
 		it("should throw error when class has circular dependency in constructor", () => {

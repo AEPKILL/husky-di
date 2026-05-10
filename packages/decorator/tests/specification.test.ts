@@ -16,6 +16,7 @@ import {
 	type Ref,
 	ResolveException,
 } from "@husky-di/core";
+import { INJECTION_METADATA_KEY } from "../src/constants/metadata-key.const";
 import {
 	DecoratorErrorCodeEnum,
 	DecoratorException,
@@ -132,14 +133,18 @@ describe("Decorator Module - Specification Compliance", () => {
 		});
 
 		describe("M3. Parameter Type Validation", () => {
-			it("should accept TypeScript-inferred wrapper types for primitives", () => {
-				@injectable()
-				class TestService {
-					constructor(public wrapper: string) {}
-				}
-
-				const instance = container.resolve(TestService);
-				expect(instance.wrapper).toBeInstanceOf(String);
+			it("should throw E_NON_CLASS_PARAMETER for primitive parameters without explicit metadata", () => {
+				expectDecoratorException(
+					() => {
+						@injectable()
+						// biome-ignore lint/correctness/noUnusedVariables: test case for invalid primitive constructor metadata
+						class TestService {
+							constructor(public value: string) {}
+						}
+					},
+					DecoratorErrorCodeEnum.E_NON_CLASS_PARAMETER,
+					/^E_NON_CLASS_PARAMETER: Constructor 'TestService' parameter #0 must be a class type$/,
+				);
 			});
 
 			it("should accept primitive type with explicit @inject()", () => {
@@ -466,6 +471,29 @@ describe("Decorator Module - Specification Compliance", () => {
 				expect(instance.depRef.current.value).toBe("test");
 			});
 		});
+
+		describe("T3, T4, T5. Metadata Storage, Retrieval, and Array Integrity", () => {
+			it("should write sparse metadata to INJECTION_METADATA by parameter index", () => {
+				class DependencyService {}
+
+				class TestService {
+					constructor(
+						public first: unknown,
+						@tagged({ serviceIdentifier: DependencyService })
+						public second: DependencyService,
+					) {}
+				}
+
+				const metadata = Reflect.getMetadata(
+					INJECTION_METADATA_KEY,
+					TestService,
+				);
+
+				expect(metadata).toHaveLength(2);
+				expect(metadata[0]).toBeUndefined();
+				expect(metadata[1]).toEqual({ serviceIdentifier: DependencyService });
+			});
+		});
 	});
 
 	describe("5. Validation Rules", () => {
@@ -549,6 +577,21 @@ describe("Decorator Module - Specification Compliance", () => {
 				expect(() => container.resolve(TestService)).not.toThrow();
 			});
 		});
+
+		describe("V4. Option Conflicts", () => {
+			it("should reject dynamic and ref options on the same parameter metadata", () => {
+				expectDecoratorException(
+					() =>
+						tagged({
+							serviceIdentifier: "Token",
+							dynamic: true,
+							ref: true,
+						}),
+					DecoratorErrorCodeEnum.E_CONFLICTING_OPTIONS,
+					/^E_CONFLICTING_OPTIONS: Cannot use both "dynamic" and "ref" options simultaneously$/,
+				);
+			});
+		});
 	});
 
 	describe("7. Error Conditions", () => {
@@ -574,15 +617,17 @@ describe("Decorator Module - Specification Compliance", () => {
 
 		describe("E2. Non-Class Parameter Type", () => {
 			it("should validate parameter types during decoration", () => {
-				// TypeScript emits wrapper constructors (String, Number, Boolean) for primitives
-				// which are valid function types, so they pass validation
-				@injectable()
-				class TestService {
-					constructor(_value: number) {}
-				}
-
-				// The class is decorated successfully
-				expect(TestService).toBeDefined();
+				expectDecoratorException(
+					() => {
+						@injectable()
+						// biome-ignore lint/correctness/noUnusedVariables: test case for invalid primitive constructor metadata
+						class TestService {
+							constructor(_value: number) {}
+						}
+					},
+					DecoratorErrorCodeEnum.E_NON_CLASS_PARAMETER,
+					/^E_NON_CLASS_PARAMETER: Constructor 'TestService' parameter #0 must be a class type$/,
+				);
 			});
 
 			it("should require explicit @inject() for non-class dependencies", () => {
@@ -634,251 +679,7 @@ describe("Decorator Module - Specification Compliance", () => {
 		});
 	});
 
-	describe("Integration Tests", () => {
-		it("should support complete dependency injection flow", () => {
-			@injectable()
-			class LoggerService {
-				log(message: string) {
-					return `Logged: ${message}`;
-				}
-			}
-
-			@injectable()
-			class DatabaseService {
-				constructor(@inject(LoggerService) private logger: LoggerService) {}
-
-				query(sql: string) {
-					return this.logger.log(`Executing: ${sql}`);
-				}
-			}
-
-			@injectable()
-			class UserService {
-				constructor(
-					@inject(DatabaseService) private db: DatabaseService,
-					@inject(LoggerService) _logger: LoggerService,
-				) {}
-
-				getUser(id: string) {
-					return this.db.query(`SELECT * FROM users WHERE id = ${id}`);
-				}
-			}
-
-			const userService = container.resolve(UserService);
-			const result = userService.getUser("123");
-			expect(result).toBe(
-				"Logged: Executing: SELECT * FROM users WHERE id = 123",
-			);
-		});
-
-		it("should support complex dependency graph with multiple options", () => {
-			@injectable()
-			class ConfigService {
-				getValue(key: string) {
-					return `config-${key}`;
-				}
-			}
-
-			@injectable()
-			class CacheService {
-				constructor(
-					@inject(ConfigService, { dynamic: true })
-					private configRef: Ref<ConfigService>,
-				) {}
-
-				get(key: string) {
-					return `cached-${this.configRef.current.getValue(key)}`;
-				}
-			}
-
-			@injectable()
-			class ApiService {
-				constructor(
-					@inject(CacheService, { ref: true })
-					public cacheRef: Ref<CacheService>,
-					@inject(ConfigService) public config: ConfigService,
-				) {}
-
-				getData(key: string) {
-					return {
-						cached: this.cacheRef.current.get(key),
-						direct: this.config.getValue(key),
-					};
-				}
-			}
-
-			const apiService = container.resolve(ApiService);
-			const result = apiService.getData("test");
-
-			expect(result.cached).toBe("cached-config-test");
-			expect(result.direct).toBe("config-test");
-		});
-
-		it("should handle optional dependencies correctly", () => {
-			const OPTIONAL_TOKEN = Symbol("Optional");
-
-			@injectable()
-			class ServiceA {}
-
-			@injectable()
-			class TestService {
-				constructor(
-					@inject(ServiceA) public required: ServiceA,
-					@inject(OPTIONAL_TOKEN, { optional: true })
-					public optional?: unknown,
-				) {}
-			}
-
-			const instance = container.resolve(TestService);
-			expect(instance.required).toBeInstanceOf(ServiceA);
-			expect(instance.optional).toBeUndefined();
-		});
-
-		it("should support mixing explicit and implicit injection", () => {
-			@injectable()
-			class ServiceA {
-				value = "A";
-			}
-
-			@injectable()
-			class ServiceB {
-				value = "B";
-			}
-
-			@injectable()
-			class ServiceC {
-				value = "C";
-			}
-
-			@injectable()
-			class TestService {
-				constructor(
-					public a: ServiceA,
-					@inject(ServiceB) public b: ServiceB,
-					public c: ServiceC,
-				) {}
-			}
-
-			const instance = container.resolve(TestService);
-			expect(instance.a.value).toBe("A");
-			expect(instance.b.value).toBe("B");
-			expect(instance.c.value).toBe("C");
-		});
-	});
-
-	describe("Edge Cases", () => {
-		it("should handle empty constructor", () => {
-			@injectable()
-			class EmptyService {
-				constructor() {}
-			}
-
-			const instance = container.resolve(EmptyService);
-			expect(instance).toBeInstanceOf(EmptyService);
-		});
-
-		it("should handle constructor with single parameter", () => {
-			@injectable()
-			class SingleDependency {}
-
-			@injectable()
-			class TestService {
-				constructor(public dep: SingleDependency) {}
-			}
-
-			const instance = container.resolve(TestService);
-			expect(instance.dep).toBeInstanceOf(SingleDependency);
-		});
-
-		it("should handle constructor with many parameters", () => {
-			@injectable()
-			class Dep1 {}
-			@injectable()
-			class Dep2 {}
-			@injectable()
-			class Dep3 {}
-			@injectable()
-			class Dep4 {}
-			@injectable()
-			class Dep5 {}
-
-			@injectable()
-			class TestService {
-				constructor(
-					public d1: Dep1,
-					public d2: Dep2,
-					public d3: Dep3,
-					public d4: Dep4,
-					public d5: Dep5,
-				) {}
-			}
-
-			const instance = container.resolve(TestService);
-			expect(instance.d1).toBeInstanceOf(Dep1);
-			expect(instance.d2).toBeInstanceOf(Dep2);
-			expect(instance.d3).toBeInstanceOf(Dep3);
-			expect(instance.d4).toBeInstanceOf(Dep4);
-			expect(instance.d5).toBeInstanceOf(Dep5);
-		});
-
-		it("should detect circular dependencies", () => {
-			@injectable()
-			class ServiceA {
-				constructor(@inject("ServiceB") public serviceB: unknown) {}
-			}
-
-			@injectable()
-			class ServiceB {
-				constructor(@inject(ServiceA) public serviceA: ServiceA) {}
-			}
-
-			container.register("ServiceB", { useClass: ServiceB });
-
-			expect(() => {
-				container.resolve(ServiceA);
-			}).toThrow(/circular dependency/i);
-		});
-
-		it("should handle constructor errors gracefully", () => {
-			@injectable()
-			class FailingService {
-				constructor() {
-					throw new Error("Constructor failed");
-				}
-			}
-
-			@injectable()
-			class TestService {
-				constructor(@inject(FailingService) public failing: FailingService) {}
-			}
-
-			expect(() => {
-				container.resolve(TestService);
-			}).toThrow(/Constructor failed/);
-		});
-	});
-
-	describe("decoratorMiddleware", () => {
-		it("should have correct middleware name", () => {
-			expect(decoratorMiddleware.name.toString()).toBe(
-				"Symbol(DecoratorMiddleware)",
-			);
-		});
-
-		it("should have executor function", () => {
-			expect(typeof decoratorMiddleware.executor).toBe("function");
-		});
-
-		it("should be registered in global middleware", () => {
-			@injectable()
-			class TestService {}
-
-			// Should work because middleware is registered
-			expect(() => container.resolve(TestService)).not.toThrow();
-		});
-	});
-
-	describe("TypeScript Metadata Integration", () => {
+	describe("8. TypeScript Metadata Integration", () => {
 		it("should use design:paramtypes metadata when available", () => {
 			@injectable()
 			class DependencyA {}

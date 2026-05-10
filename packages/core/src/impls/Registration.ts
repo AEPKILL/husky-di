@@ -11,11 +11,30 @@ import { CoreException } from "@/exceptions/core.exception";
 import type { IContainer } from "@/interfaces/container.interface";
 import type { IDisplayName } from "@/interfaces/display-name.interface";
 import type {
+	CreateAliasRegistrationOptions,
 	CreateRegistrationOptions,
 	IInternalRegistration,
 	IRegistration,
 } from "@/interfaces/registration.interface";
+import type { ServiceIdentifier } from "@/types/service-identifier.type";
 import { createRegistrationId } from "@/utils/uuid.utils";
+
+const REGISTRATION_PROVIDER_KEYS = [
+	"useClass",
+	"useFactory",
+	"useValue",
+	"useAlias",
+] as const;
+
+function isValidServiceIdentifier(
+	value: unknown,
+): value is ServiceIdentifier<unknown> {
+	return (
+		typeof value === "function" ||
+		typeof value === "symbol" ||
+		(typeof value === "string" && value.length > 0)
+	);
+}
 
 /**
  * Registration class
@@ -76,11 +95,35 @@ export class Registration<T> implements IInternalRegistration<T>, IDisplayName {
 	constructor(options: CreateRegistrationOptions<T>) {
 		this.id = createRegistrationId();
 
+		const providerKeys = REGISTRATION_PROVIDER_KEYS.filter(
+			(key) => key in options,
+		);
+		if (providerKeys.length !== 1) {
+			throw new CoreException(
+				CoreErrorCodeEnum.E_INVALID_PROVIDER,
+				"Registration must specify exactly one provider strategy.",
+			);
+		}
+
 		if ("useClass" in options) {
+			if (typeof options.useClass !== "function") {
+				throw new CoreException(
+					CoreErrorCodeEnum.E_INVALID_PROVIDER,
+					"useClass must be a constructor function.",
+				);
+			}
+
 			this.type = RegistrationTypeEnum.class;
 			this.provider = options.useClass;
 			this.lifecycle = options.lifecycle ?? LifecycleEnum.transient;
 		} else if ("useFactory" in options) {
+			if (typeof options.useFactory !== "function") {
+				throw new CoreException(
+					CoreErrorCodeEnum.E_INVALID_PROVIDER,
+					"useFactory must be a function.",
+				);
+			}
+
 			this.type = RegistrationTypeEnum.factory;
 			this.provider = options.useFactory;
 			this.lifecycle = options.lifecycle ?? LifecycleEnum.transient;
@@ -89,6 +132,23 @@ export class Registration<T> implements IInternalRegistration<T>, IDisplayName {
 			this.provider = options.useValue;
 			this.lifecycle = options.lifecycle ?? LifecycleEnum.transient;
 		} else if ("useAlias" in options) {
+			const aliasOptions = options as CreateAliasRegistrationOptions<T>;
+			if (!isValidServiceIdentifier(aliasOptions.useAlias)) {
+				throw new CoreException(
+					CoreErrorCodeEnum.E_INVALID_PROVIDER,
+					"useAlias must be a valid service identifier.",
+				);
+			}
+			if (
+				aliasOptions.getContainer !== undefined &&
+				typeof aliasOptions.getContainer !== "function"
+			) {
+				throw new CoreException(
+					CoreErrorCodeEnum.E_INVALID_PROVIDER,
+					"getContainer must be a function.",
+				);
+			}
+
 			this.type = RegistrationTypeEnum.alias;
 			this.provider = options.useAlias;
 			this.lifecycle = LifecycleEnum.transient;
