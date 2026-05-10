@@ -13,7 +13,7 @@ import {
 	type ResolveOptions,
 	type ServiceIdentifier,
 } from "@husky-di/core";
-import { createExportedGuardMiddlewareFactory } from "@/factories/exported-guard-middleware.factory";
+import { createExportedGuardMiddleware } from "@/factories/exported-guard-middleware.factory";
 import { createImportScope } from "@/factories/import-scope.factory";
 import type {
 	Alias,
@@ -81,9 +81,7 @@ export class Module implements IModule {
 		this.validateConfiguration();
 
 		this.container = this.buildContainer();
-		this.container.use(
-			createExportedGuardMiddlewareFactory(this.exports ?? []),
-		);
+		this.container.use(createExportedGuardMiddleware(this.exports ?? []));
 	}
 
 	public resolve<T, O extends ResolveOptions<T>>(

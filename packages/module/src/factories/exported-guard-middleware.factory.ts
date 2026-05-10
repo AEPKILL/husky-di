@@ -46,7 +46,7 @@ import { ModuleErrorCodeEnum } from "@/enums/module-error-code.enum";
  * Removing this middleware will disable export protection and allow external access
  * to non-exported services.
  */
-export function createExportedGuardMiddlewareFactory(
+export function createExportedGuardMiddleware(
 	exports: ReadonlyArray<ServiceIdentifier<unknown>>,
 	// biome-ignore lint/suspicious/noExplicitAny: should be any
 ): ResolveMiddleware<any, any> {
