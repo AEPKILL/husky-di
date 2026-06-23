@@ -27,6 +27,7 @@ import type {
 	ResolveMiddlewareParams,
 	ResolveOptions,
 } from "@/interfaces/container.interface";
+import type { Cleanup } from "@/interfaces/disposable.interface";
 import type { IDisposableRegistry } from "@/interfaces/disposable-registry.interface";
 import type {
 	CreateAliasRegistrationOptions,
@@ -35,7 +36,6 @@ import type {
 	CreateRegistrationOptions,
 	CreateValueRegistrationOptions,
 	IInternalRegistration,
-	IRegistration,
 } from "@/interfaces/registration.interface";
 import type { IInternalResolveRecord } from "@/interfaces/resolve-record.interface";
 import { globalMiddleware } from "@/shared/instances";
@@ -44,7 +44,6 @@ import type { MutableRef, Ref } from "@/types/ref.type";
 import type { ResolveContext } from "@/types/resolve-context.type";
 import type { ServiceIdentifier } from "@/types/service-identifier.type";
 import { createAssertNotDisposed } from "@/utils/disposable.utils";
-import { isRegistration } from "@/utils/registration.utils";
 import {
 	getEnsureResolveRecord,
 	resetResolveRecord,
@@ -356,7 +355,7 @@ export class ContainerImpl implements IInternalContainer {
 	public register<T>(
 		serviceIdentifier: ServiceIdentifier<T>,
 		registration: CreateRegistrationOptions<T>,
-	): IRegistration<T> {
+	): Cleanup {
 		assertNotDisposed(this);
 
 		const registrationInstance = new RegistrationImpl<T>(
@@ -364,7 +363,9 @@ export class ContainerImpl implements IInternalContainer {
 			registration,
 		);
 		this._registry.set(serviceIdentifier, registrationInstance);
-		return registrationInstance;
+		return () => {
+			this._registry.removeRegistration(registrationInstance);
+		};
 	}
 
 	/**
@@ -404,17 +405,10 @@ export class ContainerImpl implements IInternalContainer {
 	 * @template T - The type of the service
 	 * @param serviceIdentifier - The service identifier to unregister
 	 */
-	public unregister<T>(serviceIdentifier: ServiceIdentifier<T>): void;
-	public unregister<T>(registration: IRegistration<T>): void;
-	public unregister<T>(target: ServiceIdentifier<T> | IRegistration<T>): void {
+	public unregister<T>(serviceIdentifier: ServiceIdentifier<T>): void {
 		assertNotDisposed(this);
 
-		if (isRegistration(target)) {
-			this._registry.removeRegistration(target);
-			return;
-		}
-
-		this._registry.remove(target);
+		this._registry.remove(serviceIdentifier);
 	}
 
 	/**
@@ -425,10 +419,10 @@ export class ContainerImpl implements IInternalContainer {
 	 *
 	 * @param middleware - The middleware function to add to the resolution chain
 	 */
-	public use(middleware: ResolveMiddleware<any, any>): void {
+	public use(middleware: ResolveMiddleware<any, any>): Cleanup {
 		assertNotDisposed(this);
 
-		this._resolveMiddlewareChain.use(middleware);
+		return this._resolveMiddlewareChain.use(middleware);
 	}
 
 	/**

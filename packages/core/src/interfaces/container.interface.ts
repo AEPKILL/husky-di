@@ -13,7 +13,7 @@
 /** biome-ignore-all lint/suspicious/noExplicitAny: Generic type utilities require any type */
 
 import type { IDisplayName } from "@/interfaces/display-name.interface";
-import type { IDisposable } from "@/interfaces/disposable.interface";
+import type { Cleanup, IDisposable } from "@/interfaces/disposable.interface";
 import type {
 	Middleware,
 	MiddlewareExecutor,
@@ -374,8 +374,7 @@ export interface IServiceRegistry {
 	 * @typeParam T - The type of the service to register
 	 * @param serviceIdentifier - The identifier of the service to register
 	 * @param registration - The registration options defining how to create the service
-	 * @returns The created registration handle, which can be used to unregister
-	 * a specific registration later
+	 * @returns A cleanup function that removes this specific registration when called
 	 *
 	 * @example
 	 * ```typescript
@@ -392,7 +391,7 @@ export interface IServiceRegistry {
 	register<T>(
 		serviceIdentifier: ServiceIdentifier<T>,
 		registration: CreateRegistrationOptions<T>,
-	): IRegistration<T>;
+	): Cleanup;
 
 	/**
 	 * Checks if a service is registered in the container.
@@ -428,11 +427,8 @@ export interface IServiceRegistry {
 	 * Unregisters a service from the container.
 	 *
 	 * @remarks
-	 * Removes registrations from the container.
-	 * When a service identifier is provided, all registrations associated
-	 * with that identifier are removed. When a registration handle is provided,
-	 * only that specific registration is removed.
-	 * If the target is not registered, this method does nothing.
+	 * Removes all registrations associated with the given service identifier.
+	 * If the service is not registered, this method does nothing.
 	 * Note: This does not affect already resolved instances.
 	 *
 	 * @typeParam T - The type of the service to unregister
@@ -441,13 +437,9 @@ export interface IServiceRegistry {
 	 * @example
 	 * ```typescript
 	 * container.unregister(MyService);
-	 *
-	 * const registration = container.register(MyService, { useClass: MyService });
-	 * container.unregister(registration);
 	 * ```
 	 */
 	unregister<T>(serviceIdentifier: ServiceIdentifier<T>): void;
-	unregister<T>(registration: IRegistration<T>): void;
 
 	/**
 	 * Gets all registered service identifiers in the container.
@@ -496,6 +488,7 @@ export interface IMiddlewareManager {
 	 * The same middleware instance can be registered multiple times.
 	 *
 	 * @param middleware - The middleware function to register
+	 * @returns A cleanup function that removes the middleware added by this call
 	 *
 	 * @example
 	 * ```typescript
@@ -513,7 +506,7 @@ export interface IMiddlewareManager {
 	 * // If you register: [A, B, C], they execute in order: [C, B, A]
 	 * ```
 	 */
-	use(middleware: ResolveMiddleware<any, any>): void;
+	use(...middleware: ResolveMiddleware<any, any>[]): Cleanup;
 
 	/**
 	 * Unregisters a middleware from the container.
@@ -540,7 +533,7 @@ export interface IMiddlewareManager {
 	 * container.unused(loggingMiddleware);
 	 * ```
 	 */
-	unused(middleware: ResolveMiddleware<any, any>): void;
+	unused(...middleware: ResolveMiddleware<any, any>[]): void;
 }
 
 /**

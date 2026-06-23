@@ -2,7 +2,7 @@
  * @overview Core container specification compliance tests.
  *
  * This test suite validates that the container implementation complies with
- * the behavioral contract defined in SPECIFICATION.md v1.1.1.
+ * the behavioral contract defined in SPECIFICATION.md v1.1.3.
  *
  * Each test is labeled with its corresponding specification requirement ID
  * (e.g., R1, S2, L1, etc.) for traceability.
@@ -166,44 +166,48 @@ describe("SPEC 4.1: Service Registration", () => {
 			expect(instances.map((i) => i.id)).toEqual([1, 2, 3]);
 		});
 
-		it("should return a registration handle bound to its service identifier", () => {
+		it("should return a disposer that removes only its own registration", () => {
 			// Arrange
 			const ITestValue = createServiceIdentifier<{ id: number }>("ITestValue");
-
-			// Act
-			const registration = container.register(ITestValue, {
+			const disposeRegistration1 = container.register(ITestValue, {
 				useValue: { id: 1 },
 			});
-
-			// Assert
-			expect(registration.id).toBeDefined();
-			expect(registration.serviceIdentifier).toBe(ITestValue);
-			expect(registration.instance?.id).toBe(1);
-		});
-
-		it("should unregister a single registration by handle without removing siblings", () => {
-			// Arrange
-			const ITestValue = createServiceIdentifier<{ id: number }>("ITestValue");
-			const registration1 = container.register(ITestValue, {
-				useValue: { id: 1 },
-			});
-			const registration2 = container.register(ITestValue, {
+			container.register(ITestValue, {
 				useValue: { id: 2 },
 			});
-			const registration3 = container.register(ITestValue, {
+
+			// Act
+			disposeRegistration1();
+
+			// Assert
+			expect(
+				container.resolve(ITestValue, { multiple: true }).map((i) => i.id),
+			).toEqual([2]);
+		});
+
+		it("should allow multiple disposers to remove registrations without removing siblings", () => {
+			// Arrange
+			const ITestValue = createServiceIdentifier<{ id: number }>("ITestValue");
+			const disposeRegistration1 = container.register(ITestValue, {
+				useValue: { id: 1 },
+			});
+			const disposeRegistration2 = container.register(ITestValue, {
+				useValue: { id: 2 },
+			});
+			const disposeRegistration3 = container.register(ITestValue, {
 				useValue: { id: 3 },
 			});
 
 			// Act
-			container.unregister(registration2);
-			container.unregister(registration3);
+			disposeRegistration2();
+			disposeRegistration3();
 
 			// Assert
 			const instances = container.resolve(ITestValue, { multiple: true });
 			expect(instances).toHaveLength(1);
 			expect(instances[0].id).toBe(1);
 			expect(container.resolve(ITestValue).id).toBe(1);
-			expect(registration1.id).toBeDefined();
+			expect(() => disposeRegistration1()).not.toThrow();
 		});
 
 		it("should unregister all registrations when using the service identifier", () => {
@@ -224,13 +228,13 @@ describe("SPEC 4.1: Service Registration", () => {
 			expect(() => container.resolve(ITestValue)).toThrow();
 		});
 
-		it("should treat stale registration handles and missing service identifiers as no-op", () => {
+		it("should treat stale disposers and missing service identifiers as no-op", () => {
 			// Arrange
 			const ITestValue = createServiceIdentifier<{ id: number }>("ITestValue");
 			const IMissingValue = createServiceIdentifier<{ id: number }>(
 				"IMissingValue",
 			);
-			const registration1 = container.register(ITestValue, {
+			const disposeRegistration1 = container.register(ITestValue, {
 				useValue: { id: 1 },
 			});
 			container.register(ITestValue, {
@@ -238,10 +242,10 @@ describe("SPEC 4.1: Service Registration", () => {
 			});
 
 			// Act
-			container.unregister(registration1);
+			disposeRegistration1();
 
 			// Assert
-			expect(() => container.unregister(registration1)).not.toThrow();
+			expect(() => disposeRegistration1()).not.toThrow();
 			expect(() => container.unregister(IMissingValue)).not.toThrow();
 			expect(
 				container.resolve(ITestValue, { multiple: true }).map((i) => i.id),
@@ -1715,6 +1719,54 @@ describe("SPEC 4.6: Middleware System", () => {
 	});
 
 	describe("M5: Middleware Removal", () => {
+		it("should return a disposer that removes a local middleware", () => {
+			// Arrange
+			let callCount = 0;
+			const middleware = {
+				name: "localDisposerMiddleware",
+				// biome-ignore lint/suspicious/noExplicitAny: Test middleware needs flexible typing
+				executor: (params: any, next: any) => {
+					callCount++;
+					return next(params);
+				},
+			};
+			const disposeMiddleware = container.use(middleware);
+			container.register(IServiceA, { useClass: ServiceA });
+
+			// Act
+			container.resolve(IServiceA);
+			disposeMiddleware();
+			container.resolve(IServiceA);
+
+			// Assert
+			expect(callCount).toBe(1);
+			expect(() => disposeMiddleware()).not.toThrow();
+		});
+
+		it("should return a disposer that removes a global middleware", () => {
+			// Arrange
+			let callCount = 0;
+			const middleware = {
+				name: "globalDisposerMiddleware",
+				// biome-ignore lint/suspicious/noExplicitAny: Test middleware needs flexible typing
+				executor: (params: any, next: any) => {
+					callCount++;
+					return next(params);
+				},
+			};
+			const disposeMiddleware = globalMiddleware.use(middleware);
+			container.register(IServiceA, { useClass: ServiceA });
+
+			// Act
+			container.resolve(IServiceA);
+			disposeMiddleware();
+			container.resolve(IServiceA);
+
+			// Assert
+			expect(callCount).toBe(1);
+			expect(() => disposeMiddleware()).not.toThrow();
+		});
+
 		it("should remove middleware when unused is called", () => {
 			// Arrange
 			let callCount = 0;

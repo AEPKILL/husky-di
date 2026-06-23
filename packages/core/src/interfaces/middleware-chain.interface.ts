@@ -11,7 +11,7 @@
  */
 
 import type { IContainer } from "./container.interface";
-import type { IDisposable } from "./disposable.interface";
+import type { Cleanup, IDisposable } from "./disposable.interface";
 import type { ITypedEvent } from "./typed-event.interface";
 
 /**
@@ -118,8 +118,9 @@ export interface IMiddlewareManager<Params, Result>
 	 * Adds one or more middlewares to the chain.
 	 *
 	 * @param middlewares - The middlewares to add
+	 * @returns A cleanup function that removes the middlewares added by this call
 	 */
-	use(...middlewares: Middleware<Params, Result>[]): void;
+	use(...middlewares: Middleware<Params, Result>[]): Cleanup;
 
 	/**
 	 * Removes one or more middlewares from the chain.
