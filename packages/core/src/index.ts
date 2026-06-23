@@ -44,6 +44,7 @@ export type {
 	CreateRegistrationBaseOptions,
 	CreateRegistrationOptions,
 	CreateValueRegistrationOptions,
+	IRegistration,
 } from "@/interfaces/registration.interface";
 export type {
 	MessageResolveRecordData as MessageResolveRecordNode,

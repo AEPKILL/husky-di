@@ -103,6 +103,8 @@ export type CreateRegistrationOptions<T> =
  * the resolved instance (if any).
  */
 export interface IRegistration<T> extends IUnique {
+	/** The service identifier associated with this registration */
+	readonly serviceIdentifier: ServiceIdentifier<T>;
 	/** The type of registration (class, factory, value, or alias) */
 	readonly type: RegistrationTypeEnum;
 	/** The lifecycle strategy for the service */
