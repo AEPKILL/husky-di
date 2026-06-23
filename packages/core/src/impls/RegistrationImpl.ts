@@ -17,6 +17,7 @@ import type {
 	IRegistration,
 } from "@/interfaces/registration.interface";
 import type { ServiceIdentifier } from "@/types/service-identifier.type";
+import { isValidServiceIdentifier } from "@/utils/registration.utils";
 import { createRegistrationId } from "@/utils/uuid.utils";
 
 const REGISTRATION_PROVIDER_KEYS = [
@@ -25,16 +26,6 @@ const REGISTRATION_PROVIDER_KEYS = [
 	"useValue",
 	"useAlias",
 ] as const;
-
-function isValidServiceIdentifier(
-	value: unknown,
-): value is ServiceIdentifier<unknown> {
-	return (
-		typeof value === "function" ||
-		typeof value === "symbol" ||
-		(typeof value === "string" && value.length > 0)
-	);
-}
 
 /**
  * Registration class
@@ -57,6 +48,11 @@ export class RegistrationImpl<T>
 	 * Registration type (class, factory, value, or alias)
 	 */
 	public readonly type: RegistrationTypeEnum;
+
+	/**
+	 * The service identifier associated with this registration.
+	 */
+	public readonly serviceIdentifier: ServiceIdentifier<T>;
 
 	/**
 	 * Lifecycle strategy for instance management
@@ -92,10 +88,15 @@ export class RegistrationImpl<T>
 
 	/**
 	 * Creates a new registration instance
+	 * @param serviceIdentifier The identifier of the service being registered
 	 * @param options Registration options specifying the service creation strategy
 	 */
-	constructor(options: CreateRegistrationOptions<T>) {
+	constructor(
+		serviceIdentifier: ServiceIdentifier<T>,
+		options: CreateRegistrationOptions<T>,
+	) {
 		this.id = createRegistrationId();
+		this.serviceIdentifier = serviceIdentifier;
 
 		const providerKeys = REGISTRATION_PROVIDER_KEYS.filter(
 			(key) => key in options,

@@ -35,6 +35,7 @@ import type {
 	CreateRegistrationOptions,
 	CreateValueRegistrationOptions,
 	IInternalRegistration,
+	IRegistration,
 } from "@/interfaces/registration.interface";
 import type { IInternalResolveRecord } from "@/interfaces/resolve-record.interface";
 import { globalMiddleware } from "@/shared/instances";
@@ -43,6 +44,7 @@ import type { MutableRef, Ref } from "@/types/ref.type";
 import type { ResolveContext } from "@/types/resolve-context.type";
 import type { ServiceIdentifier } from "@/types/service-identifier.type";
 import { createAssertNotDisposed } from "@/utils/disposable.utils";
+import { isRegistration } from "@/utils/registration.utils";
 import {
 	getEnsureResolveRecord,
 	resetResolveRecord,
@@ -354,11 +356,15 @@ export class ContainerImpl implements IInternalContainer {
 	public register<T>(
 		serviceIdentifier: ServiceIdentifier<T>,
 		registration: CreateRegistrationOptions<T>,
-	): void {
+	): IRegistration<T> {
 		assertNotDisposed(this);
 
-		const registrationInstance = new RegistrationImpl<T>(registration);
+		const registrationInstance = new RegistrationImpl<T>(
+			serviceIdentifier,
+			registration,
+		);
 		this._registry.set(serviceIdentifier, registrationInstance);
+		return registrationInstance;
 	}
 
 	/**
@@ -398,10 +404,17 @@ export class ContainerImpl implements IInternalContainer {
 	 * @template T - The type of the service
 	 * @param serviceIdentifier - The service identifier to unregister
 	 */
-	public unregister<T>(serviceIdentifier: ServiceIdentifier<T>): void {
+	public unregister<T>(serviceIdentifier: ServiceIdentifier<T>): void;
+	public unregister<T>(registration: IRegistration<T>): void;
+	public unregister<T>(target: ServiceIdentifier<T> | IRegistration<T>): void {
 		assertNotDisposed(this);
 
-		this._registry.remove(serviceIdentifier);
+		if (isRegistration(target)) {
+			this._registry.removeRegistration(target);
+			return;
+		}
+
+		this._registry.remove(target);
 	}
 
 	/**
@@ -718,7 +731,7 @@ export class ContainerImpl implements IInternalContainer {
 				container: this,
 				serviceIdentifier,
 				resolveOptions,
-				registration: new RegistrationImpl({
+				registration: new RegistrationImpl(serviceIdentifier, {
 					lifecycle: LifecycleEnum.transient,
 					useClass: serviceIdentifier as Constructor<T>,
 				}),

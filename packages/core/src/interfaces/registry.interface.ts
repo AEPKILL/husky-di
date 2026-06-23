@@ -84,7 +84,22 @@ export interface IRegistry {
 	remove<T>(serviceIdentifier: ServiceIdentifier<T>): void;
 
 	/**
+	 * Removes a single registration from the registry.
+	 *
+	 * @typeParam T - The service type
+	 * @param registration - The registration to remove
+	 */
+	removeRegistration<T>(registration: IRegistration<T>): void;
+
+	/**
 	 * Clears all registrations from the registry.
 	 */
 	clear(): void;
+
+	/**
+	 * Gets all registered service identifiers.
+	 *
+	 * @returns An array of all registered service identifiers
+	 */
+	keys(): ServiceIdentifier<unknown>[];
 }

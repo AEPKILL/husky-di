@@ -116,6 +116,40 @@ export class RegistryImpl implements IRegistry {
 	}
 
 	/**
+	 * Removes a single registration from the registry.
+	 *
+	 * @typeParam T - The service type
+	 * @param registration - The registration to remove
+	 */
+	removeRegistration<T>(registration: IRegistration<T>): void {
+		const registrations = this._registrationMap.get(
+			registration.serviceIdentifier,
+		);
+		if (!registrations) {
+			return;
+		}
+
+		const nextRegistrations = registrations.filter(
+			(currentRegistration) =>
+				currentRegistration !== registration &&
+				currentRegistration.id !== registration.id,
+		);
+		if (nextRegistrations.length === registrations.length) {
+			return;
+		}
+
+		if (nextRegistrations.length === 0) {
+			this._registrationMap.delete(registration.serviceIdentifier);
+			return;
+		}
+
+		this._registrationMap.set(
+			registration.serviceIdentifier,
+			nextRegistrations,
+		);
+	}
+
+	/**
 	 * Clears all registrations from the registry.
 	 */
 	clear(): void {

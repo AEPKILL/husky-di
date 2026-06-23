@@ -2,7 +2,7 @@
  * @overview Core container specification compliance tests.
  *
  * This test suite validates that the container implementation complies with
- * the behavioral contract defined in SPECIFICATION.md v1.1.0.
+ * the behavioral contract defined in SPECIFICATION.md v1.1.1.
  *
  * Each test is labeled with its corresponding specification requirement ID
  * (e.g., R1, S2, L1, etc.) for traceability.
@@ -164,6 +164,88 @@ describe("SPEC 4.1: Service Registration", () => {
 			// Assert
 			expect(instances).toHaveLength(3);
 			expect(instances.map((i) => i.id)).toEqual([1, 2, 3]);
+		});
+
+		it("should return a registration handle bound to its service identifier", () => {
+			// Arrange
+			const ITestValue = createServiceIdentifier<{ id: number }>("ITestValue");
+
+			// Act
+			const registration = container.register(ITestValue, {
+				useValue: { id: 1 },
+			});
+
+			// Assert
+			expect(registration.id).toBeDefined();
+			expect(registration.serviceIdentifier).toBe(ITestValue);
+			expect(registration.instance?.id).toBe(1);
+		});
+
+		it("should unregister a single registration by handle without removing siblings", () => {
+			// Arrange
+			const ITestValue = createServiceIdentifier<{ id: number }>("ITestValue");
+			const registration1 = container.register(ITestValue, {
+				useValue: { id: 1 },
+			});
+			const registration2 = container.register(ITestValue, {
+				useValue: { id: 2 },
+			});
+			const registration3 = container.register(ITestValue, {
+				useValue: { id: 3 },
+			});
+
+			// Act
+			container.unregister(registration2);
+			container.unregister(registration3);
+
+			// Assert
+			const instances = container.resolve(ITestValue, { multiple: true });
+			expect(instances).toHaveLength(1);
+			expect(instances[0].id).toBe(1);
+			expect(container.resolve(ITestValue).id).toBe(1);
+			expect(registration1.id).toBeDefined();
+		});
+
+		it("should unregister all registrations when using the service identifier", () => {
+			// Arrange
+			const ITestValue = createServiceIdentifier<{ id: number }>("ITestValue");
+			container.register(ITestValue, {
+				useValue: { id: 1 },
+			});
+			container.register(ITestValue, {
+				useValue: { id: 2 },
+			});
+
+			// Act
+			container.unregister(ITestValue);
+
+			// Assert
+			expect(container.isRegistered(ITestValue)).toBe(false);
+			expect(() => container.resolve(ITestValue)).toThrow();
+		});
+
+		it("should treat stale registration handles and missing service identifiers as no-op", () => {
+			// Arrange
+			const ITestValue = createServiceIdentifier<{ id: number }>("ITestValue");
+			const IMissingValue = createServiceIdentifier<{ id: number }>(
+				"IMissingValue",
+			);
+			const registration1 = container.register(ITestValue, {
+				useValue: { id: 1 },
+			});
+			container.register(ITestValue, {
+				useValue: { id: 2 },
+			});
+
+			// Act
+			container.unregister(registration1);
+
+			// Assert
+			expect(() => container.unregister(registration1)).not.toThrow();
+			expect(() => container.unregister(IMissingValue)).not.toThrow();
+			expect(
+				container.resolve(ITestValue, { multiple: true }).map((i) => i.id),
+			).toEqual([2]);
 		});
 	});
 

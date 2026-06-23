@@ -367,12 +367,15 @@ export interface IServiceRegistry {
 	 * @remarks
 	 * Associates a service identifier with a registration strategy
 	 * (constructor, factory, or instance) and lifecycle management options.
-	 * If a service with the same identifier is already registered, it will
-	 * be replaced.
+	 * If a service with the same identifier is already registered, the new
+	 * registration is appended and becomes the default result for non-multiple
+	 * resolution.
 	 *
 	 * @typeParam T - The type of the service to register
 	 * @param serviceIdentifier - The identifier of the service to register
 	 * @param registration - The registration options defining how to create the service
+	 * @returns The created registration handle, which can be used to unregister
+	 * a specific registration later
 	 *
 	 * @example
 	 * ```typescript
@@ -389,7 +392,7 @@ export interface IServiceRegistry {
 	register<T>(
 		serviceIdentifier: ServiceIdentifier<T>,
 		registration: CreateRegistrationOptions<T>,
-	): void;
+	): IRegistration<T>;
 
 	/**
 	 * Checks if a service is registered in the container.
@@ -425,8 +428,11 @@ export interface IServiceRegistry {
 	 * Unregisters a service from the container.
 	 *
 	 * @remarks
-	 * Removes the registration associated with the given service identifier.
-	 * If the service is not registered, this method does nothing.
+	 * Removes registrations from the container.
+	 * When a service identifier is provided, all registrations associated
+	 * with that identifier are removed. When a registration handle is provided,
+	 * only that specific registration is removed.
+	 * If the target is not registered, this method does nothing.
 	 * Note: This does not affect already resolved instances.
 	 *
 	 * @typeParam T - The type of the service to unregister
@@ -435,9 +441,13 @@ export interface IServiceRegistry {
 	 * @example
 	 * ```typescript
 	 * container.unregister(MyService);
+	 *
+	 * const registration = container.register(MyService, { useClass: MyService });
+	 * container.unregister(registration);
 	 * ```
 	 */
 	unregister<T>(serviceIdentifier: ServiceIdentifier<T>): void;
+	unregister<T>(registration: IRegistration<T>): void;
 
 	/**
 	 * Gets all registered service identifiers in the container.

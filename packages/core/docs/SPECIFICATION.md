@@ -1,6 +1,6 @@
 # Dependency Injection Container Specification
 
-**Version:** 1.1.0  
+**Version:** 1.1.1  
 **Status:** Stable  
 **Context:** Type-safe Dependency Injection Container for TypeScript
 
@@ -101,6 +101,19 @@ A ServiceIdentifier **MAY** be registered multiple times in the same container.
 
 - When resolving with `multiple: false` (or default), the container **MUST** return the instance from the latest registration (Last-write-wins).
 - When resolving with `multiple: true`, the container **MUST** return all registered instances.
+
+**R2.1 Registration Handle**  
+Each successful registration **MUST** return a `Registration` handle associated with the registered `ServiceIdentifier`.
+
+- The returned handle **MUST** identify exactly one registration entry.
+- The returned handle **MUST** retain the `ServiceIdentifier` it was registered under.
+
+**R2.2 Unregistration Semantics**  
+The container **MUST** support unregistering by either `ServiceIdentifier` or `Registration` handle.
+
+- When unregistering by `ServiceIdentifier`, the container **MUST** remove all registrations associated with that identifier in the current container.
+- When unregistering by `Registration` handle, the container **MUST** remove only the matching registration entry.
+- Unregistering a non-existent `ServiceIdentifier` or stale `Registration` handle **MUST** be a no-op.
 
 **R3. Lifecycle Default**  
 If `lifecycle` is not specified, the container **MUST** default to `LifecycleEnum.transient`.
