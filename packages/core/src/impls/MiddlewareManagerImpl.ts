@@ -5,6 +5,7 @@
  */
 
 import { TypedEventImpl } from "@/impls/TypedEventImpl";
+import type { Cleanup } from "@/interfaces/disposable.interface";
 import type {
 	IMiddlewareManager,
 	Middleware,
@@ -60,10 +61,11 @@ export class MiddlewareManagerImpl<Params, Result>
 	 * Adds one or more middlewares to the manager
 	 * @param middlewares The middlewares to add
 	 */
-	use(...middlewares: Middleware<Params, Result>[]): void {
+	use(...middlewares: Middleware<Params, Result>[]): Cleanup {
 		assertNotDisposed(this);
 
 		let hasAdded = false;
+		const addedMiddlewares: Middleware<Params, Result>[] = [];
 		for (const middleware of middlewares) {
 			if (this.has(middleware)) {
 				console.warn(
@@ -73,12 +75,21 @@ export class MiddlewareManagerImpl<Params, Result>
 			}
 
 			this._middlewares.push(middleware);
+			addedMiddlewares.push(middleware);
 			hasAdded = true;
 		}
 
 		if (hasAdded) {
 			this.emit("change", this._middlewares);
 		}
+
+		return () => {
+			if (this.disposed || addedMiddlewares.length === 0) {
+				return;
+			}
+
+			this.unused(...addedMiddlewares);
+		};
 	}
 
 	/**

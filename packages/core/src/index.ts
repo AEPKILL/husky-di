@@ -35,6 +35,10 @@ export type {
 } from "@/interfaces/container.interface";
 export { IContainer } from "@/interfaces/container.interface";
 export type { IDisplayName } from "@/interfaces/display-name.interface";
+export type {
+	Cleanup,
+	IDisposable,
+} from "@/interfaces/disposable.interface";
 export { IDisposableRegistry } from "@/interfaces/disposable-registry.interface";
 export type { IMiddlewareManager } from "@/interfaces/middleware-chain.interface";
 export type {

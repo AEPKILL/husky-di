@@ -1,6 +1,6 @@
 # Dependency Injection Container Specification
 
-**Version:** 1.1.1  
+**Version:** 1.1.3  
 **Status:** Stable  
 **Context:** Type-safe Dependency Injection Container for TypeScript
 
@@ -102,18 +102,17 @@ A ServiceIdentifier **MAY** be registered multiple times in the same container.
 - When resolving with `multiple: false` (or default), the container **MUST** return the instance from the latest registration (Last-write-wins).
 - When resolving with `multiple: true`, the container **MUST** return all registered instances.
 
-**R2.1 Registration Handle**  
-Each successful registration **MUST** return a `Registration` handle associated with the registered `ServiceIdentifier`.
+**R2.1 Registration Disposer**  
+Each successful registration **MUST** return a disposer function associated with the registered `ServiceIdentifier`.
 
-- The returned handle **MUST** identify exactly one registration entry.
-- The returned handle **MUST** retain the `ServiceIdentifier` it was registered under.
+- Calling the returned disposer **MUST** remove exactly one registration entry.
+- Calling the returned disposer after that registration has already been removed **MUST** be a no-op.
 
 **R2.2 Unregistration Semantics**  
-The container **MUST** support unregistering by either `ServiceIdentifier` or `Registration` handle.
+The container **MUST** support unregistering by `ServiceIdentifier`.
 
 - When unregistering by `ServiceIdentifier`, the container **MUST** remove all registrations associated with that identifier in the current container.
-- When unregistering by `Registration` handle, the container **MUST** remove only the matching registration entry.
-- Unregistering a non-existent `ServiceIdentifier` or stale `Registration` handle **MUST** be a no-op.
+- Unregistering a non-existent `ServiceIdentifier` **MUST** be a no-op.
 
 **R3. Lifecycle Default**  
 If `lifecycle` is not specified, the container **MUST** default to `LifecycleEnum.transient`.
@@ -227,8 +226,8 @@ Each middleware **MUST** receive:
 
 - **Registration API**: Implementations **MUST** provide distinct mechanisms to register middleware at different scopes:
 
-  - **Local Registration**: `container.use(middleware)` - Registers middleware for the specific container instance
-  - **Global Registration**: Accessed through a shared global middleware manager (e.g., `globalMiddleware.use(middleware)`) - Registers middleware for all containers
+  - **Local Registration**: `container.use(middleware)` - Registers middleware for the specific container instance and returns a disposer for that registration
+  - **Global Registration**: Accessed through a shared global middleware manager (e.g., `globalMiddleware.use(middleware)`) - Registers middleware for all containers and returns a disposer for that registration
 
 - **Execution Order**: The composition follows strict LIFO order based on registration scope:
 
@@ -262,6 +261,9 @@ A middleware **MAY**:
 
 **M5. Middleware Removal**  
 A middleware **MAY** be removed using `unused()`. The middleware will be removed from the chain, preventing it from executing in subsequent resolutions.
+
+- Each successful `use()` call **MUST** return a disposer function that removes only the middleware entries added by that call.
+- Calling the returned disposer after its middleware entries have already been removed **MUST** be a no-op.
 
 **M6. Middleware Disposal Hook**  
 A middleware **MAY** define an optional `onContainerDispose` callback that is invoked when a container is disposed.
