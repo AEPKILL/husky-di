@@ -11,7 +11,7 @@
  */
 
 import type { IContainer } from "@/interfaces/container.interface";
-import { Container } from "./impls/Container";
+import { ContainerImpl } from "./impls/ContainerImpl";
 
 export { CoreErrorCodeEnum } from "@/enums/core-error-code.enum";
 export { LifecycleEnum } from "@/enums/lifecycle.enum";
@@ -77,4 +77,4 @@ export {
 	type IdGenerator,
 	incrementalIdFactory,
 } from "@/utils/uuid.utils";
-export const rootContainer: IContainer = Container.rootContainer;
+export const rootContainer: IContainer = ContainerImpl.rootContainer;

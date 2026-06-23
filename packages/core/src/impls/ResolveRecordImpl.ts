@@ -36,7 +36,7 @@ import {
  * a step in the dependency resolution process. The tree structure enables
  * tracking of the complete resolution path and detection of circular dependencies.
  */
-export class ResolveRecord implements IInternalResolveRecord {
+export class ResolveRecordImpl implements IInternalResolveRecord {
 	/** Gets the current node in the resolution tree. */
 	get current() {
 		return this._current;
@@ -64,7 +64,7 @@ export class ResolveRecord implements IInternalResolveRecord {
 	private _generateTreeNodeId = incrementalIdFactory("RESOLVE_RECORD_NODE");
 
 	/**
-	 * Creates a new ResolveRecord.
+	 * Creates a new ResolveRecordImpl.
 	 *
 	 * @param container - The container that initiated the resolution
 	 */

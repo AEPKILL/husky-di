@@ -12,7 +12,7 @@
  */
 
 import { ResolveRecordTypeEnum } from "@/enums/resolve-record-type.enum";
-import { ResolveRecord } from "@/impls/ResolveRecord";
+import { ResolveRecordImpl } from "@/impls/ResolveRecordImpl";
 import type { IContainer } from "@/interfaces/container.interface";
 import type {
 	IInternalResolveRecord,
@@ -34,7 +34,7 @@ export function getEnsureResolveRecord(
 	container: IContainer,
 ): IInternalResolveRecord {
 	if (!resolveRecordRef.current) {
-		resolveRecordRef.current = new ResolveRecord(container);
+		resolveRecordRef.current = new ResolveRecordImpl(container);
 	}
 	return resolveRecordRef.current;
 }

@@ -60,7 +60,7 @@ export type ResolveOptions<T> = {
 	 *
 	 * @remarks
 	 * **Warning**: Avoid using this option unless absolutely necessary.
-	 * Setting this option creates an `InstanceDynamicRef` instance that maintains
+	 * Setting this option creates an `InstanceDynamicRefImpl` instance that maintains
 	 * a closure over the resolve record and context, which may lead to memory leaks
 	 * as these references are never released.
 	 *

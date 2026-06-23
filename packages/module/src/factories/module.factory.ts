@@ -4,7 +4,7 @@
  * @created 2025-08-09 21:57:05
  */
 
-import { Module } from "@/impls/Module";
+import { ModuleImpl } from "@/impls/ModuleImpl";
 
 import type {
 	CreateModuleOptions,
@@ -12,5 +12,5 @@ import type {
 } from "@/interfaces/module.interface";
 
 export function createModule(options: CreateModuleOptions): IModule {
-	return new Module(options);
+	return new ModuleImpl(options);
 }

@@ -3,7 +3,7 @@
  *
  * @overview
  * Implements a dynamic reference that creates a new service instance on
- * every access. Unlike InstanceRef, this implementation does not cache
+ * every access. Unlike InstanceRefImpl, this implementation does not cache
  * the instance, making it suitable for scenarios where fresh instances
  * are needed each time.
  *
@@ -24,12 +24,12 @@ import type { Ref } from "@/types/ref.type";
  * instances are required. The `resolved` flag is set to true after the
  * first access, but new instances are still created on subsequent accesses.
  */
-export class InstanceDynamicRef<T> implements Ref<T> {
+export class InstanceDynamicRefImpl<T> implements Ref<T> {
 	private _resolved = false;
 	private readonly _createInstance: () => T;
 
 	/**
-	 * Creates a new InstanceDynamicRef.
+	 * Creates a new InstanceDynamicRefImpl.
 	 *
 	 * @param createInstance - The factory function to create instances
 	 */
@@ -41,7 +41,7 @@ export class InstanceDynamicRef<T> implements Ref<T> {
 	 * Gets the current service instance, creating a new one each time.
 	 *
 	 * @remarks
-	 * Unlike InstanceRef, this always creates a new instance on each access.
+	 * Unlike InstanceRefImpl, this always creates a new instance on each access.
 	 * The resolved flag is set to true after the first access.
 	 *
 	 * @returns A new service instance

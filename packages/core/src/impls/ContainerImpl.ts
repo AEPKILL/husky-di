@@ -12,12 +12,12 @@ import { RegistrationTypeEnum } from "@/enums/registration-type.enum";
 import { ResolveRecordTypeEnum } from "@/enums/resolve-record-type.enum";
 import { CodedException } from "@/exceptions/coded.exception";
 import { ResolveException } from "@/exceptions/resolve.exception";
-import { DisposableRegistry } from "@/impls/DisposableRegistry";
-import { InstanceDynamicRef } from "@/impls/InstanceDynamicRef";
-import { InstanceRef } from "@/impls/InstanceRef";
-import { MiddlewareChain } from "@/impls/MiddlewareChain";
-import { Registration } from "@/impls/Registration";
-import { Registry } from "@/impls/Registry";
+import { DisposableRegistryImpl } from "@/impls/DisposableRegistryImpl";
+import { InstanceDynamicRefImpl } from "@/impls/InstanceDynamicRefImpl";
+import { InstanceRefImpl } from "@/impls/InstanceRefImpl";
+import { MiddlewareChainImpl } from "@/impls/MiddlewareChainImpl";
+import { RegistrationImpl } from "@/impls/RegistrationImpl";
+import { RegistryImpl } from "@/impls/RegistryImpl";
 import type {
 	IContainer,
 	IInternalContainer,
@@ -59,11 +59,11 @@ const assertNotDisposed = createAssertNotDisposed("Container");
  * for dependency injection. It supports multiple lifecycle strategies (singleton, transient, resolution),
  * middleware chains for custom resolution logic, and hierarchical container relationships.
  *
- * @extends DisposableRegistry - Provides automatic cleanup of resources
+ * @extends DisposableRegistryImpl - Provides automatic cleanup of resources
  * @implements IInternalContainer - Internal container interface with enhanced capabilities
  */
-export class Container
-	extends DisposableRegistry
+export class ContainerImpl
+	extends DisposableRegistryImpl
 	implements IInternalContainer
 {
 	/**
@@ -103,7 +103,7 @@ export class Container
 	/**
 	 * Registry storing all service registrations
 	 */
-	private readonly _registry: Registry;
+	private readonly _registry: RegistryImpl;
 
 	/**
 	 * Parent container for cascading service resolution
@@ -123,7 +123,7 @@ export class Container
 	/**
 	 * Middleware chain for intercepting and customizing service resolution
 	 */
-	private readonly _resolveMiddlewareChain: MiddlewareChain<
+	private readonly _resolveMiddlewareChain: MiddlewareChainImpl<
 		ResolveMiddlewareParams<unknown, ResolveOptions<unknown>>,
 		any
 	>;
@@ -139,11 +139,11 @@ export class Container
 
 		this.id = createContainerId();
 		this._name = name;
-		this._registry = new Registry();
+		this._registry = new RegistryImpl();
 		this._parent = parent;
 
 		// Initialize middleware chain with global middleware and resolution handler
-		this._resolveMiddlewareChain = new MiddlewareChain(
+		this._resolveMiddlewareChain = new MiddlewareChainImpl(
 			(params) => {
 				return this._resolveRegistration(params);
 			},
@@ -258,7 +258,7 @@ export class Container
 						serviceIdentifier,
 						resolveOptions,
 						resolveRecord,
-						InstanceRef,
+						InstanceRefImpl,
 						"ref",
 					);
 				}
@@ -272,7 +272,7 @@ export class Container
 						serviceIdentifier,
 						resolveOptions,
 						resolveRecord,
-						InstanceDynamicRef,
+						InstanceDynamicRefImpl,
 						"dynamic",
 					);
 				}
@@ -353,7 +353,7 @@ export class Container
 	): void {
 		assertNotDisposed(this);
 
-		const registrationInstance = new Registration<T>(registration);
+		const registrationInstance = new RegistrationImpl<T>(registration);
 		this._registry.set(serviceIdentifier, registrationInstance);
 	}
 
@@ -619,7 +619,7 @@ export class Container
 	 * @param serviceIdentifier - The service identifier to wrap in a reference
 	 * @param resolveOptions - Resolution options to use when the reference is accessed
 	 * @param resolveRecord - The current resolve record for tracking
-	 * @param RefClass - The reference class constructor (InstanceRef or InstanceDynamicRef)
+	 * @param RefClass - The reference class constructor (InstanceRefImpl or InstanceDynamicRefImpl)
 	 * @param refType - The type of reference being created ("ref" or "dynamic")
 	 * @returns A reference instance that will resolve the service when accessed
 	 */
@@ -627,7 +627,7 @@ export class Container
 		serviceIdentifier: ServiceIdentifier<T>,
 		resolveOptions: O,
 		resolveRecord: IInternalResolveRecord,
-		RefClass: typeof InstanceRef | typeof InstanceDynamicRef,
+		RefClass: typeof InstanceRefImpl | typeof InstanceDynamicRefImpl,
 		refType: "ref" | "dynamic",
 	): ResolveInstance<T, O> {
 		const current = resolveRecord.current;
@@ -709,7 +709,7 @@ export class Container
 				container: this,
 				serviceIdentifier,
 				resolveOptions,
-				registration: new Registration({
+				registration: new RegistrationImpl({
 					lifecycle: LifecycleEnum.transient,
 					useClass: serviceIdentifier as Constructor<T>,
 				}),
@@ -756,5 +756,5 @@ export class Container
 	 * This is the default container used when no explicit container is specified.
 	 * It serves as the root of the container hierarchy.
 	 */
-	static rootContainer: IContainer = new Container("Root");
+	static rootContainer: IContainer = new ContainerImpl("Root");
 }

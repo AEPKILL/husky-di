@@ -22,7 +22,7 @@ import { toDisposed } from "@/utils/disposable.utils";
  * when the registry is disposed. Disposal is idempotent and handles errors
  * gracefully by continuing to dispose remaining resources even if one fails.
  */
-export class DisposableRegistry implements IDisposable {
+export class DisposableRegistryImpl implements IDisposable {
 	private _disposed: boolean = false;
 	private _disposables: Set<IDisposable> = new Set();
 

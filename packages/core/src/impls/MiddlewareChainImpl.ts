@@ -4,7 +4,7 @@
  * @created 2025-07-26 22:07:03
  */
 
-import { MiddlewareManager } from "@/impls/MiddlewareManager";
+import { MiddlewareManagerImpl } from "@/impls/MiddlewareManagerImpl";
 import type {
 	IMiddlewareChain,
 	IMiddlewareManager,
@@ -22,8 +22,8 @@ import type {
  * @example
  * ```typescript
  * const defaultExecutor = (params: string) => params.toUpperCase();
- * const globalMiddleware = new MiddlewareManager();
- * const chain = new MiddlewareChain(defaultExecutor, globalMiddleware, []);
+ * const globalMiddleware = new MiddlewareManagerImpl();
+ * const chain = new MiddlewareChainImpl(defaultExecutor, globalMiddleware, []);
  *
  * chain.use({ name: 'log', executor: (params, next) => {
  *   console.log('Before:', params);
@@ -50,8 +50,8 @@ import type {
  *           Result
  * ```
  */
-export class MiddlewareChain<Params, Result>
-	extends MiddlewareManager<Params, Result>
+export class MiddlewareChainImpl<Params, Result>
+	extends MiddlewareManagerImpl<Params, Result>
 	implements IMiddlewareChain<Params, Result>
 {
 	/** The composed middleware executor function */
