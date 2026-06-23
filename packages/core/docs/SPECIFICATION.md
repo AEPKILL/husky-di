@@ -149,14 +149,6 @@ The package-level `resolve()` helper **MUST** only be used while a resolution co
 
 - _Error Code:_ `E_RESOLVE_CONTEXT_UNAVAILABLE`
 
-**S9. Internal Service Availability**  
-Each container **MUST** register the following internal services in its own local registry before user resolution begins:
-
-- `IContainer`
-- `IDisposableRegistry`
-
-Resolving `IContainer` **MUST** return the current container instance. These internal services **MUST** participate in the normal registration and resolution pipeline of the container.
-
 ### 4.3 Lifecycle Management
 
 **L1. Transient Lifecycle (`LifecycleEnum.transient`)**  

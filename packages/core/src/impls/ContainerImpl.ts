@@ -6,7 +6,6 @@
  */
 /** biome-ignore-all lint/suspicious/noExplicitAny: Required for flexible middleware and registration system */
 
-import { INTERNAL_SERVICES } from "@/constants/internal-service.const";
 import { CoreErrorCodeEnum } from "@/enums/core-error-code.enum";
 import { LifecycleEnum } from "@/enums/lifecycle.enum";
 import { RegistrationTypeEnum } from "@/enums/registration-type.enum";
@@ -154,14 +153,6 @@ export class ContainerImpl implements IInternalContainer {
 			globalMiddleware,
 			[],
 		);
-
-		// Register internal service
-		for (const internalService of INTERNAL_SERVICES) {
-			this.register(
-				internalService.serviceIdentifier,
-				internalService.registrationOptions,
-			);
-		}
 
 		this._resolveContextRef = { current: undefined };
 
@@ -480,6 +471,7 @@ export class ContainerImpl implements IInternalContainer {
 		// Check resolution-scoped cache
 		const isResolution = registration.lifecycle === LifecycleEnum.resolution;
 		if (isResolution) {
+			// Resolution-scoped services are reused only within the active resolve tree.
 			if (resolveContext.has(registration)) {
 				return resolveContext.get(registration) as T;
 			}
@@ -652,7 +644,7 @@ export class ContainerImpl implements IInternalContainer {
 
 		const instance = new RefClass(() => {
 			try {
-				// Restore the resolution context for lazy resolution
+				// Lazy refs must resume the original resolve tree so lifecycle caches stay consistent.
 				this._resolveContextRef.current = resolveContext;
 				setResolveRecord(resolveRecord);
 				resolveRecord._internalSetCurrent(current);
@@ -762,6 +754,7 @@ export class ContainerImpl implements IInternalContainer {
 	 */
 	private _getResolveContext(): ResolveContext {
 		if (!this._resolveContextRef.current) {
+			// The context is created lazily so containers do not carry per-resolve state when idle.
 			this._resolveContextRef.current = new Map();
 		}
 		return this._resolveContextRef.current;
