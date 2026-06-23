@@ -23,7 +23,7 @@ import type { ServiceIdentifier } from "@/types/service-identifier.type";
  * identifier can have multiple registrations. The get() method returns the
  * most recently registered service (last in the array).
  */
-export class Registry implements IRegistry {
+export class RegistryImpl implements IRegistry {
 	/**
 	 * Map storing service registrations.
 	 * Key: ServiceIdentifier, Value: Array of IRegistration

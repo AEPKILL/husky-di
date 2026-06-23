@@ -45,7 +45,9 @@ function isValidServiceIdentifier(
  *
  * @template T The type of the service instance
  */
-export class Registration<T> implements IInternalRegistration<T>, IDisplayName {
+export class RegistrationImpl<T>
+	implements IInternalRegistration<T>, IDisplayName
+{
 	/**
 	 * Unique identifier for this registration
 	 */

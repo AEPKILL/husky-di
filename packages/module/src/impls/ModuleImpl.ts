@@ -36,7 +36,7 @@ import {
 } from "@/utils/module-validator.utils";
 import { createModuleId } from "@/utils/uuid.utils";
 
-export class Module implements IModule {
+export class ModuleImpl implements IModule {
 	get id() {
 		return this._id;
 	}

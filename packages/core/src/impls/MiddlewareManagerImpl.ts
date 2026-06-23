@@ -4,7 +4,7 @@
  * @created 2025-07-31 23:22:23
  */
 
-import { TypedEvent } from "@/impls/TypedEvent";
+import { TypedEventImpl } from "@/impls/TypedEventImpl";
 import type {
 	IMiddlewareManager,
 	Middleware,
@@ -36,8 +36,8 @@ const assertNotDisposed = createAssertNotDisposed("MiddlewareManager");
  * @template Params Middleware parameter type
  * @template Result Middleware return result type
  */
-export class MiddlewareManager<Params, Result>
-	extends TypedEvent<MiddlewareChainEvents<Params, Result>>
+export class MiddlewareManagerImpl<Params, Result>
+	extends TypedEventImpl<MiddlewareChainEvents<Params, Result>>
 	implements IMiddlewareManager<Params, Result>
 {
 	/** Stores all registered middlewares */

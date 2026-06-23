@@ -10,7 +10,7 @@
  * @created 2025-07-29 23:01:46
  */
 
-import { MiddlewareManager } from "@/impls/MiddlewareManager";
+import { MiddlewareManagerImpl } from "@/impls/MiddlewareManagerImpl";
 import type {
 	ResolveMiddlewareParams,
 	ResolveOptions,
@@ -41,7 +41,7 @@ export const globalMiddleware: IMiddlewareManager<
 	ResolveMiddlewareParams<unknown, ResolveOptions<unknown>>,
 	// biome-ignore lint/suspicious/noExplicitAny: here is a generic type
 	any
-> = new MiddlewareManager<
+> = new MiddlewareManagerImpl<
 	ResolveMiddlewareParams<unknown, ResolveOptions<unknown>>,
 	// biome-ignore lint/suspicious/noExplicitAny: here is a generic type
 	any

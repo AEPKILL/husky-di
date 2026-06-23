@@ -22,13 +22,13 @@ import type { Ref } from "@/types/ref.type";
  * After resolution, the instance factory is cleared to allow garbage collection
  * of the resolve record and resolve context, reducing memory usage.
  */
-export class InstanceRef<T> implements Ref<T> {
+export class InstanceRefImpl<T> implements Ref<T> {
 	private _current: T | undefined;
 	private _resolved = false;
 	private _createInstance: (() => T) | null;
 
 	/**
-	 * Creates a new InstanceRef.
+	 * Creates a new InstanceRefImpl.
 	 *
 	 * @param createInstance - The factory function to create the instance
 	 */

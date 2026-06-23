@@ -81,12 +81,12 @@ export interface IContainer {}
 
 	it("reports invalid impl file names", () => {
 		const rootDirectoryPath = createWorkspace({
-			"packages/module/src/impls/module.ts": `/**
+			"packages/module/src/impls/Module.ts": `/**
  * @overview Module implementation.
  * @author AEPKILL
  * @created 2025-08-09 15:56:11
  */
-export class Module {}
+export class ModuleImpl {}
 `,
 		});
 
@@ -119,9 +119,9 @@ export default function getValue(): number {
  * @created 2025-07-30 22:40:39
  */
 import type { IContainer } from "@/interfaces/container.interface";
-import { Container } from "./impls/Container";
+import { ContainerImpl } from "./impls/ContainerImpl";
 
-export const rootContainer: IContainer = Container.rootContainer;
+export const rootContainer: IContainer = ContainerImpl.rootContainer;
 `,
 		});
 
@@ -153,10 +153,10 @@ export const value = createValue();
  * @author AEPKILL
  * @created 2025-08-09 14:55:21
  */
-import { Container } from "@husky-di/core/src/impls/Container";
+import { ContainerImpl } from "@husky-di/core/src/impls/ContainerImpl";
 
 export function getContainerName(): string {
-	return Container.name;
+	return ContainerImpl.name;
 }
 `,
 		});

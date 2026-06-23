@@ -10,7 +10,7 @@
  * @created 2025-07-30 22:39:29
  */
 
-import { Container } from "@/impls/Container";
+import { ContainerImpl } from "@/impls/ContainerImpl";
 import type { IContainer } from "@/interfaces/container.interface";
 
 /**
@@ -33,5 +33,5 @@ export function createContainer(
 	name: string = "AnonymousContainer",
 	parent?: IContainer,
 ): IContainer {
-	return new Container(name, parent ?? Container.rootContainer);
+	return new ContainerImpl(name, parent ?? ContainerImpl.rootContainer);
 }

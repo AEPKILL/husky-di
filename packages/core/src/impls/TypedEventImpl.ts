@@ -4,13 +4,13 @@
  * @overview
  * Implements a type-safe event emitter that provides compile-time type checking
  * for event names and their corresponding listener signatures. Extends
- * DisposableRegistry to automatically clean up listeners on disposal.
+ * DisposableRegistryImpl to automatically clean up listeners on disposal.
  *
  * @author AEPKILL
  * @created 2025-07-26 23:58:33
  */
 
-import { DisposableRegistry } from "@/impls/DisposableRegistry";
+import { DisposableRegistryImpl } from "@/impls/DisposableRegistryImpl";
 import type { IDisposable } from "@/interfaces/disposable.interface";
 import type { ITypedEvent } from "@/interfaces/typed-event.interface";
 import { createAssertNotDisposed, toDisposed } from "@/utils/disposable.utils";
@@ -26,11 +26,11 @@ const assertNotDisposed = createAssertNotDisposed("TypedEvent");
  * Provides type-safe event emission and listening. When disposed, all listeners
  * are automatically cleared to prevent memory leaks.
  */
-export class TypedEvent<
+export class TypedEventImpl<
 		// biome-ignore lint/suspicious/noExplicitAny: any
 		Events extends Record<string | symbol, (...args: any[]) => void>,
 	>
-	extends DisposableRegistry
+	extends DisposableRegistryImpl
 	implements ITypedEvent<Events>
 {
 	// biome-ignore lint/suspicious/noExplicitAny: any

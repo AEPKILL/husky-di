@@ -69,7 +69,7 @@ export function validateFilePlacement(
 	}
 
 	if (sourceDirectoryName === "impls") {
-		if (isPascalCaseTypeScriptFile(fileName)) {
+		if (isImplementationTypeScriptFile(fileName)) {
 			return [];
 		}
 
@@ -79,7 +79,7 @@ export function validateFilePlacement(
 				relativeFilePath,
 				sourceFile,
 				0,
-				"Implementation files must use PascalCase.ts under src/impls.",
+				"Implementation files must use PascalCaseImpl.ts under src/impls.",
 			),
 		];
 	}
@@ -161,13 +161,17 @@ function formatSuffixList(patterns: readonly (string | RegExp)[]): string {
 		.join(" or ");
 }
 
-function isPascalCaseTypeScriptFile(fileName: string): boolean {
+function isImplementationTypeScriptFile(fileName: string): boolean {
 	if (!fileName.endsWith(".ts") || fileName.endsWith(".d.ts")) {
 		return false;
 	}
 
 	const baseName = fileName.slice(0, -3);
 	if (baseName.length === 0) {
+		return false;
+	}
+
+	if (!baseName.endsWith("Impl")) {
 		return false;
 	}
 
