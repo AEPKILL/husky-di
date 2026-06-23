@@ -9,23 +9,23 @@
  * @author AEPKILL
  * @created 2025-07-30 22:40:39
  */
-
-import type { IContainer } from "@/interfaces/container.interface";
 import { ContainerImpl } from "./impls/ContainerImpl";
 
 export { CoreErrorCodeEnum } from "@/enums/core-error-code.enum";
 export { LifecycleEnum } from "@/enums/lifecycle.enum";
 export { RegistrationTypeEnum } from "@/enums/registration-type.enum";
 export { ResolveRecordTypeEnum } from "@/enums/resolve-record-type.enum";
+
 export {
 	CodedException,
 	formatCodedErrorMessage,
 } from "@/exceptions/coded.exception";
 export { CoreException } from "@/exceptions/core.exception";
 export { ResolveException } from "@/exceptions/resolve.exception";
+
 export { createContainer } from "@/factories/container.factory";
+
 export type {
-	IContainer,
 	IsRegisteredOptions,
 	ResolveInstance,
 	ResolveMiddleware,
@@ -33,7 +33,9 @@ export type {
 	ResolveMiddlewareParams,
 	ResolveOptions,
 } from "@/interfaces/container.interface";
+export { IContainer } from "@/interfaces/container.interface";
 export type { IDisplayName } from "@/interfaces/display-name.interface";
+export { IDisposableRegistry } from "@/interfaces/disposable-registry.interface";
 export type { IMiddlewareManager } from "@/interfaces/middleware-chain.interface";
 export type {
 	CreateAliasRegistrationOptions,
@@ -77,4 +79,5 @@ export {
 	type IdGenerator,
 	incrementalIdFactory,
 } from "@/utils/uuid.utils";
-export const rootContainer: IContainer = ContainerImpl.rootContainer;
+
+export const rootContainer = ContainerImpl.rootContainer;

@@ -27,6 +27,7 @@ import type { IUnique } from "@/interfaces/unique.interface";
 import type { MutableRef, Ref } from "@/types/ref.type";
 import type { ResolveContext } from "@/types/resolve-context.type";
 import type { ServiceIdentifier } from "@/types/service-identifier.type";
+import { createServiceIdentifier } from "@/utils/service-identifier.utils";
 
 /**
  * Options for resolving service instances from the container.
@@ -648,3 +649,5 @@ export interface IInternalContainer extends IContainer {
 	 */
 	readonly _internalResolveContextRef: MutableRef<ResolveContext>;
 }
+
+export const IContainer = createServiceIdentifier<IContainer>("IContainer");

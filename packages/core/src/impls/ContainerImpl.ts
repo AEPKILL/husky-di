@@ -6,6 +6,7 @@
  */
 /** biome-ignore-all lint/suspicious/noExplicitAny: Required for flexible middleware and registration system */
 
+import { INTERNAL_SERVICES } from "@/constants/internal-service.const";
 import { CoreErrorCodeEnum } from "@/enums/core-error-code.enum";
 import { LifecycleEnum } from "@/enums/lifecycle.enum";
 import { RegistrationTypeEnum } from "@/enums/registration-type.enum";
@@ -27,6 +28,7 @@ import type {
 	ResolveMiddlewareParams,
 	ResolveOptions,
 } from "@/interfaces/container.interface";
+import type { IDisposableRegistry } from "@/interfaces/disposable-registry.interface";
 import type {
 	CreateAliasRegistrationOptions,
 	CreateClassRegistrationOptions,
@@ -62,10 +64,10 @@ const assertNotDisposed = createAssertNotDisposed("Container");
  * @extends DisposableRegistryImpl - Provides automatic cleanup of resources
  * @implements IInternalContainer - Internal container interface with enhanced capabilities
  */
-export class ContainerImpl
-	extends DisposableRegistryImpl
-	implements IInternalContainer
-{
+export class ContainerImpl implements IInternalContainer {
+	private _disposableRegistry: IDisposableRegistry =
+		new DisposableRegistryImpl();
+
 	/**
 	 * Unique identifier for this container instance
 	 */
@@ -98,6 +100,10 @@ export class ContainerImpl
 	 */
 	public get _internalResolveContextRef(): MutableRef<ResolveContext> {
 		return this._resolveContextRef;
+	}
+
+	public get disposed() {
+		return this._disposableRegistry.disposed;
 	}
 
 	/**
@@ -135,8 +141,6 @@ export class ContainerImpl
 	 * @param parent - Optional parent container for hierarchical service resolution
 	 */
 	constructor(name: string = "AnonymousContainer", parent?: IContainer) {
-		super();
-
 		this.id = createContainerId();
 		this._name = name;
 		this._registry = new RegistryImpl();
@@ -151,9 +155,17 @@ export class ContainerImpl
 			[],
 		);
 
+		// Register internal service
+		for (const internalService of INTERNAL_SERVICES) {
+			this.register(
+				internalService.serviceIdentifier,
+				internalService.registrationOptions,
+			);
+		}
+
 		this._resolveContextRef = { current: undefined };
 
-		this.addCleanup(() => {
+		this._disposableRegistry.addCleanup(() => {
 			for (const middleware of [
 				...globalMiddleware.middlewares,
 				...this._resolveMiddlewareChain.middlewares,
@@ -165,9 +177,10 @@ export class ContainerImpl
 				}
 			}
 		});
+
 		// Register cleanup handlers for proper disposal
-		this.addDisposable(this._resolveMiddlewareChain);
-		this.addCleanup(() => {
+		this._disposableRegistry.addDisposable(this._resolveMiddlewareChain);
+		this._disposableRegistry.addCleanup(() => {
 			this._registry.clear();
 		});
 	}
@@ -432,6 +445,10 @@ export class ContainerImpl
 	 */
 	public getServiceIdentifiers(): ServiceIdentifier<unknown>[] {
 		return this._registry.keys();
+	}
+
+	public dispose(): void {
+		this._disposableRegistry.dispose();
 	}
 
 	/**

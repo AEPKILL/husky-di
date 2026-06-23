@@ -2,7 +2,7 @@
  * @overview Core container specification compliance tests.
  *
  * This test suite validates that the container implementation complies with
- * the behavioral contract defined in SPECIFICATION.md v1.0.0.
+ * the behavioral contract defined in SPECIFICATION.md v1.1.0.
  *
  * Each test is labeled with its corresponding specification requirement ID
  * (e.g., R1, S2, L1, etc.) for traceability.
@@ -18,6 +18,8 @@ import {
 	createServiceIdentifier,
 	globalMiddleware,
 	type IContainer,
+	IContainer as IContainerIdentifier,
+	IDisposableRegistry,
 	LifecycleEnum,
 	ResolveException,
 	resolve,
@@ -474,6 +476,27 @@ describe("SPEC 4.2: Service Resolution", () => {
 			expect(() => {
 				resolve(IServiceA);
 			}).toThrow(/E_RESOLVE_CONTEXT_UNAVAILABLE/);
+		});
+	});
+
+	describe("S9: Internal Service Availability", () => {
+		it("should resolve IContainer to the current container instance", () => {
+			// Act
+			const resolvedContainer = childContainer.resolve(IContainerIdentifier);
+
+			// Assert
+			expect(resolvedContainer).toBe(childContainer);
+		});
+
+		it("should resolve IDisposableRegistry through the normal resolution pipeline", () => {
+			// Act
+			const disposableRegistry = childContainer.resolve(IDisposableRegistry);
+
+			// Assert
+			expect(disposableRegistry).toBeDefined();
+			expect(disposableRegistry.disposed).toBe(false);
+			expect(typeof disposableRegistry.addDisposable).toBe("function");
+			expect(typeof disposableRegistry.addCleanup).toBe("function");
 		});
 	});
 });

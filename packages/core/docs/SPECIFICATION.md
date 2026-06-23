@@ -1,6 +1,6 @@
 # Dependency Injection Container Specification
 
-**Version:** 1.0.0  
+**Version:** 1.1.0  
 **Status:** Stable  
 **Context:** Type-safe Dependency Injection Container for TypeScript
 
@@ -18,6 +18,7 @@ The following keywords are to be interpreted as described in [RFC 2119](https://
 - **Lifecycle**: A strategy that determines when and how service instances are created and reused (transient, singleton, resolution).
 - **Resolution**: The process of obtaining a service instance from the container.
 - **Container**: A registry that manages service registrations and provides service resolution.
+- **Internal Service**: A service registration created by the container itself to expose infrastructure capabilities through the standard resolution pipeline.
 - **Middleware**: An interceptor function that can observe or modify the resolution process.
 - **ResolveRecord**: A tree structure tracking the resolution chain for debugging and circular dependency detection.
 - **ResolveContext**: A map tracking resolved instances within a single resolution scope.
@@ -72,6 +73,15 @@ type ResolveOptions<T> = {
   | { multiple: true; optional?: false; defaultValue?: never }
   | { multiple: true; optional: true; defaultValue?: T[] }
 );
+```
+
+### 3.5 Disposable Registry
+
+```typescript
+interface IDisposableRegistry extends IDisposable {
+  addDisposable(disposable: IDisposable): void;
+  addCleanup(cleanup: Cleanup): void;
+}
 ```
 
 ---
@@ -138,6 +148,14 @@ If a provider throws while a service is being resolved, the container **MUST** w
 The package-level `resolve()` helper **MUST** only be used while a resolution context is active. If no active `ResolveRecord` or current container is available, the implementation **MUST** reject the call.
 
 - _Error Code:_ `E_RESOLVE_CONTEXT_UNAVAILABLE`
+
+**S9. Internal Service Availability**  
+Each container **MUST** register the following internal services in its own local registry before user resolution begins:
+
+- `IContainer`
+- `IDisposableRegistry`
+
+Resolving `IContainer` **MUST** return the current container instance. These internal services **MUST** participate in the normal registration and resolution pipeline of the container.
 
 ### 4.3 Lifecycle Management
 
