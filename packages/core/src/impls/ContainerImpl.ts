@@ -41,6 +41,7 @@ import type { IInternalResolveRecord } from "@/interfaces/resolve-record.interfa
 import { globalMiddleware } from "@/shared/instances";
 import type { Constructor } from "@/types/constructor.type";
 import type { MutableRef, Ref } from "@/types/ref.type";
+import type { RegistrationPlan } from "@/types/registration-plan.type";
 import type { ResolveContext } from "@/types/resolve-context.type";
 import type { ServiceIdentifier } from "@/types/service-identifier.type";
 import { createAssertNotDisposed } from "@/utils/disposable.utils";
@@ -366,6 +367,43 @@ export class ContainerImpl implements IInternalContainer {
 		return () => {
 			this._registry.removeRegistration(registrationInstance);
 		};
+	}
+
+	/**
+	 * Applies all entries from a registration plan.
+	 *
+	 * @param registrationPlan - The registration plan to apply
+	 * @returns A cleanup function that removes only this plan's registrations
+	 */
+	public applyRegistrationPlan(registrationPlan: RegistrationPlan): Cleanup {
+		assertNotDisposed(this);
+
+		let cleaned = false;
+
+		const cleanups: Cleanup[] = [];
+		const cleanupPlan = () => {
+			if (cleaned) {
+				return;
+			}
+
+			cleaned = true;
+			for (let index = cleanups.length - 1; index >= 0; index--) {
+				cleanups[index]();
+			}
+		};
+
+		try {
+			for (const entry of registrationPlan.registrations) {
+				cleanups.push(
+					this.register(entry.serviceIdentifier, entry.registration),
+				);
+			}
+		} catch (error) {
+			cleanupPlan();
+			throw error;
+		}
+
+		return cleanupPlan;
 	}
 
 	/**

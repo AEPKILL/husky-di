@@ -24,6 +24,7 @@ export { CoreException } from "@/exceptions/core.exception";
 export { ResolveException } from "@/exceptions/resolve.exception";
 
 export { createContainer } from "@/factories/container.factory";
+export { createRegistrationPlan } from "@/factories/registration-plan.factory";
 
 export type {
 	IsRegisteredOptions,
@@ -62,6 +63,12 @@ export { globalMiddleware } from "@/shared/instances";
 export type { AbstractConstructor } from "@/types/abstract-constructor.type";
 export type { Constructor } from "@/types/constructor.type";
 export type { Ref } from "@/types/ref.type";
+export type {
+	RegistrationPlan,
+	RegistrationPlanConfigure,
+	RegistrationPlanEntry,
+	RegistrationPlanRegister,
+} from "@/types/registration-plan.type";
 export type {
 	ServiceIdentifier,
 	ServiceIdentifierInstance,

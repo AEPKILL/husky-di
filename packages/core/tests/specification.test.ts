@@ -2,7 +2,7 @@
  * @overview Core container specification compliance tests.
  *
  * This test suite validates that the container implementation complies with
- * the behavioral contract defined in SPECIFICATION.md v1.1.3.
+ * the behavioral contract defined in SPECIFICATION.md v1.2.0.
  *
  * Each test is labeled with its corresponding specification requirement ID
  * (e.g., R1, S2, L1, etc.) for traceability.
@@ -15,6 +15,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
 	CoreErrorCodeEnum,
 	createContainer,
+	createRegistrationPlan,
 	createServiceIdentifier,
 	globalMiddleware,
 	type IContainer,
@@ -250,6 +251,71 @@ describe("SPEC 4.1: Service Registration", () => {
 			expect(
 				container.resolve(ITestValue, { multiple: true }).map((i) => i.id),
 			).toEqual([2]);
+		});
+	});
+
+	describe("R2.3: Registration Plan", () => {
+		it("should register all plan entries in declaration order", () => {
+			// Arrange
+			const ITestValue = createServiceIdentifier<{ id: number }>("ITestValue");
+			const plan = createRegistrationPlan((register) => {
+				register(ITestValue, { useValue: { id: 1 } });
+				register(ITestValue, { useValue: { id: 2 } });
+				register(IServiceA, { useClass: ServiceA });
+			});
+
+			// Act
+			const cleanup = container.applyRegistrationPlan(plan);
+
+			// Assert
+			expect(
+				container.resolve(ITestValue, { multiple: true }).map((i) => i.id),
+			).toEqual([1, 2]);
+			expect(container.resolve(ITestValue).id).toBe(2);
+			expect(container.resolve(IServiceA)).toBeInstanceOf(ServiceA);
+
+			cleanup();
+			expect(container.isRegistered(ITestValue)).toBe(false);
+			expect(container.isRegistered(IServiceA)).toBe(false);
+		});
+
+		it("should clean up only registrations created by the plan", () => {
+			// Arrange
+			const ITestValue = createServiceIdentifier<{ id: number }>("ITestValue");
+			container.register(ITestValue, { useValue: { id: 0 } });
+			const plan = createRegistrationPlan((register) => {
+				register(ITestValue, { useValue: { id: 1 } });
+				register(ITestValue, { useValue: { id: 2 } });
+			});
+			const cleanup = container.applyRegistrationPlan(plan);
+			container.register(ITestValue, { useValue: { id: 3 } });
+
+			// Act
+			cleanup();
+
+			// Assert
+			expect(
+				container.resolve(ITestValue, { multiple: true }).map((i) => i.id),
+			).toEqual([0, 3]);
+			expect(container.resolve(ITestValue).id).toBe(3);
+			expect(() => cleanup()).not.toThrow();
+		});
+
+		it("should roll back registered entries when a later plan entry fails", () => {
+			// Arrange
+			const ITestValue = createServiceIdentifier<{ id: number }>("ITestValue");
+			const plan = createRegistrationPlan((register) => {
+				register(ITestValue, { useValue: { id: 1 } });
+				register(IServiceA, {
+					// biome-ignore lint/suspicious/noExplicitAny: testing invalid registration shape inside a plan
+				} as any);
+			});
+
+			// Act & Assert
+			expect(() => container.applyRegistrationPlan(plan)).toThrow(
+				/E_INVALID_PROVIDER/,
+			);
+			expect(container.isRegistered(ITestValue)).toBe(false);
 		});
 	});
 

@@ -25,6 +25,7 @@ import type {
 import type { IInternalResolveRecord } from "@/interfaces/resolve-record.interface";
 import type { IUnique } from "@/interfaces/unique.interface";
 import type { MutableRef, Ref } from "@/types/ref.type";
+import type { RegistrationPlan } from "@/types/registration-plan.type";
 import type { ResolveContext } from "@/types/resolve-context.type";
 import type { ServiceIdentifier } from "@/types/service-identifier.type";
 import { createServiceIdentifier } from "@/utils/service-identifier.utils";
@@ -392,6 +393,32 @@ export interface IServiceRegistry {
 		serviceIdentifier: ServiceIdentifier<T>,
 		registration: CreateRegistrationOptions<T>,
 	): Cleanup;
+
+	/**
+	 * Applies all entries from a registration plan.
+	 *
+	 * @remarks
+	 * Entries are applied in declaration order. The returned cleanup function
+	 * removes only the registrations created by this plan, leaving unrelated
+	 * registrations for the same service identifiers intact.
+	 *
+	 * If any entry fails to register, entries already registered by this plan
+	 * are removed before the original error is rethrown.
+	 *
+	 * @param registrationPlan - The reusable registration plan to apply
+	 * @returns A cleanup function that removes this plan's registrations
+	 *
+	 * @example
+	 * ```typescript
+	 * const plan = createRegistrationPlan((register) => {
+	 *   register(MyService, { useClass: MyService });
+	 *   register(Config, { useValue: config });
+	 * });
+	 *
+	 * const cleanup = container.applyRegistrationPlan(plan);
+	 * ```
+	 */
+	applyRegistrationPlan(registrationPlan: RegistrationPlan): Cleanup;
 
 	/**
 	 * Checks if a service is registered in the container.
