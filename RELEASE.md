@@ -128,6 +128,7 @@ pnpm changeset version
 
 `master` 上的发布工作流按下面的顺序执行：
 
+0. 只有发布相关路径会自动触发该工作流：`.changeset/**`、`packages/**` 和 `.github/workflows/release.yml`。纯 `website/` 更新不会自动执行 release，需要时可以手动触发 `workflow_dispatch`。
 1. 安装依赖、运行测试、构建包
 2. 检查 `.changeset/*.md` 中是否存在待发布 changeset
 3. 如果存在 changeset，则执行 `changeset version` 更新版本号和 CHANGELOG
