@@ -5,6 +5,7 @@
  */
 
 import {
+	type Cleanup,
 	createContainer,
 	type IContainer,
 	type IsRegisteredOptions,
@@ -106,13 +107,13 @@ export class ModuleImpl implements IModule {
 	}
 
 	// biome-ignore lint/suspicious/noExplicitAny: should use any type
-	use(middleware: ResolveMiddleware<any, any>): void {
-		this.container.use(middleware);
+	use(...middleware: ResolveMiddleware<any, any>[]): Cleanup {
+		return this.container.use(...middleware);
 	}
 
 	// biome-ignore lint/suspicious/noExplicitAny: should use any type
-	unused(middleware: ResolveMiddleware<any, any>): void {
-		this.container.unused(middleware);
+	unused(...middleware: ResolveMiddleware<any, any>[]): void {
+		this.container.unused(...middleware);
 	}
 
 	withAliases(aliases: Alias[]): ModuleWithAliases {

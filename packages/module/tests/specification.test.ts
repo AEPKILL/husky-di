@@ -1110,5 +1110,31 @@ describe("Module System - SPECIFICATION.md v1.0.0", () => {
 			});
 			expect(SharedModule.resolve("config")).toEqual({ env: "production" });
 		});
+
+		it("should return a cleanup function that unregisters module middleware", () => {
+			const TestModule = createModule({
+				name: "TestModule",
+				declarations: [{ serviceIdentifier: "value", useValue: "ok" }],
+				exports: ["value"],
+			});
+			let middlewareHits = 0;
+
+			const cleanup = TestModule.use({
+				name: "count-module-middleware",
+				executor: (params, next) => {
+					middlewareHits++;
+					return next(params);
+				},
+			});
+
+			expect(TestModule.resolve("value")).toBe("ok");
+			expect(middlewareHits).toBe(1);
+
+			cleanup();
+
+			expect(TestModule.resolve("value")).toBe("ok");
+			expect(middlewareHits).toBe(1);
+			expect(() => cleanup()).not.toThrow();
+		});
 	});
 });
