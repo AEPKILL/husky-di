@@ -18,7 +18,7 @@ The registration plan API needs to preserve existing registration semantics:
 - Non-multiple resolution uses latest registration wins.
 - Each successful `register()` call returns a cleanup function that removes
   exactly that registration entry.
-- `unregister()` removes all registrations for an identifier and is therefore
+- `unregisterAll()` removes all registrations for an identifier and is therefore
   too broad for plan cleanup.
 
 ## Decision
@@ -30,8 +30,8 @@ Expose the public API as:
 
 ```typescript
 const plan = createRegistrationPlan((register) => {
-	register(ILogger, { useClass: ConsoleLogger });
-	register(IConfig, { useValue: config });
+  register(ILogger, { useClass: ConsoleLogger });
+  register(IConfig, { useValue: config });
 });
 
 const cleanup = container.applyRegistrationPlan(plan);
@@ -42,7 +42,7 @@ container. `container.applyRegistrationPlan()` applies those entries to a specif
 container by delegating to the existing `register()` method for each entry.
 
 The plan cleanup returned by `applyRegistrationPlan()` removes only the registration
-entries created by that plan. It must not call `unregister()` by identifier,
+entries created by that plan. It must not call `unregisterAll()` by identifier,
 because that would remove unrelated sibling registrations.
 
 If a plan application fails after some entries were already registered, the

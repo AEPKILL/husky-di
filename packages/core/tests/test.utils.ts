@@ -15,7 +15,7 @@ export function clearContainer(container: IContainer): void {
 	if (container && !container.disposed) {
 		const serviceIdentifiers = container.getServiceIdentifiers();
 		serviceIdentifiers.forEach((serviceIdentifier) => {
-			container.unregister(serviceIdentifier);
+			container.unregisterAll(serviceIdentifier);
 		});
 	}
 }

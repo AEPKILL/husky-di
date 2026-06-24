@@ -125,10 +125,10 @@ Each successful registration **MUST** return a disposer function associated with
 - Calling the returned disposer after that registration has already been removed **MUST** be a no-op.
 
 **R2.2 Unregistration Semantics**  
-The container **MUST** support unregistering by `ServiceIdentifier`.
+The container **MUST** support `unregisterAll(serviceIdentifier)` by `ServiceIdentifier`.
 
-- When unregistering by `ServiceIdentifier`, the container **MUST** remove all registrations associated with that identifier in the current container.
-- Unregistering a non-existent `ServiceIdentifier` **MUST** be a no-op.
+- Calling `unregisterAll(serviceIdentifier)` **MUST** remove all registrations associated with that identifier in the current container.
+- Calling `unregisterAll(serviceIdentifier)` with a non-existent `ServiceIdentifier` **MUST** be a no-op.
 
 **R2.3 Registration Plan**  
 A container **MUST** support applying a `RegistrationPlan`.

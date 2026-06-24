@@ -136,7 +136,7 @@ describe("Cross Container Resolution", () => {
 			// Clean up root container registrations
 			const serviceIdentifiers = rootContainer.getServiceIdentifiers();
 			serviceIdentifiers.forEach((serviceIdentifier) => {
-				rootContainer.unregister(serviceIdentifier);
+				rootContainer.unregisterAll(serviceIdentifier);
 			});
 		});
 	});
@@ -451,7 +451,7 @@ describe("Cross Container Resolution", () => {
 			if (childContainer) clearContainer(childContainer);
 		});
 
-		it("should unregister service from child container only", () => {
+		it("should unregister all service registrations from child container only", () => {
 			// Arrange
 			parentContainer.register(IServiceA, {
 				useClass: ServiceA,
@@ -461,7 +461,7 @@ describe("Cross Container Resolution", () => {
 			});
 
 			// Act
-			childContainer.unregister(IServiceB);
+			childContainer.unregisterAll(IServiceB);
 
 			// Assert
 			expect(childContainer.isRegistered(IServiceB)).toBe(false);
@@ -469,7 +469,7 @@ describe("Cross Container Resolution", () => {
 			expect(parentContainer.isRegistered(IServiceA)).toBe(true);
 		});
 
-		it("should not affect parent when unregistering from child", () => {
+		it("should not affect parent when unregistering all from child", () => {
 			// Arrange
 			parentContainer.register(IServiceA, {
 				useClass: ServiceA,
@@ -479,7 +479,7 @@ describe("Cross Container Resolution", () => {
 			});
 
 			// Act
-			childContainer.unregister(IServiceA);
+			childContainer.unregisterAll(IServiceA);
 
 			// Assert
 			expect(childContainer.isRegistered(IServiceA)).toBe(false);
