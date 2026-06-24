@@ -1,5 +1,14 @@
 # @husky-di/module
 
+## 1.2.1
+
+### Patch Changes
+
+- Align the public packages to a shared version and keep future releases in lockstep.
+
+- Updated dependencies []:
+  - @husky-di/core@1.2.1
+
 ## 1.1.1
 
 ### Patch Changes
