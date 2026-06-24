@@ -63,6 +63,33 @@ jobs:
       - name: Build packages
         run: pnpm build
 
+      - name: Verify npm publisher access
+        if: steps.pending_changesets.outputs.has_changesets == 'true'
+        shell: bash
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          npm_user="$(npm whoami)"
+          maintainers_json="$(npm view @husky-di/core maintainers --json --registry=https://registry.npmjs.org)"
+
+          if ! node -e '
+            const [user, rawMaintainers] = process.argv.slice(1);
+            const maintainers = JSON.parse(rawMaintainers);
+            const entries = Array.isArray(maintainers) ? maintainers : [maintainers];
+            const hasAccess = entries.some((entry) => {
+              if (typeof entry === "string") {
+                return entry.startsWith(`${user} <`);
+              }
+
+              return entry?.name === user;
+            });
+
+            process.exit(hasAccess ? 0 : 1);
+          ' "$npm_user" "$maintainers_json"; then
+            echo "::error::NPM_TOKEN is authenticated as '$npm_user', but that user is not a maintainer of @husky-di/core. Update NPM_TOKEN before publishing."
+            exit 1
+          fi
+
       - name: Version packages and changelog
         if: steps.pending_changesets.outputs.has_changesets == 'true'
         run: pnpm changeset:version
