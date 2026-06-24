@@ -1,0 +1,244 @@
+:root {
+	--page-bg: #f6f1e8;
+	--panel-bg: rgba(255, 252, 247, 0.88);
+	--panel-border: rgba(99, 67, 38, 0.14);
+	--panel-shadow: 0 24px 80px rgba(89, 59, 30, 0.12);
+	--text-strong: #2d1f11;
+	--text-muted: #695240;
+	--accent: #9b3d1f;
+	--accent-soft: #f3d7b3;
+	--accent-strong: #6b2410;
+	--line: rgba(99, 67, 38, 0.16);
+	--radius-xl: 28px;
+	--radius-lg: 20px;
+	--radius-md: 14px;
+	--content-width: 1180px;
+	font-family:
+		"Iowan Old Style", "Palatino Linotype", "Book Antiqua", Palatino, serif;
+	color: var(--text-strong);
+	background:
+		radial-gradient(circle at top left, rgba(255, 214, 153, 0.42), transparent 34%),
+		radial-gradient(circle at top right, rgba(191, 94, 55, 0.14), transparent 24%),
+		linear-gradient(180deg, #fbf5ec 0%, #f4ede1 100%);
+}
+
+* {
+	box-sizing: border-box;
+}
+
+html,
+body {
+	margin: 0;
+	min-height: 100%;
+}
+
+body {
+	color: var(--text-strong);
+	background: transparent;
+}
+
+a {
+	color: inherit;
+	text-decoration: none;
+}
+
+p,
+li {
+	color: var(--text-muted);
+	font-size: 1rem;
+	line-height: 1.7;
+}
+
+ul,
+ol {
+	padding-left: 1.25rem;
+}
+
+code {
+	padding: 0.1rem 0.35rem;
+	border-radius: 0.45rem;
+	background: rgba(107, 36, 16, 0.08);
+	font-family:
+		"SFMono-Regular", "SF Mono", "Menlo", "Monaco", "Courier New", monospace;
+	font-size: 0.92em;
+}
+
+.site-shell {
+	width: min(calc(100% - 2rem), var(--content-width));
+	margin: 0 auto;
+	padding: 2rem 0 4rem;
+}
+
+.site-header {
+	display: grid;
+	gap: 1.5rem;
+	padding: 2rem;
+	border: 1px solid var(--panel-border);
+	border-radius: var(--radius-xl);
+	background: var(--panel-bg);
+	box-shadow: var(--panel-shadow);
+	backdrop-filter: blur(14px);
+}
+
+.site-header__brand {
+	max-width: 48rem;
+}
+
+.site-header__eyebrow,
+.eyebrow {
+	margin: 0 0 0.5rem;
+	color: var(--accent);
+	font-size: 0.8rem;
+	font-weight: 700;
+	letter-spacing: 0.18em;
+	text-transform: uppercase;
+}
+
+.site-header__title,
+.hero__title,
+.docs-section__header h2 {
+	margin: 0;
+	color: var(--text-strong);
+	font-size: clamp(2.2rem, 4vw, 4rem);
+	line-height: 0.96;
+	letter-spacing: -0.04em;
+}
+
+.site-header__subtitle,
+.hero__body,
+.docs-section__header p {
+	max-width: 44rem;
+	margin: 0.9rem 0 0;
+	font-size: 1.05rem;
+}
+
+.site-nav {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.75rem;
+}
+
+.site-nav__link,
+.section-nav__link,
+.button {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	padding: 0.78rem 1.1rem;
+	border: 1px solid var(--line);
+	border-radius: 999px;
+	transition:
+		transform 160ms ease,
+		background-color 160ms ease,
+		border-color 160ms ease,
+		color 160ms ease;
+}
+
+.site-nav__link:hover,
+.section-nav__link:hover,
+.button:hover {
+	transform: translateY(-1px);
+}
+
+.site-nav__link--active,
+.section-nav__link--active,
+.button--primary {
+	border-color: transparent;
+	background: var(--accent);
+	color: #fff8f1;
+}
+
+.button--secondary {
+	background: rgba(255, 255, 255, 0.46);
+}
+
+.site-main {
+	padding-top: 1.5rem;
+}
+
+.hero,
+.docs-section {
+	display: grid;
+	gap: 1.5rem;
+	padding: 2rem;
+	border: 1px solid var(--panel-border);
+	border-radius: var(--radius-xl);
+	background: var(--panel-bg);
+	box-shadow: var(--panel-shadow);
+	backdrop-filter: blur(14px);
+}
+
+.hero__copy {
+	max-width: 50rem;
+}
+
+.hero__actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.9rem;
+}
+
+.card-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+	gap: 1rem;
+}
+
+.card,
+.prose-card {
+	padding: 1.35rem;
+	border: 1px solid var(--panel-border);
+	border-radius: var(--radius-lg);
+	background: rgba(255, 255, 255, 0.72);
+	box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.54);
+}
+
+.card h3,
+.prose-card h3 {
+	margin-top: 0;
+	margin-bottom: 0.7rem;
+	font-size: 1.35rem;
+	line-height: 1.15;
+}
+
+.docs-layout {
+	display: grid;
+	grid-template-columns: minmax(220px, 260px) minmax(0, 1fr);
+	gap: 1.25rem;
+}
+
+.docs-sidebar {
+	align-self: start;
+}
+
+.section-nav {
+	display: grid;
+	gap: 0.65rem;
+}
+
+.section-nav__link {
+	justify-content: flex-start;
+	border-radius: var(--radius-md);
+	background: rgba(255, 255, 255, 0.56);
+}
+
+.docs-content {
+	min-width: 0;
+}
+
+@media (max-width: 880px) {
+	.site-shell {
+		width: min(calc(100% - 1rem), var(--content-width));
+		padding-top: 1rem;
+	}
+
+	.site-header,
+	.hero,
+	.docs-section {
+		padding: 1.35rem;
+	}
+
+	.docs-layout {
+		grid-template-columns: 1fr;
+	}
+}

@@ -7,13 +7,12 @@
 - `@husky-di/core` - 核心依赖注入功能
 - `@husky-di/decorator` - 装饰器支持
 - `@husky-di/module` - 模块化支持
-- `@husky-di/react` - React 集成组件
 
 ## 🚀 快速开始
 
 ### 安装
 
-```bash
+````bash
 # 安装核心包
 npm install @husky-di/core
 
@@ -23,9 +22,7 @@ npm install @husky-di/decorator reflect-metadata
 # 模块化支持
 npm install @husky-di/module
 
-# React 集成
-npm install @husky-di/react
-```
+
 
 ### 基本使用
 
@@ -40,7 +37,7 @@ container.register("logger", () => new Logger());
 
 // 解析服务
 const logger = container.resolve("logger");
-```
+````
 
 ## 🛠️ 开发
 
