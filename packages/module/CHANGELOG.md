@@ -1,5 +1,12 @@
 # @husky-di/module
 
+## 1.1.1
+
+### Patch Changes
+
+- Updated dependencies [[`e2b2ade`](https://github.com/AEPKILL/husky-di/commit/e2b2adee5a610532948fbfbc6bc47780cebb3e60)]:
+  - @husky-di/core@1.2.0
+
 ## 1.1.0
 
 ### Minor Changes
