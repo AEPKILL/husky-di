@@ -16,6 +16,7 @@ The website is configured for static prerendering and GitHub Pages deployment.
 - Default production base path: `/<repository-name>/`
 - Override base path: set `WEBSITE_BASE_PATH`
 - Published artifact directory: `website/dist/client`
+- Automatic deployment runs on `master` push only when `.github/workflows/website-pages.yml` or `website/**` changes; otherwise use `workflow_dispatch`
 
 ## Route Structure
 

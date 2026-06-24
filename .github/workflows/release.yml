@@ -4,6 +4,10 @@ on:
   push:
     branches:
       - master
+    paths:
+      - ".changeset/**"
+      - ".github/workflows/release.yml"
+      - "packages/**"
   workflow_dispatch:
 
 concurrency: ${{ github.workflow }}-${{ github.ref }}
