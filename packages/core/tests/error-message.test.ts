@@ -1005,21 +1005,28 @@ describe("Error Messages", () => {
 					/^E_RESOLUTION_FAILED: Failed to resolve service identifier "AliasFault" in "TestContainer\/CONTAINER-\d+": getContainer failed/,
 				);
 				expect((error as Error).message).toContain(
-					'Resolving alias container for "AliasFault"',
+					'Resolving alias "AliasFault" as "AliasTarget" from configured container',
 				);
 			}
 		});
 
-		it("should include alias current-container context in resolve record for normal alias", () => {
-			container.register("AliasTarget3", {
-				useValue: "target3",
-			});
+		it("should include alias current-container context in resolve record for missing alias target", () => {
 			container.register("AliasNormal", {
 				useAlias: "AliasTarget3",
 			});
 
-			const instance = container.resolve("AliasNormal");
-			expect(instance).toBe("target3");
+			try {
+				container.resolve("AliasNormal");
+				throw new Error("Expected resolve to throw.");
+			} catch (error) {
+				expect(error).toBeInstanceOf(ResolveException);
+				expect((error as ResolveException).code).toBe(
+					CoreErrorCodeEnum.E_SERVICE_NOT_FOUND,
+				);
+				expect((error as Error).message).toContain(
+					'Resolving alias "AliasNormal" as "AliasTarget3" from current container',
+				);
+			}
 		});
 
 		it("should preserve original error code when constructor throws ResolveException", () => {
@@ -1176,7 +1183,7 @@ describe("Error Messages", () => {
 				);
 				expect((error as Error).message).toContain("42");
 				expect((error as Error).message).toContain(
-					'Resolving alias container for "AliasStringThrow"',
+					'Resolving alias "AliasStringThrow" as "AliasTarget2" from configured container',
 				);
 			}
 		});

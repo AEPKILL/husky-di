@@ -550,19 +550,25 @@ export class ContainerImpl implements IInternalContainer {
 					return provider(container, resolveContext);
 				}
 				case RegistrationTypeEnum.alias: {
-					const provider =
+					const aliasServiceIdentifier =
 						registration.provider as CreateAliasRegistrationOptions<T>["useAlias"];
+					const aliasIdentifierName = getServiceIdentifierName(
+						aliasServiceIdentifier,
+					);
 					resolveRecord.addRecordNode({
 						type: ResolveRecordTypeEnum.message,
 						message: registration.getContainer
-							? `Resolving alias container for "${identifierName}"`
-							: `Resolving alias "${identifierName}" via current container`,
+							? `Resolving alias "${identifierName}" as "${aliasIdentifierName}" from configured container`
+							: `Resolving alias "${identifierName}" as "${aliasIdentifierName}" from current container`,
 					});
 					const containerRef = registration.getContainer
 						? registration.getContainer()
 						: container;
 
-					return containerRef.resolve(provider, resolveOptions) as T;
+					return containerRef.resolve(
+						aliasServiceIdentifier,
+						resolveOptions,
+					) as T;
 				}
 				default:
 					throw new ResolveException(

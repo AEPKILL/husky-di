@@ -9,7 +9,7 @@
  * @author AEPKILL
  * @created 2025-07-30 22:40:39
  */
-import { ContainerImpl } from "./impls/ContainerImpl";
+import { ContainerImpl } from "@/impls/ContainerImpl";
 
 export { CoreErrorCodeEnum } from "@/enums/core-error-code.enum";
 export { LifecycleEnum } from "@/enums/lifecycle.enum";
