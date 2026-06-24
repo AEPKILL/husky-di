@@ -435,15 +435,15 @@ export class ContainerImpl implements IInternalContainer {
 	}
 
 	/**
-	 * Unregisters a service from the container
+	 * Unregisters all registrations for a service from the container
 	 *
-	 * Removes the service registration, making it unavailable for future resolutions.
+	 * Removes all registrations for the service, making it unavailable for future resolutions.
 	 * Note: This does not dispose existing singleton instances.
 	 *
 	 * @template T - The type of the service
-	 * @param serviceIdentifier - The service identifier to unregister
+	 * @param serviceIdentifier - The service identifier to unregister all registrations for
 	 */
-	public unregister<T>(serviceIdentifier: ServiceIdentifier<T>): void {
+	public unregisterAll<T>(serviceIdentifier: ServiceIdentifier<T>): void {
 		assertNotDisposed(this);
 
 		this._registry.remove(serviceIdentifier);

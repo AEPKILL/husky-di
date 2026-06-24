@@ -451,7 +451,7 @@ export interface IServiceRegistry {
 	): boolean;
 
 	/**
-	 * Unregisters a service from the container.
+	 * Unregisters all registrations for a service from the container.
 	 *
 	 * @remarks
 	 * Removes all registrations associated with the given service identifier.
@@ -459,14 +459,14 @@ export interface IServiceRegistry {
 	 * Note: This does not affect already resolved instances.
 	 *
 	 * @typeParam T - The type of the service to unregister
-	 * @param serviceIdentifier - The identifier of the service to unregister
+	 * @param serviceIdentifier - The identifier of the service to unregister all registrations for
 	 *
 	 * @example
 	 * ```typescript
-	 * container.unregister(MyService);
+	 * container.unregisterAll(MyService);
 	 * ```
 	 */
-	unregister<T>(serviceIdentifier: ServiceIdentifier<T>): void;
+	unregisterAll<T>(serviceIdentifier: ServiceIdentifier<T>): void;
 
 	/**
 	 * Gets all registered service identifiers in the container.

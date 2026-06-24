@@ -211,7 +211,7 @@ describe("SPEC 4.1: Service Registration", () => {
 			expect(() => disposeRegistration1()).not.toThrow();
 		});
 
-		it("should unregister all registrations when using the service identifier", () => {
+		it("should unregister all registrations when using unregisterAll", () => {
 			// Arrange
 			const ITestValue = createServiceIdentifier<{ id: number }>("ITestValue");
 			container.register(ITestValue, {
@@ -222,7 +222,7 @@ describe("SPEC 4.1: Service Registration", () => {
 			});
 
 			// Act
-			container.unregister(ITestValue);
+			container.unregisterAll(ITestValue);
 
 			// Assert
 			expect(container.isRegistered(ITestValue)).toBe(false);
@@ -247,7 +247,7 @@ describe("SPEC 4.1: Service Registration", () => {
 
 			// Assert
 			expect(() => disposeRegistration1()).not.toThrow();
-			expect(() => container.unregister(IMissingValue)).not.toThrow();
+			expect(() => container.unregisterAll(IMissingValue)).not.toThrow();
 			expect(
 				container.resolve(ITestValue, { multiple: true }).map((i) => i.id),
 			).toEqual([2]);
@@ -2065,7 +2065,7 @@ describe("SPEC 4.7: Resource Disposal", () => {
 			expect(() =>
 				container.register(IServiceA, { useClass: ServiceA }),
 			).toThrow();
-			expect(() => container.unregister(IServiceA)).toThrow();
+			expect(() => container.unregisterAll(IServiceA)).toThrow();
 		});
 	});
 
