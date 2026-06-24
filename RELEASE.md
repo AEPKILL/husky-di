@@ -39,9 +39,10 @@ git commit -m "feat: add new feature with changeset"
 
 合并后，GitHub Actions 会：
 
-- 自动创建一个 "Version Packages" PR
-- 更新版本号和 CHANGELOG
-- 合并该 PR 后自动发布到 npm
+- 自动更新版本号和 CHANGELOG
+- 自动提交版本变更到 `master`
+- 自动发布到 npm
+- 自动推送发布 tag
 
 ## 变更类型指南
 
@@ -69,7 +70,6 @@ git commit -m "feat: add new feature with changeset"
 
 - `@husky-di/decorator` → 依赖 `@husky-di/core`
 - `@husky-di/module` → 依赖 `@husky-di/core`
-- `@husky-di/react` → 依赖 `@husky-di/core`, `@husky-di/decorator`, `@husky-di/module`
 
 当 `core` 包更新时，依赖它的包会自动更新依赖版本。
 
@@ -111,9 +111,10 @@ pnpm changeset pre exit
 
 ### 如果 GitHub Actions 失败
 
-1. 检查 NPM_TOKEN 是否正确配置
-2. 确保包名在 npm 上可用
-3. 检查包的访问权限设置
+1. 检查仓库 Secrets 中是否已配置 `NPM_TOKEN`
+2. 确保 `Settings > Actions > General > Workflow permissions` 允许工作流写入仓库
+3. 确保包名在 npm 上可用
+4. 检查包的访问权限设置
 
 ### 如果版本冲突
 
@@ -122,6 +123,19 @@ pnpm changeset pre exit
 git pull origin master
 pnpm changeset version
 ```
+
+### GitHub Actions 发布流程
+
+`master` 上的发布工作流按下面的顺序执行：
+
+1. 安装依赖、运行测试、构建包
+2. 检查 `.changeset/*.md` 中是否存在待发布 changeset
+3. 如果存在 changeset，则执行 `changeset version` 更新版本号和 CHANGELOG
+4. 将版本变更自动提交回 `master`
+5. 执行 `changeset publish` 发布到 npm
+6. 推送发布 tag
+
+如果 `master` 上没有待发布的 changeset，工作流仍会检查当前版本是否存在未发布包；若没有可发布内容，发布步骤会直接跳过。
 
 ### 如果需要跳过某个包的发布
 

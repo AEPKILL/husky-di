@@ -82,7 +82,7 @@ pnpm dev
 1. 创建功能分支
 2. 进行代码更改
 3. 添加 changeset：`pnpm changeset`
-4. 提交代码并创建 PR
+4. 提交代码并创建 PR，合并到 `master` 后会自动更新 changelog 并发布到 npm
 
 详细信息请参考 [RELEASE.md](./RELEASE.md)。
 
