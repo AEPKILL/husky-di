@@ -21,7 +21,11 @@
 			"*.ts",
 			"*.tsx",
 			"scripts/**/*.json",
-			"scripts/**/*.ts"
+			"scripts/**/*.ts",
+			"website/**/*.css",
+			"website/**/*.json",
+			"website/**/*.ts",
+			"website/**/*.tsx"
 		]
 	},
 	"formatter": {

@@ -9,7 +9,7 @@
  * @created 2026-06-25 16:25:00
  */
 
-import { Link, createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 
 const landingCards = [
 	{
@@ -35,7 +35,9 @@ function HomePage() {
 		<section className="hero">
 			<div className="hero__copy">
 				<p className="eyebrow">TanStack Start + File-Based Routing</p>
-				<h2 className="hero__title">Write docs in the same repo where the code lives.</h2>
+				<h2 className="hero__title">
+					Write docs in the same repo where the code lives.
+				</h2>
 				<p className="hero__body">
 					This website is a dedicated writing surface for Husky DI. Use it for
 					narrative guides, package reference pages, migration notes, and

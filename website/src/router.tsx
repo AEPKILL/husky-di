@@ -12,9 +12,11 @@
 import { createRouter } from "@tanstack/react-router";
 
 import { routeTree } from "./routeTree.gen";
+import { getNormalizedWebsiteBasePath } from "./utils/base-path.utils";
 
 export function getRouter() {
 	return createRouter({
+		basepath: getNormalizedWebsiteBasePath(import.meta.env.BASE_URL),
 		routeTree,
 		defaultPreload: "intent",
 		scrollRestoration: true,

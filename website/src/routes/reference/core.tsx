@@ -22,7 +22,9 @@ function CoreReferencePage() {
 			<ul>
 				<li>Container creation, hierarchy, and disposal semantics</li>
 				<li>Registration strategies and last-write-wins behavior</li>
-				<li>Resolve options such as `optional`, `multiple`, `ref`, and `dynamic`</li>
+				<li>
+					Resolve options such as `optional`, `multiple`, `ref`, and `dynamic`
+				</li>
 				<li>Middleware ordering, scope, and `onContainerDispose` behavior</li>
 				<li>`RegistrationPlan` usage with rollback and cleanup guarantees</li>
 			</ul>

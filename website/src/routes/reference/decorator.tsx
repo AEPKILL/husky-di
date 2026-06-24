@@ -23,7 +23,9 @@ function DecoratorReferencePage() {
 				<li>`@injectable()` metadata consolidation behavior</li>
 				<li>`@inject()` and `@tagged()` parameter metadata rules</li>
 				<li>How `decoratorMiddleware` integrates with `globalMiddleware`</li>
-				<li>Why the package supports TypeScript experimental decorators only</li>
+				<li>
+					Why the package supports TypeScript experimental decorators only
+				</li>
 				<li>Common structured error codes and failure conditions</li>
 			</ul>
 		</article>

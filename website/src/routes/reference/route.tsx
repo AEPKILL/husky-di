@@ -9,7 +9,7 @@
  * @created 2026-06-25 16:25:00
  */
 
-import { Link, Outlet, createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link, Outlet } from "@tanstack/react-router";
 
 const referenceLinks = [
 	{
