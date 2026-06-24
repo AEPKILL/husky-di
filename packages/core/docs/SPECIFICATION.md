@@ -1,6 +1,6 @@
 # Dependency Injection Container Specification
 
-**Version:** 1.1.3  
+**Version:** 1.2.0  
 **Status:** Stable  
 **Context:** Type-safe Dependency Injection Container for TypeScript
 
@@ -14,6 +14,7 @@ The following keywords are to be interpreted as described in [RFC 2119](https://
 
 - **ServiceIdentifier**: A unique key (class constructor, abstract constructor, string, or symbol) used to identify a service.
 - **Registration**: A binding between a ServiceIdentifier and a provider strategy (class, factory, value, or alias).
+- **RegistrationPlan**: A reusable ordered group of registration entries that can be applied to a container.
 - **Provider**: A mechanism that defines how a service instance is created (constructor, factory function, value, or alias).
 - **Lifecycle**: A strategy that determines when and how service instances are created and reused (transient, singleton, resolution).
 - **Resolution**: The process of obtaining a service instance from the container.
@@ -51,7 +52,22 @@ type CreateRegistrationOptions<T> =
   | { useAlias: ServiceIdentifier<T>; getContainer?: () => IContainer };
 ```
 
-### 3.3 Lifecycle Strategies
+### 3.3 Registration Plan
+
+A registration plan **MUST** contain ordered registration entries:
+
+```typescript
+type RegistrationPlanEntry<T = unknown> = {
+  readonly serviceIdentifier: ServiceIdentifier<T>;
+  readonly registration: CreateRegistrationOptions<T>;
+};
+
+type RegistrationPlan = {
+  readonly registrations: ReadonlyArray<RegistrationPlanEntry<unknown>>;
+};
+```
+
+### 3.4 Lifecycle Strategies
 
 ```typescript
 enum LifecycleEnum {
@@ -61,7 +77,7 @@ enum LifecycleEnum {
 }
 ```
 
-### 3.4 Resolve Options
+### 3.5 Resolve Options
 
 ```typescript
 type ResolveOptions<T> = {
@@ -113,6 +129,16 @@ The container **MUST** support unregistering by `ServiceIdentifier`.
 
 - When unregistering by `ServiceIdentifier`, the container **MUST** remove all registrations associated with that identifier in the current container.
 - Unregistering a non-existent `ServiceIdentifier` **MUST** be a no-op.
+
+**R2.3 Registration Plan**  
+A container **MUST** support applying a `RegistrationPlan`.
+
+- Plan entries **MUST** be registered in declaration order.
+- Applying a plan **MUST** return a disposer function.
+- Calling the returned disposer **MUST** remove exactly the registrations created by that plan.
+- Calling the returned disposer after those registrations have already been removed **MUST** be a no-op.
+- The plan disposer **MUST NOT** remove unrelated registrations for the same `ServiceIdentifier`.
+- If any entry fails to register, the container **MUST** remove entries already registered by that plan and rethrow the failure.
 
 **R3. Lifecycle Default**  
 If `lifecycle` is not specified, the container **MUST** default to `LifecycleEnum.transient`.

@@ -38,6 +38,7 @@
 
 - **ServiceIdentifier**：服务标识符。可以是 class constructor、abstract constructor、string 或 symbol。推荐使用 `createServiceIdentifier<T>()` 创建有类型的标识符。
 - **Registration**：服务标识符与 provider 策略的绑定。
+- **Registration Plan**：一组可复用的注册项。通过 `createRegistrationPlan()` 收集注册项，并通过 `container.applyRegistrationPlan()` 应用到某个容器。
 - **Provider**：服务创建策略。当前模型支持 `useClass`、`useFactory`、`useValue`、`useAlias`，并要求一次注册只使用一种策略。
 - **Resolution**：解析过程。根据 `ServiceIdentifier` 从容器获取服务实例。
 - **ResolveOptions**：解析选项。包括 `optional`、`defaultValue`、`multiple`、`ref`、`dynamic`。
@@ -95,6 +96,8 @@
 - 同一个 `ServiceIdentifier` 可以在同一容器中多次注册。
 - 默认解析单个服务时采用 last-write-wins，返回最新注册。
 - 使用 `multiple: true` 时返回该标识符的所有注册实例。
+- 注册计划是对多个 `register()` 调用的组合；成功后返回组合 cleanup，且 cleanup 只能移除该计划创建的注册项。
+- 注册计划应用中途失败时，已经创建的注册项应被回滚，避免容器保留部分状态。
 - `optional: true` 且未找到服务时返回 `undefined` 或 `defaultValue`；非 optional 未找到服务时抛出 `ResolveException`。
 - `ref` 和 `dynamic` 互斥，不能同时为 true。
 - 循环依赖通过 `ResolveRecord` 检测。错误信息应包含可读的解析路径，并提示可考虑 `ref` 或 `dynamic`。
