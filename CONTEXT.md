@@ -8,13 +8,12 @@
 
 `husky-di` 是一个现代 TypeScript 依赖注入框架。它的核心目标是提供一个类型安全、行为确定、可测试、可内省的依赖管理系统。
 
-本项目采用 monorepo 结构，当前工作区中实际存在并持续维护的主要包包括：
+本项目采用 monorepo 结构，当前工作区中实际存在并持续维护的主要工作区包括：
 
 - `@husky-di/core`：核心 DI 容器、注册、解析、生命周期、中间件、引用、释放能力。
 - `@husky-di/decorator`：基于 TypeScript experimental decorators 和 `reflect-metadata` 的构造函数注入支持。
 - `@husky-di/module`：借鉴 ESM import/export 语义的模块化 DI 系统。
-
-当前工作区中没有 `@husky-di/react` package，也没有 `@husky-di/website` package。根 README 仍然提到 React 集成，根 `package.json` 仍然保留 `dev:website` / `build:website` 脚本，但这些内容不应被视为当前工作区结构的权威来源。实现、诊断、测试和文档更新时，应以实际目录结构、各 package 的 `package.json`、源码、测试和 `docs/SPECIFICATION.md` 为准。
+- `@husky-di/website`：基于 TanStack Start file-based routing 的文档网站应用，位于仓库顶层 `website/`。
 
 ## 核心设计原则
 
@@ -115,6 +114,7 @@
 - `packages/core` 是底层包。新增核心能力时应先考虑它是否属于容器、注册、解析、生命周期、中间件、引用或释放模型。
 - `packages/decorator` 只负责把 TypeScript decorator metadata 翻译成 core 的解析动作。不要把通用容器能力放进 decorator 包。
 - `packages/module` 只负责模块语义、声明导入导出校验、alias、export guard 和模块容器组装。不要让 module 包绕过 core 的注册和解析模型。
+- `website/` 是文档网站应用工作区，不是发布到 npm 的运行时库包。这里适合放文档浏览体验、信息架构和面向读者的页面组织。
 - `docs/` 当前主要承载 ADR，而不是独立 website package 的源码目录。不要把它当作运行中的文档站实现来修改；如果需要补充架构决策或长期设计约束，应优先放入 `docs/adr/`。
 
 ## 命名约定
@@ -137,8 +137,8 @@
 ## 当前文档状态
 
 - 根目录 `CONTEXT.md` 是当前 single-context 布局下的仓库级领域上下文入口。
+- `docs/agents/domain.md` 是指向 `CONTEXT.md` 的稳定入口，用于兼容 agent 约定和快速发现 single-context 布局。
 - `packages/core/docs/SPECIFICATION.md` 是 core 行为契约的主要来源，状态为 Stable。
 - `packages/decorator/docs/SPECIFICATION.md` 是 decorator 行为契约的主要来源，状态为 Final。
 - `packages/module/docs/SPECIFICATION.md` 是 module 行为契约的主要来源，状态为 Proposal。
 - `docs/adr/0001-registration-plan.md` 已存在，状态为 Accepted；涉及 `RegistrationPlan` 设计动机、命名与回滚语义时，应同时参考该 ADR 与 core specification。
-- 根 README 和根脚本中仍有部分历史遗留信息，例如 `@husky-di/react` 与 website 相关条目。遇到这些内容时，应先与当前工作区结构和 package 实际导出交叉验证，再决定是否沿用。
