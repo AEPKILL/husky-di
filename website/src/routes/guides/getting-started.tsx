@@ -24,8 +24,12 @@ function GettingStartedGuidePage() {
 			</p>
 			<ul>
 				<li>Start with the problem Husky DI solves in one short paragraph.</li>
-				<li>Show the smallest useful setup that reaches first value quickly.</li>
-				<li>Introduce `@husky-di/core` before decorator or module integrations.</li>
+				<li>
+					Show the smallest useful setup that reaches first value quickly.
+				</li>
+				<li>
+					Introduce `@husky-di/core` before decorator or module integrations.
+				</li>
 				<li>Link out to reference pages only after the core flow is clear.</li>
 			</ul>
 		</article>

@@ -17,8 +17,16 @@
 		"Iowan Old Style", "Palatino Linotype", "Book Antiqua", Palatino, serif;
 	color: var(--text-strong);
 	background:
-		radial-gradient(circle at top left, rgba(255, 214, 153, 0.42), transparent 34%),
-		radial-gradient(circle at top right, rgba(191, 94, 55, 0.14), transparent 24%),
+		radial-gradient(
+			circle at top left,
+			rgba(255, 214, 153, 0.42),
+			transparent 34%
+		),
+		radial-gradient(
+			circle at top right,
+			rgba(191, 94, 55, 0.14),
+			transparent 24%
+		),
 		linear-gradient(180deg, #fbf5ec 0%, #f4ede1 100%);
 }
 

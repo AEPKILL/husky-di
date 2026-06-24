@@ -9,16 +9,15 @@
  * @created 2026-06-25 16:25:00
  */
 
-import type { ReactNode } from "react";
-
 import {
+	createRootRoute,
 	HeadContent,
 	Link,
 	Outlet,
 	Scripts,
-	createRootRoute,
 } from "@tanstack/react-router";
 import { TanStackRouterDevtools } from "@tanstack/react-router-devtools";
+import type { ReactNode } from "react";
 
 import appCss from "@/styles/app.css?url";
 
@@ -52,8 +51,7 @@ export const Route = createRootRoute({
 			},
 			{
 				name: "description",
-				content:
-					"TanStack Start powered documentation workspace for Husky DI.",
+				content: "TanStack Start powered documentation workspace for Husky DI.",
 			},
 		],
 		links: [{ rel: "stylesheet", href: appCss }],
@@ -92,7 +90,9 @@ function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
 									key={item.to}
 									to={item.to}
 									activeOptions={{ exact: item.to === "/" }}
-									activeProps={{ className: "site-nav__link site-nav__link--active" }}
+									activeProps={{
+										className: "site-nav__link site-nav__link--active",
+									}}
 									inactiveProps={{ className: "site-nav__link" }}
 								>
 									{item.label}

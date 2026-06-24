@@ -13,7 +13,24 @@ import { tanstackStart } from "@tanstack/react-start/plugin/vite";
 import viteReact from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 
+function getWebsiteBasePath(): string {
+	const configuredBasePath = process.env.WEBSITE_BASE_PATH?.trim();
+
+	if (!configuredBasePath || configuredBasePath === "/") {
+		return "/";
+	}
+
+	const normalizedBasePath = configuredBasePath.startsWith("/")
+		? configuredBasePath
+		: `/${configuredBasePath}`;
+
+	return normalizedBasePath.endsWith("/")
+		? normalizedBasePath
+		: `${normalizedBasePath}/`;
+}
+
 export default defineConfig({
+	base: getWebsiteBasePath(),
 	server: {
 		port: 3000,
 	},
@@ -22,6 +39,9 @@ export default defineConfig({
 	},
 	plugins: [
 		tanstackStart({
+			prerender: {
+				enabled: true,
+			},
 			srcDirectory: "src",
 		}),
 		viteReact(),

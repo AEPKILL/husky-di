@@ -9,6 +9,14 @@ pnpm --filter @husky-di/website dev
 pnpm --filter @husky-di/website build
 ```
 
+## GitHub Pages
+
+The website is configured for static prerendering and GitHub Pages deployment.
+
+- Default production base path: `/<repository-name>/`
+- Override base path: set `WEBSITE_BASE_PATH`
+- Published artifact directory: `website/dist/client`
+
 ## Route Structure
 
 - `src/routes/index.tsx`: landing page

@@ -4,8 +4,10 @@
 	"private": true,
 	"type": "module",
 	"scripts": {
+		"check": "pnpm exec biome check src/routes src/router.tsx src/styles src/utils src/vite-env.d.ts vite.config.ts package.json tsconfig.json && tsc --noEmit",
 		"dev": "vite dev",
-		"build": "vite build",
+		"build": "vite build && tsc --noEmit",
+		"format": "pnpm exec biome check --write src/routes src/router.tsx src/styles src/utils src/vite-env.d.ts vite.config.ts package.json tsconfig.json",
 		"preview": "vite preview"
 	},
 	"dependencies": {
