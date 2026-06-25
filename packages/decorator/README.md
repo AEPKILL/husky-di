@@ -1,238 +1,442 @@
 # @husky-di/decorator
 
-`@husky-di/decorator` 是 husky-di 的装饰器支持包，提供了基于 TypeScript 装饰器的依赖注入功能。
+`@husky-di/decorator` adds decorator support to husky-di.
+It translates TypeScript decorator metadata into `@husky-di/core` resolution behavior, so you can declare dependencies directly on constructor parameters.
 
-## 概述
+You can think of it as a syntax layer on top of `core`:
 
-该包专门为偏好使用装饰器语法的开发者设计，提供了简洁直观的依赖注入方式。**仅支持 TypeScript 装饰器**，不支持 ES 装饰器。
+- it makes dependency declaration feel more natural
+- it does not replace the container itself, and lifecycle, middleware, `ref`, and `dynamic` still come from `@husky-di/core`
 
-### 为什么仅支持 TypeScript 装饰器？
+This package currently supports TypeScript experimental decorators only, not ES decorators.
+The reason is straightforward: husky-di depends on parameter decorators for constructor injection, and ES decorators do not provide that capability.
 
-husky-di 的设计理念是**仅支持构造函数注入**，而 ES 装饰器的规范中**没有设计参数注入器**。
+## Is This The Right Package?
 
-## 安装
+This package is a good fit when:
+
+- you want dependencies to live directly on constructor parameters
+- you do not want to hand-write wiring for every class
+- you are comfortable using TypeScript experimental decorators and `reflect-metadata`
+
+If what you really want is:
+
+- a low-level container with no decorator dependency:
+  see `../core/README.md`
+- module import/export boundaries:
+  pair it with `../module/README.md`
+
+## What You Get
+
+- `@injectable()` to mark classes as instantiable through decorator-aware resolution
+- `@inject()` to declare service identifiers and resolve options for constructor parameters
+- `@tagged()` as the low-level metadata decorator for custom abstractions
+- `decoratorMiddleware` to read injection metadata during class resolution
+- stable error exports such as `DecoratorException` and `DecoratorErrorCodeEnum`
+
+## Installation
 
 ```bash
-pnpm add @husky-di/decorator
+pnpm add @husky-di/core @husky-di/decorator reflect-metadata
 ```
 
-## 核心装饰器
+`reflect-metadata` is a peer dependency.
+At runtime, you need to load it first or provide a compatible Reflect metadata implementation.
 
-### @injectable()
+## TypeScript Configuration
 
-标记一个类为可注入，使其能够被依赖注入容器管理。
+Enable TypeScript experimental decorators and metadata emission:
 
-> 背后的原因是因为只有应用了装饰器，typescript 编译器才会触发元数据的标记。
+```json
+{
+  "compilerOptions": {
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true
+  }
+}
+```
+
+## Quick Start
+
+The example below shows the most common setup: register the middleware once, then declare dependencies directly on constructor parameters.
+
+```typescript
+import "reflect-metadata";
+import {
+  createContainer,
+  createServiceIdentifier,
+  globalMiddleware,
+} from "@husky-di/core";
+import {
+  decoratorMiddleware,
+  inject,
+  injectable,
+} from "@husky-di/decorator";
+
+interface Logger {
+  log(message: string): void;
+}
+
+const ILogger = createServiceIdentifier<Logger>("ILogger");
+
+@injectable()
+class ConsoleLogger implements Logger {
+  log(message: string) {
+    console.log(`[log] ${message}`);
+  }
+}
+
+@injectable()
+class UserService {
+  constructor(@inject(ILogger) private readonly logger: Logger) {}
+
+  getUser(id: string) {
+    this.logger.log(`load user: ${id}`);
+    return { id, name: "Ada" };
+  }
+}
+
+globalMiddleware.use(decoratorMiddleware);
+
+const container = createContainer("AppContainer");
+container.register(ILogger, { useClass: ConsoleLogger });
+
+const userService = container.resolve(UserService);
+console.log(userService.getUser("u-1"));
+```
+
+In this example:
+
+- `decoratorMiddleware` reads constructor parameter metadata
+- `@inject(ILogger)` maps an interface dependency to a runtime-visible service identifier
+
+With plain `@husky-di/core`, a common alternative is to resolve the dependency inside the class directly:
+
+```typescript
+import { resolve } from "@husky-di/core";
+
+class UserService {
+  private readonly logger = resolve(ILogger);
+
+  getUser(id: string) {
+    this.logger.log(`load user: ${id}`);
+    return { id, name: "Ada" };
+  }
+}
+```
+
+## Adding It To An Existing Project
+
+### Register Middleware Globally
+
+This is the recommended option for most applications:
+
+```typescript
+import { globalMiddleware } from "@husky-di/core";
+import { decoratorMiddleware } from "@husky-di/decorator";
+
+globalMiddleware.use(decoratorMiddleware);
+```
+
+That enables decorator-based constructor injection for all containers.
+
+### Register Middleware Locally
+
+If you only want decorator support in one container, register it locally instead:
+
+```typescript
+const container = createContainer("FeatureContainer");
+container.use(decoratorMiddleware);
+```
+
+## Main APIs
+
+### `@injectable()`
+
+Marks a class as instantiable by the decorator middleware and merges its parameter metadata into the internal metadata store.
 
 ```typescript
 import { injectable } from "@husky-di/decorator";
 
 @injectable()
+class UserService {}
+```
+
+Key points:
+
+- the same class cannot be decorated with `@injectable()` more than once
+- parameters without explicit `@inject()` are inferred from `design:paramtypes`
+- if inference resolves to a primitive instead of a class, resolution fails immediately
+
+### `@inject()`
+
+Explicitly declares the service identifier for a constructor parameter.
+
+```typescript
+@injectable()
 class UserService {
-  constructor() {}
+  constructor(@inject(ILogger) private readonly logger: Logger) {}
 }
 ```
 
-### @inject()
+The supported service identifier kinds match `core`:
 
-用于构造函数参数注入，支持多种注入选项。
+- class constructor
+- `symbol`
+- `string`
+
+### `@tagged()`
+
+`@tagged()` is the lower-level metadata decorator.
+It accepts the full `InjectionMetadata` object directly.
 
 ```typescript
-import { inject, injectable } from "@husky-di/decorator";
+import { tagged, injectable } from "@husky-di/decorator";
 
 @injectable()
-class LoggerService {
+class UserService {
+  constructor(
+    @tagged({ serviceIdentifier: ILogger, optional: true })
+    private readonly logger?: Logger
+  ) {}
+}
+```
+
+This is useful when:
+
+- you want to build a domain-specific custom decorator
+- you want full control over the metadata instead of the `@inject()` shorthand
+
+## Cases Where You Should Explicitly Use `@inject()`
+
+### Interface Types
+
+Interfaces do not exist at runtime, so you must provide a runtime-visible service identifier explicitly.
+
+```typescript
+interface Logger {
+  log(message: string): void;
+}
+
+const ILogger = createServiceIdentifier<Logger>("ILogger");
+
+@injectable()
+class UserService {
+  constructor(@inject(ILogger) private readonly logger: Logger) {}
+}
+```
+
+### Primitive Types
+
+Primitive types such as `string`, `number`, and `boolean` also need an explicit identifier.
+
+```typescript
+const API_BASE_URL = Symbol("API_BASE_URL");
+
+@injectable()
+class ApiClient {
+  constructor(@inject(API_BASE_URL) private readonly baseUrl: string) {}
+}
+```
+
+### When You Want To Override Inference
+
+Even if the parameter type is a class, you should still write `@inject()` or `@tagged()` when you want to:
+
+- use a different token
+- enable `optional`
+- enable `ref`
+- enable `dynamic`
+
+## Injection Options
+
+The decorator layer supports the same resolve options as `core.resolve()`.
+
+### `optional`
+
+Return `undefined` instead of throwing when the dependency is missing.
+
+```typescript
+@injectable()
+class UserService {
+  constructor(
+    @inject("auditLogger", { optional: true })
+    private readonly auditLogger?: { log(message: string): void }
+  ) {}
+}
+```
+
+### `ref`
+
+Return a lazy reference, which is useful for deferred access or partially breaking circular dependencies.
+
+```typescript
+import type { Ref } from "@husky-di/core";
+
+@injectable()
+class UserService {
+  constructor(
+    @inject(ILogger, { ref: true })
+    private readonly loggerRef: Ref<Logger>
+  ) {}
+
+  run() {
+    this.loggerRef.current.log("run");
+  }
+}
+```
+
+### `dynamic`
+
+Return a dynamic reference whose `.current` value is re-resolved on every access.
+
+```typescript
+import type { Ref } from "@husky-di/core";
+
+@injectable()
+class UserService {
+  constructor(
+    @inject(ILogger, { dynamic: true })
+    private readonly loggerRef: Ref<Logger>
+  ) {}
+}
+```
+
+Prefer `ref` unless you specifically need to re-run resolution every time the value is read.
+
+## When Automatic Inference Works
+
+### Cases Where Type Inference Is Enough
+
+If the parameter itself is a class, and that class is also marked with `@injectable()`, you can omit `@inject()`:
+
+```typescript
+@injectable()
+class LoggerService {}
+
+@injectable()
+class UserService {
+  constructor(private readonly logger: LoggerService) {}
+}
+```
+
+### Cases Where You Should Not Rely On Inference
+
+Do not rely on automatic inference in these cases:
+
+- the parameter type is an interface
+- the parameter type is a primitive
+- you need `optional`
+- you need `ref`
+- you need `dynamic`
+- you want to bind the parameter to a different token than its runtime class
+
+## Relationship To `core`
+
+`@husky-di/decorator` does not replace `core`.
+It is a syntax layer built on top of it.
+
+You still keep using:
+
+- `createContainer()`
+- `createServiceIdentifier()`
+- `LifecycleEnum`
+- `globalMiddleware`
+- `resolve()` / `ref` / `dynamic`
+
+The decorator middleware only participates in the class-instantiation phase.
+Registrations such as `useValue`, `useFactory`, and `useAlias` still follow normal `core` rules.
+
+## Common Pitfalls
+
+### Forgetting To Register `decoratorMiddleware`
+
+If the middleware is not registered, the container does not read decorator metadata.
+
+### Forgetting To Import `reflect-metadata`
+
+Without Reflect metadata at runtime, the implementation cannot access `design:paramtypes`.
+
+### Using Interfaces Or Primitives Without `@inject()`
+
+That leaves the metadata incomplete or points inference at the wrong runtime identifier.
+
+### Applying `@injectable()` Twice To The Same Class
+
+This throws `E_DUPLICATE_INJECTABLE`.
+
+### Using `dynamic` And `ref` Together
+
+These options are mutually exclusive and throw `E_CONFLICTING_OPTIONS`.
+
+## Complete Example
+
+```typescript
+import "reflect-metadata";
+import {
+  createContainer,
+  createServiceIdentifier,
+  globalMiddleware,
+  type Ref,
+} from "@husky-di/core";
+import {
+  decoratorMiddleware,
+  inject,
+  injectable,
+} from "@husky-di/decorator";
+
+interface Config {
+  apiBaseUrl: string;
+}
+
+interface Logger {
+  log(message: string): void;
+}
+
+const IConfig = createServiceIdentifier<Config>("IConfig");
+const ILogger = createServiceIdentifier<Logger>("ILogger");
+
+@injectable()
+class ConsoleLogger implements Logger {
   log(message: string) {
     console.log(message);
   }
 }
 
 @injectable()
-class UserService {
-  constructor(@inject(LoggerService) private logger: LoggerService) {}
-}
-```
-
-## 注入选项
-
-`@inject()` 装饰器支持多种注入选项：
-
-### 动态注入 (dynamic)
-
-获取服务的动态引用，支持延迟解析：
-
-```typescript
-@injectable()
-class ConfigService {
-  getValue(key: string) {
-    return `config-${key}`;
-  }
-}
-
-@injectable()
-class CacheService {
+class ApiClient {
   constructor(
-    @inject(ConfigService, { dynamic: true })
-    private configRef: Ref<ConfigService>
-  ) {}
-
-  get(key: string) {
-    const config = this.configRef.current;
-    return `cached-${config.getValue(key)}`;
-  }
-}
-```
-
-### 引用注入 (ref)
-
-获取服务的引用对象：
-
-```typescript
-@injectable()
-class ApiService {
-  constructor(
-    @inject(CacheService, { ref: true })
-    public cacheRef: Ref<CacheService>
-  ) {}
-}
-```
-
-### 可选注入 (optional)
-
-支持可选依赖，当依赖不存在时不会抛出错误：
-
-```typescript
-@injectable()
-class TestService {
-  constructor(
-    @inject(ExistingService, { optional: true })
-    public service: ExistingService
-  ) {}
-}
-```
-
-## 中间件集成
-
-装饰器包提供了 `decoratorMiddleware` 中间件，需要注册到全局中间件中：
-
-```typescript
-import { globalMiddleware } from "@husky-di/core";
-import { decoratorMiddleware } from "@husky-di/decorator";
-
-// 注册装饰器中间件
-globalMiddleware.use(decoratorMiddleware);
-```
-
-## 完整示例
-
-```typescript
-import "reflect-metadata";
-import { createContainer, globalMiddleware } from "@husky-di/core";
-import { decoratorMiddleware, inject, injectable } from "@husky-di/decorator";
-
-// 注册装饰器中间件
-globalMiddleware.use(decoratorMiddleware);
-
-// 创建容器
-const container = createContainer();
-
-// 定义服务
-@injectable()
-class LoggerService {
-  log(message: string) {
-    return `Logged: ${message}`;
-  }
-}
-
-@injectable()
-class DatabaseService {
-  constructor(@inject(LoggerService) private logger: LoggerService) {}
-
-  query(sql: string) {
-    return this.logger.log(`Executing: ${sql}`);
-  }
-}
-
-@injectable()
-class UserService {
-  constructor(
-    @inject(DatabaseService) private db: DatabaseService,
-    @inject(LoggerService) private logger: LoggerService
+    @inject(IConfig) private readonly config: Config,
+    @inject(ILogger, { ref: true }) private readonly loggerRef: Ref<Logger>
   ) {}
 
   getUser(id: string) {
-    return this.db.query(`SELECT * FROM users WHERE id = ${id}`);
+    this.loggerRef.current.log(`GET ${this.config.apiBaseUrl}/users/${id}`);
+    return { id, name: "Ada" };
   }
 }
 
-// 使用服务
-const userService = container.resolve(UserService);
-const result = userService.getUser("123");
-console.log(result); // "Logged: Executing: SELECT * FROM users WHERE id = 123"
+globalMiddleware.use(decoratorMiddleware);
+
+const container = createContainer("AppContainer");
+container.register(IConfig, {
+  useValue: { apiBaseUrl: "https://api.example.com" },
+});
+container.register(ILogger, { useClass: ConsoleLogger });
+
+const apiClient = container.resolve(ApiClient);
+console.log(apiClient.getUser("u-1"));
 ```
 
-## 错误处理
+## Related Docs
 
-### 常见错误
+- container and resolution model: `../core/README.md`
+- decorator behavior specification: `./docs/SPECIFICATION.md`
+- module system: `../module/README.md`
 
-1. **重复使用 @injectable()**
+## Local Development
 
-   ```typescript
-   // 错误：不能对同一个类使用两次 @injectable()
-   @injectable()
-   @injectable()
-   class TestService {}
-   ```
-
-2. **注入非可注入类**
-
-   ```typescript
-   // 错误：依赖的类没有使用 @injectable()
-   class NonInjectableService {}
-
-   @injectable()
-   class TestService {
-     constructor(@inject(NonInjectableService) dep: NonInjectableService) {}
-   }
-   ```
-
-3. **循环依赖**
-
-   ```typescript
-   // 错误：检测到循环依赖
-   @injectable()
-   class ServiceA {
-     constructor(@inject(ServiceB) public serviceB: ServiceB) {}
-   }
-
-   @injectable()
-   class ServiceB {
-     constructor(@inject(ServiceA) public serviceA: ServiceA) {}
-   }
-   ```
-
-## 设计原理
-
-装饰器包使用 TypeScript 的 `reflect-metadata`或其他提供 Reflect API 的库来存储和管理注入元数据：
-
-- `@injectable()` 收集构造函数参数的注入信息
-- `@inject()` 为特定参数位置设置注入配置
-- `decoratorMiddleware` 在实例化时读取元数据并执行注入
-
-## 最佳实践
-
-1. **始终使用 @injectable() 标记可注入类**
-2. **为所有依赖参数使用 @inject() 装饰器**
-3. **合理使用注入选项（dynamic、ref、optional）**
-4. **避免循环依赖，必要时使用 ref 选项**
-5. **在应用启动时注册 decoratorMiddleware**
-
-## 注意事项
-
-- 需要启用 TypeScript 的装饰器支持
-
-> 建议在 tsconfig.json 中启用 `experimentalDecorators` 和 `emitDecoratorMetadata` 选项
-
-- 需要引入 `reflect-metadata` 包或其他提供 Reflect API 的库
-- `@inject()` 仅支持构造函数注入，不支持属性注入 (可以 `@husky-di/core` 中的 `resolve` 方法来实现属性注入)
-- 装饰器中间件需要全局注册，这样才会在每个容器中都生效
+```bash
+pnpm build
+pnpm test
+```
