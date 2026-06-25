@@ -1,5 +1,11 @@
 # @husky-di/core
 
+## 1.2.2
+
+### Patch Changes
+
+- [`2e57b5b`](https://github.com/AEPKILL/husky-di/commit/2e57b5b28ddfa3fd083321a857eaa0e159d20217) Thanks [@AEPKILL](https://github.com/AEPKILL)! - Clarify the `Cleanup` contract in `@husky-di/core` documentation. The public interface docs and core specification now explicitly require cleanup functions to be idempotent: only the first call performs cleanup, and later calls are ignored without throwing.
+
 ## 1.2.1
 
 ### Patch Changes
