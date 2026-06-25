@@ -17,7 +17,7 @@ import {
 	resolve,
 } from "../../src/index";
 
-const RESOLVE_BATCH_SIZE = 1_000_000;
+const RESOLVE_BATCH_SIZE = 1_000_00;
 
 const BENCH_OPTIONS = {
 	iterations: 3,
