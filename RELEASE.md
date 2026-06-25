@@ -1,146 +1,146 @@
-# 发布指南
+# Release Guide
 
-本文档描述了如何使用 Changesets 进行版本管理和发布。
+This document explains how to use Changesets for versioning and releases.
 
-## 基本工作流程
+## Basic workflow
 
-### 1. 开发新功能或修复 Bug
+### 1. Develop a feature or fix a bug
 
-正常进行开发工作，提交代码到功能分支。
+Do your work as usual and commit it to a feature branch.
 
-### 2. 创建 Changeset
+### 2. Create a changeset
 
-当你的更改准备好发布时，创建一个 changeset：
+When your change is ready to ship, create a changeset:
 
 ```bash
 pnpm changeset
 ```
 
-这会引导你：
+The command will guide you through:
 
-- 选择受影响的包
-- 选择变更类型（patch/minor/major）
-- 添加变更描述
+- selecting the affected packages
+- selecting the change type (`patch`, `minor`, or `major`)
+- adding a release note
 
-### 3. 提交 Changeset
+### 3. Commit the changeset
 
-将生成的 changeset 文件与你的代码更改一起提交：
+Commit the generated changeset file together with your code changes:
 
 ```bash
 git add .changeset/your-changeset-file.md
 git commit -m "feat: add new feature with changeset"
 ```
 
-### 4. 合并到主分支
+### 4. Merge into the main branch
 
-创建 PR 并合并到 `master` 分支。
+Open a PR and merge it into the `master` branch.
 
-### 5. 自动发布
+### 5. Automatic release
 
-合并后，GitHub Actions 会：
+After the merge, GitHub Actions will:
 
-- 自动更新版本号和 CHANGELOG
-- 自动提交版本变更到 `master`
-- 自动发布到 npm
-- 自动推送发布 tag
+- update versions and changelogs automatically
+- commit the version changes back to `master`
+- publish packages to npm
+- push the release tags
 
-## 变更类型指南
+## Change type guide
 
-### Patch (补丁版本)
+### Patch
 
-- Bug 修复
-- 文档更新
-- 内部重构（不影响 API）
+- bug fixes
+- documentation updates
+- internal refactors that do not change the API
 
-### Minor (次版本)
+### Minor
 
-- 新功能添加
-- 新的 API 接口
-- 向后兼容的更改
+- new features
+- new public APIs
+- backward-compatible changes
 
-### Major (主版本)
+### Major
 
-- 破坏性变更
-- API 接口删除或修改
-- 不兼容的更改
+- breaking changes
+- removed or changed public APIs
+- incompatible behavior changes
 
-## 包依赖关系
+## Package dependency relationships
 
-项目中的包依赖关系：
+Package dependencies in this repository:
 
-- `@husky-di/decorator` → 依赖 `@husky-di/core`
-- `@husky-di/module` → 依赖 `@husky-di/core`
+- `@husky-di/decorator` depends on `@husky-di/core`
+- `@husky-di/module` depends on `@husky-di/core`
 
-当 `core` 包更新时，依赖它的包会自动更新依赖版本。
+When the `core` package changes, dependent packages automatically receive updated dependency versions.
 
-## 手动发布命令
+## Manual release commands
 
-如果需要手动控制发布过程：
+Use these commands when you need manual control over the release process:
 
 ```bash
-# 查看待发布的变更
+# View pending release changes
 pnpm changeset status
 
-# 更新版本号（不发布）
+# Update versions without publishing
 pnpm changeset:version
 
-# 发布到 npm
+# Publish to npm
 pnpm changeset:publish
 
-# 创建快照版本（用于测试）
+# Create snapshot versions for testing
 pnpm changeset:snapshot
 ```
 
-## 预发布版本
+## Prerelease versions
 
-创建预发布版本用于测试：
+Create prerelease versions for testing:
 
 ```bash
-# 进入预发布模式
+# Enter prerelease mode
 pnpm changeset pre enter alpha
 
-# 创建预发布版本
+# Create prerelease versions
 pnpm changeset version
 pnpm changeset publish --tag alpha
 
-# 退出预发布模式
+# Exit prerelease mode
 pnpm changeset pre exit
 ```
 
-## 故障排除
+## Troubleshooting
 
-### 如果 GitHub Actions 失败
+### If GitHub Actions fails
 
-1. 检查仓库 Secrets 中是否已配置 `NPM_TOKEN`
-2. 确保 `Settings > Actions > General > Workflow permissions` 允许工作流写入仓库
-3. 确保包名在 npm 上可用
-4. 检查包的访问权限设置
+1. Check whether `NPM_TOKEN` is configured in repository Secrets.
+2. Make sure `Settings > Actions > General > Workflow permissions` allows the workflow to write to the repository.
+3. Make sure the package names are available on npm.
+4. Check the package access settings.
 
-### 如果版本冲突
+### If versions conflict
 
 ```bash
-# 重置到最新版本
+# Reset to the latest version
 git pull origin master
 pnpm changeset version
 ```
 
-### GitHub Actions 发布流程
+### GitHub Actions release flow
 
-`master` 上的发布工作流按下面的顺序执行：
+The release workflow on `master` runs in the following order:
 
-0. 只有发布相关路径会自动触发该工作流：`.changeset/**`、`packages/**` 和 `.github/workflows/release.yml`。纯 `website/` 更新不会自动执行 release，需要时可以手动触发 `workflow_dispatch`。
-1. 安装依赖、运行测试、构建包
-2. 检查 `.changeset/*.md` 中是否存在待发布 changeset
-3. 如果存在 changeset，则执行 `changeset version` 更新版本号和 CHANGELOG
-4. 将版本变更自动提交回 `master`
-5. 执行 `changeset publish` 发布到 npm
-6. 推送发布 tag
+0. The workflow is triggered automatically only by release-related paths: `.changeset/**`, `packages/**`, and `.github/workflows/release.yml`. Changes only under `website/` do not trigger release automatically; use `workflow_dispatch` when needed.
+1. Install dependencies, run tests, and build packages.
+2. Check whether `.changeset/*.md` contains any pending changesets.
+3. If pending changesets exist, run `changeset version` to update versions and changelogs.
+4. Commit the version changes back to `master`.
+5. Run `changeset publish` to publish to npm.
+6. Push the release tags.
 
-如果 `master` 上没有待发布的 changeset，工作流仍会检查当前版本是否存在未发布包；若没有可发布内容，发布步骤会直接跳过。
+If `master` has no pending changesets, the workflow still checks whether any current package version has not yet been published. If nothing is publishable, the publish step is skipped.
 
-### 如果需要跳过某个包的发布
+### If you need to skip publishing a package
 
-在 `.changeset/config.json` 中添加到 `ignore` 数组：
+Add it to the `ignore` array in `.changeset/config.json`:
 
 ```json
 {

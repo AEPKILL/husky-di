@@ -6,4 +6,4 @@
 
 ### Domain docs
 
-本仓库使用 single-context 领域文档布局。详见 `docs/agents/domain.md`。
+This repository uses a single-context domain documentation layout. See `docs/agents/domain.md`.

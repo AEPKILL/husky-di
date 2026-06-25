@@ -4,9 +4,9 @@ import path from "node:path";
  * @filename: lint-staged.config.js
  * @type {import('lint-staged').Configuration}
  *
- * 根目录的 lint-staged 配置
- * 仅处理根目录的文件，不包括 packages/ 目录下的文件
- * 每个 package 都有自己的配置文件
+ * Root-level lint-staged configuration
+ * Only handles files in the repository root, excluding files under packages/
+ * Each package keeps its own configuration file
  */
 const toRelativePath = (file) =>
 	path.isAbsolute(file) ? path.relative(process.cwd(), file) : file;
@@ -27,12 +27,12 @@ const createBiomeTask = (files) => {
 };
 
 export default {
-	// 处理根目录的 TypeScript/JavaScript 文件
+	// Handle root-level TypeScript and JavaScript files
 	"*.{js,ts,jsx,tsx}": createBiomeTask,
 
-	// 处理根目录的 JSON 文件
+	// Handle root-level JSON files
 	"*.json": createBiomeTask,
 
-	// 处理 CSS 相关文件
+	// Handle CSS-related files
 	"*.{css,scss,sass,less}": createBiomeTask,
 };

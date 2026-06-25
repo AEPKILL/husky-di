@@ -1,6 +1,6 @@
 /**
- * Vitest 设置文件
- * 确保 reflect-metadata 在测试开始前被正确导入
+ * Vitest setup file
+ * Ensures reflect-metadata is imported before the test suite starts
  */
 
 import "reflect-metadata";

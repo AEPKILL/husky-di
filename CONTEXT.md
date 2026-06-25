@@ -1,144 +1,144 @@
 # Husky DI Context
 
-本文档记录 `husky-di` 的领域语言、设计边界和仓库约定。工程类技能在做诊断、TDD、架构分析或 issue 拆分前，应先读取本文档。
+This document records the domain language, design boundaries, and repository conventions for `husky-di`. Engineering skills should read this document before doing diagnosis, TDD, architecture analysis, or issue breakdown.
 
-本仓库当前采用 single-context 领域文档布局：仓库级领域上下文集中维护在根目录 `CONTEXT.md`。如需快速建立项目语义和边界认知，应优先阅读本文档，而不是假设存在旧版的分散式领域文档路径。
+This repository currently uses a single-context domain documentation layout: the repository-level domain context is maintained centrally in the root `CONTEXT.md`. To build a quick understanding of the project semantics and boundaries, read this document first instead of assuming an older distributed documentation layout still exists.
 
-## 项目定位
+## Project positioning
 
-`husky-di` 是一个现代 TypeScript 依赖注入框架。它的核心目标是提供一个类型安全、行为确定、可测试、可内省的依赖管理系统。
+`husky-di` is a modern TypeScript dependency injection framework. Its core goal is to provide a type-safe, deterministic, testable, and introspectable dependency management system.
 
-本项目采用 monorepo 结构，当前工作区中实际存在并持续维护的主要工作区包括：
+This project uses a monorepo structure. The main workspaces that currently exist and are actively maintained are:
 
-- `@husky-di/core`：核心 DI 容器、注册、解析、生命周期、中间件、引用、释放能力。
-- `@husky-di/decorator`：基于 TypeScript experimental decorators 和 `reflect-metadata` 的构造函数注入支持。
-- `@husky-di/module`：借鉴 ESM import/export 语义的模块化 DI 系统。
-- `@husky-di/website`：基于 TanStack Start file-based routing 的文档网站应用，位于仓库顶层 `website/`。
+- `@husky-di/core`: The core DI container, registration, resolution, lifecycle, middleware, reference, and disposal capabilities.
+- `@husky-di/decorator`: Constructor injection support built on TypeScript experimental decorators and `reflect-metadata`.
+- `@husky-di/module`: A modular DI system inspired by ESM `import` / `export` semantics.
+- `@husky-di/website`: A documentation workspace located at the top-level `website/` directory.
 
-## 核心设计原则
+## Core design principles
 
-- 依赖由外部提供，而不是由业务对象自行创建。这是本项目对 DI 和 IoC 的基本理解。
-- 优先支持构造函数注入。属性注入和方法注入不是核心模型，必要时通过 factory 或显式 `resolve` 组合完成。
-- 运行时行为必须可预测。注册、解析、生命周期、模块导入导出、错误条件都应有明确规则。
-- 类型安全优先。公开 API 应尽量让 TypeScript 推断出正确的解析结果，包括 `optional`、`multiple`、`ref` 和 `dynamic` 的组合。
-- 容器行为应可内省。解析链、循环依赖、服务标识符名称和错误信息都要帮助用户定位问题。
-- 包之间保持清晰边界。`decorator` 和 `module` 依赖 `core`，但 `core` 不依赖上层集成包。
+- Dependencies are provided externally rather than created by business objects themselves. This is the repository's basic interpretation of DI and IoC.
+- Constructor injection is the primary model. Property injection and method injection are not part of the core model; when needed, use factories or explicit `resolve` composition.
+- Runtime behavior must be predictable. Registration, resolution, lifecycle, module import/export behavior, and error conditions should all have explicit rules.
+- Type safety comes first. Public APIs should let TypeScript infer accurate resolution results, including combinations of `optional`, `multiple`, `ref`, and `dynamic`.
+- Container behavior should be introspectable. Resolution chains, circular dependencies, service identifier names, and error messages should all help users locate problems.
+- Keep clear boundaries between packages. `decorator` and `module` depend on `core`, but `core` does not depend on packages built on top of it.
 
-## 领域词汇
+## Domain vocabulary
 
-### DI 与容器
+### DI and containers
 
-- **Dependency Injection / DI**：依赖注入。对象通过外部传入依赖，而不是自己创建依赖。
-- **IoC**：控制反转。DI 是本项目采用的 IoC 实现方式。
-- **Container**：依赖注入容器。负责注册服务、解析服务、管理生命周期、执行中间件和释放资源。
-- **Root Container**：通过 `rootContainer` 常量暴露出的根容器。`createContainer()` 在未显式传入 parent 时会挂到该根容器下；工具函数 `resolve` 会使用当前解析上下文或根容器完成解析。
-- **Parent Container / Child Container**：父子容器关系。解析时先查当前容器，再向父容器查找；子容器注册不会影响父容器。
+- **Dependency Injection / DI**: Objects receive dependencies from the outside instead of creating them on their own.
+- **IoC**: Inversion of Control. DI is the IoC mechanism adopted by this project.
+- **Container**: A dependency injection container. It registers services, resolves services, manages lifecycles, executes middleware, and disposes resources.
+- **Root Container**: The root container exposed through the `rootContainer` constant. `createContainer()` attaches to it when `parent` is not passed explicitly; the `resolve` helper uses the current resolution context or the root container to perform resolution.
+- **Parent Container / Child Container**: The parent-child container relationship. Resolution checks the current container first and then falls back to the parent; registrations in a child do not affect the parent.
 
-### 注册与解析
+### Registration and resolution
 
-- **ServiceIdentifier**：服务标识符。可以是 class constructor、abstract constructor、string 或 symbol。推荐使用 `createServiceIdentifier<T>()` 创建有类型的标识符。
-- **Registration**：服务标识符与 provider 策略的绑定。
-- **Registration Plan**：一组可复用的注册项。通过 `createRegistrationPlan()` 收集注册项，并通过 `container.applyRegistrationPlan()` 应用到某个容器。
-- **Provider**：服务创建策略。当前模型支持 `useClass`、`useFactory`、`useValue`、`useAlias`，并要求一次注册只使用一种策略。
-- **Resolution**：解析过程。根据 `ServiceIdentifier` 从容器获取服务实例。
-- **ResolveOptions**：解析选项。包括 `optional`、`defaultValue`、`multiple`、`ref`、`dynamic`。
-- **ResolveContext**：一次解析链内共享的上下文，用于 resolution lifecycle 和内部解析状态。
-- **ResolveRecord**：记录解析路径的树结构，用于错误信息和循环依赖检测。
-- **ResolveException**：解析失败、循环依赖、非法选项等场景的核心异常类型。
+- **ServiceIdentifier**: A service identifier. It can be a class constructor, abstract constructor, string, or symbol. Prefer `createServiceIdentifier<T>()` to create typed identifiers.
+- **Registration**: A binding between a service identifier and a provider strategy.
+- **Registration Plan**: A reusable collection of registration entries. It is assembled with `createRegistrationPlan()` and applied to a container with `container.applyRegistrationPlan()`.
+- **Provider**: A service creation strategy. The current model supports `useClass`, `useFactory`, `useValue`, and `useAlias`, and requires exactly one strategy per registration.
+- **Resolution**: The process of obtaining a service instance from the container using a `ServiceIdentifier`.
+- **ResolveOptions**: Resolution options including `optional`, `defaultValue`, `multiple`, `ref`, and `dynamic`.
+- **ResolveContext**: The shared context for a single resolution chain, used for the resolution lifecycle and internal resolution state.
+- **ResolveRecord**: A tree structure that records the resolution path for error reporting and circular dependency detection.
+- **ResolveException**: The core exception type for resolution failures, circular dependencies, invalid options, and similar scenarios.
 
-### 生命周期
+### Lifecycle
 
-- **LifecycleEnum.transient**：默认生命周期。每次解析创建新实例。
-- **LifecycleEnum.singleton**：容器级单例。首次解析创建实例，之后在同一容器内复用。
-- **LifecycleEnum.resolution**：解析链级单例。同一次解析链中复用，解析链结束后不跨链复用。
-- **Disposable / dispose**：释放容器或资源。容器释放后应拒绝后续操作；重复 `dispose()` 应保持幂等；释放父容器不会自动释放子容器。
+- **LifecycleEnum.transient**: The default lifecycle. Each resolution creates a new instance.
+- **LifecycleEnum.singleton**: A container-scoped singleton. The first resolution creates the instance, and later resolutions in the same container reuse it.
+- **LifecycleEnum.resolution**: A resolution-chain-scoped singleton. It is reused within the same resolution chain, but not across different chains.
+- **Disposable / dispose**: Releasing a container or resource. A disposed container should reject subsequent operations; repeated `dispose()` calls should remain idempotent; disposing a parent container does not automatically dispose child containers.
 
-### 引用
+### References
 
-- **Ref**：通过 `.current` 暴露实例的引用包装器。
-- **Static Ref / `ref: true`**：延迟解析并缓存引用结果，适合打破部分循环依赖或推迟实例化。
-- **Dynamic Ref / `dynamic: true`**：每次访问 `.current` 都重新解析。它会持有解析记录和上下文闭包，可能造成内存泄漏；除非确有必要，不要优先使用。
+- **Ref**: A reference wrapper that exposes an instance through `.current`.
+- **Static Ref / `ref: true`**: Defers resolution and caches the referenced result. It is useful for breaking some circular dependencies or delaying instantiation.
+- **Dynamic Ref / `dynamic: true`**: Re-resolves on every `.current` access. It holds resolution records and context closures, which can lead to memory leaks; do not prefer it unless it is genuinely necessary.
 
-### 中间件
+### Middleware
 
-- **Middleware**：拦截解析过程的函数对象。可以观察参数、转换结果、执行副作用，或不调用 `next()` 来短路解析。
-- **Global Middleware**：通过 `globalMiddleware` 注册，对所有容器生效。
-- **Local Middleware**：通过 `container.use()` 或 `module.use()` 注册，只作用于当前容器或模块容器。
-- **Middleware Order**：中间件按 LIFO 执行。局部中间件位于外层，之后进入全局中间件，最后到 provider。
-- **onContainerDispose**：中间件可选的释放钩子。容器释放时调用，异常应被吞掉，不能中断释放流程。
+- **Middleware**: A function object that intercepts resolution. It can inspect arguments, transform results, perform side effects, or short-circuit resolution by not calling `next()`.
+- **Global Middleware**: Registered through `globalMiddleware` and applies to all containers.
+- **Local Middleware**: Registered through `container.use()` or `module.use()` and only applies to the current container or module container.
+- **Middleware Order**: Middleware runs in LIFO order. Local middleware wraps the outside, then global middleware runs, and finally the provider executes.
+- **onContainerDispose**: An optional disposal hook on middleware. It is called when a container is disposed; exceptions should be swallowed and must not interrupt disposal.
 
-### 装饰器包
+### Decorator package
 
-- **Injectable Class**：被 `@injectable()` 标记、可被装饰器中间件实例化的类。
-- **Injection Metadata**：构造函数参数的注入元数据，包括 `serviceIdentifier`、`container`、`dynamic`、`ref`、`optional`。
-- **`@injectable()`**：类装饰器。合并构造函数参数元数据，并标记类可注入。
-- **`@inject()`**：参数装饰器。为构造函数参数声明服务标识符和解析选项。
-- **`@tagged()`**：底层参数元数据装饰器，`@inject()` 可视为它的便捷封装。
-- **`decoratorMiddleware`**：读取 injection metadata 并参与构造函数注入的中间件。使用装饰器注入时需要注册到 `globalMiddleware` 或容器中。
-- **Reflection Metadata**：通过 Reflect API 读取的 TypeScript 编译期参数类型信息。此包依赖 `reflect-metadata` 或兼容实现。
+- **Injectable Class**: A class marked with `@injectable()` that can be instantiated by the decorator middleware.
+- **Injection Metadata**: Constructor-parameter injection metadata including `serviceIdentifier`, `container`, `dynamic`, `ref`, and `optional`.
+- **`@injectable()`**: A class decorator that merges constructor parameter metadata and marks the class as injectable.
+- **`@inject()`**: A parameter decorator that declares the service identifier and resolution options for a constructor parameter.
+- **`@tagged()`**: The lower-level parameter metadata decorator. `@inject()` can be treated as its convenience wrapper.
+- **`decoratorMiddleware`**: Middleware that reads injection metadata and participates in constructor injection. When using decorator-based injection, register it in `globalMiddleware` or on the container.
+- **Reflection Metadata**: TypeScript compile-time parameter type information read through the Reflect API. This package depends on `reflect-metadata` or a compatible implementation.
 
-装饰器包只支持 TypeScript experimental decorators，不支持 ES decorators。原因是当前 ES decorators 规范没有参数装饰器，不能表达本项目需要的构造函数参数注入。
+The decorator package supports only TypeScript experimental decorators, not ES decorators. The reason is that the current ES decorators specification does not include parameter decorators, so it cannot express the constructor parameter injection model required by this project.
 
-### 模块包
+### Module package
 
-- **Module**：封装 declarations、imports、exports 的逻辑单元。
-- **Declaration**：模块本地服务声明，等价于 ESM 中模块内部定义的变量或类。
-- **Import**：导入其他模块暴露的服务。
-- **Export**：向外暴露本模块声明或转发导入的服务。
-- **Alias**：导入时重命名服务标识符，类似 `import { foo as bar }`。
-- **Import Scope**：某个 Module 从 imports 中获得的可见服务集合。alias 只重命名被映射的导入项；未被 alias 映射的 imported exports 仍以原服务标识符进入 Import Scope。
-- **Export Guard**：模块容器上的保护中间件，用来阻止外部解析未导出的服务。
+- **Module**: A logical unit that encapsulates declarations, imports, and exports.
+- **Declaration**: A service declared locally within a module, equivalent to variables or classes defined inside an ESM module.
+- **Import**: A service imported from another module.
+- **Export**: A service exposed from the current module, either from a local declaration or by forwarding an import.
+- **Alias**: Renaming a service identifier on import, similar to `import { foo as bar }`.
+- **Import Scope**: The visible set of services a module receives from its imports. `alias` only renames mapped imports; imported exports that are not aliased still enter the import scope under their original service identifiers.
+- **Export Guard**: A protective middleware on the module container that prevents external resolution of non-exported services.
 
-模块系统借鉴 ESM 语义：导入必须明确，导出边界必须明确，命名冲突应在创建模块时暴露，而不是留到运行时变成歧义。
+The module system is inspired by ESM semantics: imports must be explicit, export boundaries must be explicit, and naming conflicts should surface when a module is created instead of turning into ambiguity at runtime.
 
-## 行为约束
+## Behavioral constraints
 
-- 同一个 `ServiceIdentifier` 可以在同一容器中多次注册。
-- 默认解析单个服务时采用 last-write-wins，返回最新注册。
-- 使用 `multiple: true` 时返回该标识符的所有注册实例。
-- 注册计划是对多个 `register()` 调用的组合；成功后返回组合 cleanup，且 cleanup 只能移除该计划创建的注册项。
-- 注册计划应用中途失败时，已经创建的注册项应被回滚，避免容器保留部分状态。
-- `optional: true` 且未找到服务时返回 `undefined` 或 `defaultValue`；非 optional 未找到服务时抛出 `ResolveException`。
-- `ref` 和 `dynamic` 互斥，不能同时为 true。
-- 循环依赖通过 `ResolveRecord` 检测。错误信息应包含可读的解析路径，并提示可考虑 `ref` 或 `dynamic`。
-- 服务查找遵循当前容器优先、父容器兜底的顺序。
-- 本地中间件不会通过父子容器关系继承；服务注册会沿父容器查找，但中间件链不随容器层级继承。
-- 模块 declarations 不能重复，imports 不能重复，exports 不能重复。
-- 模块 import graph 不应出现循环依赖。
-- 多个 imported modules 导出同名服务时，必须通过 alias 消除冲突。
-- Import Scope 中的服务标识符不能与本地 declaration 重名；如果导入服务与本地 declaration 重名，必须通过 alias 重命名导入服务。
-- 模块只能 export 本地 declaration、显式 import 的 export，或 alias 后可用的服务。
+- The same `ServiceIdentifier` can be registered multiple times in the same container.
+- By default, resolving a single service uses last-write-wins and returns the most recent registration.
+- Using `multiple: true` returns all registrations for that identifier.
+- A registration plan composes multiple `register()` calls; on success it returns a combined cleanup, and that cleanup can remove only the registrations created by that plan.
+- If applying a registration plan fails midway, already-created registrations must be rolled back so the container does not keep partial state.
+- When `optional: true` is set and the service is not found, resolution returns `undefined` or `defaultValue`; when the service is not optional, it throws `ResolveException`.
+- `ref` and `dynamic` are mutually exclusive and cannot both be `true`.
+- Circular dependencies are detected through `ResolveRecord`. Error messages should include a readable resolution path and suggest `ref` or `dynamic` when appropriate.
+- Service lookup follows current-container-first, parent-container-fallback order.
+- Local middleware does not inherit through parent-child container relationships; service registration lookup can walk up to the parent container, but middleware chains do not inherit through the container hierarchy.
+- Module declarations, imports, and exports must each be unique.
+- The module import graph must not contain circular dependencies.
+- When multiple imported modules export the same service name, the conflict must be resolved with aliases.
+- A service identifier in the import scope must not conflict with a local declaration; if an imported service conflicts with a local declaration, the imported service must be renamed with an alias.
+- A module can export only a local declaration, an explicitly imported export, or a service made available through an alias.
 
-## 包边界
+## Package boundaries
 
-- `packages/core` 是底层包。新增核心能力时应先考虑它是否属于容器、注册、解析、生命周期、中间件、引用或释放模型。
-- `packages/decorator` 只负责把 TypeScript decorator metadata 翻译成 core 的解析动作。不要把通用容器能力放进 decorator 包。
-- `packages/module` 只负责模块语义、声明导入导出校验、alias、export guard 和模块容器组装。不要让 module 包绕过 core 的注册和解析模型。
-- `website/` 是文档网站应用工作区，不是发布到 npm 的运行时库包。这里适合放文档浏览体验、信息架构和面向读者的页面组织。
-- `docs/` 当前主要承载 ADR，而不是独立 website package 的源码目录。不要把它当作运行中的文档站实现来修改；如果需要补充架构决策或长期设计约束，应优先放入 `docs/adr/`。
+- `packages/core` is the foundational package. When adding new core capabilities, first decide whether they belong to the container, registration, resolution, lifecycle, middleware, reference, or disposal model.
+- `packages/decorator` is only responsible for translating TypeScript decorator metadata into core resolution behavior. Do not move general container capabilities into the decorator package.
+- `packages/module` is only responsible for module semantics, declaration/import/export validation, aliases, export guards, and module container assembly. Do not let the module package bypass the core registration and resolution model.
+- `website/` is the documentation workspace, not a runtime library package published to npm. It is the right place for documentation browsing experience, information architecture, and reader-facing page organization.
+- `docs/` currently holds ADRs rather than the source code of a standalone website package. Do not treat it as the implementation of a running documentation site; if you need to add architectural decisions or long-lived design constraints, prefer `docs/adr/`.
 
-## 命名约定
+## Naming conventions
 
-- 服务标识符变量通常使用接口风格名称，例如 `IServiceA`、`IDatabaseConfig`。
-- 结构化接口位于 `interfaces/`，命名以 `I` 开头，例如 `IContainer`、`IModule`。
-- 类型别名位于 `types/`，不使用 `I` 前缀。
-- enum 使用 `PascalCaseEnum`，例如 `LifecycleEnum`、`RegistrationTypeEnum`。
-- 工厂函数使用 `createXxx`，例如 `createContainer`、`createModule`、`createServiceIdentifier`。
-- public API 通过各 package 的 `src/index.ts` 导出。
+- Service identifier variables usually use interface-style names such as `IServiceA` and `IDatabaseConfig`.
+- Structural interfaces live under `interfaces/` and use an `I` prefix, such as `IContainer` and `IModule`.
+- Type aliases live under `types/` and do not use the `I` prefix.
+- Enums use `PascalCaseEnum`, such as `LifecycleEnum` and `RegistrationTypeEnum`.
+- Factory functions use `createXxx`, such as `createContainer`, `createModule`, and `createServiceIdentifier`.
+- Public APIs are exported through each package's `src/index.ts`.
 
-## 术语使用建议
+## Terminology guidance
 
-- 优先使用“服务标识符”描述 `ServiceIdentifier`，不要混用 “token”、“key”、“name”，除非在解释外部概念。
-- 优先使用“解析”描述 `resolve` 行为，不要写成“获取依赖”来替代核心术语。
-- 优先使用“注册”描述 `register` 行为，不要写成“绑定”作为主要术语。
-- 优先使用“模块声明 / 导入 / 导出 / alias”描述 module 包语义，保持与 ESM 类比一致。
-- 对 `ref` 与 `dynamic` 保持区分：`ref` 是延迟引用，`dynamic` 是每次访问重新解析的动态引用。
+- Prefer "service identifier" for `ServiceIdentifier`; avoid mixing in "token", "key", or "name" unless you are explaining an external concept.
+- Prefer "resolve" when describing `resolve` behavior; do not replace the core term with wording like "get a dependency".
+- Prefer "register" when describing `register` behavior; do not use "bind" as the primary term.
+- Prefer "module declaration / import / export / alias" when describing module package semantics to keep the ESM analogy consistent.
+- Keep `ref` and `dynamic` distinct: `ref` is a deferred reference, while `dynamic` re-resolves on every access.
 
-## 当前文档状态
+## Current documentation status
 
-- 根目录 `CONTEXT.md` 是当前 single-context 布局下的仓库级领域上下文入口。
-- `docs/agents/domain.md` 是指向 `CONTEXT.md` 的稳定入口，用于兼容 agent 约定和快速发现 single-context 布局。
-- `packages/core/docs/SPECIFICATION.md` 是 core 行为契约的主要来源，状态为 Stable。
-- `packages/decorator/docs/SPECIFICATION.md` 是 decorator 行为契约的主要来源，状态为 Final。
-- `packages/module/docs/SPECIFICATION.md` 是 module 行为契约的主要来源，状态为 Proposal。
-- `docs/adr/0001-registration-plan.md` 已存在，状态为 Accepted；涉及 `RegistrationPlan` 设计动机、命名与回滚语义时，应同时参考该 ADR 与 core specification。
+- The root `CONTEXT.md` is the repository-level domain context entry point for the current single-context layout.
+- `docs/agents/domain.md` is a stable pointer to `CONTEXT.md` for agent compatibility and quick discovery of the single-context layout.
+- `packages/core/docs/SPECIFICATION.md` is the primary source for the core behavioral contract, with status `Stable`.
+- `packages/decorator/docs/SPECIFICATION.md` is the primary source for the decorator behavioral contract, with status `Final`.
+- `packages/module/docs/SPECIFICATION.md` is the primary source for the module behavioral contract, with status `Proposal`.
+- `docs/adr/0001-registration-plan.md` already exists with status `Accepted`; when working on `RegistrationPlan` design motivation, naming, or rollback semantics, consult both that ADR and the core specification.
