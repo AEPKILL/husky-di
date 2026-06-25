@@ -312,6 +312,13 @@ Disposing a container **MUST NOT** automatically dispose its child containers. E
 **D3. Idempotency**  
 Calling `dispose()` multiple times **MUST** be idempotent (safe to call repeatedly).
 
+**D4. Cleanup Idempotency**  
+Any `Cleanup` function accepted by the resource disposal system **MUST** be safe to call multiple times.
+
+- Only the first successful call **MUST** perform the actual cleanup work.
+- Any subsequent call **MUST** be treated as a no-op.
+- Subsequent no-op calls **MUST NOT** throw solely because the cleanup has already been executed.
+
 ---
 
 ## 5. Validation Rules
