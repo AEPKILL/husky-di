@@ -18,8 +18,9 @@ import {
 } from "@tanstack/react-router";
 import { TanStackRouterDevtools } from "@tanstack/react-router-devtools";
 import type { ReactNode } from "react";
+import tailwindCss from "tailwindcss/index.css?url";
 
-import appCss from "@/styles/app.css?url";
+import appScss from "@/styles/app.scss?url";
 
 const primaryLinks = [
 	{
@@ -54,7 +55,10 @@ export const Route = createRootRoute({
 				content: "TanStack Start powered documentation workspace for Husky DI.",
 			},
 		],
-		links: [{ rel: "stylesheet", href: appCss }],
+		links: [
+			{ rel: "stylesheet", href: tailwindCss },
+			{ rel: "stylesheet", href: appScss },
+		],
 	}),
 	component: RootComponent,
 });

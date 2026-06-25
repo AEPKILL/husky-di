@@ -28,4 +28,4 @@ The website is configured for static prerendering and GitHub Pages deployment.
 
 1. Add or edit route files under `src/routes/`.
 2. Reuse the section layout files in `guides/route.tsx` and `reference/route.tsx`.
-3. Use the shared styles in `src/styles/app.css` for consistent presentation.
+3. Use `src/styles/app.scss` for the shared SCSS theme, and use Tailwind utility classes directly in route components.

@@ -1,3 +1,14 @@
+/**
+ * Shared SCSS theme styles for the documentation website.
+ *
+ * @overview
+ * Preserves the handcrafted site theme used across the Husky DI documentation
+ * workspace while enabling Sass features such as nesting.
+ *
+ * @author AEPKILL
+ * @created 2026-06-25 16:25:00
+ */
+
 :root {
 	--page-bg: #f6f1e8;
 	--panel-bg: rgba(255, 252, 247, 0.88);
@@ -88,72 +99,74 @@ code {
 	backdrop-filter: blur(14px);
 }
 
-.site-header__brand {
-	max-width: 48rem;
-}
+.site-header {
+	&__brand {
+		max-width: 48rem;
+	}
 
-.site-header__eyebrow,
-.eyebrow {
-	margin: 0 0 0.5rem;
-	color: var(--accent);
-	font-size: 0.8rem;
-	font-weight: 700;
-	letter-spacing: 0.18em;
-	text-transform: uppercase;
-}
+	&__eyebrow,
+	.eyebrow {
+		margin: 0 0 0.5rem;
+		color: var(--accent);
+		font-size: 0.8rem;
+		font-weight: 700;
+		letter-spacing: 0.18em;
+		text-transform: uppercase;
+	}
 
-.site-header__title,
-.hero__title,
-.docs-section__header h2 {
-	margin: 0;
-	color: var(--text-strong);
-	font-size: clamp(2.2rem, 4vw, 4rem);
-	line-height: 0.96;
-	letter-spacing: -0.04em;
-}
+	&__title,
+	.hero__title,
+	.docs-section__header h2 {
+		margin: 0;
+		color: var(--text-strong);
+		font-size: clamp(2.2rem, 4vw, 4rem);
+		line-height: 0.96;
+		letter-spacing: -0.04em;
+	}
 
-.site-header__subtitle,
-.hero__body,
-.docs-section__header p {
-	max-width: 44rem;
-	margin: 0.9rem 0 0;
-	font-size: 1.05rem;
+	&__subtitle,
+	.hero__body,
+	.docs-section__header p {
+		max-width: 44rem;
+		margin: 0.9rem 0 0;
+		font-size: 1.05rem;
+	}
 }
 
 .site-nav {
 	display: flex;
 	flex-wrap: wrap;
 	gap: 0.75rem;
-}
 
-.site-nav__link,
-.section-nav__link,
-.button {
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
-	padding: 0.78rem 1.1rem;
-	border: 1px solid var(--line);
-	border-radius: 999px;
-	transition:
-		transform 160ms ease,
-		background-color 160ms ease,
-		border-color 160ms ease,
-		color 160ms ease;
-}
+	&__link,
+	.section-nav__link,
+	.button {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		padding: 0.78rem 1.1rem;
+		border: 1px solid var(--line);
+		border-radius: 999px;
+		transition:
+			transform 160ms ease,
+			background-color 160ms ease,
+			border-color 160ms ease,
+			color 160ms ease;
+	}
 
-.site-nav__link:hover,
-.section-nav__link:hover,
-.button:hover {
-	transform: translateY(-1px);
-}
+	&__link:hover,
+	.section-nav__link:hover,
+	.button:hover {
+		transform: translateY(-1px);
+	}
 
-.site-nav__link--active,
-.section-nav__link--active,
-.button--primary {
-	border-color: transparent;
-	background: var(--accent);
-	color: #fff8f1;
+	&__link--active,
+	.section-nav__link--active,
+	.button--primary {
+		border-color: transparent;
+		background: var(--accent);
+		color: #fff8f1;
+	}
 }
 
 .button--secondary {
