@@ -15,7 +15,10 @@
  *
  * @remarks
  * Used by disposable objects to define cleanup logic that should be
- * executed when the object is disposed.
+ * executed when the object is disposed. Cleanup implementations should
+ * be idempotent: multiple calls are allowed, only the first call should
+ * perform the actual cleanup, and later calls must be ignored without
+ * throwing errors.
  */
 export type Cleanup = () => void;
 

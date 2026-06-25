@@ -11,9 +11,9 @@
  */
 
 import { DisposableRegistryImpl } from "@/impls/DisposableRegistryImpl";
-import type { IDisposable } from "@/interfaces/disposable.interface";
+import type { Cleanup } from "@/interfaces/disposable.interface";
 import type { ITypedEvent } from "@/interfaces/typed-event.interface";
-import { createAssertNotDisposed, toDisposed } from "@/utils/disposable.utils";
+import { createAssertNotDisposed } from "@/utils/disposable.utils";
 
 const assertNotDisposed = createAssertNotDisposed("TypedEvent");
 
@@ -70,12 +70,12 @@ export class TypedEventImpl<
 	 * @typeParam EventName - The name of the event to listen to
 	 * @param eventName - The name of the event
 	 * @param listener - The listener function to call when the event is emitted
-	 * @returns A disposable object that can be used to remove the listener
+	 * @returns A cleanup function that removes the listener
 	 */
 	public on<EventName extends keyof Events>(
 		eventName: EventName,
 		listener: Events[EventName],
-	): IDisposable {
+	): Cleanup {
 		assertNotDisposed(this);
 
 		if (!this.listeners.has(eventName)) {
@@ -84,7 +84,7 @@ export class TypedEventImpl<
 		// biome-ignore lint/style/noNonNullAssertion: this.listeners.get(eventName) is not null
 		this.listeners.get(eventName)!.add(listener);
 
-		return toDisposed(() => this.off(eventName, listener));
+		return () => this.off(eventName, listener);
 	}
 
 	/**

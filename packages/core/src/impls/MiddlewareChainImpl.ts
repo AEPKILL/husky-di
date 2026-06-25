@@ -93,7 +93,7 @@ export class MiddlewareChainImpl<Params, Result>
 		});
 
 		// Rebuild executor when global middlewares change
-		this.addDisposable(
+		this.addCleanup(
 			this._globalMiddleware.on("change", () => {
 				this._middlewareExecutor = this.buildMiddlewareExecutor();
 			}),

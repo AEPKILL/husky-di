@@ -1833,6 +1833,29 @@ describe("SPEC 4.6: Middleware System", () => {
 			expect(() => disposeMiddleware()).not.toThrow();
 		});
 
+		it("should return a cleanup function that removes an event listener", () => {
+			// Arrange
+			let callCount = 0;
+			const cleanup = globalMiddleware.on("change", () => {
+				callCount++;
+			});
+			const middleware = {
+				name: "eventCleanupMiddleware",
+				// biome-ignore lint/suspicious/noExplicitAny: Test middleware needs flexible typing
+				executor: (params: any, next: any) => next(params),
+			};
+
+			// Act
+			globalMiddleware.use(middleware);
+			cleanup();
+			globalMiddleware.unused(middleware);
+
+			// Assert
+			expect(callCount).toBe(1);
+			expect(typeof cleanup).toBe("function");
+			expect(() => cleanup()).not.toThrow();
+		});
+
 		it("should remove middleware when unused is called", () => {
 			// Arrange
 			let callCount = 0;

@@ -10,7 +10,7 @@
  * @created 2025-07-26 23:52:38
  */
 
-import type { IDisposable } from "./disposable.interface";
+import type { Cleanup, IDisposable } from "./disposable.interface";
 
 /**
  * Type-safe event emitter interface.
@@ -56,12 +56,12 @@ export interface ITypedEvent<
 	 * @typeParam EventName - The name of the event to listen to
 	 * @param eventName - The name of the event
 	 * @param listener - The listener function to call when the event is emitted
-	 * @returns A disposable object that can be used to remove the listener
+	 * @returns A cleanup function that removes the listener
 	 */
 	on<EventName extends keyof Events>(
 		eventName: EventName,
 		listener: Events[EventName],
-	): IDisposable;
+	): Cleanup;
 
 	/**
 	 * Removes an event listener.
