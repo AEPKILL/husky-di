@@ -1,0 +1,16 @@
+{
+	"root": false,
+	"extends": "//",
+	"files": {
+		"includes": [
+			"src/**",
+			"src/vite-env.d.ts",
+			"vite.config.ts",
+			"package.json",
+			"tsconfig.json",
+			"!!src/constants/twoslash-snippets.const.ts",
+			"!!src/routeTree.gen.ts",
+			"!!dist"
+		]
+	}
+}

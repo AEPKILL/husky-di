@@ -6,27 +6,7 @@
 		"useIgnoreFile": false
 	},
 	"files": {
-		"ignoreUnknown": false,
-		"includes": [
-			"*.css",
-			"*.js",
-			"*.json",
-			"*.jsx",
-			"*.less",
-			"packages/**/package.json",
-			"packages/**/src/**",
-			"packages/**/tests/**",
-			"*.sass",
-			"*.scss",
-			"*.ts",
-			"*.tsx",
-			"scripts/**/*.json",
-			"scripts/**/*.ts",
-			"website/**/*.css",
-			"website/**/*.json",
-			"website/**/*.ts",
-			"website/**/*.tsx"
-		]
+		"ignoreUnknown": false
 	},
 	"formatter": {
 		"enabled": true,
