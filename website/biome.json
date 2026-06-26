@@ -8,7 +8,6 @@
 			"vite.config.ts",
 			"package.json",
 			"tsconfig.json",
-			"!!src/constants/twoslash-snippets.const.ts",
 			"!!src/routeTree.gen.ts",
 			"!!dist"
 		]

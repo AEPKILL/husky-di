@@ -9,150 +9,38 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as ReferenceRouteRouteImport } from './routes/reference/route'
-import { Route as GuidesRouteRouteImport } from './routes/guides/route'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as ReferenceIndexRouteImport } from './routes/reference/index'
-import { Route as GuidesIndexRouteImport } from './routes/guides/index'
-import { Route as ReferenceDecoratorRouteImport } from './routes/reference/decorator'
-import { Route as ReferenceCoreRouteImport } from './routes/reference/core'
-import { Route as GuidesWritingDocsRouteImport } from './routes/guides/writing-docs'
-import { Route as GuidesGettingStartedRouteImport } from './routes/guides/getting-started'
 
-const ReferenceRouteRoute = ReferenceRouteRouteImport.update({
-  id: '/reference',
-  path: '/reference',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const GuidesRouteRoute = GuidesRouteRouteImport.update({
-  id: '/guides',
-  path: '/guides',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ReferenceIndexRoute = ReferenceIndexRouteImport.update({
-  id: '/',
-  path: '/',
-  getParentRoute: () => ReferenceRouteRoute,
-} as any)
-const GuidesIndexRoute = GuidesIndexRouteImport.update({
-  id: '/',
-  path: '/',
-  getParentRoute: () => GuidesRouteRoute,
-} as any)
-const ReferenceDecoratorRoute = ReferenceDecoratorRouteImport.update({
-  id: '/decorator',
-  path: '/decorator',
-  getParentRoute: () => ReferenceRouteRoute,
-} as any)
-const ReferenceCoreRoute = ReferenceCoreRouteImport.update({
-  id: '/core',
-  path: '/core',
-  getParentRoute: () => ReferenceRouteRoute,
-} as any)
-const GuidesWritingDocsRoute = GuidesWritingDocsRouteImport.update({
-  id: '/writing-docs',
-  path: '/writing-docs',
-  getParentRoute: () => GuidesRouteRoute,
-} as any)
-const GuidesGettingStartedRoute = GuidesGettingStartedRouteImport.update({
-  id: '/getting-started',
-  path: '/getting-started',
-  getParentRoute: () => GuidesRouteRoute,
-} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/guides': typeof GuidesRouteRouteWithChildren
-  '/reference': typeof ReferenceRouteRouteWithChildren
-  '/guides/getting-started': typeof GuidesGettingStartedRoute
-  '/guides/writing-docs': typeof GuidesWritingDocsRoute
-  '/reference/core': typeof ReferenceCoreRoute
-  '/reference/decorator': typeof ReferenceDecoratorRoute
-  '/guides/': typeof GuidesIndexRoute
-  '/reference/': typeof ReferenceIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/guides/getting-started': typeof GuidesGettingStartedRoute
-  '/guides/writing-docs': typeof GuidesWritingDocsRoute
-  '/reference/core': typeof ReferenceCoreRoute
-  '/reference/decorator': typeof ReferenceDecoratorRoute
-  '/guides': typeof GuidesIndexRoute
-  '/reference': typeof ReferenceIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
-  '/guides': typeof GuidesRouteRouteWithChildren
-  '/reference': typeof ReferenceRouteRouteWithChildren
-  '/guides/getting-started': typeof GuidesGettingStartedRoute
-  '/guides/writing-docs': typeof GuidesWritingDocsRoute
-  '/reference/core': typeof ReferenceCoreRoute
-  '/reference/decorator': typeof ReferenceDecoratorRoute
-  '/guides/': typeof GuidesIndexRoute
-  '/reference/': typeof ReferenceIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths:
-    | '/'
-    | '/guides'
-    | '/reference'
-    | '/guides/getting-started'
-    | '/guides/writing-docs'
-    | '/reference/core'
-    | '/reference/decorator'
-    | '/guides/'
-    | '/reference/'
+  fullPaths: '/'
   fileRoutesByTo: FileRoutesByTo
-  to:
-    | '/'
-    | '/guides/getting-started'
-    | '/guides/writing-docs'
-    | '/reference/core'
-    | '/reference/decorator'
-    | '/guides'
-    | '/reference'
-  id:
-    | '__root__'
-    | '/'
-    | '/guides'
-    | '/reference'
-    | '/guides/getting-started'
-    | '/guides/writing-docs'
-    | '/reference/core'
-    | '/reference/decorator'
-    | '/guides/'
-    | '/reference/'
+  to: '/'
+  id: '__root__' | '/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
-  GuidesRouteRoute: typeof GuidesRouteRouteWithChildren
-  ReferenceRouteRoute: typeof ReferenceRouteRouteWithChildren
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/reference': {
-      id: '/reference'
-      path: '/reference'
-      fullPath: '/reference'
-      preLoaderRoute: typeof ReferenceRouteRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/guides': {
-      id: '/guides'
-      path: '/guides'
-      fullPath: '/guides'
-      preLoaderRoute: typeof GuidesRouteRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/': {
       id: '/'
       path: '/'
@@ -160,87 +48,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/reference/': {
-      id: '/reference/'
-      path: '/'
-      fullPath: '/reference/'
-      preLoaderRoute: typeof ReferenceIndexRouteImport
-      parentRoute: typeof ReferenceRouteRoute
-    }
-    '/guides/': {
-      id: '/guides/'
-      path: '/'
-      fullPath: '/guides/'
-      preLoaderRoute: typeof GuidesIndexRouteImport
-      parentRoute: typeof GuidesRouteRoute
-    }
-    '/reference/decorator': {
-      id: '/reference/decorator'
-      path: '/decorator'
-      fullPath: '/reference/decorator'
-      preLoaderRoute: typeof ReferenceDecoratorRouteImport
-      parentRoute: typeof ReferenceRouteRoute
-    }
-    '/reference/core': {
-      id: '/reference/core'
-      path: '/core'
-      fullPath: '/reference/core'
-      preLoaderRoute: typeof ReferenceCoreRouteImport
-      parentRoute: typeof ReferenceRouteRoute
-    }
-    '/guides/writing-docs': {
-      id: '/guides/writing-docs'
-      path: '/writing-docs'
-      fullPath: '/guides/writing-docs'
-      preLoaderRoute: typeof GuidesWritingDocsRouteImport
-      parentRoute: typeof GuidesRouteRoute
-    }
-    '/guides/getting-started': {
-      id: '/guides/getting-started'
-      path: '/getting-started'
-      fullPath: '/guides/getting-started'
-      preLoaderRoute: typeof GuidesGettingStartedRouteImport
-      parentRoute: typeof GuidesRouteRoute
-    }
   }
 }
 
-interface GuidesRouteRouteChildren {
-  GuidesGettingStartedRoute: typeof GuidesGettingStartedRoute
-  GuidesWritingDocsRoute: typeof GuidesWritingDocsRoute
-  GuidesIndexRoute: typeof GuidesIndexRoute
-}
-
-const GuidesRouteRouteChildren: GuidesRouteRouteChildren = {
-  GuidesGettingStartedRoute: GuidesGettingStartedRoute,
-  GuidesWritingDocsRoute: GuidesWritingDocsRoute,
-  GuidesIndexRoute: GuidesIndexRoute,
-}
-
-const GuidesRouteRouteWithChildren = GuidesRouteRoute._addFileChildren(
-  GuidesRouteRouteChildren,
-)
-
-interface ReferenceRouteRouteChildren {
-  ReferenceCoreRoute: typeof ReferenceCoreRoute
-  ReferenceDecoratorRoute: typeof ReferenceDecoratorRoute
-  ReferenceIndexRoute: typeof ReferenceIndexRoute
-}
-
-const ReferenceRouteRouteChildren: ReferenceRouteRouteChildren = {
-  ReferenceCoreRoute: ReferenceCoreRoute,
-  ReferenceDecoratorRoute: ReferenceDecoratorRoute,
-  ReferenceIndexRoute: ReferenceIndexRoute,
-}
-
-const ReferenceRouteRouteWithChildren = ReferenceRouteRoute._addFileChildren(
-  ReferenceRouteRouteChildren,
-)
-
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
-  GuidesRouteRoute: GuidesRouteRouteWithChildren,
-  ReferenceRouteRoute: ReferenceRouteRouteWithChildren,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

@@ -1,30 +1,10 @@
 /**
- * Documentation landing page route.
- *
- * @overview
- * Introduces the Husky DI documentation workspace and points contributors to
- * the most important writing entry points.
- *
+ * @overview Homepage route for the minimal Husky DI website.
  * @author AEPKILL
- * @created 2026-06-25 16:25:00
+ * @created 2026-06-26 10:20:00
  */
 
-import { createFileRoute, Link } from "@tanstack/react-router";
-
-const landingCards = [
-	{
-		description:
-			"Explain how to get started, shape mental models, and onboard contributors.",
-		title: "Guides",
-		to: "/guides",
-	},
-	{
-		description:
-			"Capture stable APIs, contracts, and package-specific reference material.",
-		title: "Reference",
-		to: "/reference",
-	},
-];
+import { createFileRoute } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/")({
 	component: HomePage,
@@ -32,34 +12,39 @@ export const Route = createFileRoute("/")({
 
 function HomePage() {
 	return (
-		<section className="hero">
-			<div className="hero__copy">
-				<p className="eyebrow">TanStack Start + File-Based Routing</p>
-				<h2 className="hero__title">
-					Write docs in the same repo where the code lives.
+		<section className="home-page">
+			<div className="home-page__intro">
+				<p className="eyebrow">Type-Safe Dependency Injection</p>
+				<h2 className="home-page__title">
+					Husky DI keeps object graphs explicit, testable, and predictable.
 				</h2>
-				<p className="hero__body">
-					This website is a dedicated writing surface for Husky DI. Use it for
-					narrative guides, package reference pages, migration notes, and
-					architecture storytelling that benefits from a polished browsing
-					experience.
+				<p className="home-page__body">
+					This site is intentionally reduced to a single homepage. The extra
+					documentation routes, demo components, and content scaffolding have
+					been removed so the workspace stays easy to understand and extend.
 				</p>
 			</div>
-			<div className="hero__actions">
-				<Link className="button button--primary" to="/guides/getting-started">
-					Open Writing Guide
-				</Link>
-				<Link className="button button--secondary" to="/reference/core">
-					Browse Core Reference
-				</Link>
+			<div className="home-page__panel">
+				<p className="home-page__label">Core packages</p>
+				<ul className="home-page__list">
+					<li>
+						<code>@husky-di/core</code> for container and resolution behavior.
+					</li>
+					<li>
+						<code>@husky-di/decorator</code> for constructor injection metadata.
+					</li>
+					<li>
+						<code>@husky-di/module</code> for module-style composition
+						boundaries.
+					</li>
+				</ul>
 			</div>
-			<div className="card-grid">
-				{landingCards.map((card) => (
-					<Link key={card.to} className="card" to={card.to}>
-						<h3>{card.title}</h3>
-						<p>{card.description}</p>
-					</Link>
-				))}
+			<div className="home-page__panel">
+				<p className="home-page__label">What remains here</p>
+				<p className="home-page__body">
+					A TanStack Start app shell, one route, one stylesheet, and the base
+					path helper needed for deployment under a subdirectory.
+				</p>
 			</div>
 		</section>
 	);

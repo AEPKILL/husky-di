@@ -1,41 +1,18 @@
 /**
- * Root route for the documentation website.
- *
- * @overview
- * Provides the shared document shell, top-level navigation, and global page
- * chrome for all documentation routes in the TanStack Start app.
- *
+ * @overview Root route for the minimal Husky DI website.
  * @author AEPKILL
- * @created 2026-06-25 16:25:00
+ * @created 2026-06-26 10:20:00
  */
 
 import {
 	createRootRoute,
 	HeadContent,
-	Link,
 	Outlet,
 	Scripts,
 } from "@tanstack/react-router";
-import { TanStackRouterDevtools } from "@tanstack/react-router-devtools";
 import type { ReactNode } from "react";
 import tailwindCss from "tailwindcss/index.css?url";
-
 import appScss from "@/styles/app.scss?url";
-
-const primaryLinks = [
-	{
-		label: "Overview",
-		to: "/" as const,
-	},
-	{
-		label: "Guides",
-		to: "/guides" as const,
-	},
-	{
-		label: "Reference",
-		to: "/reference" as const,
-	},
-];
 
 export const Route = createRootRoute({
 	head: () => ({
@@ -48,11 +25,11 @@ export const Route = createRootRoute({
 				content: "width=device-width, initial-scale=1",
 			},
 			{
-				title: "Husky DI Docs",
+				title: "Husky DI",
 			},
 			{
 				name: "description",
-				content: "TanStack Start powered documentation workspace for Husky DI.",
+				content: "Minimal homepage for the Husky DI project website.",
 			},
 		],
 		links: [
@@ -80,33 +57,17 @@ function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
 			<body>
 				<div className="site-shell">
 					<header className="site-header">
-						<div className="site-header__brand">
-							<p className="site-header__eyebrow">husky-di</p>
-							<h1 className="site-header__title">Documentation Workspace</h1>
-							<p className="site-header__subtitle">
-								File-based docs app for guides, reference pages, and ADR-driven
-								knowledge capture.
-							</p>
-						</div>
-						<nav className="site-nav" aria-label="Primary">
-							{primaryLinks.map((item) => (
-								<Link
-									key={item.to}
-									to={item.to}
-									activeOptions={{ exact: item.to === "/" }}
-									activeProps={{
-										className: "site-nav__link site-nav__link--active",
-									}}
-									inactiveProps={{ className: "site-nav__link" }}
-								>
-									{item.label}
-								</Link>
-							))}
-						</nav>
+						<p className="site-header__eyebrow">husky-di</p>
+						<h1 className="site-header__title">
+							A small, focused project homepage.
+						</h1>
+						<p className="site-header__subtitle">
+							The website workspace now ships a single landing page instead of a
+							full documentation tree.
+						</p>
 					</header>
 					<main className="site-main">{children}</main>
 				</div>
-				<TanStackRouterDevtools position="bottom-right" />
 				<Scripts />
 			</body>
 		</html>
