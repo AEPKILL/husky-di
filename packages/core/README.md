@@ -341,6 +341,7 @@ import {
   createContainer,
   createServiceIdentifier,
   resolve,
+  ResolveContainerScopeEnum,
 } from "@husky-di/core";
 
 const ILogger = createServiceIdentifier<Logger>("ILogger");
@@ -360,6 +361,18 @@ serviceA.loggerRef.current.log("inside resolve context");
 
 `resolve()` cannot be called outside the container resolution flow.
 If you do, it throws `E_RESOLVE_CONTEXT_UNAVAILABLE`.
+
+By default, `resolve()` continues from the container currently performing the
+active resolution step. If you need to continue from the container that started
+the current resolution chain instead, pass `scope: ResolveContainerScopeEnum.origin`.
+
+```typescript
+class Database {
+  readonly options = resolve(IDatabaseOptions, {
+    scope: ResolveContainerScopeEnum.origin,
+  });
+}
+```
 
 ## Container Hierarchy
 

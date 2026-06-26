@@ -11,18 +11,19 @@
  */
 
 import { CoreErrorCodeEnum } from "@/enums/core-error-code.enum";
+import { ResolveContainerScopeEnum } from "@/enums/resolve-container-scope.enum";
 import { CoreException } from "@/exceptions/core.exception";
 import { ResolveException } from "@/exceptions/resolve.exception";
 import type {
-	IContainer,
 	ResolveInstance,
 	ResolveOptions,
 } from "@/interfaces/container.interface";
 import { resolveRecordRef } from "@/shared/instances";
+import type { ResolveHelperOptions } from "@/types/resolve-helper-options.type";
 import type { ServiceIdentifier } from "@/types/service-identifier.type";
 
-function _resolve<T>(serviceIdentifier: ServiceIdentifier<T>): T;
-function _resolve<T, Options extends ResolveOptions<T>>(
+export function resolve<T>(serviceIdentifier: ServiceIdentifier<T>): T;
+export function resolve<T, Options extends ResolveHelperOptions<T>>(
 	serviceIdentifier: ServiceIdentifier<T>,
 	options: Options,
 ): ResolveInstance<T, Options>;
@@ -53,7 +54,7 @@ function _resolve<T, Options extends ResolveOptions<T>>(
  * };
  * ```
  */
-function _resolve<T, Options extends ResolveOptions<T>>(
+export function resolve<T, Options extends ResolveHelperOptions<T>>(
 	serviceIdentifier: ServiceIdentifier<T>,
 	options?: Options,
 ): ResolveInstance<T, Options> {
@@ -66,12 +67,17 @@ function _resolve<T, Options extends ResolveOptions<T>>(
 		);
 	}
 
-	const currentContainer = resolveRecord.getCurrentContainer();
+	const { scope = ResolveContainerScopeEnum.current, ...resolveOptions } =
+		options ?? {};
+	const container =
+		scope === ResolveContainerScopeEnum.origin
+			? resolveRecord.getOriginContainer()
+			: resolveRecord.getCurrentContainer();
 
-	if (currentContainer) {
-		return currentContainer.resolve(
+	if (container) {
+		return container.resolve(
 			serviceIdentifier,
-			options as Options,
+			resolveOptions as ResolveOptions<T>,
 		) as ResolveInstance<T, Options>;
 	}
 
@@ -81,13 +87,3 @@ function _resolve<T, Options extends ResolveOptions<T>>(
 		resolveRecord,
 	);
 }
-
-/**
- * Resolve utility function that works within resolution contexts.
- *
- * @remarks
- * This is a convenience function that allows resolving services from within
- * factory functions, decorators, or other contexts without direct container access.
- * It must be called within an active resolution context.
- */
-export const resolve: IContainer["resolve"] = _resolve;

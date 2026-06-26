@@ -153,6 +153,20 @@ export class ResolveRecordImpl implements IInternalResolveRecord {
 	}
 
 	/**
+	 * Gets the container that started the current resolution chain.
+	 *
+	 * @returns The origin container stored on the root resolve record
+	 */
+	getOriginContainer(): IContainer {
+		const { value } = this._root;
+		if (value.type !== ResolveRecordTypeEnum.root) {
+			throw new Error("Resolve record root node must contain a root record.");
+		}
+
+		return value.container;
+	}
+
+	/**
 	 * Gets the path from root to current node.
 	 *
 	 * @returns An array of nodes representing the resolution path

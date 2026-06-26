@@ -91,7 +91,24 @@ type ResolveOptions<T> = {
 );
 ```
 
-### 3.5 Disposable Registry
+### 3.6 Resolve Helper Scope
+
+```typescript
+enum ResolveContainerScopeEnum {
+  current = "current",
+  origin = "origin",
+}
+```
+
+### 3.7 Resolve Helper Options
+
+```typescript
+type ResolveHelperOptions<T> = ResolveOptions<T> & {
+  scope?: ResolveContainerScopeEnum;
+};
+```
+
+### 3.8 Disposable Registry
 
 ```typescript
 interface IDisposableRegistry extends IDisposable {
@@ -186,6 +203,14 @@ If a provider throws while a service is being resolved, the container **MUST** w
 The package-level `resolve()` helper **MUST** only be used while a resolution context is active. If no active `ResolveRecord` or current container is available, the implementation **MUST** reject the call.
 
 - _Error Code:_ `E_RESOLVE_CONTEXT_UNAVAILABLE`
+
+**S9. Resolve Helper Container Scope**  
+The package-level `resolve()` helper **MUST** support a helper-only `scope` option with the following behavior:
+
+- When `scope` is omitted, the helper **MUST** default to `ResolveContainerScopeEnum.current`.
+- When `scope` is `ResolveContainerScopeEnum.current`, the helper **MUST** continue resolution from the container currently performing the active resolution step.
+- When `scope` is `ResolveContainerScopeEnum.origin`, the helper **MUST** continue resolution from the container that started the current resolution chain.
+- This helper-only scope option **MUST NOT** change the semantics of `container.resolve()`.
 
 ### 4.3 Lifecycle Management
 

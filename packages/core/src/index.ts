@@ -14,6 +14,7 @@ import { ContainerImpl } from "@/impls/ContainerImpl";
 export { CoreErrorCodeEnum } from "@/enums/core-error-code.enum";
 export { LifecycleEnum } from "@/enums/lifecycle.enum";
 export { RegistrationTypeEnum } from "@/enums/registration-type.enum";
+export { ResolveContainerScopeEnum } from "@/enums/resolve-container-scope.enum";
 export { ResolveRecordTypeEnum } from "@/enums/resolve-record-type.enum";
 
 export {
@@ -69,6 +70,7 @@ export type {
 	RegistrationPlanEntry,
 	RegistrationPlanRegister,
 } from "@/types/registration-plan.type";
+export type { ResolveHelperOptions } from "@/types/resolve-helper-options.type";
 export type {
 	ServiceIdentifier,
 	ServiceIdentifierInstance,

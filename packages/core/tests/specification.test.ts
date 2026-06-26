@@ -20,6 +20,7 @@ import {
 	globalMiddleware,
 	type IContainer,
 	LifecycleEnum,
+	ResolveContainerScopeEnum,
 	ResolveException,
 	resolve,
 } from "../src/index";
@@ -626,6 +627,62 @@ describe("SPEC 4.2: Service Resolution", () => {
 			expect(() => {
 				resolve(IServiceA);
 			}).toThrow(/E_RESOLVE_CONTEXT_UNAVAILABLE/);
+		});
+	});
+
+	describe("S9: Resolve Helper Container Scope", () => {
+		it("should default to current container scope when scope is omitted", () => {
+			// Arrange
+			const IDatabase = createServiceIdentifier<Database>("IDatabase");
+			const IDatabaseOptions = createServiceIdentifier<{ baseURL: string }>(
+				"IDatabaseOptions",
+			);
+
+			class Database {
+				readonly options = resolve(IDatabaseOptions);
+			}
+
+			parentContainer.register(IDatabase, {
+				useClass: Database,
+			});
+			childContainer.register(IDatabaseOptions, {
+				useValue: { baseURL: "http://localhost:3000" },
+			});
+
+			// Act & Assert
+			expect(() => childContainer.resolve(IDatabase)).toThrow(
+				'Service identifier "IDatabaseOptions" is not registered in this container. Please register it first or set the "optional" option to true if this service is optional.',
+			);
+		});
+
+		it("should resolve from origin container when scope is set to origin", () => {
+			// Arrange
+			const IOriginDatabase =
+				createServiceIdentifier<OriginDatabase>("IOriginDatabase");
+			const IDatabaseOptions = createServiceIdentifier<{ baseURL: string }>(
+				"IDatabaseOptions",
+			);
+			const childOptions = { baseURL: "http://localhost:3000" };
+
+			class OriginDatabase {
+				readonly options = resolve(IDatabaseOptions, {
+					scope: ResolveContainerScopeEnum.origin,
+				});
+			}
+
+			parentContainer.register(IOriginDatabase, {
+				useClass: OriginDatabase,
+			});
+			childContainer.register(IDatabaseOptions, {
+				useValue: childOptions,
+			});
+
+			// Act
+			const database = childContainer.resolve(IOriginDatabase);
+
+			// Assert
+			expect(database).toBeInstanceOf(OriginDatabase);
+			expect(database.options).toBe(childOptions);
 		});
 	});
 });

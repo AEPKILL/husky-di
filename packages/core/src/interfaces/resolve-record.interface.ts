@@ -159,6 +159,13 @@ export interface IResolveRecord extends IUnique {
 	 * @returns The current container, or undefined if not available
 	 */
 	getCurrentContainer(): IContainer | undefined;
+
+	/**
+	 * Gets the container that started the current resolution chain.
+	 *
+	 * @returns The origin container for this resolve record
+	 */
+	getOriginContainer(): IContainer;
 }
 
 /**
