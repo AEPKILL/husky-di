@@ -1,5 +1,20 @@
 # @husky-di/decorator
 
+## 1.3.0
+
+### Minor Changes
+
+- [`2c53a29`](https://github.com/AEPKILL/husky-di/commit/2c53a29750dda7a9b1d1f07aeca1a677256d3ee4) Thanks [@AEPKILL](https://github.com/AEPKILL)! - Add origin-aware container scope support to nested resolution helpers and decorator metadata.
+
+  `@husky-di/core` now exports `ResolveContainerScopeEnum` and `ResolveHelperOptions`, and the package-level `resolve()` helper accepts a `scope` option. This lets nested resolution continue from either the current container or the origin container of the active resolve chain.
+
+  `@husky-di/decorator` now supports the same `scope` option in injection metadata, including `@inject()` and `@tagged()`, so decorator-based constructor injection can resolve dependencies from the origin container when needed.
+
+### Patch Changes
+
+- Updated dependencies [[`2c53a29`](https://github.com/AEPKILL/husky-di/commit/2c53a29750dda7a9b1d1f07aeca1a677256d3ee4)]:
+  - @husky-di/core@1.3.0
+
 ## 1.2.2
 
 ### Patch Changes
