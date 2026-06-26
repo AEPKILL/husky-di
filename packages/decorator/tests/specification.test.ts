@@ -14,6 +14,7 @@ import {
 	globalMiddleware,
 	type IContainer,
 	type Ref,
+	ResolveContainerScopeEnum,
 	ResolveException,
 } from "@husky-di/core";
 import { INJECTION_METADATA_KEY } from "../src/constants/metadata-key.const";
@@ -370,6 +371,40 @@ describe("Decorator Module - Specification Compliance", () => {
 					container.resolve(TestService);
 				}).toThrow();
 			});
+
+			it("should resolve from origin container when scope is set to origin", () => {
+				const IDatabase = Symbol("IDatabase");
+				const IDatabaseOptions = Symbol("IDatabaseOptions");
+
+				@injectable()
+				class Database {
+					constructor(
+						@inject(IDatabaseOptions, {
+							scope: ResolveContainerScopeEnum.origin,
+						})
+						public readonly options: { baseURL: string },
+					) {}
+				}
+
+				const parentContainer = createContainer("ParentContainer");
+				const childContainer = createContainer(
+					"ChildContainer",
+					parentContainer,
+				);
+				const childOptions = { baseURL: "http://localhost:3000" };
+
+				parentContainer.register(IDatabase, {
+					useClass: Database,
+				});
+				childContainer.register(IDatabaseOptions, {
+					useValue: childOptions,
+				});
+
+				const instance = childContainer.resolve<Database>(IDatabase);
+
+				expect(instance).toBeInstanceOf(Database);
+				expect(instance.options).toBe(childOptions);
+			});
 		});
 	});
 
@@ -469,6 +504,40 @@ describe("Decorator Module - Specification Compliance", () => {
 
 				const instance = container.resolve(TestService);
 				expect(instance.depRef.current.value).toBe("test");
+			});
+
+			it("should support scope in InjectionMetadata", () => {
+				const IDatabase = Symbol("IDatabase");
+				const IDatabaseOptions = Symbol("IDatabaseOptions");
+
+				@injectable()
+				class Database {
+					constructor(
+						@tagged({
+							serviceIdentifier: IDatabaseOptions,
+							scope: ResolveContainerScopeEnum.origin,
+						})
+						public readonly options: { baseURL: string },
+					) {}
+				}
+
+				const parentContainer = createContainer("ParentContainer");
+				const childContainer = createContainer(
+					"ChildContainer",
+					parentContainer,
+				);
+				const childOptions = { baseURL: "http://localhost:3000" };
+
+				parentContainer.register(IDatabase, {
+					useClass: Database,
+				});
+				childContainer.register(IDatabaseOptions, {
+					useValue: childOptions,
+				});
+
+				const instance = childContainer.resolve<Database>(IDatabase);
+
+				expect(instance.options).toBe(childOptions);
 			});
 		});
 

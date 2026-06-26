@@ -25,7 +25,7 @@ The following keywords are to be interpreted as described in [RFC 2119](https://
 ```typescript
 interface InjectionMetadata<T> {
   readonly serviceIdentifier: ServiceIdentifier<T>;
-  readonly container?: Container;
+  readonly scope?: ResolveContainerScopeEnum;
   readonly dynamic?: boolean;
   readonly ref?: boolean;
   readonly optional?: boolean;
@@ -35,7 +35,7 @@ interface InjectionMetadata<T> {
 **Fields:**
 
 - `serviceIdentifier` **(REQUIRED)**: The service identifier to resolve.
-- `container` (OPTIONAL): Specific container instance to resolve from.
+- `scope` (OPTIONAL): Which `core.resolve()` container perspective to use for this parameter.
 - `dynamic` (OPTIONAL): When `true`, return a dynamic reference instead of the resolved instance.
 - `ref` (OPTIONAL): When `true`, return a reference wrapper instead of the resolved instance.
 - `optional` (OPTIONAL): When `true`, resolution failure does not throw an error.
@@ -134,7 +134,7 @@ If `@inject()` is applied multiple times to the same parameter, only the last ap
 
 #### 4.2.3 Options Semantics
 
-- **container**: If specified, resolution **MUST** occur from the specified container instead of the default.
+- **scope**: If specified, resolution **MUST** use the matching `core.resolve()` helper scope for this parameter.
 - **dynamic**: If `true`, the resolved value **MUST** be a reference that reflects the current registration state.
 - **ref**: If `true`, the resolved value **MUST** be a reference wrapper object.
 - **optional**: If `true` and resolution fails, the value **MUST** be `undefined` instead of throwing an error.

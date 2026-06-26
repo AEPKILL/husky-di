@@ -247,6 +247,7 @@ Even if the parameter type is a class, you should still write `@inject()` or `@t
 - enable `optional`
 - enable `ref`
 - enable `dynamic`
+- change the `core.resolve()` container scope
 
 ## Injection Options
 
@@ -303,6 +304,26 @@ class UserService {
 ```
 
 Prefer `ref` unless you specifically need to re-run resolution every time the value is read.
+
+### `scope`
+
+Choose which `core.resolve()` container perspective the decorator should use for
+that parameter.
+
+```typescript
+import { ResolveContainerScopeEnum } from "@husky-di/core";
+
+@injectable()
+class DatabaseConsumer {
+  constructor(
+    @inject(IDatabaseOptions, { scope: ResolveContainerScopeEnum.origin })
+    private readonly options: { baseURL: string }
+  ) {}
+}
+```
+
+This is useful when a parent-provided class should consume child-container
+overrides for a specific constructor parameter.
 
 ## When Automatic Inference Works
 
