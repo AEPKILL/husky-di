@@ -1,5 +1,12 @@
 # @husky-di/decorator
 
+## 1.3.1
+
+### Patch Changes
+
+- Updated dependencies [[`8e7740c`](https://github.com/AEPKILL/husky-di/commit/8e7740c3047d433041bb7894375fef1a0bed8c64)]:
+  - @husky-di/core@1.3.1
+
 ## 1.3.0
 
 ### Minor Changes

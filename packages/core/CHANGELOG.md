@@ -1,5 +1,11 @@
 # @husky-di/core
 
+## 1.3.1
+
+### Patch Changes
+
+- [`8e7740c`](https://github.com/AEPKILL/husky-di/commit/8e7740c3047d433041bb7894375fef1a0bed8c64) Thanks [@AEPKILL](https://github.com/AEPKILL)! - Enhance the `resolve()` helper so `resolve(IContainer)` returns the scoped active container without requiring an explicit container registration. This also adds specification coverage for the new helper behavior and refreshes the `@husky-di/core` README examples around `resolve()`-based dependency access.
+
 ## 1.3.0
 
 ### Minor Changes
