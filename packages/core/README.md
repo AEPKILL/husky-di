@@ -44,7 +44,7 @@ pnpm add @husky-di/core
 
 ## Quick Start
 
-The example below shows the most typical `core` style: define your own service identifiers and decide explicitly how dependencies are assembled.
+The example below shows a common `core` style: define your own service identifiers, register classes explicitly, and use `resolve()` inside classes created by the container.
 
 In most cases, `createServiceIdentifier<T>()` is the best default.
 
@@ -52,7 +52,7 @@ In most cases, `createServiceIdentifier<T>()` is the best default.
 import {
   createContainer,
   createServiceIdentifier,
-  type IContainer,
+  resolve,
 } from "@husky-di/core";
 
 interface Logger {
@@ -66,7 +66,7 @@ class ConsoleLogger implements Logger {
 }
 
 class UserService {
-  constructor(private readonly logger: Logger) {}
+  private readonly logger = resolve(ILogger);
 
   getUser(id: string) {
     this.logger.log(`load user: ${id}`);
@@ -84,14 +84,15 @@ container.register(ILogger, {
 });
 
 container.register(IUserService, {
-  useFactory: (currentContainer: IContainer) => {
-    return new UserService(currentContainer.resolve(ILogger));
-  },
+  useClass: UserService,
 });
 
 const userService = container.resolve(IUserService);
 console.log(userService.getUser("u-1"));
 ```
+
+`UserService` resolves `ILogger` from the active resolution context.
+`@husky-di/core` does not inject constructor parameters automatically, but classes resolved by the container can use `resolve()` inside the resolution flow.
 
 ## Core Mental Model
 
@@ -123,11 +124,13 @@ A container is responsible for:
 - falling back across parent/child container boundaries
 
 ```typescript
-const root = createContainer("Root");
-const feature = createContainer("Feature", root);
+import { createContainer, rootContainer } from "@husky-di/core";
+
+const app = createContainer("App");
+const feature = createContainer("Feature", rootContainer);
 ```
 
-If you do not pass a parent explicitly, `createContainer()` attaches to `rootContainer` by default.
+`app.parent === rootContainer` because `createContainer()` attaches to `rootContainer` by default when you do not pass a parent explicitly.
 
 ## Registering Services
 
@@ -152,15 +155,31 @@ If you want class dependencies to be declared and injected automatically, pair i
 
 ### `useFactory`
 
-Use this when you want to assemble dependencies explicitly, or when instance creation depends on the current container.
+Use this when you want to assemble a value explicitly, return a plain object, or branch on container state at creation time.
 
 ```typescript
+interface UserService {
+  getUser(id: string): { id: string; name: string };
+}
+
+const IUserService = createServiceIdentifier<UserService>("IUserService");
+
 container.register(IUserService, {
-  useFactory: (currentContainer) => {
-    return new UserService(currentContainer.resolve(ILogger));
+  useFactory: () => {
+    const logger = resolve(ILogger);
+
+    return {
+      getUser(id: string) {
+        logger.log(`load user: ${id}`);
+        return { id, name: "Ada" };
+      },
+    };
   },
 });
 ```
+
+Factories also run inside the active resolution context, so they can use `resolve()` directly.
+If you need the concrete container instance itself, the factory callback can still receive it as an argument.
 
 ### `useValue`
 
@@ -377,6 +396,7 @@ class Database {
 ## Container Hierarchy
 
 A child container checks its own registrations first, then falls back to the parent if needed.
+That parent can be `rootContainer` or any other container you pass explicitly.
 
 ```typescript
 const parent = createContainer("Parent");
