@@ -2,7 +2,7 @@
  * @overview Core container specification compliance tests.
  *
  * This test suite validates that the container implementation complies with
- * the behavioral contract defined in SPECIFICATION.md v1.2.0.
+ * the behavioral contract defined in SPECIFICATION.md v1.2.1.
  *
  * Each test is labeled with its corresponding specification requirement ID
  * (e.g., R1, S2, L1, etc.) for traceability.
@@ -18,7 +18,7 @@ import {
 	createRegistrationPlan,
 	createServiceIdentifier,
 	globalMiddleware,
-	type IContainer,
+	IContainer,
 	LifecycleEnum,
 	ResolveContainerScopeEnum,
 	ResolveException,
@@ -683,6 +683,81 @@ describe("SPEC 4.2: Service Resolution", () => {
 			// Assert
 			expect(database).toBeInstanceOf(OriginDatabase);
 			expect(database.options).toBe(childOptions);
+		});
+	});
+
+	describe("S10: Resolve Helper Container Access", () => {
+		it("should expose the scoped active container through resolve(IContainer)", () => {
+			// Arrange
+			const IContainerProbe =
+				createServiceIdentifier<ContainerProbe>("IContainerProbe");
+
+			class ContainerProbe {
+				readonly currentContainer = resolve(IContainer);
+				readonly currentContainerList = resolve(IContainer, {
+					multiple: true,
+				});
+				readonly originContainer = resolve(IContainer, {
+					scope: ResolveContainerScopeEnum.origin,
+				});
+				readonly originContainerList = resolve(IContainer, {
+					scope: ResolveContainerScopeEnum.origin,
+					multiple: true,
+				});
+			}
+
+			parentContainer.register(IContainerProbe, {
+				useClass: ContainerProbe,
+			});
+
+			// Act
+			const probe = childContainer.resolve(IContainerProbe);
+
+			// Assert
+			expect(probe.currentContainer).toBe(parentContainer);
+			expect(probe.currentContainerList).toEqual([parentContainer]);
+			expect(probe.originContainer).toBe(childContainer);
+			expect(probe.originContainerList).toEqual([childContainer]);
+		});
+
+		it("should support ref and dynamic helper options when resolving IContainer", () => {
+			// Arrange
+			const IContainerRefProbe =
+				createServiceIdentifier<ContainerRefProbe>("IContainerRefProbe");
+
+			class ContainerRefProbe {
+				readonly currentContainerRef = resolve(IContainer, {
+					ref: true,
+				});
+				readonly currentContainerDynamic = resolve(IContainer, {
+					dynamic: true,
+				});
+				readonly originContainerRefList = resolve(IContainer, {
+					scope: ResolveContainerScopeEnum.origin,
+					multiple: true,
+					ref: true,
+				});
+				readonly originContainerDynamicList = resolve(IContainer, {
+					scope: ResolveContainerScopeEnum.origin,
+					multiple: true,
+					dynamic: true,
+				});
+			}
+
+			parentContainer.register(IContainerRefProbe, {
+				useClass: ContainerRefProbe,
+			});
+
+			// Act
+			const probe = childContainer.resolve(IContainerRefProbe);
+
+			// Assert
+			expect(probe.currentContainerRef.current).toBe(parentContainer);
+			expect(probe.currentContainerDynamic.current).toBe(parentContainer);
+			expect(probe.originContainerRefList.current).toEqual([childContainer]);
+			expect(probe.originContainerDynamicList.current).toEqual([
+				childContainer,
+			]);
 		});
 	});
 });

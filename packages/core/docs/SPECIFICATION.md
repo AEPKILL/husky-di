@@ -1,6 +1,6 @@
 # Dependency Injection Container Specification
 
-**Version:** 1.2.0  
+**Version:** 1.2.1  
 **Status:** Stable  
 **Context:** Type-safe Dependency Injection Container for TypeScript
 
@@ -211,6 +211,14 @@ The package-level `resolve()` helper **MUST** support a helper-only `scope` opti
 - When `scope` is `ResolveContainerScopeEnum.current`, the helper **MUST** continue resolution from the container currently performing the active resolution step.
 - When `scope` is `ResolveContainerScopeEnum.origin`, the helper **MUST** continue resolution from the container that started the current resolution chain.
 - This helper-only scope option **MUST NOT** change the semantics of `container.resolve()`.
+
+**S10. Resolve Helper Container Access**  
+When the package-level `resolve()` helper receives `IContainer` as the `ServiceIdentifier`, it **MUST** expose the scoped active container without requiring an explicit container registration.
+
+- With the default single-resolution shape, the helper **MUST** return the scoped active container directly.
+- When `multiple: true` is specified, the helper **MUST** return an array containing exactly that scoped active container.
+- When `ref: true` or `dynamic: true` is specified, the helper **MUST** return a `Ref` whose `current` value follows the same single or array shape described above.
+- The selected container for this special case **MUST** still follow `S9` and therefore honor the helper's `scope` option.
 
 ### 4.3 Lifecycle Management
 

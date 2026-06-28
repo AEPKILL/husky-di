@@ -14,11 +14,13 @@ import { CoreErrorCodeEnum } from "@/enums/core-error-code.enum";
 import { ResolveContainerScopeEnum } from "@/enums/resolve-container-scope.enum";
 import { CoreException } from "@/exceptions/core.exception";
 import { ResolveException } from "@/exceptions/resolve.exception";
-import type {
-	ResolveInstance,
-	ResolveOptions,
+import {
+	IContainer,
+	type ResolveInstance,
+	type ResolveOptions,
 } from "@/interfaces/container.interface";
 import { resolveRecordRef } from "@/shared/instances";
+import type { Ref } from "@/types/ref.type";
 import type { ResolveHelperOptions } from "@/types/resolve-helper-options.type";
 import type { ServiceIdentifier } from "@/types/service-identifier.type";
 
@@ -67,23 +69,41 @@ export function resolve<T, Options extends ResolveHelperOptions<T>>(
 		);
 	}
 
-	const { scope = ResolveContainerScopeEnum.current, ...resolveOptions } =
-		options ?? {};
+	const scope = options?.scope ?? ResolveContainerScopeEnum.current;
 	const container =
 		scope === ResolveContainerScopeEnum.origin
 			? resolveRecord.getOriginContainer()
 			: resolveRecord.getCurrentContainer();
 
-	if (container) {
-		return container.resolve(
-			serviceIdentifier,
-			resolveOptions as ResolveOptions<T>,
-		) as ResolveInstance<T, Options>;
+	if (!container) {
+		throw new ResolveException(
+			CoreErrorCodeEnum.E_RESOLVE_CONTEXT_UNAVAILABLE,
+			`No container available in the current resolve context. This usually indicates that the resolve context has been corrupted or improperly initialized.`,
+			resolveRecord,
+		);
 	}
 
-	throw new ResolveException(
-		CoreErrorCodeEnum.E_RESOLVE_CONTEXT_UNAVAILABLE,
-		`No container available in the current resolve context. This usually indicates that the resolve context has been corrupted or improperly initialized.`,
-		resolveRecord,
-	);
+	// Treat `IContainer` as sugar for retrieving the current active container.
+	// Keeping this behavior in `resolve` avoids polluting other container
+	// registries with an extra registration just to model that active-container
+	// lookup semantics.
+	if (serviceIdentifier === IContainer) {
+		const multiple = options?.multiple;
+		const useRef = options?.dynamic || options?.ref;
+		const containerResult = multiple ? [container] : container;
+
+		if (useRef) {
+			return {
+				resolved: true,
+				current: containerResult as T,
+			} satisfies Ref<T> as ResolveInstance<T, Options>;
+		}
+
+		return containerResult as ResolveInstance<T, Options>;
+	}
+
+	return container.resolve(
+		serviceIdentifier,
+		options as ResolveOptions<T>,
+	) as ResolveInstance<T, Options>;
 }
