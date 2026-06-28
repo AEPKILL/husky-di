@@ -1,5 +1,11 @@
 # @husky-di/core
 
+## 1.3.2
+
+### Patch Changes
+
+- [`8e2beb8`](https://github.com/AEPKILL/husky-di/commit/8e2beb8f380c623d442024d7a93c63a2501ec5e8) Thanks [@AEPKILL](https://github.com/AEPKILL)! - Preserve the original source directory structure in package build output and publish sourcemaps for generated ESM and CJS files.
+
 ## 1.3.1
 
 ### Patch Changes
