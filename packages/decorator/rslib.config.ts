@@ -1,20 +1,25 @@
 import { defineConfig } from "@rslib/core";
 
 export default defineConfig({
-	lib: [
-		{
-			format: "esm",
-			syntax: ["node 18"],
-			dts: true,
-		},
-		{
-			format: "cjs",
-			syntax: ["node 18"],
-		},
-	],
 	resolve: {
 		alias: {
 			"@": "./src",
 		},
 	},
+	output: {
+		sourceMap: true,
+	},
+	lib: [
+		{
+			bundle: false,
+			format: "esm",
+			syntax: ["node 18"],
+			dts: true,
+		},
+		{
+			bundle: false,
+			format: "cjs",
+			syntax: ["node 18"],
+		},
+	],
 });

@@ -1,19 +1,23 @@
-import { resolve } from "node:path";
 import { defineConfig } from "@rslib/core";
 
 export default defineConfig({
-	source: {
+	resolve: {
 		alias: {
-			"@": resolve(__dirname, "src"),
+			"@": "./src",
 		},
+	},
+	output: {
+		sourceMap: true,
 	},
 	lib: [
 		{
+			bundle: false,
 			format: "esm",
 			syntax: ["node 18"],
 			dts: true,
 		},
 		{
+			bundle: false,
 			format: "cjs",
 			syntax: ["node 18"],
 		},
