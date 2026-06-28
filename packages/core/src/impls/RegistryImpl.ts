@@ -43,11 +43,9 @@ export class RegistryImpl implements IRegistry {
 	get<T>(
 		serviceIdentifier: ServiceIdentifier<T>,
 	): IRegistration<T> | undefined {
-		const registrations = this._registrationMap.get(serviceIdentifier);
-		if (registrations && registrations.length > 0) {
-			return registrations[registrations.length - 1] as IRegistration<T>;
-		}
-		return undefined;
+		const registrations = this.getAll(serviceIdentifier);
+
+		return registrations[registrations.length - 1] as IRegistration<T>;
 	}
 
 	/**
@@ -58,8 +56,9 @@ export class RegistryImpl implements IRegistry {
 	 * @returns An array of all registrations for the identifier
 	 */
 	getAll<T>(serviceIdentifier: ServiceIdentifier<T>): Array<IRegistration<T>> {
-		const registrations = this._registrationMap.get(serviceIdentifier);
-		return registrations ? (registrations as Array<IRegistration<T>>) : [];
+		return (this._registrationMap.get(serviceIdentifier) ?? []) as Array<
+			IRegistration<T>
+		>;
 	}
 
 	/**

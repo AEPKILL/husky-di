@@ -49,7 +49,7 @@ Do not apply it to:
 | File naming | Prefer existing suffixes such as `*.interface.ts`, `*.type.ts`, `*.enum.ts`, `*.factory.ts`, `*.utils.ts`, `*.const.ts`, `*.decorator.ts`, `*.middleware.ts`, `*.exception.ts` |
 | Symbol naming | Classes `PascalCase`, interfaces `I...`, enums `PascalCaseEnum`, factories `createXxx`, private fields `_name` |
 | Imports | Use `import type` for type-only imports; use `@/` inside package source; use package imports across packages |
-| Exports | Prefer named exports; update `src/index.ts` for public API changes |
+| Exports | Prefer named exports; place exported declarations before file-local helpers; update `src/index.ts` for public API changes |
 | Headers | Files that support comments should carry a header with `@overview`, `@author`, and `@created` |
 | Style | Prefer direct, explicit, readable code over speculative abstraction |
 | Exceptions | Keep `biome-ignore` narrow and always explain why |
@@ -129,6 +129,7 @@ Do not invent new suffixes when an existing suffix already fits.
 - Across packages, prefer package-name imports such as `@husky-di/core`.
 - In tests and tooling, follow the nearest existing local pattern before changing import style.
 - Prefer named exports.
+- In implementation files, place exported declarations near the top of the file, before file-local helper types, constants, and functions when practical.
 - Do not add default exports unless a user explicitly asks for them.
 - Public package APIs should flow through `src/index.ts`.
 - Keep `index.ts` files focused on exports rather than implementation-heavy logic.
@@ -155,9 +156,8 @@ Prefer predictable file shape:
 
 - header comment
 - imports
-- local types and constants near the code they support
-- primary implementation
-- local helpers when needed
+- exported declarations
+- file-local supporting types, constants, and helpers
 
 Prefer predictable class shape:
 

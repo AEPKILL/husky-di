@@ -20,13 +20,6 @@ import type { ServiceIdentifier } from "@/types/service-identifier.type";
 import { isValidServiceIdentifier } from "@/utils/registration.utils";
 import { createRegistrationId } from "@/utils/uuid.utils";
 
-const REGISTRATION_PROVIDER_KEYS = [
-	"useClass",
-	"useFactory",
-	"useValue",
-	"useAlias",
-] as const;
-
 /**
  * Registration class
  *
@@ -98,70 +91,12 @@ export class RegistrationImpl<T>
 		this.id = createRegistrationId();
 		this.serviceIdentifier = serviceIdentifier;
 
-		const providerKeys = REGISTRATION_PROVIDER_KEYS.filter(
-			(key) => key in options,
-		);
-		if (providerKeys.length !== 1) {
-			throw new CoreException(
-				CoreErrorCodeEnum.E_INVALID_PROVIDER,
-				"Registration must specify exactly one provider strategy.",
-			);
-		}
-
-		if ("useClass" in options) {
-			if (typeof options.useClass !== "function") {
-				throw new CoreException(
-					CoreErrorCodeEnum.E_INVALID_PROVIDER,
-					"useClass must be a constructor function.",
-				);
-			}
-
-			this.type = RegistrationTypeEnum.class;
-			this.provider = options.useClass;
-			this.lifecycle = options.lifecycle ?? LifecycleEnum.transient;
-		} else if ("useFactory" in options) {
-			if (typeof options.useFactory !== "function") {
-				throw new CoreException(
-					CoreErrorCodeEnum.E_INVALID_PROVIDER,
-					"useFactory must be a function.",
-				);
-			}
-
-			this.type = RegistrationTypeEnum.factory;
-			this.provider = options.useFactory;
-			this.lifecycle = options.lifecycle ?? LifecycleEnum.transient;
-		} else if ("useValue" in options) {
-			this.type = RegistrationTypeEnum.value;
-			this.provider = options.useValue;
-			this.lifecycle = options.lifecycle ?? LifecycleEnum.transient;
-		} else if ("useAlias" in options) {
-			const aliasOptions = options as CreateAliasRegistrationOptions<T>;
-			if (!isValidServiceIdentifier(aliasOptions.useAlias)) {
-				throw new CoreException(
-					CoreErrorCodeEnum.E_INVALID_PROVIDER,
-					"useAlias must be a valid service identifier.",
-				);
-			}
-			if (
-				aliasOptions.getContainer !== undefined &&
-				typeof aliasOptions.getContainer !== "function"
-			) {
-				throw new CoreException(
-					CoreErrorCodeEnum.E_INVALID_PROVIDER,
-					"getContainer must be a function.",
-				);
-			}
-
-			this.type = RegistrationTypeEnum.alias;
-			this.provider = options.useAlias;
-			this.lifecycle = LifecycleEnum.transient;
-			this.getContainer = options.getContainer;
-		} else {
-			throw new CoreException(
-				CoreErrorCodeEnum.E_INVALID_PROVIDER,
-				"Unsupported registration options",
-			);
-		}
+		const { getContainer, lifecycle, provider, type } =
+			resolveProviderDefinition(options);
+		this.type = type;
+		this.provider = provider;
+		this.lifecycle = lifecycle;
+		this.getContainer = getContainer;
 
 		if (this.type === RegistrationTypeEnum.value) {
 			this._instance = this.provider as T;
@@ -202,4 +137,102 @@ export class RegistrationImpl<T>
 	public _internalSetInstance(instance: T): void {
 		this._instance = instance;
 	}
+}
+
+const REGISTRATION_PROVIDER_KEYS = [
+	"useClass",
+	"useFactory",
+	"useValue",
+	"useAlias",
+] as const;
+
+type RegistrationProviderDefinition<T> = {
+	getContainer?: () => IContainer;
+	lifecycle: LifecycleEnum;
+	provider: IRegistration<T>["provider"];
+	type: RegistrationTypeEnum;
+};
+
+function resolveProviderDefinition<T>(
+	options: CreateRegistrationOptions<T>,
+): RegistrationProviderDefinition<T> {
+	const providerKeys = REGISTRATION_PROVIDER_KEYS.filter(
+		(key) => key in options,
+	);
+	if (providerKeys.length !== 1) {
+		throw new CoreException(
+			CoreErrorCodeEnum.E_INVALID_PROVIDER,
+			"Registration must specify exactly one provider strategy.",
+		);
+	}
+
+	if ("useClass" in options) {
+		if (typeof options.useClass !== "function") {
+			throw new CoreException(
+				CoreErrorCodeEnum.E_INVALID_PROVIDER,
+				"useClass must be a constructor function.",
+			);
+		}
+
+		return {
+			lifecycle: options.lifecycle ?? LifecycleEnum.transient,
+			provider: options.useClass,
+			type: RegistrationTypeEnum.class,
+		};
+	}
+
+	if ("useFactory" in options) {
+		if (typeof options.useFactory !== "function") {
+			throw new CoreException(
+				CoreErrorCodeEnum.E_INVALID_PROVIDER,
+				"useFactory must be a function.",
+			);
+		}
+
+		return {
+			lifecycle: options.lifecycle ?? LifecycleEnum.transient,
+			provider: options.useFactory,
+			type: RegistrationTypeEnum.factory,
+		};
+	}
+
+	if ("useValue" in options) {
+		return {
+			lifecycle: options.lifecycle ?? LifecycleEnum.transient,
+			provider: options.useValue,
+			type: RegistrationTypeEnum.value,
+		};
+	}
+
+	if ("useAlias" in options) {
+		const aliasOptions = options as CreateAliasRegistrationOptions<T>;
+		if (!isValidServiceIdentifier(aliasOptions.useAlias)) {
+			throw new CoreException(
+				CoreErrorCodeEnum.E_INVALID_PROVIDER,
+				"useAlias must be a valid service identifier.",
+			);
+		}
+
+		if (
+			aliasOptions.getContainer !== undefined &&
+			typeof aliasOptions.getContainer !== "function"
+		) {
+			throw new CoreException(
+				CoreErrorCodeEnum.E_INVALID_PROVIDER,
+				"getContainer must be a function.",
+			);
+		}
+
+		return {
+			getContainer: options.getContainer,
+			lifecycle: LifecycleEnum.transient,
+			provider: options.useAlias,
+			type: RegistrationTypeEnum.alias,
+		};
+	}
+
+	throw new CoreException(
+		CoreErrorCodeEnum.E_INVALID_PROVIDER,
+		"Unsupported registration options",
+	);
 }
