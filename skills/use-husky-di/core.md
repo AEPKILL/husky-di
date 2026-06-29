@@ -175,7 +175,13 @@ container.register(INew, {
 
 ### The `resolve()` Helper
 
-The package-level `resolve()` helper works only inside an active resolution context (e.g., inside a factory or middleware).
+The package-level `resolve()` helper works only inside an active resolution context — i.e., while the container is resolving a service. This covers three key scenarios:
+
+1. **Inside a factory** — the factory runs during resolution.
+2. **Inside class field initializers** — when the container instantiates a class, field expressions run within the resolution context.
+3. **Inside middleware** — middleware wraps the resolution chain.
+
+#### Inside a factory
 
 ```typescript
 import { resolve, ResolveContainerScopeEnum } from "@husky-di/core";
@@ -186,6 +192,52 @@ container.register(ISvc, {
     const dep2 = resolve(IDep, { scope: ResolveContainerScopeEnum.origin });
     // origin → container that started the resolution chain
     return new Svc(dep);
+  },
+});
+```
+
+#### Class field injection (no decorators needed)
+
+When the container resolves a class registered with `useClass`, field initializers execute inside the resolution context. This enables property-level DI without `@inject()` or `reflect-metadata`:
+
+```typescript
+import { resolve } from "@husky-di/core";
+
+class UserService {
+  logger = resolve(ILogger);          // resolved from the container
+  db = resolve(IDatabase);            // resolved at instantiation time
+
+  getUsers() {
+    this.logger.log("fetching users");
+    return this.db.query("SELECT * FROM users");
+  }
+}
+
+container.register(ILogger, { useClass: ConsoleLogger });
+container.register(IDatabase, { useClass: PostgresDatabase });
+container.register(IUserService, { useClass: UserService });
+
+const svc = container.resolve(IUserService);
+// UserService.logger and UserService.db are auto-resolved during construction
+```
+
+This pattern is especially useful when:
+- You want DI without TypeScript decorators (`experimentalDecorators`).
+- You have a simple class with a few dependencies and don't want constructor boilerplate.
+- Dependencies change per instance (use `scope: ResolveContainerScopeEnum.origin` to resolve from the container that started the chain).
+
+**Important:** Field initializers run in the class body, so `resolve()` relies on the container being in an active resolution chain. If you construct the class manually (`new UserService()`) outside a resolution context, `resolve()` throws `E_RESOLVE_CONTEXT_UNAVAILABLE`.
+
+#### Inside middleware
+
+```typescript
+container.use({
+  name: "profiling",
+  executor(params, next) {
+    const start = Date.now();
+    const result = next(params);
+    console.log(`${String(params.serviceIdentifier)}: ${Date.now() - start}ms`);
+    return result;
   },
 });
 ```

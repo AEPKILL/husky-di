@@ -13,11 +13,18 @@ Type-safe, introspectable DI for TypeScript. Three composable packages:
 ### Core — manual wiring
 
 ```typescript
-import { createContainer, createServiceIdentifier } from "@husky-di/core";
+import { createContainer, createServiceIdentifier, resolve } from "@husky-di/core";
 const ILogger = createServiceIdentifier<ILogger>("ILogger");
 const c = createContainer();
 c.register(ILogger, { useClass: ConsoleLogger });
 c.resolve(ILogger).log("Hello DI");
+
+// Class field injection — no decorators needed
+class UserService {
+  logger = resolve(ILogger);          // auto-resolved at construction
+}
+c.register(IUserService, { useClass: UserService });
+c.resolve(IUserService);              // .logger is ConsoleLogger
 ```
 
 ### Decorator — auto-wired constructors
