@@ -12,12 +12,12 @@ import { RegistrationTypeEnum } from "@/enums/registration-type.enum";
 import { ResolveRecordTypeEnum } from "@/enums/resolve-record-type.enum";
 import { CodedException } from "@/exceptions/coded.exception";
 import { ResolveException } from "@/exceptions/resolve.exception";
-import { DisposableRegistryImpl } from "@/impls/DisposableRegistryImpl";
-import { InstanceDynamicRefImpl } from "@/impls/InstanceDynamicRefImpl";
-import { InstanceRefImpl } from "@/impls/InstanceRefImpl";
-import { MiddlewareChainImpl } from "@/impls/MiddlewareChainImpl";
-import { RegistrationImpl } from "@/impls/RegistrationImpl";
-import { RegistryImpl } from "@/impls/RegistryImpl";
+import { DisposableRegistryImpl } from "@/impls/disposable-registry.impl";
+import { InstanceDynamicRefImpl } from "@/impls/instance-dynamic-ref.impl";
+import { InstanceRefImpl } from "@/impls/instance-ref.impl";
+import { MiddlewareChainImpl } from "@/impls/middleware-chain.impl";
+import { RegistrationImpl } from "@/impls/registration.impl";
+import { RegistryImpl } from "@/impls/registry.impl";
 import type {
 	IContainer,
 	IInternalContainer,
@@ -44,14 +44,14 @@ import type { MutableRef, Ref } from "@/types/ref.type";
 import type { RegistrationPlan } from "@/types/registration-plan.type";
 import type { ResolveContext } from "@/types/resolve-context.type";
 import type { ServiceIdentifier } from "@/types/service-identifier.type";
-import { createAssertNotDisposed } from "@/utils/disposable.utils";
+import { createAssertNotDisposed } from "@/utils/disposable.util";
 import {
 	getEnsureResolveRecord,
 	resetResolveRecord,
 	setResolveRecord,
-} from "@/utils/resolve-record.utils";
-import { getServiceIdentifierName } from "@/utils/service-identifier.utils";
-import { createContainerId } from "@/utils/uuid.utils";
+} from "@/utils/resolve-record.util";
+import { getServiceIdentifierName } from "@/utils/service-identifier.util";
+import { createContainerId } from "@/utils/uuid.util";
 
 const assertNotDisposed = createAssertNotDisposed("Container");
 

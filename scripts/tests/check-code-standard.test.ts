@@ -10,7 +10,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, describe, it } from "node:test";
 import { createConfig } from "../src/config/code-standard.config.js";
-import { validateCodeStandard } from "../src/utils/validate-code-standard.utils.js";
+import { validateCodeStandard } from "../src/utils/validate-code-standard.util.js";
 
 const temporaryDirectoryPaths: string[] = [];
 
@@ -90,12 +90,14 @@ export class ModuleImpl {}
 `,
 		});
 
-		assert.deepEqual(getRuleIds(rootDirectoryPath), ["naming/file-name"]);
+		assert.deepEqual(getRuleIds(rootDirectoryPath), [
+			"placement/source-directory-suffix",
+		]);
 	});
 
 	it("reports default exports in source and test files", () => {
 		const rootDirectoryPath = createWorkspace({
-			"packages/core/src/utils/value.utils.ts": `/**
+			"packages/core/src/utils/value.util.ts": `/**
  * @overview Value utility.
  * @author AEPKILL
  * @created 2025-08-01 00:00:00
@@ -119,7 +121,7 @@ export default function getValue(): number {
  * @created 2025-07-30 22:40:39
  */
 import type { IContainer } from "@/interfaces/container.interface";
-import { ContainerImpl } from "./impls/ContainerImpl";
+import { ContainerImpl } from "./impls/container.impl";
 
 export const rootContainer: IContainer = ContainerImpl.rootContainer;
 `,
@@ -148,12 +150,12 @@ export const value = createValue();
 
 	it("reports cross-package internal imports", () => {
 		const rootDirectoryPath = createWorkspace({
-			"packages/module/src/utils/value.utils.ts": `/**
+			"packages/module/src/utils/value.util.ts": `/**
  * @overview Module utility.
  * @author AEPKILL
  * @created 2025-08-09 14:55:21
  */
-import { ContainerImpl } from "@husky-di/core/src/impls/ContainerImpl";
+import { ContainerImpl } from "@husky-di/core/src/impls/container.impl";
 
 export function getContainerName(): string {
 	return ContainerImpl.name;
@@ -251,7 +253,7 @@ export const ERROR_CODES = {
 
 	it("ignores constants in non-.const.ts files", () => {
 		const rootDirectoryPath = createWorkspace({
-			"packages/core/src/utils/value.utils.ts": `/**
+			"packages/core/src/utils/value.util.ts": `/**
  * @overview Value utility.
  * @author AEPKILL
  * @created 2025-08-09 14:55:21
@@ -332,7 +334,7 @@ export type ValueType = string | number;
 
 	it("allows type aliases in non-type files", () => {
 		const rootDirectoryPath = createWorkspace({
-			"packages/core/src/utils/value.utils.ts": `/**
+			"packages/core/src/utils/value.util.ts": `/**
  * @overview Value utility.
  * @author AEPKILL
  * @created 2025-08-09 14:55:21
@@ -438,7 +440,7 @@ export const value = 42;
 		]);
 	});
 
-	it("reports non-.utils.ts files in utils/ directory", () => {
+	it("reports non-.util.ts files in utils/ directory", () => {
 		const rootDirectoryPath = createWorkspace({
 			"packages/core/src/utils/invalid.ts": `/**
  * @overview Invalid file.
@@ -497,7 +499,7 @@ describe("createConfig", () => {
 	it("accepts RegExp patterns", () => {
 		const config = createConfig({
 			requiredSuffixBySourceDirectoryName: new Map([
-				["utils", [/^\.utils\.ts$/]],
+				["utils", [/^\.util\.ts$/]],
 			]),
 		});
 		const patterns = config.requiredSuffixBySourceDirectoryName.get("utils");

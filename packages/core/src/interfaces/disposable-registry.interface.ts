@@ -9,7 +9,7 @@
  * @created 2026-06-23 09:00:00
  */
 
-import { createServiceIdentifier } from "@/utils/service-identifier.utils";
+import { createServiceIdentifier } from "@/utils/service-identifier.util";
 import type { Cleanup, IDisposable } from "./disposable.interface";
 
 /**

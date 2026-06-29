@@ -14,8 +14,8 @@ import { DEFAULT_CONFIG } from "@/config/code-standard.config";
 import { CodeStandardRuleIdEnum } from "@/enums/code-standard-rule-id.enum";
 import type { CodeStandardDiagnostic } from "@/types/code-standard-diagnostic.type";
 import type { CodeStandardConfig } from "@/types/config.type";
-import { createDiagnostic } from "@/utils/create-diagnostic.utils";
-import { extractFileName, getPathSegments } from "@/utils/path.utils";
+import { createDiagnostic } from "@/utils/create-diagnostic.util";
+import { extractFileName, getPathSegments } from "@/utils/path.util";
 
 export function validateFilePlacement(
 	relativeFilePath: string,
@@ -64,22 +64,6 @@ export function validateFilePlacement(
 				sourceFile,
 				0,
 				`Unknown source directory "${sourceDirectoryName}".`,
-			),
-		];
-	}
-
-	if (sourceDirectoryName === "impls") {
-		if (isImplementationTypeScriptFile(fileName)) {
-			return [];
-		}
-
-		return [
-			createDiagnostic(
-				CodeStandardRuleIdEnum.NamingFileName,
-				relativeFilePath,
-				sourceFile,
-				0,
-				"Implementation files must use PascalCaseImpl.ts under src/impls.",
 			),
 		];
 	}
@@ -159,25 +143,4 @@ function formatSuffixList(patterns: readonly (string | RegExp)[]): string {
 			pattern instanceof RegExp ? pattern.toString() : pattern,
 		)
 		.join(" or ");
-}
-
-function isImplementationTypeScriptFile(fileName: string): boolean {
-	if (!fileName.endsWith(".ts") || fileName.endsWith(".d.ts")) {
-		return false;
-	}
-
-	const baseName = fileName.slice(0, -3);
-	if (baseName.length === 0) {
-		return false;
-	}
-
-	if (!baseName.endsWith("Impl")) {
-		return false;
-	}
-
-	if (baseName[0] !== baseName[0].toUpperCase()) {
-		return false;
-	}
-
-	return /^[A-Za-z0-9]+$/.test(baseName);
 }

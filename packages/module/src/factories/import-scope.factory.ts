@@ -15,7 +15,7 @@ import type {
 	ModuleWithAliases,
 } from "@/interfaces/module.interface";
 import type { ImportScope } from "@/types/import-scope.type";
-import { isModuleWithAliases } from "@/utils/module-import.utils";
+import { isModuleWithAliases } from "@/utils/module-import.util";
 
 export function createImportScope(
 	imports?: ReadonlyArray<IModule | ModuleWithAliases>,

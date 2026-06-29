@@ -24,7 +24,7 @@ import { validateHeaderMetadata } from "../validators/header-metadata.validator"
 import { validateImportSpecifiers } from "../validators/import-specifiers.validator";
 import { validateInterfaceNaming } from "../validators/interface-naming.validator";
 import { validateTypeFileExports } from "../validators/type-file-exports.validator";
-import { collectInScopeFiles } from "./file-collector.utils";
+import { collectInScopeFiles } from "./file-collector.util";
 
 export type { CodeStandardDiagnostic } from "@/types/code-standard-diagnostic.type";
 

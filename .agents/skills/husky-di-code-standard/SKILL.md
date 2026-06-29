@@ -92,7 +92,7 @@ Prefer the repository's existing suffixes and shapes.
 - types: `*.type.ts`
 - enums: `*.enum.ts`
 - factories: `*.factory.ts`
-- utilities: `*.utils.ts`
+- utilities: `*.util.ts`
 - constants: `*.const.ts`
 - decorators: `*.decorator.ts`
 - middlewares: `*.middleware.ts`
@@ -102,7 +102,7 @@ Prefer the repository's existing suffixes and shapes.
 - shared test helpers: `test.utils.ts`
 - tool configs: preserve tool-native names such as `vitest.config.ts`, `rslib.config.ts`, and `lint-staged.config.js`
 - declaration shims: `*.d.ts`
-- implementation classes in `impls`: `PascalCaseImpl.ts`
+- implementation classes in `impls`: `*.impl.ts`
 - package entrypoints: `src/index.ts`
 
 Do not invent new suffixes when an existing suffix already fits.
@@ -256,6 +256,6 @@ Good local examples to follow:
 - `packages/core/src/factories/container.factory.ts`
 - `packages/core/src/enums/lifecycle.enum.ts`
 - `packages/core/src/exceptions/resolve.exception.ts`
-- `packages/core/src/impls/ContainerImpl.ts`
-- `packages/core/src/utils/container.utils.ts`
+- `packages/core/src/impls/container.impl.ts`
+- `packages/core/src/utils/container.util.ts`
 - `packages/decorator/src/middlewares/decorator.middleware.ts`

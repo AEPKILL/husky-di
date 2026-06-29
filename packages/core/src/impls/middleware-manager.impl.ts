@@ -4,14 +4,14 @@
  * @created 2025-07-31 23:22:23
  */
 
-import { TypedEventImpl } from "@/impls/TypedEventImpl";
+import { TypedEventImpl } from "@/impls/typed-event.impl";
 import type { Cleanup } from "@/interfaces/disposable.interface";
 import type {
 	IMiddlewareManager,
 	Middleware,
 	MiddlewareChainEvents,
 } from "@/interfaces/middleware-chain.interface";
-import { createAssertNotDisposed } from "@/utils/disposable.utils";
+import { createAssertNotDisposed } from "@/utils/disposable.util";
 
 /**
  * Compares two middlewares for equality based on their names

@@ -9,7 +9,7 @@
  * @author AEPKILL
  * @created 2025-07-30 22:40:39
  */
-import { ContainerImpl } from "@/impls/ContainerImpl";
+import { ContainerImpl } from "@/impls/container.impl";
 
 export { CoreErrorCodeEnum } from "@/enums/core-error-code.enum";
 export { LifecycleEnum } from "@/enums/lifecycle.enum";
@@ -75,23 +75,23 @@ export type {
 	ServiceIdentifier,
 	ServiceIdentifierInstance,
 } from "@/types/service-identifier.type";
-export { resolve } from "@/utils/container.utils";
+export { resolve } from "@/utils/container.util";
 export {
 	isEqualServiceIdentifierResolveRecord,
 	isResolveMessageRecord,
 	isResolveRootRecord,
 	isResolveServiceIdentifierRecord,
-} from "@/utils/resolve-record.utils";
+} from "@/utils/resolve-record.util";
 export {
 	createServiceIdentifier,
 	getServiceIdentifierName,
-} from "@/utils/service-identifier.utils";
+} from "@/utils/service-identifier.util";
 export {
 	createContainerId,
 	createRegistrationId,
 	createResolveRecordId,
 	type IdGenerator,
 	incrementalIdFactory,
-} from "@/utils/uuid.utils";
+} from "@/utils/uuid.util";
 
 export const rootContainer = ContainerImpl.rootContainer;

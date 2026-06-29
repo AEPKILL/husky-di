@@ -10,7 +10,7 @@
  * @created 2025-07-29 23:01:46
  */
 
-import { MiddlewareManagerImpl } from "@/impls/MiddlewareManagerImpl";
+import { MiddlewareManagerImpl } from "@/impls/middleware-manager.impl";
 import type {
 	ResolveMiddlewareParams,
 	ResolveOptions,

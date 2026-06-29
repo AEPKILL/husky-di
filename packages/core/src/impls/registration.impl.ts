@@ -17,8 +17,8 @@ import type {
 	IRegistration,
 } from "@/interfaces/registration.interface";
 import type { ServiceIdentifier } from "@/types/service-identifier.type";
-import { isValidServiceIdentifier } from "@/utils/registration.utils";
-import { createRegistrationId } from "@/utils/uuid.utils";
+import { isValidServiceIdentifier } from "@/utils/registration.util";
+import { createRegistrationId } from "@/utils/uuid.util";
 
 /**
  * Registration class

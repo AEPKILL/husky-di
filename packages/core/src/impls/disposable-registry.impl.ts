@@ -13,7 +13,7 @@
 
 import type { Cleanup, IDisposable } from "@/interfaces/disposable.interface";
 import type { IDisposableRegistry } from "@/interfaces/disposable-registry.interface";
-import { toDisposed } from "@/utils/disposable.utils";
+import { toDisposed } from "@/utils/disposable.util";
 
 /**
  * Registry for managing disposable resources.

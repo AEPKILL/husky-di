@@ -10,7 +10,7 @@
  * @created 2025-07-30 22:39:29
  */
 
-import { ContainerImpl } from "@/impls/ContainerImpl";
+import { ContainerImpl } from "@/impls/container.impl";
 import type { IContainer } from "@/interfaces/container.interface";
 
 /**
