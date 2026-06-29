@@ -65,6 +65,21 @@ type RegistrationPlanEntry<T = unknown> = {
 type RegistrationPlan = {
   readonly registrations: ReadonlyArray<RegistrationPlanEntry<unknown>>;
 };
+
+A registration plan is created through the `createRegistrationPlan` factory function:
+
+```typescript
+type RegistrationPlanConfigure = (
+  register: <T>(
+    serviceIdentifier: ServiceIdentifier<T>,
+    registration: CreateRegistrationOptions<T>,
+  ) => void,
+) => void;
+
+function createRegistrationPlan(
+  configure: RegistrationPlanConfigure,
+): RegistrationPlan;
+```
 ```
 
 ### 3.4 Lifecycle Strategies
