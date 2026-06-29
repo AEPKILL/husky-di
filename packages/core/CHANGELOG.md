@@ -1,5 +1,11 @@
 # @husky-di/core
 
+## 1.4.0
+
+### Minor Changes
+
+- [`6b3e3b3`](https://github.com/AEPKILL/husky-di/commit/6b3e3b37af666642d5c5e981aba7ed0449fc98d5) Thanks [@AEPKILL](https://github.com/AEPKILL)! - Add `ResolveOptions.recursive` to let resolutions stay in the current container instead of falling back to parent containers, tighten `ResolveOptions` so `dynamic` and `ref` are mutually exclusive at the type level, and align the related core documentation and specification tests with these resolve-option behaviors.
+
 ## 1.3.2
 
 ### Patch Changes
