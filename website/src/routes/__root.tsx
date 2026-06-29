@@ -14,6 +14,8 @@ import type { ReactNode } from "react";
 import tailwindCss from "tailwindcss/index.css?url";
 import appScss from "@/styles/app.scss?url";
 
+const faviconHref = `${import.meta.env.BASE_URL}favicon.svg`;
+
 export const Route = createRootRoute({
 	head: () => ({
 		meta: [
@@ -33,6 +35,7 @@ export const Route = createRootRoute({
 			},
 		],
 		links: [
+			{ rel: "icon", href: faviconHref, type: "image/svg+xml" },
 			{ rel: "stylesheet", href: tailwindCss },
 			{ rel: "stylesheet", href: appScss },
 		],
