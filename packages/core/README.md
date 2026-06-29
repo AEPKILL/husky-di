@@ -30,7 +30,7 @@ If what you really want is:
 - type-safe `ServiceIdentifier`
 - four registration strategies: `useClass`, `useFactory`, `useValue`, `useAlias`
 - three lifecycles: `transient`, `singleton`, `resolution`
-- resolution options: `optional`, `defaultValue`, `multiple`, `ref`, `dynamic`
+- resolution options: `optional`, `defaultValue`, `multiple`, `recursive`, `ref`, `dynamic`
 - parent/child container lookup
 - global and local resolution middleware
 - reusable `RegistrationPlan`
@@ -332,6 +332,7 @@ loggerRef.current.log("hello");
 ```
 
 This is often useful for partially breaking circular dependencies or delaying instantiation.
+`ref` and `dynamic` are mutually exclusive, so they cannot be enabled together.
 
 ### `dynamic`
 
@@ -349,6 +350,19 @@ loggerRef.current.log("second");
 Prefer `ref` unless you specifically need "re-resolve every time this value is read".
 Even after a value has already been resolved, `dynamic` keeps the resolution closure and context alive.
 By contrast, `ref` releases that closure after the first resolution and cached value are established, which makes it the better default in most cases.
+`dynamic` and `ref` are mutually exclusive, so choose one mode or the other.
+
+### `recursive`
+
+By default, a resolution checks the current container first and then falls back to parent containers if needed.
+
+```typescript
+const logger = child.resolve(ILogger, {
+  recursive: false,
+});
+```
+
+When `recursive: false` is set, resolution is limited to the current container and does not fall back to the parent container hierarchy.
 
 ### The `resolve()` Helper
 
@@ -410,10 +424,19 @@ parent.register(ILogger, {
 const logger = child.resolve(ILogger);
 ```
 
+If you want to keep a resolution local to the current container, pass `recursive: false`.
+
+```typescript
+const logger = child.resolve(ILogger, {
+  recursive: false,
+});
+```
+
 Key points:
 
 - registrations in a child container do not affect the parent
 - a child registration overrides the parent result for the same identifier
+- `recursive: false` disables parent-container fallback for that specific resolution
 - registrations fall back across the hierarchy, but local middleware does not inherit across container boundaries
 
 ## Registration Plans
