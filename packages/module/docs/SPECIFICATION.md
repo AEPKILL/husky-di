@@ -154,9 +154,15 @@ To ensure data integrity, the validation logic should be executed in the followi
 2. **Import Validation**: Validate `imports` recursively (checking circular dependencies and collisions).
 3. **Export Validation**: Validate `exports` against the resolved set of available declarations and imports.
 
-### 6.2 Container Composition (The `build` Algorithm)
+### 6.2 Container Composition
 
-When constructing the Dependency Injection Container for a module:
+`createModule()` returns an `IModule`, which is itself the container — it exposes `resolve()`, `isRegistered()`, `use()`, and other container methods directly. There is no separate build step. Access the underlying `IContainer` via the `container` property.
+
+```typescript
+function createModule(options: CreateModuleOptions): IModule;
+```
+
+The container is assembled internally during `createModule()`:
 
 1. **Register Locals**: Register all items from `declarations`.
 2. **Process Imports**:
