@@ -28,7 +28,7 @@ import type { MutableRef, Ref } from "@/types/ref.type";
 import type { RegistrationPlan } from "@/types/registration-plan.type";
 import type { ResolveContext } from "@/types/resolve-context.type";
 import type { ServiceIdentifier } from "@/types/service-identifier.type";
-import { createServiceIdentifier } from "@/utils/service-identifier.utils";
+import { createServiceIdentifier } from "@/utils/service-identifier.util";
 
 /**
  * Options for resolving service instances from the container.

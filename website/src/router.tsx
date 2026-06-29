@@ -12,7 +12,7 @@
 import { createRouter } from "@tanstack/react-router";
 
 import { routeTree } from "./routeTree.gen";
-import { getNormalizedWebsiteBasePath } from "./utils/base-path.utils";
+import { getNormalizedWebsiteBasePath } from "./utils/base-path.util";
 
 export function getRouter() {
 	return createRouter({

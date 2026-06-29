@@ -12,7 +12,7 @@
  */
 
 import { ResolveRecordTypeEnum } from "@/enums/resolve-record-type.enum";
-import { ResolveRecordImpl } from "@/impls/ResolveRecordImpl";
+import { ResolveRecordImpl } from "@/impls/resolve-record.impl";
 import type { IContainer } from "@/interfaces/container.interface";
 import type {
 	IInternalResolveRecord,
@@ -22,7 +22,7 @@ import type {
 	ServiceIdentifierResolveRecordData,
 } from "@/interfaces/resolve-record.interface";
 import { resolveRecordRef } from "@/shared/instances";
-import { getServiceIdentifierName } from "./service-identifier.utils";
+import { getServiceIdentifierName } from "./service-identifier.util";
 
 /**
  * Gets the current resolution record, creating one if it doesn't exist.

@@ -22,11 +22,8 @@ import {
 	isEqualServiceIdentifierResolveRecord,
 	isResolveRootRecord,
 	isResolveServiceIdentifierRecord,
-} from "@/utils/resolve-record.utils";
-import {
-	createResolveRecordId,
-	incrementalIdFactory,
-} from "@/utils/uuid.utils";
+} from "@/utils/resolve-record.util";
+import { createResolveRecordId, incrementalIdFactory } from "@/utils/uuid.util";
 
 /**
  * Resolution record implementation class.

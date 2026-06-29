@@ -14,7 +14,7 @@ import { DEFAULT_CONFIG } from "@/config/code-standard.config";
 import { CodeStandardRuleIdEnum } from "@/enums/code-standard-rule-id.enum";
 import type { CodeStandardDiagnostic } from "@/types/code-standard-diagnostic.type";
 import type { CodeStandardConfig } from "@/types/config.type";
-import { createDiagnostic } from "@/utils/create-diagnostic.utils";
+import { createDiagnostic } from "@/utils/create-diagnostic.util";
 
 export function validateImportSpecifiers(
 	relativeFilePath: string,

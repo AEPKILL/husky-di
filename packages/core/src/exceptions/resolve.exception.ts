@@ -12,7 +12,7 @@
 
 import { CodedException } from "@/exceptions/coded.exception";
 import type { IResolveRecord } from "@/interfaces/resolve-record.interface";
-import { getResolveRecordMessage } from "@/utils/resolve-record.utils";
+import { getResolveRecordMessage } from "@/utils/resolve-record.util";
 
 /**
  * Exception class for service resolution errors.

@@ -10,10 +10,10 @@
  * @created 2025-07-26 23:58:33
  */
 
-import { DisposableRegistryImpl } from "@/impls/DisposableRegistryImpl";
+import { DisposableRegistryImpl } from "@/impls/disposable-registry.impl";
 import type { Cleanup } from "@/interfaces/disposable.interface";
 import type { ITypedEvent } from "@/interfaces/typed-event.interface";
-import { createAssertNotDisposed } from "@/utils/disposable.utils";
+import { createAssertNotDisposed } from "@/utils/disposable.util";
 
 const assertNotDisposed = createAssertNotDisposed("TypedEvent");
 

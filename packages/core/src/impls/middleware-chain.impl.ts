@@ -4,7 +4,7 @@
  * @created 2025-07-26 22:07:03
  */
 
-import { MiddlewareManagerImpl } from "@/impls/MiddlewareManagerImpl";
+import { MiddlewareManagerImpl } from "@/impls/middleware-manager.impl";
 import type {
 	IMiddlewareChain,
 	IMiddlewareManager,

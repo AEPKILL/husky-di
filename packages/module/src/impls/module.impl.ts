@@ -34,8 +34,8 @@ import {
 	validateImportConflictsWithDeclarations,
 	validateImportNamingConflicts,
 	validateImportUniqueness,
-} from "@/utils/module-validator.utils";
-import { createModuleId } from "@/utils/uuid.utils";
+} from "@/utils/module-validator.util";
+import { createModuleId } from "@/utils/uuid.util";
 
 export class ModuleImpl implements IModule {
 	get id() {

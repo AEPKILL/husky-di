@@ -4,7 +4,7 @@
  * @created 2025-08-09 21:57:05
  */
 
-import { ModuleImpl } from "@/impls/ModuleImpl";
+import { ModuleImpl } from "@/impls/module.impl";
 
 import type {
 	CreateModuleOptions,

@@ -13,7 +13,7 @@ import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import process from "node:process";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { validateCodeStandard } from "./utils/validate-code-standard.utils";
+import { validateCodeStandard } from "./utils/validate-code-standard.util";
 
 function findProjectRoot(startPath: string): string {
 	let currentPath = startPath;
