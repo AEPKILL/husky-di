@@ -173,6 +173,20 @@ describe("Cross Container Resolution", () => {
 			expect(result.name).toBe("ServiceA");
 		});
 
+		it("should skip parent container when recursive is false", () => {
+			// Arrange
+			parentContainer.register(IServiceA, {
+				useClass: ServiceA,
+			});
+
+			// Act & Assert
+			expect(() => {
+				childContainer.resolve(IServiceA, {
+					recursive: false,
+				});
+			}).toThrow(/Service identifier "IServiceA" is not registered/);
+		});
+
 		it("should resolve service from child container when registered in both", () => {
 			// Arrange
 			parentContainer.register(IServiceA, {

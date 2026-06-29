@@ -38,6 +38,7 @@ import { createServiceIdentifier } from "@/utils/service-identifier.utils";
  * - `defaultValue` is only allowed when `optional` is true
  * - When `multiple` is true, `defaultValue` must be an array of T
  * - When `multiple` is false, `defaultValue` must be a single T
+ * - `dynamic` and `ref` are mutually exclusive
  *
  * @typeParam T - The type of the service instance to resolve
  *
@@ -58,53 +59,110 @@ import { createServiceIdentifier } from "@/utils/service-identifier.utils";
  */
 export type ResolveOptions<T> = {
 	/**
-	 * Whether to return a dynamic reference that re-resolves on each access.
+	 * Whether to continue searching ancestor containers when the current
+	 * container has no matching registration.
 	 *
 	 * @remarks
-	 * **Warning**: Avoid using this option unless absolutely necessary.
-	 * Setting this option creates an `InstanceDynamicRefImpl` instance that maintains
-	 * a closure over the resolve record and context, which may lead to memory leaks
-	 * as these references are never released.
+	 * When true, resolution can fall back to the parent container hierarchy.
+	 * When false, resolution is limited to the current container and will
+	 * continue with the local fallback rules instead of checking parents.
 	 *
-	 * @default false
+	 * @default true
 	 */
-	dynamic?: boolean;
+	recursive?: boolean;
+} & ResolveReferenceOptions &
+	// Single required service without default value
+	(
+		| {
+				multiple?: false;
+				optional?: false;
+				defaultValue?: never;
+		  }
+		// Single optional service with possible default value
+		| {
+				multiple?: false;
+				optional: true;
+				defaultValue?: T;
+		  }
+		// Multiple required services without default value
+		| {
+				multiple: true;
+				optional?: false;
+				defaultValue?: never;
+		  }
+		// Multiple optional services with possible default array
+		| {
+				multiple: true;
+				optional: true;
+				defaultValue?: T[];
+		  }
+	);
 
-	/**
-	 * Whether to return a reference wrapper instead of the instance itself.
-	 *
-	 * @remarks
-	 * When true, returns a `Ref<T>` that allows lazy access to the service instance.
-	 * Useful for breaking circular dependencies or deferring resolution.
-	 *
-	 * @default false
-	 */
-	ref?: boolean;
-} & ( // Single required service without default value
+/**
+ * Resolve reference mode options.
+ *
+ * @remarks
+ * `dynamic` and `ref` are mutually exclusive. Use `dynamic` to re-resolve on
+ * each access, or use `ref` to lazily resolve once and cache the result.
+ *
+ * @internal
+ */
+type ResolveReferenceOptions =
 	| {
-			multiple?: false;
-			optional?: false;
-			defaultValue?: never;
+			/**
+			 * Whether to return a dynamic reference that re-resolves on each access.
+			 *
+			 * @remarks
+			 * **Warning**: Avoid using this option unless absolutely necessary.
+			 * Setting this option creates an `InstanceDynamicRefImpl` instance that maintains
+			 * a closure over the resolve record and context, which may lead to memory leaks
+			 * as these references are never released.
+			 *
+			 * This option is mutually exclusive with `ref`.
+			 *
+			 * @default false
+			 */
+			dynamic: true;
+
+			/**
+			 * Whether to return a reference wrapper instead of the instance itself.
+			 *
+			 * @remarks
+			 * This option is mutually exclusive with `dynamic`.
+			 *
+			 * @default false
+			 */
+			ref?: false;
 	  }
-	// Single optional service with possible default value
 	| {
-			multiple?: false;
-			optional: true;
-			defaultValue?: T;
-	  }
-	// Multiple required services without default value
-	| {
-			multiple: true;
-			optional?: false;
-			defaultValue?: never;
-	  }
-	// Multiple optional services with possible default array
-	| {
-			multiple: true;
-			optional: true;
-			defaultValue?: T[];
-	  }
-);
+			/**
+			 * Whether to return a dynamic reference that re-resolves on each access.
+			 *
+			 * @remarks
+			 * **Warning**: Avoid using this option unless absolutely necessary.
+			 * Setting this option creates an `InstanceDynamicRefImpl` instance that maintains
+			 * a closure over the resolve record and context, which may lead to memory leaks
+			 * as these references are never released.
+			 *
+			 * This option is mutually exclusive with `ref`.
+			 *
+			 * @default false
+			 */
+			dynamic?: false;
+
+			/**
+			 * Whether to return a reference wrapper instead of the instance itself.
+			 *
+			 * @remarks
+			 * When true, returns a `Ref<T>` that allows lazy access to the service instance.
+			 * Useful for breaking circular dependencies or deferring resolution.
+			 *
+			 * This option is mutually exclusive with `dynamic`.
+			 *
+			 * @default false
+			 */
+			ref?: boolean;
+	  };
 
 /**
  * Determines whether the resolved type should be an array based on resolve options.
@@ -322,12 +380,13 @@ export interface IServiceResolver {
 	 * @remarks
 	 * This overload provides fine-grained control over the resolution process,
 	 * allowing you to specify whether the service is optional, whether to resolve
-	 * multiple instances, and whether to return a reference wrapper.
+	 * multiple instances, whether to search parent containers, and whether to
+	 * return a reference wrapper.
 	 *
 	 * @typeParam T - The type of the service to resolve
 	 * @typeParam O - The type of resolve options
 	 * @param serviceIdentifier - The identifier of the service to resolve
-	 * @param options - Resolve options including multiple, optional, ref, etc.
+	 * @param options - Resolve options including multiple, optional, recursive, ref, etc.
 	 * @returns The resolved service instance(s), typed according to the options
 	 * @throws {ResolveException} When the service cannot be resolved and is not optional
 	 *
@@ -338,6 +397,9 @@ export interface IServiceResolver {
 	 *
 	 * // Resolve multiple services
 	 * const services = container.resolve(MyService, { multiple: true });
+	 *
+	 * // Resolve only from the current container
+	 * const localService = container.resolve(MyService, { recursive: false });
 	 *
 	 * // Resolve as reference
 	 * const ref = container.resolve(MyService, { ref: true });

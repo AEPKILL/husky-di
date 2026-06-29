@@ -41,7 +41,7 @@ This project uses a monorepo structure. The main workspaces that currently exist
 - **Registration Plan**: A reusable collection of registration entries. It is assembled with `createRegistrationPlan()` and applied to a container with `container.applyRegistrationPlan()`.
 - **Provider**: A service creation strategy. The current model supports `useClass`, `useFactory`, `useValue`, and `useAlias`, and requires exactly one strategy per registration.
 - **Resolution**: The process of obtaining a service instance from the container using a `ServiceIdentifier`.
-- **ResolveOptions**: Resolution options including `optional`, `defaultValue`, `multiple`, `ref`, and `dynamic`.
+- **ResolveOptions**: Resolution options including `optional`, `defaultValue`, `multiple`, `recursive`, `ref`, and `dynamic`.
 - **ResolveContext**: The shared context for a single resolution chain, used for the resolution lifecycle and internal resolution state.
 - **ResolveRecord**: A tree structure that records the resolution path for error reporting and circular dependency detection.
 - **ResolveException**: The core exception type for resolution failures, circular dependencies, invalid options, and similar scenarios.
@@ -101,7 +101,7 @@ The module system is inspired by ESM semantics: imports must be explicit, export
 - When `optional: true` is set and the service is not found, resolution returns `undefined` or `defaultValue`; when the service is not optional, it throws `ResolveException`.
 - `ref` and `dynamic` are mutually exclusive and cannot both be `true`.
 - Circular dependencies are detected through `ResolveRecord`. Error messages should include a readable resolution path and suggest `ref` or `dynamic` when appropriate.
-- Service lookup follows current-container-first, parent-container-fallback order.
+- Service lookup follows current-container-first order and falls back to the parent container hierarchy unless `recursive: false` disables that fallback for the current resolution.
 - Local middleware does not inherit through parent-child container relationships; service registration lookup can walk up to the parent container, but middleware chains do not inherit through the container hierarchy.
 - Module declarations, imports, and exports must each be unique.
 - The module import graph must not contain circular dependencies.

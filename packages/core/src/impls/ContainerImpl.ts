@@ -737,16 +737,22 @@ export class ContainerImpl implements IInternalContainer {
 		resolveRecord: IInternalResolveRecord,
 		resolveContext: ResolveContext,
 	): ResolveInstance<T, O> {
-		const { multiple, optional, defaultValue } = resolveOptions;
+		const {
+			multiple,
+			optional,
+			defaultValue,
+			recursive = true,
+		} = resolveOptions;
 
 		// Strategy 1: Try to resolve from parent container
-		const registeredInParent =
+		const shouldResolveFromParent =
+			recursive &&
 			this._parent &&
 			!this._parent.disposed &&
 			this._parent.isRegistered(serviceIdentifier, {
 				recursive: true,
 			});
-		if (registeredInParent) {
+		if (shouldResolveFromParent) {
 			resolveRecord.addRecordNode({
 				type: ResolveRecordTypeEnum.message,
 				message: `Service identifier "${getServiceIdentifierName(serviceIdentifier)}" is not registered in "${this.displayName}", but found in parent container. Resolving from parent container.`,

@@ -81,9 +81,11 @@ enum LifecycleEnum {
 
 ```typescript
 type ResolveOptions<T> = {
-  dynamic?: boolean; // Return dynamic reference
-  ref?: boolean; // Return static reference
+  recursive?: boolean; // Whether parent-container fallback is enabled
 } & (
+  | { dynamic: true; ref?: false } // Return dynamic reference
+  | { dynamic?: false; ref?: boolean } // Return static reference
+) & (
   | { multiple?: false; optional?: false; defaultValue?: never }
   | { multiple?: false; optional: true; defaultValue?: T }
   | { multiple: true; optional?: false; defaultValue?: never }
@@ -166,7 +168,9 @@ If `lifecycle` is not specified, the container **MUST** default to `LifecycleEnu
 When resolving a ServiceIdentifier, the container **MUST** search in the following order:
 
 1. Local registrations in the current container.
-2. If not found and `parent` is defined, recursively search in the parent container.
+2. If not found, `parent` is defined, and `recursive !== false`, recursively search in the parent container.
+
+Parent-container fallback **MUST** remain enabled by default.
 
 **S2. Optional Resolution**  
 When `optional: true` is specified:
@@ -252,6 +256,8 @@ When a circular dependency is detected, the container **MUST**:
 
 **H1. Parent-Child Resolution**  
 A child container **MUST** be able to resolve services registered in its parent container.
+
+When `recursive: false` is specified for a resolution, that resolution **MUST** be limited to the current container and **MUST NOT** fall back to the parent container hierarchy.
 
 **H2. Registration Isolation**  
 Registrations in a child container **MUST NOT** affect the parent container.

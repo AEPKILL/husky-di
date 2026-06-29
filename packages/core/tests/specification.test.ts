@@ -22,6 +22,7 @@ import {
 	LifecycleEnum,
 	ResolveContainerScopeEnum,
 	ResolveException,
+	type ResolveOptions,
 	resolve,
 } from "../src/index";
 import { clearContainer, clearMiddleware } from "./test.utils";
@@ -206,6 +207,7 @@ describe("SPEC 4.1: Service Registration", () => {
 
 			// Assert
 			const instances = container.resolve(ITestValue, { multiple: true });
+
 			expect(instances).toHaveLength(1);
 			expect(instances[0].id).toBe(1);
 			expect(container.resolve(ITestValue).id).toBe(1);
@@ -1506,6 +1508,18 @@ describe("SPEC 4.5: Container Hierarchy", () => {
 			expect(instance).toBeInstanceOf(ServiceA);
 		});
 
+		it("should not resolve services from parent container when recursive is false", () => {
+			// Arrange
+			parentContainer.register(IServiceA, { useClass: ServiceA });
+
+			// Act & Assert
+			expect(() => {
+				childContainer.resolve(IServiceA, {
+					recursive: false,
+				});
+			}).toThrow(ResolveException);
+		});
+
 		it("should resolve services from multiple levels up the hierarchy", () => {
 			// Arrange
 			const grandchildContainer = createContainer(
@@ -2485,7 +2499,7 @@ describe("SPEC 5: Validation Rules", () => {
 				container.resolve(IServiceA, {
 					dynamic: true,
 					ref: true,
-				});
+				} as unknown as ResolveOptions<ServiceA>);
 			}).toThrow(/E_INVALID_OPTIONS/);
 		});
 	});

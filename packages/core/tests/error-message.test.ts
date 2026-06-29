@@ -13,6 +13,7 @@ import {
 	createServiceIdentifier,
 	type IContainer,
 	type Ref,
+	type ResolveOptions,
 	resolve,
 } from "../src/index";
 import { clearContainer } from "./test.utils";
@@ -175,7 +176,7 @@ describe("Error Messages", () => {
 				container.resolve("TestService", {
 					dynamic: true,
 					ref: true,
-				});
+				} as unknown as ResolveOptions<string>);
 				throw new Error("Expected resolve to throw.");
 			} catch (error) {
 				expect(error).toBeInstanceOf(ResolveException);
@@ -199,7 +200,7 @@ describe("Error Messages", () => {
 				container.resolve("TestService", {
 					dynamic: true,
 					ref: true,
-				});
+				} as unknown as ResolveOptions<string>);
 			}).toThrow(/Cannot use both "dynamic" and "ref" options simultaneously/);
 		});
 
@@ -214,7 +215,7 @@ describe("Error Messages", () => {
 				container.resolve("TestService", {
 					dynamic: true,
 					ref: true,
-				});
+				} as unknown as ResolveOptions<string>);
 			}).toThrow(ResolveException);
 		});
 
@@ -286,7 +287,7 @@ describe("Error Messages", () => {
 				container.resolve("TestService", {
 					dynamic: true,
 					ref: true,
-				});
+				} as unknown as ResolveOptions<string>);
 			} catch (error) {
 				expect(ResolveException.isResolveException(error)).toBe(true);
 			}
