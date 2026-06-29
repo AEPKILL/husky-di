@@ -11,8 +11,7 @@ import {
 	Scripts,
 } from "@tanstack/react-router";
 import type { ReactNode } from "react";
-import tailwindCss from "tailwindcss/index.css?url";
-import appScss from "@/styles/app.scss?url";
+import "@/styles/app.css";
 
 const faviconHref = `${import.meta.env.BASE_URL}favicon.svg`;
 
@@ -34,11 +33,7 @@ export const Route = createRootRoute({
 				content: "Minimal homepage for the Husky DI project website.",
 			},
 		],
-		links: [
-			{ rel: "icon", href: faviconHref, type: "image/svg+xml" },
-			{ rel: "stylesheet", href: tailwindCss },
-			{ rel: "stylesheet", href: appScss },
-		],
+		links: [{ rel: "icon", href: faviconHref, type: "image/svg+xml" }],
 	}),
 	component: RootComponent,
 });

@@ -1,0 +1,151 @@
+@import "tailwindcss";
+
+/* ============================================================
+   Husky DI Design System
+   Dark-mode first | Token-driven | Based on DESIGN.md
+   ============================================================ */
+
+/* ----- Tailwind Theme Tokens ----- */
+@theme {
+	/* Color System */
+	--color-bg: #0f111a;
+	--color-bg-alt: #121212;
+	--color-surface: rgba(255, 255, 255, 0.04);
+	--color-surface-strong: rgba(255, 255, 255, 0.07);
+	--color-border: rgba(228, 230, 235, 0.12);
+	--color-border-strong: rgba(228, 230, 235, 0.22);
+	--color-text: #e4e6eb;
+	--color-text-muted: #a0aab5;
+	--color-accent: #00e676;
+	--color-accent-green: #00e676;
+	--color-accent-blue: #2979ff;
+	--color-code-bg: rgba(255, 255, 255, 0.03);
+
+	/* Typography — Font Families */
+	--font-sans: "Inter", "Roboto", ui-sans-serif, system-ui, sans-serif;
+	--font-mono:
+		"JetBrains Mono", "Fira Code", "Source Code Pro", ui-monospace, monospace;
+
+	/* Typography — Type Scale */
+	--font-size-xs: 0.75rem;
+	--font-size-sm: 0.875rem;
+	--font-size-md: 1rem;
+	--font-size-lg: 1.125rem;
+	--font-size-xl: 1.5rem;
+	--font-size-2xl: 2rem;
+	--font-size-3xl: clamp(2.5rem, 6vw, 4.5rem);
+
+	/* Typography — Leadings */
+	--leading-xs: 1.5;
+	--leading-sm: 1.6;
+	--leading-md: 1.7;
+	--leading-lg: 1.7;
+	--leading-xl: 1.35;
+	--leading-2xl: 1.2;
+	--leading-3xl: 1.05;
+
+	/* Radius */
+	--radius-sm: 0.5rem;
+	--radius-md: 0.75rem;
+	--radius-lg: 1rem;
+	--radius-xl: 1.5rem;
+
+	/* Shadows */
+	--shadow-sm: 0 8px 24px rgba(0, 0, 0, 0.18);
+	--shadow-md: 0 18px 48px rgba(0, 0, 0, 0.24);
+}
+
+/* ----- Design Tokens: Non-Theme Custom Properties ----- */
+:root {
+	/* Spacing (mirrors Tailwind’s 0.25rem base) */
+	--space-1: 0.25rem;
+	--space-2: 0.5rem;
+	--space-3: 0.75rem;
+	--space-4: 1rem;
+	--space-5: 1.5rem;
+	--space-6: 2rem;
+	--space-7: 3rem;
+	--space-8: 4rem;
+	--space-9: 6rem;
+
+	/* Layout */
+	--content-width: 72rem;
+	--content-width-wide: 88rem;
+	--header-height: 3.5rem;
+
+	/* Glass */
+	--blur-header: 12px;
+
+	/* Selection */
+	--color-selection: rgba(41, 121, 255, 0.28);
+
+	/* Motion */
+	--motion-fast: 120ms;
+	--motion-base: 180ms;
+	--motion-slow: 280ms;
+	--ease-default: cubic-bezier(0.22, 1, 0.36, 1);
+	--ease-emphasis: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* ----- Light Theme ----- */
+[data-theme="light"] {
+	--color-bg: #fafbfc;
+	--color-bg-alt: #f2f3f5;
+	--color-surface: rgba(0, 0, 0, 0.04);
+	--color-surface-strong: rgba(0, 0, 0, 0.07);
+	--color-border: rgba(15, 17, 26, 0.12);
+	--color-border-strong: rgba(15, 17, 26, 0.22);
+	--color-text: #1a1d26;
+	--color-text-muted: #5a6070;
+	--color-code-bg: rgba(0, 0, 0, 0.03);
+	--color-selection: rgba(41, 121, 255, 0.2);
+	--shadow-sm: 0 8px 24px rgba(0, 0, 0, 0.08);
+	--shadow-md: 0 18px 48px rgba(0, 0, 0, 0.12);
+}
+
+/* ----- Base Layer ----- */
+@layer base {
+	html {
+		scroll-behavior: smooth;
+	}
+
+	body {
+		font-family: var(--font-sans);
+		font-size: var(--font-size-md);
+		line-height: var(--leading-md);
+		color: var(--color-text);
+		background-color: var(--color-bg);
+		-webkit-font-smoothing: antialiased;
+		-moz-osx-font-smoothing: grayscale;
+	}
+
+	::selection {
+		background-color: var(--color-selection);
+	}
+
+	/* Focus ring — visible, accent-colored */
+	:focus-visible {
+		outline: 2px solid var(--color-accent);
+		outline-offset: 2px;
+		border-radius: var(--radius-sm);
+	}
+
+	/* Code must always use the monospace stack */
+	code,
+	pre,
+	kbd,
+	samp {
+		font-family: var(--font-mono);
+	}
+
+	/* Links inherit the accent */
+	a {
+		color: var(--color-accent);
+		text-decoration: none;
+		transition: opacity var(--motion-fast) var(--ease-default);
+	}
+
+	a:hover {
+		opacity: 0.85;
+	}
+}
