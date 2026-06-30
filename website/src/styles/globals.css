@@ -1,14 +1,26 @@
 @import "tailwindcss";
 
+@font-face {
+	font-family: "DINish";
+	src: url("/fonts/DINish-slnt-wdth-wght.woff2") format("woff2");
+	font-display: swap;
+}
+
+@font-face {
+	font-family: "Berkeley Mono";
+	src: url("/fonts/BerkeleyMono-Regular.woff2") format("woff2");
+	font-display: swap;
+}
+
 /* ============================================================
    Website Theme Tokens
    Minimal terminal-first palette for the current homepage
    ============================================================ */
 
 @theme {
-	--font-sans: "Inter", "Roboto", ui-sans-serif, system-ui, sans-serif;
-	--font-mono:
-		"JetBrains Mono", "Fira Code", "Source Code Pro", ui-monospace, monospace;
+	--font-display: "DINish", "Avenir Next Condensed", "Arial Narrow", sans-serif;
+	--font-sans: "DINish", "Inter", ui-sans-serif, system-ui, sans-serif;
+	--font-mono: "Berkeley Mono", "JetBrains Mono", ui-monospace, monospace;
 
 	--color-page-bg: #0f111a;
 	--color-page-fg: #e4e6eb;

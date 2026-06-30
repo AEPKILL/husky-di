@@ -15,6 +15,7 @@
 		"@tanstack/react-router-devtools": "^1.167.0",
 		"@tanstack/react-start": "^1.168.26",
 		"clsx": "^2.1.1",
+		"codehike": "^1.1.0",
 		"motion": "^12.42.0",
 		"react": "^19.2.7",
 		"react-dom": "^19.2.7",
