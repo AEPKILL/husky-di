@@ -149,3 +149,591 @@
 		opacity: 0.85;
 	}
 }
+
+@utility text-terminal-glow {
+	text-shadow: 0 0 9px color-mix(in oklab, var(--term-green) 55%, transparent);
+}
+
+/* ============================================================
+   DI Workflow Animation — Wireframe / Line-art Style
+   Pure CSS keyframe-driven, zero JS runtime cost.
+   Hover → pause  |  prefers-reduced-motion → hidden
+   ============================================================ */
+
+/* ---- Container ---- */
+.di-workflow {
+	position: relative;
+	width: 100%;
+	max-width: var(--content-width-wide);
+	margin-inline: auto;
+}
+
+.di-workflow__svg {
+	width: 100%;
+	height: auto;
+	display: block;
+}
+
+/* ---- Shared typography ---- */
+.di-label {
+	fill: var(--color-text-muted);
+	font-family: var(--font-sans);
+	font-size: 12px;
+	letter-spacing: 0.03em;
+}
+
+.di-label--sm {
+	font-size: 10px;
+}
+
+.di-dep-label {
+	fill: var(--color-text-muted);
+	font-family: var(--font-mono);
+	font-size: 9px;
+	letter-spacing: 0.02em;
+}
+
+.di-target-name {
+	fill: var(--color-text);
+	font-family: var(--font-mono);
+	font-size: 11px;
+	font-weight: 600;
+}
+
+.di-slot-label {
+	fill: var(--color-text-muted);
+	font-family: var(--font-mono);
+	font-size: 9px;
+	opacity: 0.5;
+}
+
+/* ---- Port dots (connection points on box edges) ---- */
+.di-port {
+	fill: var(--color-text-muted);
+	opacity: 0.5;
+}
+
+/* ---- Box panels ---- */
+.di-container-box {
+	fill: var(--color-bg);
+	stroke: var(--color-border-strong);
+	stroke-width: 1.5;
+	animation: di-container-border 8s ease-in-out infinite;
+}
+
+.di-container-header {
+	stroke: var(--color-border);
+	stroke-width: 1;
+	stroke-dasharray: 3 3;
+}
+
+.di-target-box {
+	fill: var(--color-bg);
+	stroke: var(--color-border-strong);
+	stroke-width: 1.5;
+	animation: di-target-border 8s ease-in-out infinite;
+}
+
+.di-target-header {
+	stroke: var(--color-border);
+	stroke-width: 1;
+	stroke-dasharray: 3 3;
+}
+
+/* ---- Left: Dependencies (wireframe outlines) ---- */
+.di-dep {
+	animation-duration: 8s;
+	animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+	animation-iteration-count: infinite;
+}
+
+.di-dep--circle {
+	animation-name: di-dep-circle-fly;
+}
+
+.di-dep--triangle {
+	animation-name: di-dep-triangle-fly;
+}
+
+.di-dep-outline-circle {
+	stroke: #2979ff;
+	stroke-width: 1.5;
+	fill: var(--color-bg);
+}
+
+.di-dep-outline-triangle {
+	stroke: #00e676;
+	stroke-width: 1.5;
+	fill: var(--color-bg);
+}
+
+.di-dep-detail {
+	stroke: var(--color-border);
+	stroke-width: 1;
+}
+
+/* ---- Center: Container inner shapes (wireframe) ---- */
+.di-container-inner {
+	animation: di-container-inner-fade 8s ease-in-out infinite;
+}
+
+.di-container-inner-outline-circle {
+	stroke: #2979ff;
+	stroke-width: 1.5;
+}
+
+.di-container-inner-outline-triangle {
+	stroke: #00e676;
+	stroke-width: 1.5;
+}
+
+.di-container-inner-detail {
+	stroke: var(--color-border);
+	stroke-width: 1;
+}
+
+/* ---- Right: Target empty slots (dashed outlines) ---- */
+.di-slot-empty-group {
+	animation: di-slot-empty-fade 8s ease-in-out infinite;
+}
+
+.di-slot--circle {
+	stroke: #2979ff;
+	stroke-width: 1.5;
+	stroke-dasharray: 4 3;
+}
+
+.di-slot--triangle {
+	stroke: #00e676;
+	stroke-width: 1.5;
+	stroke-dasharray: 4 3;
+}
+
+/* ---- Right: Target filled slots (solid wireframe, appears after inject) ---- */
+.di-slot-filled-group {
+	animation: di-slot-filled-fade 8s ease-in-out infinite;
+}
+
+.di-slot-filled-circle {
+	stroke: #2979ff;
+	stroke-width: 1.5;
+}
+
+.di-slot-filled-triangle {
+	stroke: #00e676;
+	stroke-width: 1.5;
+}
+
+.di-slot-filled-detail {
+	stroke: var(--color-border);
+	stroke-width: 1;
+}
+
+/* ---- Phase 2: Scan line (wireframe) ---- */
+.di-scan {
+	animation: di-scan-appear 8s ease-in-out infinite;
+}
+
+.di-scan-line {
+	stroke: var(--color-text-muted);
+	stroke-width: 1;
+	stroke-dasharray: 5 5;
+}
+
+.di-scan-dot {
+	fill: var(--color-accent);
+}
+
+/* ---- Phase 3: Inject beams ---- */
+.di-inject-beams {
+	animation: di-inject-beams-show 8s ease-in-out infinite;
+}
+
+.di-beam {
+	fill: none;
+	stroke-linecap: round;
+	stroke-dasharray: 6 4;
+	animation: di-beam-flow 8s linear infinite;
+}
+
+.di-beam--circle {
+	stroke: #2979ff;
+	stroke-width: 1.5;
+}
+
+.di-beam--triangle {
+	stroke: #00e676;
+	stroke-width: 1.5;
+}
+
+/* ---- Phase 3: Traveling shapes (wireframe outlines) ---- */
+.di-travel-shapes {
+	animation: di-travel-show 8s ease-in-out infinite;
+}
+
+.di-travel {
+	animation-duration: 8s;
+	animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+	animation-iteration-count: infinite;
+}
+
+.di-travel--circle {
+	animation-name: di-travel-circle;
+	stroke: #2979ff;
+	stroke-width: 1.5;
+}
+
+.di-travel--triangle {
+	animation-name: di-travel-triangle;
+	stroke: #00e676;
+	stroke-width: 1.5;
+}
+
+/* ============================================================
+   Keyframes — Phase timeline (total 8s)
+     0% ─ 22%     Phase 1 Register
+    22% ─ 47%     Phase 2 Resolve
+    47% ─ 78%     Phase 3 Inject + highlight
+    78% ─ 100%    Pause / reset
+   ============================================================ */
+
+/* Phase 1: Circle flies from left into container port, then fades */
+@keyframes di-dep-circle-fly {
+	0%,
+	78% {
+		transform: translate(0, 0);
+		opacity: 1;
+	}
+	10% {
+		transform: translate(140px, 4px);
+		opacity: 0.8;
+	}
+	18%,
+	78% {
+		transform: translate(150px, 4px);
+		opacity: 0;
+	}
+	85% {
+		transform: translate(0, 0);
+		opacity: 0;
+	}
+	92% {
+		opacity: 1;
+	}
+	100% {
+		opacity: 1;
+	}
+}
+
+/* Phase 1: Triangle flies from left into container port */
+@keyframes di-dep-triangle-fly {
+	0%,
+	78% {
+		transform: translate(0, 0);
+		opacity: 1;
+	}
+	12% {
+		transform: translate(140px, -64px);
+		opacity: 0.8;
+	}
+	20%,
+	78% {
+		transform: translate(150px, -64px);
+		opacity: 0;
+	}
+	85% {
+		transform: translate(0, 0);
+		opacity: 0;
+	}
+	92% {
+		opacity: 1;
+	}
+	100% {
+		opacity: 1;
+	}
+}
+
+/* Container border flash when registration completes */
+@keyframes di-container-border {
+	0%,
+	18%,
+	24%,
+	100% {
+		stroke: var(--color-border-strong);
+	}
+	21% {
+		stroke: var(--color-accent);
+		filter: url(#di-glow);
+	}
+}
+
+/* Container inner shapes fade in after registration */
+@keyframes di-container-inner-fade {
+	0%,
+	20% {
+		opacity: 0;
+	}
+	24% {
+		opacity: 1;
+	}
+	60% {
+		opacity: 1;
+	}
+	66% {
+		opacity: 0;
+	}
+	78%,
+	100% {
+		opacity: 0;
+	}
+}
+
+/* Scan line and dot appear during resolve phase */
+@keyframes di-scan-appear {
+	0%,
+	28% {
+		opacity: 0;
+	}
+	32% {
+		opacity: 1;
+	}
+	44% {
+		opacity: 1;
+	}
+	47% {
+		opacity: 0;
+	}
+	100% {
+		opacity: 0;
+	}
+}
+
+/* Inject beams appear during inject phase */
+@keyframes di-inject-beams-show {
+	0%,
+	47% {
+		opacity: 0;
+	}
+	50% {
+		opacity: 1;
+	}
+	74% {
+		opacity: 1;
+	}
+	76% {
+		opacity: 0;
+	}
+	100% {
+		opacity: 0;
+	}
+}
+
+/* Flowing dash along beams (stroke-dashoffset) */
+@keyframes di-beam-flow {
+	0% {
+		stroke-dashoffset: 0;
+	}
+	100% {
+		stroke-dashoffset: -30;
+	}
+}
+
+/* Traveling shapes — visibility window */
+@keyframes di-travel-show {
+	0%,
+	48% {
+		opacity: 0;
+	}
+	52% {
+		opacity: 1;
+	}
+	72% {
+		opacity: 1;
+	}
+	74% {
+		opacity: 0;
+	}
+	100% {
+		opacity: 0;
+	}
+}
+
+/* Traveling circle moves along beam from container to target */
+@keyframes di-travel-circle {
+	0%,
+	52% {
+		transform: translate(0, 0);
+	}
+	62% {
+		transform: translate(80px, 0);
+	}
+	72% {
+		transform: translate(80px, 0);
+	}
+	100% {
+		transform: translate(0, 0);
+	}
+}
+
+/* Traveling triangle moves along beam from container to target */
+@keyframes di-travel-triangle {
+	0%,
+	52% {
+		transform: translate(0, 0);
+	}
+	64% {
+		transform: translate(80px, 0);
+	}
+	72% {
+		transform: translate(80px, 0);
+	}
+	100% {
+		transform: translate(0, 0);
+	}
+}
+
+/* Empty slot group — hide when filled slots appear */
+@keyframes di-slot-empty-fade {
+	0%,
+	54% {
+		opacity: 1;
+	}
+	60% {
+		opacity: 0;
+	}
+	78%,
+	100% {
+		opacity: 0;
+	}
+}
+
+/* Filled slot group — appear after inject */
+@keyframes di-slot-filled-fade {
+	0%,
+	56% {
+		opacity: 0;
+	}
+	62% {
+		opacity: 1;
+	}
+	78% {
+		opacity: 1;
+	}
+	88% {
+		opacity: 0;
+	}
+	100% {
+		opacity: 0;
+	}
+}
+
+/* Target box pulse when injection completes */
+@keyframes di-target-border {
+	0%,
+	62%,
+	78%,
+	100% {
+		stroke: var(--color-border-strong);
+	}
+	66%,
+	74% {
+		stroke: var(--color-accent);
+		filter: url(#di-pulse);
+	}
+}
+
+/* ---- prefers-reduced-motion: disable all animation ---- */
+@media (prefers-reduced-motion: reduce) {
+	.di-workflow .di-workflow__svg * {
+		animation: none;
+		transition: none;
+	}
+}
+
+/* Pause on hover (must be after all animation declarations) */
+.di-workflow:hover .di-workflow__svg * {
+	animation-play-state: paused;
+}
+
+/* ============================================================
+   Homepage Layout
+   ============================================================ */
+
+.home-page {
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-5);
+	padding-block: var(--space-7);
+}
+
+/* Hero intro */
+.home-page__intro {
+	text-align: center;
+	max-width: 48rem;
+	margin-inline: auto;
+}
+
+.home-page__intro .eyebrow {
+	font-size: var(--font-size-sm);
+	color: var(--color-accent);
+	text-transform: uppercase;
+	letter-spacing: 0.08em;
+	margin-block-end: var(--space-2);
+}
+
+.home-page__title {
+	font-size: var(--font-size-3xl);
+	line-height: var(--leading-3xl);
+	font-weight: 700;
+	letter-spacing: -0.02em;
+}
+
+.home-page__body {
+	color: var(--color-text-muted);
+	font-size: var(--font-size-lg);
+	line-height: var(--leading-lg);
+}
+
+/* Animation container */
+.home-page__animation {
+	padding-block: var(--space-5) var(--space-6);
+}
+
+/* Info panels */
+.home-page__panel {
+	border: 1px solid var(--color-border);
+	border-radius: var(--radius-lg);
+	padding: var(--space-5);
+	background: var(--color-surface);
+}
+
+.home-page__label {
+	font-size: var(--font-size-sm);
+	font-weight: 600;
+	color: var(--color-text-muted);
+	text-transform: uppercase;
+	letter-spacing: 0.06em;
+	margin-block-end: var(--space-3);
+}
+
+.home-page__list {
+	list-style: none;
+	padding: 0;
+	margin: 0;
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-2);
+}
+
+.home-page__list li {
+	font-size: var(--font-size-sm);
+	color: var(--color-text);
+}
+
+.home-page__list code {
+	color: var(--color-accent);
+	background: var(--color-code-bg);
+	padding: 0.125em 0.375em;
+	border-radius: var(--radius-sm);
+	font-size: 0.8125rem;
+}

@@ -54,16 +54,6 @@ function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
 			</head>
 			<body>
 				<div className="site-shell">
-					<header className="site-header">
-						<p className="site-header__eyebrow">husky-di</p>
-						<h1 className="site-header__title">
-							A small, focused project homepage.
-						</h1>
-						<p className="site-header__subtitle">
-							The website workspace now ships a single landing page instead of a
-							full documentation tree.
-						</p>
-					</header>
 					<main className="site-main">{children}</main>
 				</div>
 				<Scripts />
