@@ -24,5 +24,5 @@ The website is configured for static prerendering and GitHub Pages deployment.
 - `src/routes/index.tsx`: homepage
 - `tailwindcss` + `@tailwindcss/vite`: utility layer kept available for future page work
 - `@tanstack/react-router-devtools`, `clsx`, `motion`, `tailwind-merge`: retained for future homepage expansion
-- `src/styles/app.scss`: shared homepage styles
+- `src/styles/globals.css`: global theme tokens and base styles
 - `src/utils/base-path.utils.ts`: GitHub Pages base path helper

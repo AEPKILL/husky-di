@@ -1,0 +1,85 @@
+@import "tailwindcss";
+
+/* ============================================================
+   Website Theme Tokens
+   Minimal terminal-first palette for the current homepage
+   ============================================================ */
+
+@theme {
+	--font-sans: "Inter", "Roboto", ui-sans-serif, system-ui, sans-serif;
+	--font-mono:
+		"JetBrains Mono", "Fira Code", "Source Code Pro", ui-monospace, monospace;
+
+	--color-page-bg: #0f111a;
+	--color-page-fg: #e4e6eb;
+	--color-page-muted: #a0aab5;
+	--color-accent: #00e676;
+	--color-selection: rgba(41, 121, 255, 0.28);
+	--color-term-bg: #0b0f14;
+	--color-term-fg: #d8dee9;
+	--color-term-green: #00e676;
+	--color-term-amber: #ffbf69;
+	--color-term-dim: #6f7c8f;
+	--radius-sm: 0.5rem;
+	--motion-fast: 120ms;
+	--ease-default: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+[data-theme="light"] {
+	--color-page-bg: #fafbfc;
+	--color-page-fg: #1a1d26;
+	--color-page-muted: #5a6070;
+	--color-selection: rgba(41, 121, 255, 0.2);
+	--color-term-bg: #f3f5f7;
+	--color-term-fg: #1f2833;
+	--color-term-green: #008f4c;
+	--color-term-amber: #a15c00;
+	--color-term-dim: #6a7380;
+}
+
+@layer base {
+	html {
+		scroll-behavior: smooth;
+	}
+
+	body {
+		margin: 0;
+		font-family: var(--font-sans);
+		color: var(--color-page-fg);
+		background-color: var(--color-page-bg);
+		-webkit-font-smoothing: antialiased;
+		-moz-osx-font-smoothing: grayscale;
+	}
+
+	::selection {
+		background-color: var(--color-selection);
+	}
+
+	:focus-visible {
+		outline: 2px solid var(--color-accent);
+		outline-offset: 2px;
+		border-radius: var(--radius-sm);
+	}
+
+	code,
+	pre,
+	kbd,
+	samp {
+		font-family: var(--font-mono);
+	}
+
+	a {
+		color: var(--color-accent);
+		text-decoration: none;
+		transition: opacity var(--motion-fast) var(--ease-default);
+	}
+
+	a:hover {
+		opacity: 0.85;
+	}
+}
+
+@utility text-terminal-glow {
+	text-shadow: 0 0 9px
+		color-mix(in oklab, var(--color-term-green) 55%, transparent);
+}
