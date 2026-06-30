@@ -18,9 +18,10 @@
    ============================================================ */
 
 @theme {
-	--font-display: "DINish", "Avenir Next Condensed", "Arial Narrow", sans-serif;
-	--font-sans: "DINish", "Inter", ui-sans-serif, system-ui, sans-serif;
-	--font-mono: "Berkeley Mono", "JetBrains Mono", ui-monospace, monospace;
+	--font-display:
+		"Inter", "DINish", "Avenir Next Condensed", "Arial Narrow", sans-serif;
+	--font-sans: "Inter", "DINish", ui-sans-serif, system-ui, sans-serif;
+	--font-mono: "JetBrains Mono", "Berkeley Mono", ui-monospace, monospace;
 
 	--color-page-bg: #0f111a;
 	--color-page-fg: #e4e6eb;

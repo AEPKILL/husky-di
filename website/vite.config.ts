@@ -44,6 +44,10 @@ export default defineConfig({
 			prerender: {
 				enabled: true,
 			},
+			router: {
+				routeFileIgnorePattern:
+					"^(?:(?:.+/)?(?:components|hooks|utils|types|consts|styles)(?:/|$))",
+			},
 			srcDirectory: "src",
 		}),
 		viteReact(),

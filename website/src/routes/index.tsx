@@ -1,16 +1,16 @@
 /**
- * @overview Homepage route for the minimal Husky DI website.
+ * @overview Root homepage route that mounts the home page module.
  * @author AEPKILL
- * @created 2026-06-26 10:20:00
+ * @created 2026-06-30 19:05:00
  */
 
 import { createFileRoute } from "@tanstack/react-router";
-import { DiWorkflowAnimation } from "@/components/di-workflow-animation";
+import { HomePage } from "./home/index";
 
 export const Route = createFileRoute("/")({
-	component: HomePage,
+	component: HomeRoutePage,
 });
 
-function HomePage() {
-	return <DiWorkflowAnimation />;
+function HomeRoutePage() {
+	return <HomePage />;
 }
