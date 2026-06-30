@@ -14,7 +14,22 @@ const SLOT_COLUMNS = [20, 24, 28] as const;
 const DEPENDENCY_NAMES = ["A", "B", "C"] as const;
 const TOKEN_TRAIL = ["O", "o", ":", "."] as const;
 const TOKEN_TRAVEL_TICKS = 18;
-const READY_HOLD_TICKS = 14;
+const READY_HOLD_TICKS = TOKEN_TRAVEL_TICKS * 4;
+const READY_LABEL = "all satisfied -> run()";
+const READY_BLINK_PHASE_TICKS = 2;
+const READY_BLINK_VISIBILITY = [
+	true,
+	false,
+	true,
+	false,
+	true,
+	false,
+	true,
+	false,
+	true,
+	false,
+	true,
+] as const;
 const TOTAL_CYCLE_TICKS =
 	TOKEN_TRAVEL_TICKS * DEPENDENCY_NAMES.length + READY_HOLD_TICKS;
 
@@ -23,6 +38,7 @@ type Grid = string[][];
 
 export type DiWorkflowAnimationFrame = {
 	ascii: string;
+	isLabelVisible: boolean;
 	label: string;
 };
 
@@ -47,12 +63,18 @@ export function getDiWorkflowAnimationFrame(
 	drawPipeSkeleton(grid, tick);
 	drawConsumer(grid, completedDependencyCount);
 
+	const isLabelVisible = isReady
+		? getReadyLabelVisibility(
+				cycleTick - TOKEN_TRAVEL_TICKS * DEPENDENCY_NAMES.length,
+			)
+		: true;
 	const label = isReady
-		? "all satisfied -> run()"
+		? READY_LABEL
 		: drawActiveDependencyToken(grid, cycleTick, completedDependencyCount);
 
 	return {
 		ascii: convertGridToString(grid),
+		isLabelVisible,
 		label,
 	};
 }
@@ -209,6 +231,15 @@ function drawActiveDependencyToken(
 	});
 
 	return `injecting dep ${DEPENDENCY_NAMES[dependencyIndex]}  >>>`;
+}
+
+function getReadyLabelVisibility(readyTick: number): boolean {
+	const phaseIndex = Math.min(
+		Math.floor(readyTick / READY_BLINK_PHASE_TICKS),
+		READY_BLINK_VISIBILITY.length - 1,
+	);
+
+	return READY_BLINK_VISIBILITY[phaseIndex];
 }
 
 function convertGridToString(grid: Grid): string {

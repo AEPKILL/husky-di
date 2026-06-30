@@ -28,7 +28,11 @@ export function DiWorkflowAnimation() {
 			</pre>
 
 			<div className="flex flex-col items-center gap-1.5 text-center">
-				<p className="text-sm uppercase tracking-[0.3em] text-term-amber md:text-base">
+				<p
+					className={`text-sm uppercase tracking-[0.3em] text-term-amber md:text-base ${
+						frame.isLabelVisible ? "opacity-100" : "opacity-0"
+					}`}
+				>
 					{frame.label}
 				</p>
 				<p className="text-xs tracking-[0.4em] text-term-dim">
