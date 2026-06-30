@@ -11,5 +11,10 @@
 			"!!src/routeTree.gen.ts",
 			"!!dist"
 		]
+	},
+	"css": {
+		"parser": {
+			"tailwindDirectives": true
+		}
 	}
 }
