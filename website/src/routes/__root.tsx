@@ -53,9 +53,7 @@ function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
 				<HeadContent />
 			</head>
 			<body>
-				<div className="site-shell">
-					<main className="site-main">{children}</main>
-				</div>
+				{children}
 				<Scripts />
 			</body>
 		</html>

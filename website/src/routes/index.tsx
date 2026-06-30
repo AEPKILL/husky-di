@@ -12,11 +12,5 @@ export const Route = createFileRoute("/")({
 });
 
 function HomePage() {
-	return (
-		<section className="home-page">
-			<div className="home-page__animation">
-				<DiWorkflowAnimation />
-			</div>
-		</section>
-	);
+	return <DiWorkflowAnimation />;
 }

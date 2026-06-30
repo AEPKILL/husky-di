@@ -110,6 +110,7 @@
 	}
 
 	body {
+		margin: 0;
 		font-family: var(--font-sans);
 		font-size: var(--font-size-md);
 		line-height: var(--leading-md);
@@ -653,87 +654,4 @@
 /* Pause on hover (must be after all animation declarations) */
 .di-workflow:hover .di-workflow__svg * {
 	animation-play-state: paused;
-}
-
-/* ============================================================
-   Homepage Layout
-   ============================================================ */
-
-.home-page {
-	display: flex;
-	flex-direction: column;
-	gap: var(--space-5);
-	padding-block: var(--space-7);
-}
-
-/* Hero intro */
-.home-page__intro {
-	text-align: center;
-	max-width: 48rem;
-	margin-inline: auto;
-}
-
-.home-page__intro .eyebrow {
-	font-size: var(--font-size-sm);
-	color: var(--color-accent);
-	text-transform: uppercase;
-	letter-spacing: 0.08em;
-	margin-block-end: var(--space-2);
-}
-
-.home-page__title {
-	font-size: var(--font-size-3xl);
-	line-height: var(--leading-3xl);
-	font-weight: 700;
-	letter-spacing: -0.02em;
-}
-
-.home-page__body {
-	color: var(--color-text-muted);
-	font-size: var(--font-size-lg);
-	line-height: var(--leading-lg);
-}
-
-/* Animation container */
-.home-page__animation {
-	padding-block: var(--space-5) var(--space-6);
-}
-
-/* Info panels */
-.home-page__panel {
-	border: 1px solid var(--color-border);
-	border-radius: var(--radius-lg);
-	padding: var(--space-5);
-	background: var(--color-surface);
-}
-
-.home-page__label {
-	font-size: var(--font-size-sm);
-	font-weight: 600;
-	color: var(--color-text-muted);
-	text-transform: uppercase;
-	letter-spacing: 0.06em;
-	margin-block-end: var(--space-3);
-}
-
-.home-page__list {
-	list-style: none;
-	padding: 0;
-	margin: 0;
-	display: flex;
-	flex-direction: column;
-	gap: var(--space-2);
-}
-
-.home-page__list li {
-	font-size: var(--font-size-sm);
-	color: var(--color-text);
-}
-
-.home-page__list code {
-	color: var(--color-accent);
-	background: var(--color-code-bg);
-	padding: 0.125em 0.375em;
-	border-radius: var(--radius-sm);
-	font-size: 0.8125rem;
 }
