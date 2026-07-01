@@ -22,7 +22,7 @@ export const HOME_PAGE_HERO_TITLE_LINES = [
 ] as const;
 
 export const HOME_PAGE_HERO_DESCRIPTION =
-	"A modern, zero-overhead DI container for TypeScript. Built for developers who want explicit service graphs, predictable resolution rules, and rock-solid runtime clarity.";
+	"A modern, low-overhead DI container for TypeScript. Built for developers who want explicit service graphs, predictable resolution rules, and rock-solid runtime clarity.";
 
 export const HOME_PAGE_HERO_PRIMARY_ACTION = {
 	label: "Get Started",

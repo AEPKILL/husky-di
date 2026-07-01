@@ -17,6 +17,10 @@ import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment
 import { DRACOLoader } from "three/examples/jsm/loaders/DRACOLoader.js";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 
+import {
+	HOME_PAGE_HERO_COIN_DRACO_DECODER_PATH,
+	HOME_PAGE_HERO_COIN_MODEL_PATH,
+} from "../consts/assets.const";
 import styles from "../styles/homepage.module.css";
 
 const HOMEPAGE_HERO_COIN_DISPLAY_ROTATION_SPEED_X = 0.22;
@@ -31,12 +35,10 @@ const HOMEPAGE_HERO_COIN_MATERIAL_CLEARCOAT = 0.55;
 const HOMEPAGE_HERO_COIN_MATERIAL_CLEARCOAT_ROUGHNESS = 0.18;
 const HOMEPAGE_HERO_COIN_ENVIRONMENT_BLUR = 0.06;
 const HOMEPAGE_HERO_COIN_TONE_MAPPING_EXPOSURE = 1.15;
-const HOMEPAGE_HERO_COIN_MODEL_PATH = "/assets/models/coin.glb";
-const HOMEPAGE_HERO_COIN_DRACO_DECODER_PATH = "/assets/draco/gltf/";
 
 const homepageHeroCoinDracoLoader = new DRACOLoader();
 homepageHeroCoinDracoLoader.setDecoderPath(
-	HOMEPAGE_HERO_COIN_DRACO_DECODER_PATH,
+	HOME_PAGE_HERO_COIN_DRACO_DECODER_PATH,
 );
 
 function isHomepageHeroCoinMesh(node: Object3D): node is Mesh {
@@ -79,7 +81,7 @@ function HomepageHeroCoinScene() {
 	const coinRef = useRef<Group | null>(null);
 	const coinModel = useLoader(
 		GLTFLoader,
-		HOMEPAGE_HERO_COIN_MODEL_PATH,
+		HOME_PAGE_HERO_COIN_MODEL_PATH,
 		(loader) => {
 			loader.setDRACOLoader(homepageHeroCoinDracoLoader);
 		},
