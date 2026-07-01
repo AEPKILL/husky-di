@@ -17,11 +17,7 @@ export function Homepage() {
 			<main>
 				<HomepageHeroSection />
 				<div id="homepage-workflow">
-					<DiWorkflowAnimation
-						className="border-b border-[#3b4a3d]"
-						showBranding={false}
-						showPrimaryAction={false}
-					/>
+					<DiWorkflowAnimation className="border-b border-[#3b4a3d]" />
 				</div>
 				<HomepageDependencyGraphSection />
 				<HomepageCodeExampleSection />
