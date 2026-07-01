@@ -6,7 +6,7 @@
 
 import styles from "../styles/homepage.module.css";
 
-type HomepageMaterialSymbolProps = Readonly<{
+export type HomepageMaterialSymbolProps = Readonly<{
 	className?: string;
 	name:
 		| "bolt"

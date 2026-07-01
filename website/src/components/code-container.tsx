@@ -7,7 +7,7 @@
 import type { ReactNode } from "react";
 import { cn } from "@/utils/class-name.util";
 
-type CodeContainerProps = Readonly<{
+export type CodeContainerProps = Readonly<{
 	actions?: ReactNode;
 	bodyClassName?: string;
 	children: ReactNode;

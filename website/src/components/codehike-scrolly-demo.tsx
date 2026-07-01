@@ -13,7 +13,7 @@ import {
 import { CODEHIKE_TOKEN_TRANSITIONS } from "@/components/codehike-token-transitions";
 import type { CodehikeScrollyDemoStep } from "@/types/codehike-scrolly-demo.type";
 
-type CodehikeScrollyDemoProps = Readonly<{
+export type CodehikeScrollyDemoProps = Readonly<{
 	steps: readonly CodehikeScrollyDemoStep[];
 }>;
 
@@ -82,7 +82,7 @@ export function CodehikeScrollyDemo({ steps }: CodehikeScrollyDemoProps) {
 	);
 }
 
-type CodePanelProps = Readonly<{
+export type CodePanelProps = Readonly<{
 	steps: readonly CodehikeScrollyDemoStep[];
 }>;
 

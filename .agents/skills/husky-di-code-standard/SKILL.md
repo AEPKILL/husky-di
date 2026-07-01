@@ -129,6 +129,7 @@ Do not invent new suffixes when an existing suffix already fits.
 - Across packages, prefer package-name imports such as `@husky-di/core`.
 - In tests and tooling, follow the nearest existing local pattern before changing import style.
 - Prefer named exports.
+- Export React component `Props` types so the component contract remains reusable and discoverable from outside the file.
 - In implementation files, place exported declarations near the top of the file, before file-local helper types, constants, and functions when practical.
 - Do not add default exports unless a user explicitly asks for them.
 - Public package APIs should flow through `src/index.ts`.
