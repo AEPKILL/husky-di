@@ -11,6 +11,7 @@
 		"preview": "vite preview"
 	},
 	"dependencies": {
+		"@react-three/fiber": "^9.6.1",
 		"@tanstack/react-router": "^1.170.16",
 		"@tanstack/react-router-devtools": "^1.167.0",
 		"@tanstack/react-start": "^1.168.26",
