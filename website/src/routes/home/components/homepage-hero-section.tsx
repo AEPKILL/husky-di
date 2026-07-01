@@ -11,13 +11,16 @@ import {
 	HOME_PAGE_HERO_SECONDARY_ACTION,
 	HOME_PAGE_HERO_TITLE_LINES,
 } from "../consts/homepage.const";
+import styles from "../styles/homepage.module.css";
 import { HomepageHeroCoin3d } from "./homepage-hero-coin-3d";
 import { HomepageMaterialSymbol } from "./homepage-material-symbol";
 
 export function HomepageHeroSection() {
 	return (
-		<section className="relative flex min-h-[819px] items-center overflow-hidden border-b border-[#3b4a3d]">
-			<div className="relative z-10 mx-auto grid w-full max-w-[1200px] grid-cols-1 items-center gap-10 px-6 py-16 md:grid-cols-2 md:gap-10">
+		<section
+			className={`${styles.heroSection} relative flex min-h-[100svh] items-center overflow-hidden border-b border-[#3b4a3d]`}
+		>
+			<div className="relative z-10 mx-auto grid w-full max-w-[1200px] grid-cols-1 items-center gap-10 px-6 py-16 md:grid-cols-2 md:gap-10 md:py-20">
 				<div className="flex flex-col gap-6">
 					<div className="inline-flex w-fit items-center gap-1 rounded bg-[#75ff9e]/10 px-2 py-1 font-mono text-xs uppercase tracking-[0.1em] text-[#75ff9e]">
 						<HomepageMaterialSymbol className="text-sm" name="shield" />
@@ -56,7 +59,9 @@ export function HomepageHeroSection() {
 					</div>
 				</div>
 
-				<div className="flex items-center justify-center">
+				<div
+					className={`${styles.heroVisual} flex items-center justify-center`}
+				>
 					<HomepageHeroCoin3d />
 				</div>
 			</div>

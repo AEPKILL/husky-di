@@ -10,12 +10,10 @@ import { HomepageDependencyGraphSection } from "./homepage-dependency-graph-sect
 import { HomepageFeatureGridSection } from "./homepage-feature-grid-section";
 import { HomepageFooter } from "./homepage-footer";
 import { HomepageHeroSection } from "./homepage-hero-section";
-import { HomepageTopNav } from "./homepage-top-nav";
 
 export function Homepage() {
 	return (
 		<div className="bg-[#101417] text-[#e0e2e7]">
-			<HomepageTopNav />
 			<main>
 				<HomepageHeroSection />
 				<HomepageFeatureGridSection />
