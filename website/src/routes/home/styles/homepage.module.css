@@ -162,7 +162,15 @@
 	position: relative;
 	filter: drop-shadow(0 28px 40px rgba(0, 0, 0, 0.32));
 	isolation: isolate;
+	opacity: 0;
 	overflow: visible;
+	transition:
+		opacity 280ms ease-out,
+		filter 280ms ease-out;
+}
+
+.threeCanvasVisible {
+	opacity: 1;
 }
 
 .threeCanvas::before {
