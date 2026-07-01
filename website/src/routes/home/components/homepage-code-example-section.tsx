@@ -5,11 +5,11 @@
  */
 
 import { useState } from "react";
+import { CodeContainer } from "@/components/code-container";
 import {
 	HOME_PAGE_CODE_BLOCK_FILE_NAME,
 	HOME_PAGE_INSTALL_COMMAND,
 } from "../consts/homepage.const";
-import styles from "../styles/homepage.module.css";
 import { HomepageMaterialSymbol } from "./homepage-material-symbol";
 
 const COPY_FEEDBACK_HIDE_DELAY_MS = 1600;
@@ -41,22 +41,8 @@ export function HomepageCodeExampleSection() {
 					</p>
 				</div>
 
-				<div
-					className={`${styles.codeContainer} mx-auto max-w-3xl overflow-hidden rounded-lg shadow-2xl`}
-				>
-					<div
-						className={`${styles.terminalHeader} flex items-center justify-between bg-[#272a2e] px-4 py-2`}
-					>
-						<div className="flex items-center gap-2">
-							<HomepageMaterialSymbol
-								className="text-sm text-[#bacbb9]"
-								name="description"
-							/>
-							<span className="font-mono text-xs text-[#bacbb9]">
-								{HOME_PAGE_CODE_BLOCK_FILE_NAME}
-							</span>
-						</div>
-
+				<CodeContainer
+					actions={
 						<button
 							className="flex items-center gap-1 text-[#bacbb9] transition-colors hover:text-[#75ff9e]"
 							onClick={handleCopy}
@@ -67,99 +53,100 @@ export function HomepageCodeExampleSection() {
 								{isCopied ? "Copied" : "Copy"}
 							</span>
 						</button>
-					</div>
-
-					<div className="overflow-x-auto p-6 font-mono text-sm leading-6">
-						<pre className="text-[#e0e2e7]">
-							<span className="text-[#ffb866]">import</span>
-							{" {"}
-							<span className="text-[#62ff96]"> createContainer</span>,
-							<br />
-							<span className="text-[#62ff96]"> createServiceIdentifier</span>,
-							<br />
-							<span className="text-[#62ff96]"> resolve</span>,
-							<br />
-							{"} "}
-							<span className="text-[#ffb866]">from</span>{" "}
-							<span className="text-[#b0c6ff]">'@husky-di/core'</span>;{"\n\n"}
-							<span className="text-[#bacbb9]">
-								{"// 1. Define contracts and services"}
-							</span>
-							{"\n"}
-							<span className="text-[#ffb866]">interface</span>{" "}
-							<span className="text-[#e0e2e7]">Logger</span> {"{"}
-							<br />
-							{"  "}
-							<span className="text-[#e0e2e7]">log</span>(message:{" "}
-							<span className="text-[#b0c6ff]">string</span>):{" "}
-							<span className="text-[#b0c6ff]">void</span>
-							{";"}
-							<br />
-							{"}"}
-							{"\n\n"}
-							<span className="text-[#ffb866]">class</span>{" "}
-							<span className="text-[#62ff96]">ConsoleLogger</span>{" "}
-							<span className="text-[#ffb866]">implements</span>{" "}
-							<span className="text-[#e0e2e7]">Logger</span> {"{"}
-							<br />
-							{"  "}
-							<span className="text-[#e0e2e7]">log</span>(message:{" "}
-							<span className="text-[#b0c6ff]">string</span>) {"{"}
-							<br />
-							{"    "}
-							console.log(message);
-							<br />
-							{"  }"}
-							<br />
-							{"}"}
-							{"\n\n"}
-							<span className="text-[#ffb866]">class</span>{" "}
-							<span className="text-[#62ff96]">UserService</span> {"{"}
-							<br />
-							{"  "}
-							<span className="text-[#ffb866]">private</span>{" "}
-							<span className="text-[#ffb866]">readonly</span>{" "}
-							<span className="text-[#e0e2e7]">logger</span> ={" "}
-							<span className="text-[#e0e2e7]">resolve</span>(
-							<span className="text-[#62ff96]">ILogger</span>);
-							<br />
-							{"}"}
-							{"\n\n"}
-							<span className="text-[#bacbb9]">
-								{"// 2. Create service identifiers and container"}
-							</span>
-							{"\n"}
-							<span className="text-[#ffb866]">const</span>{" "}
-							<span className="text-[#e0e2e7]">ILogger</span> ={" "}
-							<span className="text-[#e0e2e7]">createServiceIdentifier</span>
-							{"<"}
-							<span className="text-[#e0e2e7]">Logger</span>
-							{">"}(<span className="text-[#b0c6ff]">"ILogger"</span>);
-							{"\n"}
-							<span className="text-[#ffb866]">const</span>{" "}
-							<span className="text-[#e0e2e7]">container</span> ={" "}
-							<span className="text-[#e0e2e7]">createContainer</span>(
-							<span className="text-[#b0c6ff]">"AppContainer"</span>);
-							{"\n\n"}
-							<span className="text-[#bacbb9]">
-								{"// 3. Register providers and resolve"}
-							</span>
-							{"\n"}
-							<span className="text-[#e0e2e7]">container</span>.
-							<span className="text-[#d9e2ff]">register</span>(
-							<span className="text-[#62ff96]">ILogger</span>, {"{"}
-							<br />
-							{"  "}
-							<span className="text-[#e0e2e7]">useClass</span>:{" "}
-							<span className="text-[#62ff96]">ConsoleLogger</span>,
-							<br />
-							{"}"});{"\n"}
-							<span className="text-[#e0e2e7]">container</span>.
-							<span className="text-[#d9e2ff]">resolve</span>(
-							<span className="text-[#62ff96]">ILogger</span>);
-						</pre>
-					</div>
-				</div>
+					}
+					bodyClassName="overflow-x-auto p-6 font-mono text-sm leading-6"
+					className="mx-auto max-w-3xl"
+					fileName={HOME_PAGE_CODE_BLOCK_FILE_NAME}
+				>
+					<pre className="text-[#e0e2e7]">
+						<span className="text-[#ffb866]">import</span>
+						{" {"}
+						<span className="text-[#62ff96]"> createContainer</span>,
+						<br />
+						<span className="text-[#62ff96]"> createServiceIdentifier</span>,
+						<br />
+						<span className="text-[#62ff96]"> resolve</span>,
+						<br />
+						{"} "}
+						<span className="text-[#ffb866]">from</span>{" "}
+						<span className="text-[#b0c6ff]">'@husky-di/core'</span>;{"\n\n"}
+						<span className="text-[#bacbb9]">
+							{"// 1. Define contracts and services"}
+						</span>
+						{"\n"}
+						<span className="text-[#ffb866]">interface</span>{" "}
+						<span className="text-[#e0e2e7]">Logger</span> {"{"}
+						<br />
+						{"  "}
+						<span className="text-[#e0e2e7]">log</span>(message:{" "}
+						<span className="text-[#b0c6ff]">string</span>):{" "}
+						<span className="text-[#b0c6ff]">void</span>
+						{";"}
+						<br />
+						{"}"}
+						{"\n\n"}
+						<span className="text-[#ffb866]">class</span>{" "}
+						<span className="text-[#62ff96]">ConsoleLogger</span>{" "}
+						<span className="text-[#ffb866]">implements</span>{" "}
+						<span className="text-[#e0e2e7]">Logger</span> {"{"}
+						<br />
+						{"  "}
+						<span className="text-[#e0e2e7]">log</span>(message:{" "}
+						<span className="text-[#b0c6ff]">string</span>) {"{"}
+						<br />
+						{"    "}
+						console.log(message);
+						<br />
+						{"  }"}
+						<br />
+						{"}"}
+						{"\n\n"}
+						<span className="text-[#ffb866]">class</span>{" "}
+						<span className="text-[#62ff96]">UserService</span> {"{"}
+						<br />
+						{"  "}
+						<span className="text-[#ffb866]">private</span>{" "}
+						<span className="text-[#ffb866]">readonly</span>{" "}
+						<span className="text-[#e0e2e7]">logger</span> ={" "}
+						<span className="text-[#e0e2e7]">resolve</span>(
+						<span className="text-[#62ff96]">ILogger</span>);
+						<br />
+						{"}"}
+						{"\n\n"}
+						<span className="text-[#bacbb9]">
+							{"// 2. Create service identifiers and container"}
+						</span>
+						{"\n"}
+						<span className="text-[#ffb866]">const</span>{" "}
+						<span className="text-[#e0e2e7]">ILogger</span> ={" "}
+						<span className="text-[#e0e2e7]">createServiceIdentifier</span>
+						{"<"}
+						<span className="text-[#e0e2e7]">Logger</span>
+						{">"}(<span className="text-[#b0c6ff]">"ILogger"</span>);
+						{"\n"}
+						<span className="text-[#ffb866]">const</span>{" "}
+						<span className="text-[#e0e2e7]">container</span> ={" "}
+						<span className="text-[#e0e2e7]">createContainer</span>(
+						<span className="text-[#b0c6ff]">"AppContainer"</span>);
+						{"\n\n"}
+						<span className="text-[#bacbb9]">
+							{"// 3. Register providers and resolve"}
+						</span>
+						{"\n"}
+						<span className="text-[#e0e2e7]">container</span>.
+						<span className="text-[#d9e2ff]">register</span>(
+						<span className="text-[#62ff96]">ILogger</span>, {"{"}
+						<br />
+						{"  "}
+						<span className="text-[#e0e2e7]">useClass</span>:{" "}
+						<span className="text-[#62ff96]">ConsoleLogger</span>,
+						<br />
+						{"}"});{"\n"}
+						<span className="text-[#e0e2e7]">container</span>.
+						<span className="text-[#d9e2ff]">resolve</span>(
+						<span className="text-[#62ff96]">ILogger</span>);
+					</pre>
+				</CodeContainer>
 			</div>
 		</section>
 	);

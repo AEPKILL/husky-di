@@ -24,11 +24,6 @@
 	-webkit-font-smoothing: antialiased;
 }
 
-.codeContainer {
-	background-color: #0b0f12;
-	border: 1px solid #3b4a3d;
-}
-
 .heroSection {
 	background:
 		radial-gradient(
@@ -161,10 +156,6 @@
 	filter: blur(30px);
 	opacity: 0.95;
 	pointer-events: none;
-}
-
-.terminalHeader {
-	border-bottom: 1px solid #3b4a3d;
 }
 
 .threeCanvas {
