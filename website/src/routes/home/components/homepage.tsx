@@ -5,11 +5,10 @@
  */
 
 import { DiWorkflowAnimation } from "@/components/di-workflow-animation";
-import { HomepageCodeExampleSection } from "./homepage-code-example-section";
 import { HomepageCtaSection } from "./homepage-cta-section";
-import { HomepageDependencyGraphSection } from "./homepage-dependency-graph-section";
 import { HomepageFooter } from "./homepage-footer";
 import { HomepageHeroSection } from "./homepage-hero-section";
+import { HomepageTutorialSection } from "./homepage-tutorial-section";
 
 export function Homepage() {
 	return (
@@ -19,8 +18,7 @@ export function Homepage() {
 				<div id="homepage-workflow">
 					<DiWorkflowAnimation className="border-b border-[#3b4a3d]" />
 				</div>
-				<HomepageDependencyGraphSection />
-				<HomepageCodeExampleSection />
+				<HomepageTutorialSection />
 				<HomepageCtaSection />
 			</main>
 			<HomepageFooter />

@@ -9,10 +9,16 @@
  * @created 2026-06-25 16:25:00
  */
 
+import mdx from "@mdx-js/rollup";
 import tailwindcss from "@tailwindcss/vite";
 import { tanstackStart } from "@tanstack/react-start/plugin/vite";
 import viteReact from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
+
+const mdxPlugin = {
+	...mdx(),
+	enforce: "pre" as const,
+};
 
 function getWebsiteBasePath(): string {
 	const configuredBasePath = process.env.WEBSITE_BASE_PATH?.trim();
@@ -39,6 +45,7 @@ export default defineConfig({
 		tsconfigPaths: true,
 	},
 	plugins: [
+		mdxPlugin,
 		tailwindcss(),
 		tanstackStart({
 			prerender: {
@@ -50,6 +57,8 @@ export default defineConfig({
 			},
 			srcDirectory: "src",
 		}),
-		viteReact(),
+		viteReact({
+			include: /\.(mdx|js|jsx|ts|tsx)$/,
+		}),
 	],
 });

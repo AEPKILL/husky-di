@@ -1,0 +1,172 @@
+import { HomepageTutorialGraphPreview } from "@/routes/home/components/homepage-tutorial-graph-preview"
+import { HomepageTutorialWorkflowPreview } from "@/routes/home/components/homepage-tutorial-workflow-preview"
+import { ScrollyTutorialSection } from "@/components/scrolly-tutorial-section"
+
+<section className="border-y border-[#273138] bg-[#101417]">
+  <div className="mx-auto max-w-6xl px-6 py-16 md:px-10 md:py-20">
+    <div className="font-mono text-[0.68rem] uppercase tracking-[0.28em] text-[#75ff9e]">
+      {"Tutorial-First Docs"}
+    </div>
+    <h2
+      className="mt-4 max-w-4xl text-4xl leading-none font-black tracking-[-0.05em] text-[#e0e2e7] md:text-[3.4rem]"
+      style={{ fontFamily: "var(--font-display)" }}
+    >
+      {"Learn Husky DI the same way you inspect a real container"}
+    </h2>
+
+    <div className="mt-6 max-w-3xl space-y-4 text-[15px] leading-8 text-[#bacbb9]">
+      The goal here is not to dump API snippets onto the homepage. We want a
+      tutorial surface that can grow with the project and stay maintainable when
+      the explanation gets longer.
+
+      MDX gives us that authoring model: prose stays in markdown, and the left
+      panel can still render a code example, a dependency graph, or a live demo
+      component whenever the concept is easier to understand visually.
+    </div>
+
+    <ol className="mt-8 grid gap-3 text-sm leading-7 text-[#d7dbe2] sm:grid-cols-2 xl:grid-cols-4">
+      <li className="rounded-2xl border border-white/8 bg-white/[0.03] px-4 py-4">
+        <strong className="block font-mono text-[0.68rem] uppercase tracking-[0.24em] text-[#75ff9e]">
+          {"Step 1"}
+        </strong>
+        <span className="mt-1 block">{"Make the graph visible before wiring services."}</span>
+      </li>
+      <li className="rounded-2xl border border-white/8 bg-white/[0.03] px-4 py-4">
+        <strong className="block font-mono text-[0.68rem] uppercase tracking-[0.24em] text-[#75ff9e]">
+          {"Step 2"}
+        </strong>
+        <span className="mt-1 block">{"Register identifiers with explicit runtime names."}</span>
+      </li>
+      <li className="rounded-2xl border border-white/8 bg-white/[0.03] px-4 py-4">
+        <strong className="block font-mono text-[0.68rem] uppercase tracking-[0.24em] text-[#75ff9e]">
+          {"Step 3"}
+        </strong>
+        <span className="mt-1 block">{"Resolve through the container instead of hand-plumbing objects."}</span>
+      </li>
+      <li className="rounded-2xl border border-white/8 bg-white/[0.03] px-4 py-4">
+        <strong className="block font-mono text-[0.68rem] uppercase tracking-[0.24em] text-[#75ff9e]">
+          {"Step 4"}
+        </strong>
+        <span className="mt-1 block">{"Swap the left pane to a live component whenever a visual demo helps."}</span>
+      </li>
+    </ol>
+  </div>
+</section>
+
+<ScrollyTutorialSection
+  description="This section is MDX-authored on purpose. The right rail stays great for prose, while the left rail remains free to show code or any React component that explains the current concept better."
+  eyebrow="Guided Walkthrough"
+  id="homepage-tutorial"
+  title="Build a deterministic container step by step"
+>
+  ## Start from the graph, not from magic
+
+  <HomepageTutorialGraphPreview />
+
+  Husky DI works best when the service graph is explicit. Instead of hiding
+  object creation behind decorators or framework conventions, the container
+  keeps the dependency edges inspectable.
+
+  That matters for docs too. A visual preview on the left can establish the
+  mental model faster than a paragraph trying to describe the same graph in
+  words.
+
+  - Resolution order stays deterministic and debuggable.
+  - Cycles are easier to explain when the graph is visible.
+  - We can switch this preview to any other demo component later.
+
+  ## Give every dependency an explicit identity
+
+  ```ts
+  import {
+    createContainer,
+    createServiceIdentifier,
+  } from "@husky-di/core";
+  
+  interface Logger {
+    log(message: string): void;
+  }
+  
+  class ConsoleLogger implements Logger {
+    log(message: string) {
+      console.log(message);
+    }
+  }
+  
+  const ILogger = createServiceIdentifier<Logger>("ILogger");
+  const container = createContainer("DocsContainer");
+  
+  container.register(ILogger, {
+    useClass: ConsoleLogger,
+  });
+  ```
+
+  The first code step should make the repository vocabulary visible right away:
+  `createServiceIdentifier`, `createContainer`, and `register`.
+
+  This keeps the tutorial aligned with the actual product language instead of
+  teaching a softer abstraction first and correcting it later.
+
+  ## Let the container wire the graph
+
+  ```ts
+  import {
+    createContainer,
+    createServiceIdentifier,
+    resolve,
+  } from "@husky-di/core";
+  
+  interface Logger {
+    log(message: string): void;
+  }
+  
+  class ConsoleLogger implements Logger {
+    log(message: string) {
+      console.log(message);
+    }
+  }
+  
+  class UserService {
+    private readonly logger = resolve(ILogger);
+  
+    getUser(id: string) {
+      this.logger.log(`load user: ${id}`);
+      return { id, name: "Ada" };
+    }
+  }
+  
+  const ILogger = createServiceIdentifier<Logger>("ILogger");
+  const IUserService =
+    createServiceIdentifier<UserService>("IUserService");
+  
+  const container = createContainer("DocsContainer");
+  
+  container.register(ILogger, {
+    useClass: ConsoleLogger,
+  });
+  
+  container.register(IUserService, {
+    useClass: UserService,
+  });
+  
+  const userService = container.resolve(IUserService);
+  ```
+
+  The interesting part here is not just that `UserService` resolves. It is that
+  the wiring logic is centralized, repeatable, and traceable from the container
+  boundary.
+
+  That gives the tutorial a clean story arc: define identifiers, register
+  providers, then resolve a feature service and let the graph do the rest.
+
+  ## Swap code for a live preview when the concept is visual
+
+  <HomepageTutorialWorkflowPreview />
+
+  The homepage tutorial should not be locked into code blocks. A resolution
+  trace, dependency graph, or animated workflow can be the better teaching tool
+  for a given chapter.
+
+  Keeping the step preview as a React node means MDX authors can choose the best
+  medium per step without rewriting the layout layer.
+</ScrollyTutorialSection>
