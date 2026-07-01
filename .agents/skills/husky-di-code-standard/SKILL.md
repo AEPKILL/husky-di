@@ -179,6 +179,13 @@ Follow the nearest stable local example when a file already has its own internal
 - keep comments and error messages linguistically consistent within the local file or package
 - in package source, default to English unless the local file or package clearly establishes a different language pattern
 
+## Frontend Styling
+
+- in frontend code, prefer Tailwind utility classes over adding route-local or component-local `.css` files
+- do not introduce extra `.css` stylesheets when Tailwind classes, theme tokens, or existing utilities can express the same design
+- keep `.css` usage narrow and intentional, such as shared global theme tokens, base resets, or cases that Tailwind cannot represent cleanly
+- before adding new stylesheet files or new stylesheet imports, check whether the change can stay inline with the existing Tailwind-based component structure
+
 ## Type Modeling
 
 - use `interface` for structural contracts and public-facing shapes

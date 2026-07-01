@@ -214,6 +214,9 @@ Use a `4px` base unit.
 
 - Use subtle border brightening, surface lift, or accent tint.
 - Hover should never move content enough to disrupt reading.
+- For compact guidance affordances such as scroll cues, prefer a clearly visible
+  glow or border-emphasis change on hover rather than positional movement. Hover
+  feedback should feel obvious without creating hit-area jitter.
 
 ### Focus
 

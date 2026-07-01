@@ -65,6 +65,23 @@ export function HomepageHeroSection() {
 					<HomepageHeroCoin3d />
 				</div>
 			</div>
+
+			<a
+				aria-label="Scroll to dependency injection workflow"
+				className={`${styles.scrollIndicator} absolute bottom-6 left-1/2 z-10 -translate-x-1/2`}
+				href="#homepage-workflow"
+			>
+				<span aria-hidden="true" className={styles.scrollIndicatorMouse}>
+					<span className={styles.scrollIndicatorDot} />
+				</span>
+				<span className="font-mono text-[10px] uppercase tracking-[0.28em] text-[#75ff9e]/80">
+					Scroll
+				</span>
+				<HomepageMaterialSymbol
+					className={`${styles.scrollIndicatorChevron} text-base text-[#75ff9e]`}
+					name="keyboard_arrow_down"
+				/>
+			</a>
 		</section>
 	);
 }

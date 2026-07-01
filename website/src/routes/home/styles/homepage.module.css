@@ -40,6 +40,103 @@
 		linear-gradient(180deg, rgba(9, 13, 15, 0.16) 0%, rgba(16, 20, 23, 0) 32%);
 }
 
+.scrollIndicator {
+	display: inline-flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 0.4rem;
+	color: #75ff9e;
+	opacity: 0.78;
+	text-shadow: 0 0 0 rgba(117, 255, 158, 0);
+	transition:
+		opacity 160ms ease,
+		text-shadow 160ms ease;
+}
+
+.scrollIndicator:hover {
+	opacity: 1;
+	text-shadow:
+		0 0 12px rgba(117, 255, 158, 0.26),
+		0 0 24px rgba(117, 255, 158, 0.18);
+}
+
+.scrollIndicatorMouse {
+	display: inline-flex;
+	height: 2.35rem;
+	width: 1.45rem;
+	justify-content: center;
+	border: 1px solid rgba(117, 255, 158, 0.42);
+	border-radius: 9999px;
+	background: rgba(11, 15, 18, 0.35);
+	box-shadow: 0 0 18px rgba(117, 255, 158, 0.08);
+	transition:
+		border-color 160ms ease,
+		background-color 160ms ease,
+		box-shadow 160ms ease;
+}
+
+.scrollIndicatorDot {
+	margin-top: 0.35rem;
+	height: 0.42rem;
+	width: 0.18rem;
+	border-radius: 9999px;
+	background: currentColor;
+	animation: scrollIndicatorDot 1.5s ease-in-out infinite;
+}
+
+.scrollIndicatorChevron {
+	animation: scrollIndicatorChevron 1.5s ease-in-out infinite;
+	transition:
+		color 160ms ease,
+		filter 160ms ease;
+}
+
+.scrollIndicator:hover .scrollIndicatorMouse {
+	border-color: rgba(117, 255, 158, 0.72);
+	background: rgba(117, 255, 158, 0.08);
+	box-shadow:
+		0 0 20px rgba(117, 255, 158, 0.18),
+		0 0 36px rgba(117, 255, 158, 0.12);
+}
+
+.scrollIndicator:hover .scrollIndicatorChevron {
+	filter: drop-shadow(0 0 10px rgba(117, 255, 158, 0.55));
+}
+
+@keyframes scrollIndicatorDot {
+	0% {
+		opacity: 0;
+		transform: translateY(0);
+	}
+
+	20% {
+		opacity: 1;
+	}
+
+	70% {
+		opacity: 0;
+		transform: translateY(0.7rem);
+	}
+
+	100% {
+		opacity: 0;
+		transform: translateY(0.7rem);
+	}
+}
+
+@keyframes scrollIndicatorChevron {
+	0%,
+	100% {
+		opacity: 0.35;
+		transform: translateY(0);
+	}
+
+	50% {
+		opacity: 1;
+		transform: translateY(0.18rem);
+	}
+}
+
 .heroVisual {
 	position: relative;
 }

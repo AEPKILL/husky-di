@@ -13,6 +13,7 @@ type HomepageMaterialSymbolProps = Readonly<{
 		| "check_circle"
 		| "content_copy"
 		| "description"
+		| "keyboard_arrow_down"
 		| "settings_input_component"
 		| "shield"
 		| "terminal";
