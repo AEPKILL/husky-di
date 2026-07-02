@@ -4,27 +4,19 @@
  * @created 2026-06-30 17:45:00
  */
 
-import { useState } from "react";
 import { CodeContainer } from "@/components/code-container";
+import { useCopyFeedback } from "@/hooks/use-copy-feedback";
 import {
 	HOME_PAGE_CODE_BLOCK_FILE_NAME,
 	HOME_PAGE_INSTALL_COMMAND,
 } from "../consts/homepage.const";
 import { HomepageMaterialSymbol } from "./homepage-material-symbol";
 
-const COPY_FEEDBACK_HIDE_DELAY_MS = 1600;
-
 export function HomepageCodeExampleSection() {
-	const [isCopied, setIsCopied] = useState(false);
+	const { copyText, isCopied } = useCopyFeedback();
 
 	const handleCopy = async () => {
-		try {
-			await navigator.clipboard.writeText(HOME_PAGE_INSTALL_COMMAND.codeSample);
-			setIsCopied(true);
-			window.setTimeout(() => setIsCopied(false), COPY_FEEDBACK_HIDE_DELAY_MS);
-		} catch {
-			setIsCopied(false);
-		}
+		await copyText(HOME_PAGE_INSTALL_COMMAND.codeSample);
 	};
 
 	return (
