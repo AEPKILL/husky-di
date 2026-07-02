@@ -11,10 +11,10 @@ import {
 	useSelectedIndex,
 } from "codehike/utils/selection";
 import { CODEHIKE_TOKEN_TRANSITIONS } from "@/components/codehike-token-transitions";
-import type { CodehikeScrollyDemoStep } from "@/types/codehike-scrolly-demo.type";
+import type { ScrollyTutorialStep } from "@/types/scrolly-tutorial-step.type";
 
 export type CodehikeScrollyDemoProps = Readonly<{
-	steps: readonly CodehikeScrollyDemoStep[];
+	steps: readonly ScrollyTutorialStep[];
 }>;
 
 export function CodehikeScrollyDemo({ steps }: CodehikeScrollyDemoProps) {
@@ -80,7 +80,7 @@ export function CodehikeScrollyDemo({ steps }: CodehikeScrollyDemoProps) {
 }
 
 export type CodePanelProps = Readonly<{
-	steps: readonly CodehikeScrollyDemoStep[];
+	steps: readonly ScrollyTutorialStep[];
 }>;
 
 function CodePanel({ steps }: CodePanelProps) {

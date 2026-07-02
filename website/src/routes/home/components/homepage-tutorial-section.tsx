@@ -5,20 +5,20 @@
  * @created 2026-07-02 18:20:00
  */
 
+import { ScrollyTutorialCodeStepsProvider } from "@/components/scrolly-tutorial-code-steps.context";
 import HomepageTutorialDocument from "@/content/homepage/homepage-tutorial.mdx";
-import type { CodehikeScrollyDemoStep } from "@/types/codehike-scrolly-demo.type";
-import { HomepageTutorialCodeStepsProvider } from "./homepage-tutorial-code-steps.context";
+import type { ScrollyTutorialStep } from "@/types/scrolly-tutorial-step.type";
 
 export type HomepageTutorialSectionProps = Readonly<{
-	steps: readonly CodehikeScrollyDemoStep[];
+	steps: readonly ScrollyTutorialStep[];
 }>;
 
 export function HomepageTutorialSection({
 	steps,
 }: HomepageTutorialSectionProps) {
 	return (
-		<HomepageTutorialCodeStepsProvider steps={steps}>
+		<ScrollyTutorialCodeStepsProvider steps={steps}>
 			<HomepageTutorialDocument />
-		</HomepageTutorialCodeStepsProvider>
+		</ScrollyTutorialCodeStepsProvider>
 	);
 }

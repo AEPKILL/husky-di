@@ -5,12 +5,17 @@
  */
 
 import { createFileRoute } from "@tanstack/react-router";
-import { createHomepageScrollyTutorialSteps } from "@/utils/homepage-scrolly-tutorial.util";
+import HomepageTutorialDocument from "@/content/homepage/homepage-tutorial.mdx";
+import type { ScrollyTutorialStep } from "@/types/scrolly-tutorial-step.type";
+import { createScrollyTutorialSteps } from "@/utils/scrolly-tutorial.util";
 import { Homepage } from "./components/homepage";
 
 export async function loadHomepageRouteData() {
 	return {
-		tutorialSteps: await createHomepageScrollyTutorialSteps(),
+		tutorialSteps: await createScrollyTutorialSteps({
+			document: HomepageTutorialDocument,
+			fileName: "homepage-tutorial.ts",
+		}),
 	};
 }
 
@@ -20,7 +25,7 @@ export const Route = createFileRoute("/home/")({
 });
 
 export type HomePageProps = Readonly<{
-	tutorialSteps: Awaited<ReturnType<typeof createHomepageScrollyTutorialSteps>>;
+	tutorialSteps: readonly ScrollyTutorialStep[];
 }>;
 
 function HomeRoutePage() {

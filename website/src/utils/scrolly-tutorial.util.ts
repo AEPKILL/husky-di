@@ -1,6 +1,6 @@
 /**
- * @overview Builds the highlighted step data for the homepage dependency
- * injection scrollytelling tutorial from the MDX-authored document tree.
+ * @overview Builds highlighted step data for MDX-authored scrolly tutorial
+ * documents.
  * @author AEPKILL
  * @created 2026-07-02 14:35:00
  */
@@ -13,29 +13,27 @@ import {
 	type ReactElement,
 	type ReactNode,
 } from "react";
-import HomepageTutorialDocument from "@/content/homepage/homepage-tutorial.mdx";
-import type { CodehikeScrollyDemoStep } from "@/types/codehike-scrolly-demo.type";
-import { createHomepageTutorialStepId } from "@/utils/homepage-tutorial-step-id.util";
+import type { ScrollyTutorialStep } from "@/types/scrolly-tutorial-step.type";
+import { createScrollyTutorialStepId } from "@/utils/scrolly-tutorial-step-id.util";
 
-const HOMEPAGE_SCROLLY_TUTORIAL_THEME = "slack-dark";
-const HOMEPAGE_SCROLLY_TUTORIAL_FILE_NAME = "homepage-tutorial.ts";
+const DEFAULT_SCROLLY_TUTORIAL_FILE_NAME = "tutorial.ts";
 
-type HomepageScrollyTutorialDefinition = Readonly<{
+type ScrollyTutorialDefinition = Readonly<{
 	codeblock: RawCode;
 	fileName: string;
 	id: string;
 	title: string;
 }>;
 
-type HomepageScrollyTutorialSection = {
+type ScrollyTutorialSection = {
 	hasContentBeforeCodeBlock: boolean;
 	hasLateCodeBlock: boolean;
 	id: string;
-	leadingCodeBlock: HomepageTutorialCodeBlock | null;
+	leadingCodeBlock: ScrollyTutorialCodeBlock | null;
 	title: string;
 };
 
-type HomepageTutorialCodeBlock = Readonly<{
+type ScrollyTutorialCodeBlock = Readonly<{
 	lang: string;
 	value: string;
 }>;
@@ -46,18 +44,33 @@ type WithChildrenProps = Readonly<{
 	id?: string;
 }>;
 
+type ScrollyTutorialDocument = (props: Record<string, never>) => ReactNode;
+type ScrollyTutorialTheme = Parameters<typeof highlight>[1];
+
+const DEFAULT_SCROLLY_TUTORIAL_THEME = "slack-dark" as ScrollyTutorialTheme;
+
 const PROSE_TAG_NAMES = new Set(["p", "ul", "ol", "blockquote"]);
 
-export async function createHomepageScrollyTutorialSteps(): Promise<
-	CodehikeScrollyDemoStep[]
-> {
-	const tutorialDefinitions = createHomepageScrollyTutorialDefinitions();
+export type CreateScrollyTutorialStepsOptions = Readonly<{
+	document: ScrollyTutorialDocument;
+	fileName?: string;
+	theme?: ScrollyTutorialTheme;
+}>;
+
+export async function createScrollyTutorialSteps({
+	document,
+	fileName = DEFAULT_SCROLLY_TUTORIAL_FILE_NAME,
+	theme,
+}: CreateScrollyTutorialStepsOptions): Promise<ScrollyTutorialStep[]> {
+	const resolvedTheme: ScrollyTutorialTheme =
+		theme ?? DEFAULT_SCROLLY_TUTORIAL_THEME;
+	const tutorialDefinitions = createScrollyTutorialDefinitions({
+		document,
+		fileName,
+	});
 	const highlightedSteps = await Promise.all(
 		tutorialDefinitions.map(async (definition, index) => {
-			const code = await highlight(
-				definition.codeblock,
-				HOMEPAGE_SCROLLY_TUTORIAL_THEME,
-			);
+			const code = await highlight(definition.codeblock, resolvedTheme);
 			const previousDefinition =
 				index > 0 ? tutorialDefinitions[index - 1] : null;
 
@@ -73,18 +86,26 @@ export async function createHomepageScrollyTutorialSteps(): Promise<
 				summary: "",
 				details: [],
 				code,
-			} satisfies CodehikeScrollyDemoStep;
+			} satisfies ScrollyTutorialStep;
 		}),
 	);
 
 	return highlightedSteps;
 }
 
-function createHomepageScrollyTutorialDefinitions(): HomepageScrollyTutorialDefinition[] {
-	const tutorialSections = parseHomepageTutorialSections();
+type CreateScrollyTutorialDefinitionsOptions = Readonly<{
+	document: ScrollyTutorialDocument;
+	fileName: string;
+}>;
+
+function createScrollyTutorialDefinitions({
+	document,
+	fileName,
+}: CreateScrollyTutorialDefinitionsOptions): ScrollyTutorialDefinition[] {
+	const tutorialSections = parseScrollyTutorialSections(document);
 
 	return tutorialSections.flatMap((section) => {
-		validateHomepageTutorialSectionCodePlacement(section);
+		validateScrollyTutorialSectionCodePlacement(section);
 
 		if (!section.leadingCodeBlock) {
 			return [];
@@ -94,10 +115,10 @@ function createHomepageScrollyTutorialDefinitions(): HomepageScrollyTutorialDefi
 			{
 				codeblock: {
 					lang: section.leadingCodeBlock.lang,
-					meta: `title=${HOMEPAGE_SCROLLY_TUTORIAL_FILE_NAME}`,
+					meta: `title=${fileName}`,
 					value: section.leadingCodeBlock.value,
 				},
-				fileName: HOMEPAGE_SCROLLY_TUTORIAL_FILE_NAME,
+				fileName,
 				id: section.id,
 				title: section.title,
 			},
@@ -105,20 +126,22 @@ function createHomepageScrollyTutorialDefinitions(): HomepageScrollyTutorialDefi
 	});
 }
 
-function parseHomepageTutorialSections(): HomepageScrollyTutorialSection[] {
-	const tutorialDocumentNode = HomepageTutorialDocument({});
+function parseScrollyTutorialSections(
+	document: ScrollyTutorialDocument,
+): ScrollyTutorialSection[] {
+	const tutorialDocumentNode = document({});
 
 	if (!isValidElement<WithChildrenProps>(tutorialDocumentNode)) {
 		throw new Error(
-			"Homepage tutorial document did not render a valid element.",
+			"Scrolly tutorial document did not render a valid element.",
 		);
 	}
 
 	const tutorialNodes = Children.toArray(
 		tutorialDocumentNode.props.children,
 	).filter((node) => !isIgnorableNode(node));
-	const tutorialSections: HomepageScrollyTutorialSection[] = [];
-	let currentSection: HomepageScrollyTutorialSection | null = null;
+	const tutorialSections: ScrollyTutorialSection[] = [];
+	let currentSection: ScrollyTutorialSection | null = null;
 
 	for (const tutorialNode of tutorialNodes) {
 		if (isHeadingStepNode(tutorialNode)) {
@@ -131,7 +154,7 @@ function parseHomepageTutorialSections(): HomepageScrollyTutorialSection[] {
 			currentSection = {
 				hasContentBeforeCodeBlock: false,
 				hasLateCodeBlock: false,
-				id: createHomepageTutorialStepId(title),
+				id: createScrollyTutorialStepId(title),
 				leadingCodeBlock: null,
 				title,
 			};
@@ -150,7 +173,7 @@ function parseHomepageTutorialSections(): HomepageScrollyTutorialSection[] {
 				}
 
 				currentSection.leadingCodeBlock =
-					extractHomepageTutorialCodeBlock(tutorialNode);
+					extractScrollyTutorialCodeBlock(tutorialNode);
 			} else {
 				currentSection.hasLateCodeBlock = true;
 			}
@@ -169,20 +192,20 @@ function parseHomepageTutorialSections(): HomepageScrollyTutorialSection[] {
 	return tutorialSections;
 }
 
-function validateHomepageTutorialSectionCodePlacement(
-	section: HomepageScrollyTutorialSection,
+function validateScrollyTutorialSectionCodePlacement(
+	section: ScrollyTutorialSection,
 ): void {
 	if (section.hasLateCodeBlock) {
 		throw new Error(
-			`Homepage tutorial section "${section.title}" must keep a single code block at the very start of the section.`,
+			`Scrolly tutorial section "${section.title}" must keep a single code block at the very start of the section.`,
 		);
 	}
 }
 
-function extractHomepageTutorialCodeBlock(
+function extractScrollyTutorialCodeBlock(
 	node: ReactElement<WithChildrenProps>,
-): HomepageTutorialCodeBlock {
-	const codeElement = getHomepageTutorialCodeElement(node);
+): ScrollyTutorialCodeBlock {
+	const codeElement = getScrollyTutorialCodeElement(node);
 	const className = codeElement.props.className ?? "";
 	const languageMatch = className.match(/language-([a-z0-9-]+)/i);
 
@@ -192,7 +215,7 @@ function extractHomepageTutorialCodeBlock(
 	};
 }
 
-function getHomepageTutorialCodeElement(
+function getScrollyTutorialCodeElement(
 	node: ReactElement<WithChildrenProps>,
 ): ReactElement<WithChildrenProps> {
 	const codeChildNode = Children.toArray(node.props.children).find(
@@ -204,7 +227,7 @@ function getHomepageTutorialCodeElement(
 		!isIntrinsicElement<WithChildrenProps>(codeChildNode, "code")
 	) {
 		throw new Error(
-			"Homepage tutorial code block did not render a <code> child inside <pre>.",
+			"Scrolly tutorial code block did not render a <code> child inside <pre>.",
 		);
 	}
 

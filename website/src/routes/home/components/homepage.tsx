@@ -4,14 +4,14 @@
  * @created 2026-06-30 12:35:00
  */
 
-import type { CodehikeScrollyDemoStep } from "@/types/codehike-scrolly-demo.type";
+import type { ScrollyTutorialStep } from "@/types/scrolly-tutorial-step.type";
 import { HomepageCtaSection } from "./homepage-cta-section";
 import { HomepageFooter } from "./homepage-footer";
 import { HomepageHeroSection } from "./homepage-hero-section";
 import { HomepageTutorialSection } from "./homepage-tutorial-section";
 
 export type HomepageProps = Readonly<{
-	tutorialSteps: readonly CodehikeScrollyDemoStep[];
+	tutorialSteps: readonly ScrollyTutorialStep[];
 }>;
 
 export function Homepage({ tutorialSteps }: HomepageProps) {

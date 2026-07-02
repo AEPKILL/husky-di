@@ -1,6 +1,6 @@
 /**
- * @overview MDX-driven homepage scrollytelling layout with a single fixed left
- * preview rail and right-side narrative sections.
+ * @overview MDX-driven scrollytelling layout with a single fixed left preview
+ * rail and right-side narrative sections.
  * @author AEPKILL
  * @created 2026-07-02 18:20:00
  */
@@ -22,11 +22,11 @@ import {
 	useState,
 } from "react";
 import { CODEHIKE_TOKEN_TRANSITIONS } from "@/components/codehike-token-transitions";
-import { createHomepageTutorialStepId } from "@/utils/homepage-tutorial-step-id.util";
+import { createScrollyTutorialStepId } from "@/utils/scrolly-tutorial-step-id.util";
 import {
-	useHomepageTutorialCodeStep,
-	useHomepageTutorialCodeStepsMap,
-} from "./homepage-tutorial-code-steps.context";
+	useScrollyTutorialCodeStep,
+	useScrollyTutorialCodeStepsMap,
+} from "./scrolly-tutorial-code-steps.context";
 
 const CODE_LINE_HEIGHT_PX = 24;
 const CODE_FOCUS_TOP_OFFSET_RATIO = 0.24;
@@ -36,7 +36,7 @@ const INTRO_PREVIEW_SWAP_START = 0.56;
 const INTRO_PREVIEW_SWAP_END = 0.92;
 const PREVIEW_LAYER_TRAVEL_PERCENT = 104;
 
-export type HomepageMdxScrollyTutorialProps = Readonly<{
+export type ScrollyTutorialProps = Readonly<{
 	children: ReactNode;
 	id?: string;
 }>;
@@ -64,10 +64,7 @@ type WithChildrenProps = Readonly<{
 
 const PROSE_TAG_NAMES = new Set(["p", "ul", "ol", "blockquote"]);
 
-export function HomepageMdxScrollyTutorial({
-	children,
-	id,
-}: HomepageMdxScrollyTutorialProps) {
+export function ScrollyTutorial({ children, id }: ScrollyTutorialProps) {
 	const tutorialSteps = createTutorialSteps(children);
 	const stepArticleRefs = useRef<Array<HTMLElement | null>>([]);
 	const [introTransitionProgress, setIntroTransitionProgress] = useState(0);
@@ -86,7 +83,7 @@ export function HomepageMdxScrollyTutorial({
 			const endY = window.innerHeight * INTRO_PREVIEW_TRANSITION_END_RATIO;
 			const progress = (startY - secondStepTop) / (startY - endY);
 
-			setIntroTransitionProgress(clampHomepagePreviewProgress(progress));
+			setIntroTransitionProgress(clampPreviewProgress(progress));
 		};
 
 		updateProgress();
@@ -117,7 +114,7 @@ export function HomepageMdxScrollyTutorial({
 					className="grid gap-10 xl:grid-cols-[minmax(0,1.08fr)_minmax(23rem,28rem)] xl:gap-16"
 					rootMargin={{ top: 180, height: 240 }}
 				>
-					<HomepageMdxScrollyTutorialPreviewRail
+					<ScrollyTutorialPreviewRail
 						introTransitionProgress={introTransitionProgress}
 						steps={tutorialSteps}
 					/>
@@ -154,17 +151,17 @@ export function HomepageMdxScrollyTutorial({
 	);
 }
 
-type HomepageMdxScrollyTutorialPreviewRailProps = Readonly<{
+type ScrollyTutorialPreviewRailProps = Readonly<{
 	introTransitionProgress: number;
 	steps: readonly TutorialStepData[];
 }>;
 
-function HomepageMdxScrollyTutorialPreviewRail({
+function ScrollyTutorialPreviewRail({
 	introTransitionProgress,
 	steps,
-}: HomepageMdxScrollyTutorialPreviewRailProps) {
+}: ScrollyTutorialPreviewRailProps) {
 	const [selectedIndex] = useSelectedIndex();
-	const codeSteps = useHomepageTutorialCodeStepsMap();
+	const codeSteps = useScrollyTutorialCodeStepsMap();
 	const activeStep = steps[selectedIndex] ?? steps[0];
 	const previewRailRef = useRef<HTMLDivElement | null>(null);
 	const scrollContainerRef = useRef<HTMLDivElement | null>(null);
@@ -271,7 +268,7 @@ function HomepageMdxScrollyTutorialPreviewRail({
 								}%)`,
 							}}
 						>
-							{renderHomepagePreview({
+							{renderPreview({
 								descriptor: introPreview,
 								scrollContainerRef,
 							})}
@@ -288,7 +285,7 @@ function HomepageMdxScrollyTutorialPreviewRail({
 								}%)`,
 							}}
 						>
-							{renderHomepagePreview({
+							{renderPreview({
 								descriptor: visiblePreview,
 								scrollContainerRef,
 							})}
@@ -300,41 +297,41 @@ function HomepageMdxScrollyTutorialPreviewRail({
 	);
 }
 
-type RenderHomepagePreviewOptions = Readonly<{
+type RenderPreviewOptions = Readonly<{
 	descriptor: TutorialPreviewDescriptor;
 	scrollContainerRef: RefObject<HTMLDivElement | null>;
 }>;
 
-function renderHomepagePreview({
+function renderPreview({
 	descriptor,
 	scrollContainerRef,
-}: RenderHomepagePreviewOptions): ReactNode {
+}: RenderPreviewOptions): ReactNode {
 	if (descriptor.kind === "node") {
 		return descriptor.node;
 	}
 
 	return (
-		<HomepageTutorialCodePreview
+		<ScrollyTutorialCodePreview
 			scrollContainerRef={scrollContainerRef}
 			stepId={descriptor.stepId}
 		/>
 	);
 }
 
-type HomepageTutorialCodePreviewProps = Readonly<{
+type ScrollyTutorialCodePreviewProps = Readonly<{
 	scrollContainerRef: RefObject<HTMLDivElement | null>;
 	stepId: string;
 }>;
 
-function HomepageTutorialCodePreview({
+function ScrollyTutorialCodePreview({
 	scrollContainerRef,
 	stepId,
-}: HomepageTutorialCodePreviewProps) {
-	const codeStep = useHomepageTutorialCodeStep(stepId);
+}: ScrollyTutorialCodePreviewProps) {
+	const codeStep = useScrollyTutorialCodeStep(stepId);
 
 	return (
 		<div
-			className="homepage-code-scroll relative max-h-[52svh] overflow-y-auto overflow-x-hidden pr-2 md:max-h-[60svh] xl:max-h-[78svh]"
+			className="relative max-h-[52svh] overflow-y-auto overflow-x-hidden pr-2 [overscroll-behavior:none] [scrollbar-color:var(--color-accent-border)_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar-thumb:hover]:bg-[color-mix(in_oklab,var(--color-accent)_56%,var(--color-surface-panel-strong))] [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:border-2 [&::-webkit-scrollbar-thumb]:border-transparent [&::-webkit-scrollbar-thumb]:bg-[color-mix(in_oklab,var(--color-accent)_42%,var(--color-surface-panel))] [&::-webkit-scrollbar-thumb]:bg-clip-padding-box [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar]:h-[10px] [&::-webkit-scrollbar]:w-[10px] md:max-h-[60svh] xl:max-h-[78svh]"
 			ref={scrollContainerRef}
 		>
 			<div className="relative">
@@ -382,7 +379,7 @@ function createTutorialSteps(children: ReactNode): TutorialStepData[] {
 
 			currentStep = {
 				contentNodes: [],
-				id: tutorialNode.props.id ?? createHomepageTutorialStepId(stepTitle),
+				id: tutorialNode.props.id ?? createScrollyTutorialStepId(stepTitle),
 				preview: null,
 				title: stepTitle,
 			};
@@ -489,7 +486,7 @@ function isIgnorableNode(node: ReactNode): boolean {
 	return false;
 }
 
-function clampHomepagePreviewProgress(value: number): number {
+function clampPreviewProgress(value: number): number {
 	return Math.min(1, Math.max(0, value));
 }
 
@@ -516,19 +513,19 @@ function assignCodePreviewToTutorialStep(step: {
 }): void {
 	if (step.preview?.kind === "code") {
 		throw new Error(
-			`Homepage tutorial section "${step.title}" allows only one leading code block.`,
+			`Scrolly tutorial section "${step.title}" allows only one leading code block.`,
 		);
 	}
 
 	if (step.preview || step.contentNodes.length > 0) {
 		throw new Error(
-			`Homepage tutorial section "${step.title}" must place its code block immediately after the heading.`,
+			`Scrolly tutorial section "${step.title}" must place its code block immediately after the heading.`,
 		);
 	}
 
 	step.preview = {
 		kind: "code",
-		stepId: createHomepageTutorialStepId(step.title),
+		stepId: createScrollyTutorialStepId(step.title),
 	};
 }
 
@@ -537,11 +534,9 @@ function getIntroPreviewSwapProgress(progress: number): number {
 		(progress - INTRO_PREVIEW_SWAP_START) /
 		(INTRO_PREVIEW_SWAP_END - INTRO_PREVIEW_SWAP_START);
 
-	return easeHomepagePreviewProgress(
-		clampHomepagePreviewProgress(normalizedProgress),
-	);
+	return easePreviewProgress(clampPreviewProgress(normalizedProgress));
 }
 
-function easeHomepagePreviewProgress(progress: number): number {
+function easePreviewProgress(progress: number): number {
 	return progress * progress * (3 - 2 * progress);
 }

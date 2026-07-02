@@ -7,7 +7,7 @@
 
 import type { RawCode } from "codehike/code";
 import { highlight } from "codehike/code";
-import type { CodehikeScrollyDemoStep } from "@/types/codehike-scrolly-demo.type";
+import type { ScrollyTutorialStep } from "@/types/scrolly-tutorial-step.type";
 
 const CODEHIKE_SCROLLY_DEMO_THEME = "slack-dark";
 
@@ -220,7 +220,7 @@ console.log(userService.getUser("u-1"));`,
 	];
 
 export async function createCodehikeScrollyDemoSteps(): Promise<
-	CodehikeScrollyDemoStep[]
+	ScrollyTutorialStep[]
 > {
 	const highlightedSteps = await Promise.all(
 		CODEHIKE_SCROLLY_DEMO_DEFINITIONS.map(async (definition) => {
@@ -237,7 +237,7 @@ export async function createCodehikeScrollyDemoSteps(): Promise<
 				summary: definition.summary,
 				details: definition.details,
 				code,
-			} satisfies CodehikeScrollyDemoStep;
+			} satisfies ScrollyTutorialStep;
 		}),
 	);
 
