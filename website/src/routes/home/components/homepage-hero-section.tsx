@@ -4,6 +4,7 @@
  * @created 2026-06-30 17:45:00
  */
 
+import { cn } from "@/utils/class-name.util";
 import {
 	HOME_PAGE_HERO_BADGE_LABEL,
 	HOME_PAGE_HERO_DESCRIPTION,
@@ -18,7 +19,10 @@ import { HomepageMaterialSymbol } from "./homepage-material-symbol";
 export function HomepageHeroSection() {
 	return (
 		<section
-			className={`${styles.heroSection} relative flex min-h-[100svh] items-center overflow-hidden border-b border-border`}
+			className={cn(
+				styles.heroSection,
+				"relative flex min-h-[100svh] items-center overflow-hidden border-b border-border",
+			)}
 		>
 			<div className="relative z-10 mx-auto grid w-full max-w-[1200px] grid-cols-1 items-center gap-10 px-6 py-16 md:grid-cols-2 md:gap-10 md:py-20">
 				<div className="flex flex-col gap-6">
@@ -58,7 +62,7 @@ export function HomepageHeroSection() {
 				</div>
 
 				<div
-					className={`${styles.heroVisual} flex items-center justify-center`}
+					className={cn(styles.heroVisual, "flex items-center justify-center")}
 				>
 					<HomepageHeroCoin3d />
 				</div>
@@ -66,7 +70,10 @@ export function HomepageHeroSection() {
 
 			<a
 				aria-label="Scroll to dependency injection tutorial"
-				className={`${styles.scrollIndicator} absolute bottom-6 left-1/2 z-10 -translate-x-1/2`}
+				className={cn(
+					styles.scrollIndicator,
+					"absolute bottom-6 left-1/2 z-10 -translate-x-1/2",
+				)}
 				href="#homepage-tutorial"
 			>
 				<span aria-hidden="true" className={styles.scrollIndicatorMouse}>
@@ -76,7 +83,7 @@ export function HomepageHeroSection() {
 					Scroll
 				</span>
 				<HomepageMaterialSymbol
-					className={`${styles.scrollIndicatorChevron} text-base text-accent`}
+					className={cn(styles.scrollIndicatorChevron, "text-base text-accent")}
 					name="keyboard_arrow_down"
 				/>
 			</a>

@@ -7,6 +7,7 @@
 import { Canvas } from "@react-three/fiber";
 import { Suspense } from "react";
 import { ACESFilmicToneMapping } from "three";
+import { cn } from "@/utils/class-name.util";
 import styles from "../../../styles/homepage.module.css";
 
 import { useHomepageHeroCoinSceneVisibility } from "../hooks/use-homepage-hero-coin-scene-visibility";
@@ -20,7 +21,11 @@ export function HomepageHeroCoin3d() {
 
 	return (
 		<div
-			className={`${styles.threeCanvas} ${isSceneVisible ? styles.threeCanvasVisible : ""} h-125 w-full`}
+			className={cn(
+				styles.threeCanvas,
+				isSceneVisible && styles.threeCanvasVisible,
+				"h-125 w-full",
+			)}
 		>
 			<Canvas
 				camera={{ fov: 42, position: [0, 0, 5] }}

@@ -11,7 +11,7 @@ export function HomepageCtaSection() {
 	const { copyText, isCopied } = useCopyFeedback();
 
 	const handleCopy = async () => {
-		await copyText(HOME_PAGE_INSTALL_COMMAND.command);
+		await copyText(HOME_PAGE_INSTALL_COMMAND);
 	};
 
 	return (
@@ -34,7 +34,7 @@ export function HomepageCtaSection() {
 					>
 						{isCopied
 							? "Copied npm install command"
-							: HOME_PAGE_INSTALL_COMMAND.command}
+							: HOME_PAGE_INSTALL_COMMAND}
 					</button>
 				</div>
 			</div>

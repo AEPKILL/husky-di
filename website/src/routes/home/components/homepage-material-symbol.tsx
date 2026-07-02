@@ -4,19 +4,12 @@
  * @created 2026-06-30 17:45:00
  */
 
+import { cn } from "@/utils/class-name.util";
 import styles from "../styles/homepage.module.css";
 
 export type HomepageMaterialSymbolProps = Readonly<{
 	className?: string;
-	name:
-		| "bolt"
-		| "check_circle"
-		| "content_copy"
-		| "description"
-		| "keyboard_arrow_down"
-		| "settings_input_component"
-		| "shield"
-		| "terminal";
+	name: "keyboard_arrow_down" | "shield";
 }>;
 
 export function HomepageMaterialSymbol({
@@ -24,10 +17,7 @@ export function HomepageMaterialSymbol({
 	name,
 }: HomepageMaterialSymbolProps) {
 	return (
-		<span
-			aria-hidden="true"
-			className={`${styles.materialSymbol} ${className ?? ""}`.trim()}
-		>
+		<span aria-hidden="true" className={cn(styles.materialSymbol, className)}>
 			{name}
 		</span>
 	);
