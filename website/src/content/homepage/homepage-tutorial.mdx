@@ -1,6 +1,5 @@
 import { DiWorkflowAnimation } from "@/components/di-workflow-animation"
 import { HomepageMdxScrollyTutorial } from "@/routes/home/components/homepage-mdx-scrolly-tutorial"
-import { HomepageTutorialCodeMarker } from "@/routes/home/components/homepage-tutorial-code-marker"
 
 <HomepageMdxScrollyTutorial id="homepage-tutorial">
   ## Dependency injection starts before the container
@@ -22,7 +21,34 @@ import { HomepageTutorialCodeMarker } from "@/routes/home/components/homepage-tu
 
   ## A feature can work and still be badly wired
 
-  <HomepageTutorialCodeMarker stepId="hard-wired-branching" />
+  ```ts title=homepage-tutorial.ts
+  type StorageProvider = "aws" | "sftp" | "webdav";
+
+  interface Attachment {
+    id: string;
+    localPath: string;
+    destination: StorageProvider;
+  }
+
+  class AttachmentService {
+    async upload(
+      attachment: Attachment,
+      awsKey?: string,
+      sftpHost?: string,
+      webDavUrl?: string,
+    ) {
+      if (attachment.destination === "sftp") {
+        return this.uploadToSftp(attachment, sftpHost!);
+      }
+
+      if (attachment.destination === "webdav") {
+        return this.uploadToWebDav(attachment, webDavUrl!);
+      }
+
+      return this.uploadToAws(attachment, awsKey!);
+    }
+  }
+  ```
 
   The first real smell is not "missing framework." It is "one object owns too
   many decisions."
@@ -36,7 +62,37 @@ import { HomepageTutorialCodeMarker } from "@/routes/home/components/homepage-tu
 
   ## First extract the behavior that changes
 
-  <HomepageTutorialCodeMarker stepId="extract-capability" />
+  ```ts title=homepage-tutorial.ts
+  type StorageProvider = "aws" | "sftp" | "webdav";
+
+  interface Attachment {
+    id: string;
+    localPath: string;
+    destination: StorageProvider;
+  }
+
+  interface AttachmentStorage {
+    upload(attachment: Attachment): Promise<string>;
+  }
+
+  class AwsStorage implements AttachmentStorage {
+    async upload(attachment: Attachment): Promise<string> {
+      return attachment.id;
+    }
+  }
+
+  class SftpStorage implements AttachmentStorage {
+    async upload(attachment: Attachment): Promise<string> {
+      return attachment.id;
+    }
+  }
+
+  class WebDavStorage implements AttachmentStorage {
+    async upload(attachment: Attachment): Promise<string> {
+      return attachment.id;
+    }
+  }
+  ```
 
   Once the varying behavior gets a name, the rest of the design gets less
   mystical.
@@ -51,7 +107,60 @@ import { HomepageTutorialCodeMarker } from "@/routes/home/components/homepage-tu
 
   ## Injection just means passing the dependency in
 
-  <HomepageTutorialCodeMarker stepId="inject-dependency" />
+  ```ts title=homepage-tutorial.ts
+  type StorageProvider = "aws" | "sftp" | "webdav";
+
+  interface Attachment {
+    id: string;
+    localPath: string;
+    destination: StorageProvider;
+  }
+
+  interface AttachmentStorage {
+    upload(attachment: Attachment): Promise<string>;
+  }
+
+  class AwsStorage implements AttachmentStorage {
+    async upload(attachment: Attachment): Promise<string> {
+      return attachment.id;
+    }
+  }
+
+  class SftpStorage implements AttachmentStorage {
+    async upload(attachment: Attachment): Promise<string> {
+      return attachment.id;
+    }
+  }
+
+  class WebDavStorage implements AttachmentStorage {
+    async upload(attachment: Attachment): Promise<string> {
+      return attachment.id;
+    }
+  }
+
+  class UploadRequest {
+    constructor(
+      private readonly storage: AttachmentStorage,
+    ) {}
+
+    async upload(attachment: Attachment): Promise<string> {
+      return await this.storage.upload(attachment);
+    }
+  }
+
+  async function handleUpload(
+    attachment: Attachment,
+  ) {
+    const storage =
+      attachment.destination === "sftp"
+        ? new SftpStorage()
+        : attachment.destination === "webdav"
+          ? new WebDavStorage()
+          : new AwsStorage();
+
+    return await new UploadRequest(storage).upload(attachment);
+  }
+  ```
 
   This is the conceptual center of the whole tutorial.
 
@@ -64,7 +173,86 @@ import { HomepageTutorialCodeMarker } from "@/routes/home/components/homepage-tu
 
   ## Husky DI gives the composition a home
 
-  <HomepageTutorialCodeMarker stepId="container-composition" />
+  ```ts title=homepage-tutorial.ts
+  import {
+    createContainer,
+    createServiceIdentifier,
+    resolve,
+  } from "@husky-di/core";
+
+  type StorageProvider = "aws" | "sftp" | "webdav";
+
+  interface Attachment {
+    id: string;
+    localPath: string;
+    destination: StorageProvider;
+  }
+
+  interface AttachmentStorage {
+    upload(attachment: Attachment): Promise<string>;
+  }
+
+  class AwsStorage implements AttachmentStorage {
+    async upload(attachment: Attachment): Promise<string> {
+      return attachment.id;
+    }
+  }
+
+  class SftpStorage implements AttachmentStorage {
+    async upload(attachment: Attachment): Promise<string> {
+      return attachment.id;
+    }
+  }
+
+  class WebDavStorage implements AttachmentStorage {
+    async upload(attachment: Attachment): Promise<string> {
+      return attachment.id;
+    }
+  }
+
+  const IStorageProvider =
+    createServiceIdentifier<StorageProvider>("IStorageProvider");
+  const IAttachmentStorage =
+    createServiceIdentifier<AttachmentStorage>("IAttachmentStorage");
+  const IUploadRequest =
+    createServiceIdentifier<UploadRequest>("IUploadRequest");
+
+  class UploadRequest {
+    private readonly storage = resolve(IAttachmentStorage);
+
+    async upload(attachment: Attachment): Promise<string> {
+      return await this.storage.upload(attachment);
+    }
+  }
+
+  const container = createContainer("HomepageTutorialContainer");
+
+  container.register(IStorageProvider, {
+    useValue: "sftp",
+  });
+
+  container.register(IAttachmentStorage, {
+    useFactory: () => {
+      const provider = resolve(IStorageProvider);
+
+      if (provider === "sftp") {
+        return new SftpStorage();
+      }
+
+      if (provider === "webdav") {
+        return new WebDavStorage();
+      }
+
+      return new AwsStorage();
+    },
+  });
+
+  container.register(IUploadRequest, {
+    useClass: UploadRequest,
+  });
+
+  const request = container.resolve(IUploadRequest);
+  ```
 
   This is where `husky-di` enters the story.
 
@@ -80,7 +268,73 @@ import { HomepageTutorialCodeMarker } from "@/routes/home/components/homepage-tu
 
   ## Testing gets easier because the puzzle pieces are swappable
 
-  <HomepageTutorialCodeMarker stepId="testing-seam" />
+  ```ts title=homepage-tutorial.ts
+  import {
+    createContainer,
+    createServiceIdentifier,
+    resolve,
+  } from "@husky-di/core";
+
+  type StorageProvider = "aws" | "sftp" | "webdav";
+
+  interface Attachment {
+    id: string;
+    localPath: string;
+    destination: StorageProvider;
+  }
+
+  interface AttachmentStorage {
+    upload(attachment: Attachment): Promise<string>;
+  }
+
+  const IAttachmentStorage =
+    createServiceIdentifier<AttachmentStorage>("IAttachmentStorage");
+  const IUploadRequest =
+    createServiceIdentifier<UploadRequest>("IUploadRequest");
+
+  class UploadRequest {
+    private readonly storage = resolve(IAttachmentStorage);
+
+    async upload(attachment: Attachment): Promise<string> {
+      return await this.storage.upload(attachment);
+    }
+  }
+
+  class FakeStorage implements AttachmentStorage {
+    public readonly uploaded: Attachment[] = [];
+
+    async upload(attachment: Attachment): Promise<string> {
+      this.uploaded.push(attachment);
+      return attachment.id;
+    }
+  }
+
+  const container = createContainer("HomepageTutorialTestContainer");
+
+  container.register(IAttachmentStorage, {
+    useValue: new FakeStorage(),
+  });
+
+  container.register(IUploadRequest, {
+    useClass: UploadRequest,
+  });
+
+  async function testUploadRequest() {
+    const request = container.resolve(IUploadRequest);
+    const storage = container.resolve(IAttachmentStorage);
+
+    const attachment: Attachment = {
+      id: "attachment-1",
+      localPath: "/tmp/readme.txt",
+      destination: "aws",
+    };
+
+    const uploadedId = await request.upload(attachment);
+
+    console.log(uploadedId);
+    console.log(storage.uploaded.length);
+  }
+  ```
 
   This is the payoff most people feel the fastest.
 

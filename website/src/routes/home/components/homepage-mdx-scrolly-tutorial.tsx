@@ -22,10 +22,7 @@ import {
 	useState,
 } from "react";
 import { CODEHIKE_TOKEN_TRANSITIONS } from "@/components/codehike-token-transitions";
-import {
-	HomepageTutorialCodeMarker,
-	type HomepageTutorialCodeMarkerProps,
-} from "./homepage-tutorial-code-marker";
+import { createHomepageTutorialStepId } from "@/utils/homepage-tutorial-step-id.util";
 import {
 	useHomepageTutorialCodeStep,
 	useHomepageTutorialCodeStepsMap,
@@ -385,7 +382,7 @@ function createTutorialSteps(children: ReactNode): TutorialStepData[] {
 
 			currentStep = {
 				contentNodes: [],
-				id: tutorialNode.props.id ?? createSlug(stepTitle),
+				id: tutorialNode.props.id ?? createHomepageTutorialStepId(stepTitle),
 				preview: null,
 				title: stepTitle,
 			};
@@ -393,6 +390,11 @@ function createTutorialSteps(children: ReactNode): TutorialStepData[] {
 		}
 
 		if (!currentStep) {
+			continue;
+		}
+
+		if (isCodeBlockNode(tutorialNode)) {
+			assignCodePreviewToTutorialStep(currentStep);
 			continue;
 		}
 
@@ -412,15 +414,8 @@ function createTutorialSteps(children: ReactNode): TutorialStepData[] {
 }
 
 function createPreviewDescriptor(
-	node: ReactElement<WithChildrenProps & HomepageTutorialCodeMarkerProps>,
+	node: ReactElement<WithChildrenProps>,
 ): TutorialPreviewDescriptor {
-	if (node.type === HomepageTutorialCodeMarker) {
-		return {
-			kind: "code",
-			stepId: node.props.stepId,
-		};
-	}
-
 	return {
 		kind: "node",
 		node,
@@ -435,13 +430,9 @@ function isHeadingStepNode(
 
 function isPreviewNode(
 	node: ReactNode,
-): node is ReactElement<WithChildrenProps & HomepageTutorialCodeMarkerProps> {
+): node is ReactElement<WithChildrenProps> {
 	if (!isValidElement(node)) {
 		return false;
-	}
-
-	if (node.type === HomepageTutorialCodeMarker) {
-		return true;
 	}
 
 	return typeof node.type !== "string";
@@ -465,18 +456,17 @@ function getNodeTextContent(node: ReactNode): string {
 		.join("");
 }
 
-function createSlug(value: string): string {
-	return value
-		.toLowerCase()
-		.replace(/[^a-z0-9]+/g, "-")
-		.replace(/^-+|-+$/g, "");
-}
-
 function isIntrinsicElement<TProps extends { children?: ReactNode }>(
 	node: ReactNode,
 	tagName: string,
 ): node is ReactElement<TProps> {
 	return isValidElement(node) && node.type === tagName;
+}
+
+function isCodeBlockNode(
+	node: ReactNode,
+): node is ReactElement<WithChildrenProps> {
+	return isIntrinsicElement(node, "pre");
 }
 
 function isIgnorableNode(node: ReactNode): boolean {
@@ -516,6 +506,30 @@ function normalizeWheelDelta(
 		default:
 			return delta;
 	}
+}
+
+function assignCodePreviewToTutorialStep(step: {
+	contentNodes: ReactNode[];
+	id: string;
+	preview: TutorialPreviewDescriptor | null;
+	title: string;
+}): void {
+	if (step.preview?.kind === "code") {
+		throw new Error(
+			`Homepage tutorial section "${step.title}" allows only one leading code block.`,
+		);
+	}
+
+	if (step.preview || step.contentNodes.length > 0) {
+		throw new Error(
+			`Homepage tutorial section "${step.title}" must place its code block immediately after the heading.`,
+		);
+	}
+
+	step.preview = {
+		kind: "code",
+		stepId: createHomepageTutorialStepId(step.title),
+	};
 }
 
 function getIntroPreviewSwapProgress(progress: number): number {

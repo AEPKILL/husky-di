@@ -1,395 +1,269 @@
 /**
  * @overview Builds the highlighted step data for the homepage dependency
- * injection scrollytelling tutorial.
+ * injection scrollytelling tutorial from the MDX-authored document tree.
  * @author AEPKILL
  * @created 2026-07-02 14:35:00
  */
 
 import type { RawCode } from "codehike/code";
 import { highlight } from "codehike/code";
+import {
+	Children,
+	isValidElement,
+	type ReactElement,
+	type ReactNode,
+} from "react";
+import HomepageTutorialDocument from "@/content/homepage/homepage-tutorial.mdx";
 import type { CodehikeScrollyDemoStep } from "@/types/codehike-scrolly-demo.type";
+import { createHomepageTutorialStepId } from "@/utils/homepage-tutorial-step-id.util";
 
 const HOMEPAGE_SCROLLY_TUTORIAL_THEME = "slack-dark";
 const HOMEPAGE_SCROLLY_TUTORIAL_FILE_NAME = "homepage-tutorial.ts";
 
 type HomepageScrollyTutorialDefinition = Readonly<{
-	id: string;
-	eyebrow: string;
-	fileName: string;
-	title: string;
-	summary: string;
-	details: readonly string[];
 	codeblock: RawCode;
+	fileName: string;
+	id: string;
+	title: string;
 }>;
 
-const HOMEPAGE_SCROLLY_TUTORIAL_DEFINITIONS: readonly HomepageScrollyTutorialDefinition[] =
-	[
-		{
-			id: "hard-wired-branching",
-			eyebrow: "Step 1",
-			fileName: HOMEPAGE_SCROLLY_TUTORIAL_FILE_NAME,
-			title: "Start with the code smell dependency injection is trying to fix",
-			summary:
-				"A feature can work and still be badly wired when one object both chooses and uses its collaborators.",
-			details: [
-				"The upload method knows about AWS, SFTP, and WebDAV at the same time.",
-				"Optional config values leak storage-specific details into a caller that should not care about them.",
-				"This is where DI begins: not with a container, but with the feeling that the object owns too many decisions.",
-			],
-			codeblock: {
-				lang: "ts",
-				meta: `title=${HOMEPAGE_SCROLLY_TUTORIAL_FILE_NAME}`,
-				value: `type StorageProvider = "aws" | "sftp" | "webdav";
+type HomepageScrollyTutorialSection = {
+	hasContentBeforeCodeBlock: boolean;
+	hasLateCodeBlock: boolean;
+	id: string;
+	leadingCodeBlock: HomepageTutorialCodeBlock | null;
+	title: string;
+};
 
-interface Attachment {
-  id: string;
-  localPath: string;
-  destination: StorageProvider;
-}
+type HomepageTutorialCodeBlock = Readonly<{
+	lang: string;
+	value: string;
+}>;
 
-class AttachmentService {
-  async upload(
-    attachment: Attachment,
-    awsKey?: string,
-    sftpHost?: string,
-    webDavUrl?: string,
-  ) {
-    if (attachment.destination === "sftp") {
-      return this.uploadToSftp(attachment, sftpHost!);
-    }
+type WithChildrenProps = Readonly<{
+	children?: ReactNode;
+	className?: string;
+	id?: string;
+}>;
 
-    if (attachment.destination === "webdav") {
-      return this.uploadToWebDav(attachment, webDavUrl!);
-    }
-
-    return this.uploadToAws(attachment, awsKey!);
-  }
-}`,
-			},
-		},
-		{
-			id: "extract-capability",
-			eyebrow: "Step 2",
-			fileName: HOMEPAGE_SCROLLY_TUTORIAL_FILE_NAME,
-			title: "Extract the behavior that changes and give it a clear name",
-			summary:
-				"Once the storage behavior becomes an interface, the business flow can stop depending on vendor-specific branches.",
-			details: [
-				"`AttachmentStorage` names the capability the workflow actually needs.",
-				"Each implementation keeps only the config and logic it owns.",
-				"DI gets much easier to understand after the varying behavior has a stable abstraction.",
-			],
-			codeblock: {
-				lang: "ts",
-				meta: `title=${HOMEPAGE_SCROLLY_TUTORIAL_FILE_NAME}`,
-				value: `type StorageProvider = "aws" | "sftp" | "webdav";
-
-interface Attachment {
-  id: string;
-  localPath: string;
-  destination: StorageProvider;
-}
-
-interface AttachmentStorage {
-  upload(attachment: Attachment): Promise<string>;
-}
-
-class AwsStorage implements AttachmentStorage {
-  async upload(attachment: Attachment): Promise<string> {
-    return attachment.id;
-  }
-}
-
-class SftpStorage implements AttachmentStorage {
-  async upload(attachment: Attachment): Promise<string> {
-    return attachment.id;
-  }
-}
-
-class WebDavStorage implements AttachmentStorage {
-  async upload(attachment: Attachment): Promise<string> {
-    return attachment.id;
-  }
-}`,
-			},
-		},
-		{
-			id: "inject-dependency",
-			eyebrow: "Step 3",
-			fileName: HOMEPAGE_SCROLLY_TUTORIAL_FILE_NAME,
-			title: "Dependency injection simply means passing the dependency in",
-			summary:
-				"The object that performs the upload no longer constructs its own storage. Another part of the system chooses it first.",
-			details: [
-				"`new UploadRequest(storage)` is already dependency injection.",
-				"The composition logic now sits in `handleUpload`, while `UploadRequest` only uses the dependency.",
-				"This is the key mental split: one place chooses dependencies, another place consumes them.",
-			],
-			codeblock: {
-				lang: "ts",
-				meta: `title=${HOMEPAGE_SCROLLY_TUTORIAL_FILE_NAME}`,
-				value: `type StorageProvider = "aws" | "sftp" | "webdav";
-
-interface Attachment {
-  id: string;
-  localPath: string;
-  destination: StorageProvider;
-}
-
-interface AttachmentStorage {
-  upload(attachment: Attachment): Promise<string>;
-}
-
-class AwsStorage implements AttachmentStorage {
-  async upload(attachment: Attachment): Promise<string> {
-    return attachment.id;
-  }
-}
-
-class SftpStorage implements AttachmentStorage {
-  async upload(attachment: Attachment): Promise<string> {
-    return attachment.id;
-  }
-}
-
-class WebDavStorage implements AttachmentStorage {
-  async upload(attachment: Attachment): Promise<string> {
-    return attachment.id;
-  }
-}
-
-class UploadRequest {
-  constructor(
-    private readonly storage: AttachmentStorage,
-  ) {}
-
-  async upload(attachment: Attachment): Promise<string> {
-    return await this.storage.upload(attachment);
-  }
-}
-
-async function handleUpload(
-  attachment: Attachment,
-) {
-  const storage =
-    attachment.destination === "sftp"
-      ? new SftpStorage()
-      : attachment.destination === "webdav"
-        ? new WebDavStorage()
-        : new AwsStorage();
-
-  return await new UploadRequest(storage).upload(attachment);
-}`,
-			},
-		},
-		{
-			id: "container-composition",
-			eyebrow: "Step 4",
-			fileName: HOMEPAGE_SCROLLY_TUTORIAL_FILE_NAME,
-			title: "Husky DI gives that composition point a single explicit home",
-			summary:
-				"The library does not invent dependency injection. It makes the wiring rules named, visible, and deterministic.",
-			details: [
-				"`createServiceIdentifier()` gives the runtime graph explicit names.",
-				"`register()` centralizes assembly instead of scattering `new` and branching logic through request handlers.",
-				"`useClass` and class-field `resolve()` match the repository's preferred no-decorator core workflow.",
-			],
-			codeblock: {
-				lang: "ts",
-				meta: "title=homepage-tutorial.ts",
-				value: `import {
-  createContainer,
-  createServiceIdentifier,
-  resolve,
-} from "@husky-di/core";
-
-type StorageProvider = "aws" | "sftp" | "webdav";
-
-interface Attachment {
-  id: string;
-  localPath: string;
-  destination: StorageProvider;
-}
-
-interface AttachmentStorage {
-  upload(attachment: Attachment): Promise<string>;
-}
-
-class AwsStorage implements AttachmentStorage {
-  async upload(attachment: Attachment): Promise<string> {
-    return attachment.id;
-  }
-}
-
-class SftpStorage implements AttachmentStorage {
-  async upload(attachment: Attachment): Promise<string> {
-    return attachment.id;
-  }
-}
-
-class WebDavStorage implements AttachmentStorage {
-  async upload(attachment: Attachment): Promise<string> {
-    return attachment.id;
-  }
-}
-
-const IStorageProvider =
-  createServiceIdentifier<StorageProvider>("IStorageProvider");
-const IAttachmentStorage =
-  createServiceIdentifier<AttachmentStorage>("IAttachmentStorage");
-const IUploadRequest =
-  createServiceIdentifier<UploadRequest>("IUploadRequest");
-
-class UploadRequest {
-  private readonly storage = resolve(IAttachmentStorage);
-
-  async upload(attachment: Attachment): Promise<string> {
-    return await this.storage.upload(attachment);
-  }
-}
-
-const container = createContainer("HomepageTutorialContainer");
-
-container.register(IStorageProvider, {
-  useValue: "sftp",
-});
-
-container.register(IAttachmentStorage, {
-  useFactory: () => {
-    const provider = resolve(IStorageProvider);
-
-    if (provider === "sftp") {
-      return new SftpStorage();
-    }
-
-    if (provider === "webdav") {
-      return new WebDavStorage();
-    }
-
-    return new AwsStorage();
-  },
-});
-
-container.register(IUploadRequest, {
-  useClass: UploadRequest,
-});
-
-const request = container.resolve(IUploadRequest);`,
-			},
-		},
-		{
-			id: "testing-seam",
-			eyebrow: "Step 5",
-			fileName: HOMEPAGE_SCROLLY_TUTORIAL_FILE_NAME,
-			title: "The payoff is that tests become small and mechanical",
-			summary:
-				"Once the seam is explicit, you can replace one dependency with a fake instead of wrestling with private state or hidden setup.",
-			details: [
-				"`useValue` is enough to swap a fake implementation into the graph.",
-				"The test stays focused on the workflow contract instead of storage vendor behavior.",
-				"Husky DI keeps the same seam visible in production and in tests.",
-			],
-			codeblock: {
-				lang: "ts",
-				meta: `title=${HOMEPAGE_SCROLLY_TUTORIAL_FILE_NAME}`,
-				value: `import {
-  createContainer,
-  createServiceIdentifier,
-  resolve,
-} from "@husky-di/core";
-
-type StorageProvider = "aws" | "sftp" | "webdav";
-
-interface Attachment {
-  id: string;
-  localPath: string;
-  destination: StorageProvider;
-}
-
-interface AttachmentStorage {
-  upload(attachment: Attachment): Promise<string>;
-}
-
-const IAttachmentStorage =
-  createServiceIdentifier<AttachmentStorage>("IAttachmentStorage");
-const IUploadRequest =
-  createServiceIdentifier<UploadRequest>("IUploadRequest");
-
-class UploadRequest {
-  private readonly storage = resolve(IAttachmentStorage);
-
-  async upload(attachment: Attachment): Promise<string> {
-    return await this.storage.upload(attachment);
-  }
-}
-
-class FakeStorage implements AttachmentStorage {
-  public readonly uploaded: Attachment[] = [];
-
-  async upload(attachment: Attachment): Promise<string> {
-    this.uploaded.push(attachment);
-    return attachment.id;
-  }
-}
-
-const container = createContainer("HomepageTutorialTestContainer");
-
-container.register(IAttachmentStorage, {
-  useValue: new FakeStorage(),
-});
-
-container.register(IUploadRequest, {
-  useClass: UploadRequest,
-});
-
-async function testUploadRequest() {
-  const request = container.resolve(IUploadRequest);
-  const storage = container.resolve(IAttachmentStorage);
-
-  const attachment: Attachment = {
-    id: "attachment-1",
-    localPath: "/tmp/readme.txt",
-    destination: "aws",
-  };
-
-  const uploadedId = await request.upload(attachment);
-
-  console.log(uploadedId);
-  console.log(storage.uploaded.length);
-}`,
-			},
-		},
-	];
+const PROSE_TAG_NAMES = new Set(["p", "ul", "ol", "blockquote"]);
 
 export async function createHomepageScrollyTutorialSteps(): Promise<
 	CodehikeScrollyDemoStep[]
 > {
+	const tutorialDefinitions = createHomepageScrollyTutorialDefinitions();
 	const highlightedSteps = await Promise.all(
-		HOMEPAGE_SCROLLY_TUTORIAL_DEFINITIONS.map(async (definition, index) => {
+		tutorialDefinitions.map(async (definition, index) => {
 			const code = await highlight(
 				definition.codeblock,
 				HOMEPAGE_SCROLLY_TUTORIAL_THEME,
 			);
 			const previousDefinition =
-				index > 0 ? HOMEPAGE_SCROLLY_TUTORIAL_DEFINITIONS[index - 1] : null;
+				index > 0 ? tutorialDefinitions[index - 1] : null;
 
 			return {
 				id: definition.id,
-				eyebrow: definition.eyebrow,
+				eyebrow: `Step ${index + 1}`,
 				fileName: definition.fileName,
 				focusLineIndex: getFirstChangedLineIndex(
 					previousDefinition?.codeblock.value,
 					definition.codeblock.value,
 				),
 				title: definition.title,
-				summary: definition.summary,
-				details: definition.details,
+				summary: "",
+				details: [],
 				code,
 			} satisfies CodehikeScrollyDemoStep;
 		}),
 	);
 
 	return highlightedSteps;
+}
+
+function createHomepageScrollyTutorialDefinitions(): HomepageScrollyTutorialDefinition[] {
+	const tutorialSections = parseHomepageTutorialSections();
+
+	return tutorialSections.flatMap((section) => {
+		validateHomepageTutorialSectionCodePlacement(section);
+
+		if (!section.leadingCodeBlock) {
+			return [];
+		}
+
+		return [
+			{
+				codeblock: {
+					lang: section.leadingCodeBlock.lang,
+					meta: `title=${HOMEPAGE_SCROLLY_TUTORIAL_FILE_NAME}`,
+					value: section.leadingCodeBlock.value,
+				},
+				fileName: HOMEPAGE_SCROLLY_TUTORIAL_FILE_NAME,
+				id: section.id,
+				title: section.title,
+			},
+		];
+	});
+}
+
+function parseHomepageTutorialSections(): HomepageScrollyTutorialSection[] {
+	const tutorialDocumentNode = HomepageTutorialDocument({});
+
+	if (!isValidElement<WithChildrenProps>(tutorialDocumentNode)) {
+		throw new Error(
+			"Homepage tutorial document did not render a valid element.",
+		);
+	}
+
+	const tutorialNodes = Children.toArray(
+		tutorialDocumentNode.props.children,
+	).filter((node) => !isIgnorableNode(node));
+	const tutorialSections: HomepageScrollyTutorialSection[] = [];
+	let currentSection: HomepageScrollyTutorialSection | null = null;
+
+	for (const tutorialNode of tutorialNodes) {
+		if (isHeadingStepNode(tutorialNode)) {
+			if (currentSection) {
+				tutorialSections.push(currentSection);
+			}
+
+			const title = getNodeTextContent(tutorialNode.props.children).trim();
+
+			currentSection = {
+				hasContentBeforeCodeBlock: false,
+				hasLateCodeBlock: false,
+				id: createHomepageTutorialStepId(title),
+				leadingCodeBlock: null,
+				title,
+			};
+			continue;
+		}
+
+		if (!currentSection) {
+			continue;
+		}
+
+		if (isCodeBlockNode(tutorialNode)) {
+			if (!currentSection.leadingCodeBlock) {
+				if (currentSection.hasContentBeforeCodeBlock) {
+					currentSection.hasLateCodeBlock = true;
+					continue;
+				}
+
+				currentSection.leadingCodeBlock =
+					extractHomepageTutorialCodeBlock(tutorialNode);
+			} else {
+				currentSection.hasLateCodeBlock = true;
+			}
+			continue;
+		}
+
+		if (!currentSection.leadingCodeBlock) {
+			currentSection.hasContentBeforeCodeBlock = true;
+		}
+	}
+
+	if (currentSection) {
+		tutorialSections.push(currentSection);
+	}
+
+	return tutorialSections;
+}
+
+function validateHomepageTutorialSectionCodePlacement(
+	section: HomepageScrollyTutorialSection,
+): void {
+	if (section.hasLateCodeBlock) {
+		throw new Error(
+			`Homepage tutorial section "${section.title}" must keep a single code block at the very start of the section.`,
+		);
+	}
+}
+
+function extractHomepageTutorialCodeBlock(
+	node: ReactElement<WithChildrenProps>,
+): HomepageTutorialCodeBlock {
+	const codeElement = getHomepageTutorialCodeElement(node);
+	const className = codeElement.props.className ?? "";
+	const languageMatch = className.match(/language-([a-z0-9-]+)/i);
+
+	return {
+		lang: languageMatch?.[1] ?? "text",
+		value: getNodeTextContent(codeElement.props.children).replace(/\n$/, ""),
+	};
+}
+
+function getHomepageTutorialCodeElement(
+	node: ReactElement<WithChildrenProps>,
+): ReactElement<WithChildrenProps> {
+	const codeChildNode = Children.toArray(node.props.children).find(
+		(childNode) => isIntrinsicElement(childNode, "code"),
+	);
+
+	if (
+		!codeChildNode ||
+		!isIntrinsicElement<WithChildrenProps>(codeChildNode, "code")
+	) {
+		throw new Error(
+			"Homepage tutorial code block did not render a <code> child inside <pre>.",
+		);
+	}
+
+	return codeChildNode;
+}
+
+function isHeadingStepNode(
+	node: ReactNode,
+): node is ReactElement<WithChildrenProps> {
+	return isIntrinsicElement(node, "h2");
+}
+
+function isCodeBlockNode(
+	node: ReactNode,
+): node is ReactElement<WithChildrenProps> {
+	return isIntrinsicElement(node, "pre");
+}
+
+function isIntrinsicElement<TProps extends { children?: ReactNode }>(
+	node: ReactNode,
+	tagName: string,
+): node is ReactElement<TProps> {
+	return isValidElement(node) && node.type === tagName;
+}
+
+function isIgnorableNode(node: ReactNode): boolean {
+	if (typeof node === "string") {
+		return node.trim().length === 0;
+	}
+
+	if (!isValidElement<WithChildrenProps>(node)) {
+		return false;
+	}
+
+	if (
+		typeof node.type === "string" &&
+		PROSE_TAG_NAMES.has(node.type) &&
+		getNodeTextContent(node.props.children).trim().length === 0
+	) {
+		return true;
+	}
+
+	return false;
+}
+
+function getNodeTextContent(node: ReactNode): string {
+	return Children.toArray(node)
+		.map((childNode) => {
+			if (typeof childNode === "string" || typeof childNode === "number") {
+				return String(childNode);
+			}
+
+			if (!isValidElement<WithChildrenProps>(childNode)) {
+				return "";
+			}
+
+			return getNodeTextContent(childNode.props.children);
+		})
+		.join("");
 }
 
 function getFirstChangedLineIndex(
