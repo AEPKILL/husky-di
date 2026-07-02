@@ -1,5 +1,12 @@
 {
-	"cSpell.words": ["impls", "lifecycles", "paramtypes", "rslib"],
+	"cSpell.words": [
+		"Codehike",
+		"impls",
+		"lifecycles",
+		"paramtypes",
+		"rslib",
+		"Scrolly"
+	],
 	"editor.formatOnSave": true,
 	"editor.defaultFormatter": "biomejs.biome",
 	"editor.codeActionsOnSave": {

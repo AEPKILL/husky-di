@@ -1,227 +1,94 @@
-import { ScrollyTutorialSection } from "@/components/scrolly-tutorial-section"
+import { DiWorkflowAnimation } from "@/components/di-workflow-animation"
+import { HomepageMdxScrollyTutorial } from "@/routes/home/components/homepage-mdx-scrolly-tutorial"
+import { HomepageTutorialCodeMarker } from "@/routes/home/components/homepage-tutorial-code-marker"
 
-<ScrollyTutorialSection id="homepage-tutorial">
-  ## A feature can work and still be badly wired
+<HomepageMdxScrollyTutorial id="homepage-tutorial">
+  ## Dependency injection starts before the container
 
-  ```ts
-  type StorageProvider = "aws" | "sftp" | "webdav";
-  
-  interface Attachment {
-    id: string;
-    localPath: string;
-    destination: StorageProvider;
-  }
-  
-  class AttachmentService {
-    async upload(
-      attachment: Attachment,
-      awsKey?: string,
-      sftpHost?: string,
-      webDavUrl?: string,
-    ) {
-      if (attachment.destination === "sftp") {
-        return this.uploadToSftp(attachment, sftpHost!);
-      }
-  
-      if (attachment.destination === "webdav") {
-        return this.uploadToWebDav(attachment, webDavUrl!);
-      }
-  
-      return this.uploadToAws(attachment, awsKey!);
-    }
-  }
-  ```
+  <DiWorkflowAnimation className="min-h-0 rounded-[1.5rem] bg-transparent px-0 py-0 shadow-none [&>div]:max-w-none [&>div]:rounded-[1.5rem] [&>div]:border-0 [&>div]:bg-transparent [&>div]:px-4 [&>div]:py-5 [&>div]:shadow-none [&>div]:backdrop-blur-none [&_pre]:text-[clamp(0.52rem,1.25vw,0.86rem)]" />
 
-  Dependency injection usually starts with discomfort, not with a framework.
-  The code above can upload a file, but it is solving too many problems in one
+  Dependency injection usually makes more sense when you watch the flow before
+  you stare at the API.
+
+  A request comes in, something decides what implementation belongs in this
+  environment, and only then does the workflow run with that dependency in
   place.
 
-  - One class owns the upload logic and the storage-selection logic.
-  - The caller has to know which optional config matters for which branch.
-  - The decision of which dependency to use happens deep inside the workflow.
+  That is the idea to hold onto for the rest of the page:
 
-  That is the core smell DI is trying to remove. The goal is not "use a
-  container". The goal is "stop hard-wiring decisions into the object that just
-  wants to do its job."
+  - one place chooses dependencies
+  - another place uses dependencies
+  - the boundary between those two jobs is the seam DI gives you
+
+  ## A feature can work and still be badly wired
+
+  <HomepageTutorialCodeMarker stepId="hard-wired-branching" />
+
+  The first real smell is not "missing framework." It is "one object owns too
+  many decisions."
+
+  In this version, the upload workflow is entangled with the logic for choosing
+  AWS, SFTP, or WebDAV. The caller has to know which optional argument belongs
+  to which branch, and the runtime decision happens deep inside the object that
+  only wanted to upload a file.
+
+  That is the core pressure that pushes people toward DI in the first place.
 
   ## First extract the behavior that changes
 
-  ```ts
-  interface AttachmentStorage {
-    upload(attachment: Attachment): Promise<string>;
-  }
-  
-  class AwsStorage implements AttachmentStorage {
-    async upload(attachment: Attachment): Promise<string> {
-      return attachment.id;
-    }
-  }
-  
-  class SftpStorage implements AttachmentStorage {
-    async upload(attachment: Attachment): Promise<string> {
-      return attachment.id;
-    }
-  }
-  
-  class WebDavStorage implements AttachmentStorage {
-    async upload(attachment: Attachment): Promise<string> {
-      return attachment.id;
-    }
-  }
-  ```
+  <HomepageTutorialCodeMarker stepId="extract-capability" />
 
-  DI gets much less mystical once the changing part is named.
+  Once the varying behavior gets a name, the rest of the design gets less
+  mystical.
 
-  `AttachmentService` does not really care about AWS, SFTP, or WebDAV. It cares
-  that *something* knows how to store an attachment. That is why the abstraction
-  comes first.
+  `AttachmentService` does not actually care about vendors. It cares that
+  *something* knows how to store an attachment. Pulling that capability into
+  `AttachmentStorage` lets the workflow depend on an abstraction instead of
+  three branches.
 
-  - Business code depends on a capability, not a vendor.
-  - Each implementation keeps only the config it actually needs.
-  - The runtime decision is now free to move somewhere else.
+  Each implementation also becomes smaller and more honest: it keeps only the
+  config and logic it truly owns.
 
   ## Injection just means passing the dependency in
 
-  ```ts
-  interface Company {
-    storage: StorageProvider;
-  }
-  
-  class UploadRequest {
-    constructor(
-      private readonly storage: AttachmentStorage,
-    ) {}
-  
-    async upload(attachment: Attachment): Promise<string> {
-      return await this.storage.upload(attachment);
-    }
-  }
-  
-  async function handleUpload(
-    company: Company,
-    attachment: Attachment,
-  ) {
-    const storage =
-      company.storage === "sftp"
-        ? new SftpStorage()
-        : company.storage === "webdav"
-          ? new WebDavStorage()
-          : new AwsStorage();
-  
-    return await new UploadRequest(storage).upload(attachment);
-  }
-  ```
+  <HomepageTutorialCodeMarker stepId="inject-dependency" />
 
-  That single line, `new UploadRequest(storage)`, is dependency injection.
+  This is the conceptual center of the whole tutorial.
 
-  The `UploadRequest` object is not reaching out to construct its own storage.
-  Another part of the system chooses the dependency and hands it over. No
-  decorator, container, or magic is required for the idea to be true.
+  `UploadRequest` no longer decides what storage to construct. Another part of
+  the system chooses the dependency first, then passes it into the workflow.
 
-  This is the mental model to keep:
-
-  - One place chooses dependencies.
-  - Another place uses dependencies.
-  - Those two responsibilities get cleaner when they stop living in the same
-    object.
+  No decorators or container are required for that idea to be true. DI is
+  already happening as soon as dependency selection and dependency usage stop
+  living in the same object.
 
   ## Husky DI gives the composition a home
 
-  ```ts
-  import {
-    createContainer,
-    createServiceIdentifier,
-  } from "@husky-di/core";
-  
-  const IStorageProvider =
-    createServiceIdentifier<StorageProvider>("IStorageProvider");
-  const IAttachmentStorage =
-    createServiceIdentifier<AttachmentStorage>("IAttachmentStorage");
-  const IUploadRequest =
-    createServiceIdentifier<UploadRequest>("IUploadRequest");
-  
-  const container = createContainer("HomepageTutorialContainer");
-  
-  container.register(IStorageProvider, {
-    useValue: "sftp",
-  });
-  
-  container.register(IAttachmentStorage, {
-    useFactory: (currentContainer) => {
-      const provider = currentContainer.resolve(IStorageProvider);
-  
-      if (provider === "sftp") {
-        return new SftpStorage();
-      }
-  
-      if (provider === "webdav") {
-        return new WebDavStorage();
-      }
-  
-      return new AwsStorage();
-    },
-  });
-  
-  container.register(IUploadRequest, {
-    useFactory: (currentContainer) =>
-      new UploadRequest(
-        currentContainer.resolve(IAttachmentStorage),
-      ),
-  });
-  
-  const request = container.resolve(IUploadRequest);
-  ```
+  <HomepageTutorialCodeMarker stepId="container-composition" />
 
-  This is where `husky-di` enters the story. It does not invent DI. It gives
-  the wiring a single, explicit home.
+  This is where `husky-di` enters the story.
 
-  On the homepage, that matters because it shows the real promise of the
-  library:
+  The library does not invent dependency injection. It gives the wiring rules a
+  single, explicit, inspectable home:
 
-  - identifiers give the runtime graph stable names
-  - `register()` keeps the assembly rules visible
-  - `resolve()` happens from a deterministic container boundary
+  - identifiers keep runtime names stable
+  - `register()` makes assembly visible
+  - `useClass` plus `resolve()` keeps the no-decorator core workflow compact
 
-  If you want even more automation later, `@husky-di/decorator` can sit on top.
-  The important idea still stays the same: dependencies should be assembled at
-  the edge, not hidden inside the workflow object.
+  So the code stays close to the mental model you just built, but the
+  composition stops being scattered across request handlers and setup files.
 
   ## Testing gets easier because the puzzle pieces are swappable
 
-  ```ts
-  class FakeStorage implements AttachmentStorage {
-    public uploaded: Attachment[] = [];
-  
-    async upload(attachment: Attachment): Promise<string> {
-      this.uploaded.push(attachment);
-      return attachment.id;
-    }
-  }
-  
-  async function testUploadRequest() {
-    const storage = new FakeStorage();
-    const request = new UploadRequest(storage);
-  
-    const attachment: Attachment = {
-      id: "attachment-1",
-      localPath: "/tmp/readme.txt",
-      destination: "aws",
-    };
-  
-    const uploadedId = await request.upload(attachment);
-  
-    console.log(uploadedId);
-    console.log(storage.uploaded.length);
-  }
-  ```
+  <HomepageTutorialCodeMarker stepId="testing-seam" />
 
-  This is the payoff beginners feel the fastest.
+  This is the payoff most people feel the fastest.
 
-  You do not need to patch private state or fake half the application just to
-  test one path. You replace one dependency with a controlled implementation,
-  keep the workflow intact, and verify behavior at the seam.
+  Once the seam is explicit, you can replace a real dependency with a fake
+  using the same container API. The test stays focused on the workflow
+  contract, not on vendor behavior or hidden internal state.
 
-  That is why DI keeps showing up in good architecture conversations. It is not
-  about ceremony. It is about making change, debugging, and testing feel
-  mechanical instead of fragile.
-</ScrollyTutorialSection>
+  That is why dependency injection keeps coming up in good architecture
+  conversations. It is not about ceremony. It is about making change,
+  debugging, and testing feel mechanical instead of fragile.
+</HomepageMdxScrollyTutorial>

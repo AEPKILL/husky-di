@@ -211,6 +211,7 @@
 }
 
 .homepage-code-scroll {
+	overscroll-behavior: none;
 	scrollbar-width: thin;
 	scrollbar-color: var(--color-accent-border) transparent;
 }
