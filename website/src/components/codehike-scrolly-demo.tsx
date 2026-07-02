@@ -25,10 +25,7 @@ export function CodehikeScrollyDemo({ steps }: CodehikeScrollyDemoProps) {
 					<p className="font-mono text-[0.68rem] uppercase tracking-[0.3em] text-term-green">
 						Layout / Scrollycoding
 					</p>
-					<h1
-						className="mt-4 text-4xl leading-none font-black tracking-[-0.04em] text-page-fg md:text-5xl"
-						style={{ fontFamily: "var(--font-display)" }}
-					>
+					<h1 className="mt-4 font-display text-4xl leading-none font-black tracking-[-0.04em] text-page-fg md:text-5xl">
 						Scrollycoding for Husky DI
 					</h1>
 					<p className="mt-5 max-w-2xl text-base leading-8 text-page-soft">
