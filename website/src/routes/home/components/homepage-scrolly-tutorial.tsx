@@ -31,17 +31,8 @@ export function HomepageScrollyTutorial({
 			id="homepage-tutorial"
 		>
 			<div className="mx-auto max-w-6xl px-6 py-14 md:px-10 md:py-18 xl:py-24">
-				<div className="max-w-3xl">
-					<p className="font-mono text-[0.68rem] uppercase tracking-[0.3em] text-term-green">
-						Dependency Injection, Slowly
-					</p>
-					<h2 className="mt-4 font-display text-2xl leading-none font-black tracking-[-0.05em] text-page-fg">
-						Understand dependency injection by watching the wiring change
-					</h2>
-				</div>
-
 				<SelectionProvider
-					className="mt-12 grid gap-10 xl:grid-cols-[minmax(0,1.08fr)_minmax(23rem,28rem)] xl:gap-16"
+					className="grid gap-10 xl:grid-cols-[minmax(0,1.08fr)_minmax(23rem,28rem)] xl:gap-16"
 					rootMargin={{ top: 180, height: 240 }}
 				>
 					<HomepageScrollyTutorialCodePanel steps={steps} />
@@ -51,7 +42,7 @@ export function HomepageScrollyTutorial({
 							{steps.map((step, index) => (
 								<Selectable
 									key={step.id}
-									className="flex min-h-[74svh] items-center py-8 data-[selected=true]:[&_article_h3]:text-page-fg data-[selected=true]:[&_article_p]:text-page-soft"
+									className="py-10 first:pt-0 last:pb-[26svh] xl:min-h-[38svh] xl:py-14 data-[selected=true]:[&_article_h3]:text-page-fg data-[selected=true]:[&_article_p]:text-page-soft"
 									index={index}
 									selectOn={["scroll"]}
 								>

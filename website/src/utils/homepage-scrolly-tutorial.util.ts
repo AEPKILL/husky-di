@@ -192,7 +192,7 @@ async function handleUpload(
 			details: [
 				"`createServiceIdentifier()` gives the runtime graph explicit names.",
 				"`register()` centralizes assembly instead of scattering `new` and branching logic through request handlers.",
-				"`resolve()` starts from a concrete container boundary, which makes the dependency graph easier to inspect and change.",
+				"`useClass` and class-field `resolve()` match the repository's preferred no-decorator core workflow.",
 			],
 			codeblock: {
 				lang: "ts",
@@ -200,6 +200,7 @@ async function handleUpload(
 				value: `import {
   createContainer,
   createServiceIdentifier,
+  resolve,
 } from "@husky-di/core";
 
 type StorageProvider = "aws" | "sftp" | "webdav";
@@ -232,22 +233,20 @@ class WebDavStorage implements AttachmentStorage {
   }
 }
 
-class UploadRequest {
-  constructor(
-    private readonly storage: AttachmentStorage,
-  ) {}
-
-  async upload(attachment: Attachment): Promise<string> {
-    return await this.storage.upload(attachment);
-  }
-}
-
 const IStorageProvider =
   createServiceIdentifier<StorageProvider>("IStorageProvider");
 const IAttachmentStorage =
   createServiceIdentifier<AttachmentStorage>("IAttachmentStorage");
 const IUploadRequest =
   createServiceIdentifier<UploadRequest>("IUploadRequest");
+
+class UploadRequest {
+  private readonly storage = resolve(IAttachmentStorage);
+
+  async upload(attachment: Attachment): Promise<string> {
+    return await this.storage.upload(attachment);
+  }
+}
 
 const container = createContainer("HomepageTutorialContainer");
 
@@ -256,8 +255,8 @@ container.register(IStorageProvider, {
 });
 
 container.register(IAttachmentStorage, {
-  useFactory: (currentContainer) => {
-    const provider = currentContainer.resolve(IStorageProvider);
+  useFactory: () => {
+    const provider = resolve(IStorageProvider);
 
     if (provider === "sftp") {
       return new SftpStorage();
@@ -272,11 +271,10 @@ container.register(IAttachmentStorage, {
 });
 
 container.register(IUploadRequest, {
-  useFactory: (currentContainer) =>
-    new UploadRequest(
-      currentContainer.resolve(IAttachmentStorage),
-    ),
-});`,
+  useClass: UploadRequest,
+});
+
+const request = container.resolve(IUploadRequest);`,
 			},
 		},
 		{
@@ -287,14 +285,20 @@ container.register(IUploadRequest, {
 			summary:
 				"Once the seam is explicit, you can replace one dependency with a fake instead of wrestling with private state or hidden setup.",
 			details: [
-				"The test focuses on the workflow contract, not on storage vendor behavior.",
-				"This is why DI improves codebases even before you adopt a full container.",
-				"Husky DI then helps the same seams stay visible at runtime as the application grows.",
+				"`useValue` is enough to swap a fake implementation into the graph.",
+				"The test stays focused on the workflow contract instead of storage vendor behavior.",
+				"Husky DI keeps the same seam visible in production and in tests.",
 			],
 			codeblock: {
 				lang: "ts",
 				meta: `title=${HOMEPAGE_SCROLLY_TUTORIAL_FILE_NAME}`,
-				value: `type StorageProvider = "aws" | "sftp" | "webdav";
+				value: `import {
+  createContainer,
+  createServiceIdentifier,
+  resolve,
+} from "@husky-di/core";
+
+type StorageProvider = "aws" | "sftp" | "webdav";
 
 interface Attachment {
   id: string;
@@ -306,10 +310,13 @@ interface AttachmentStorage {
   upload(attachment: Attachment): Promise<string>;
 }
 
+const IAttachmentStorage =
+  createServiceIdentifier<AttachmentStorage>("IAttachmentStorage");
+const IUploadRequest =
+  createServiceIdentifier<UploadRequest>("IUploadRequest");
+
 class UploadRequest {
-  constructor(
-    private readonly storage: AttachmentStorage,
-  ) {}
+  private readonly storage = resolve(IAttachmentStorage);
 
   async upload(attachment: Attachment): Promise<string> {
     return await this.storage.upload(attachment);
@@ -325,9 +332,19 @@ class FakeStorage implements AttachmentStorage {
   }
 }
 
+const container = createContainer("HomepageTutorialTestContainer");
+
+container.register(IAttachmentStorage, {
+  useValue: new FakeStorage(),
+});
+
+container.register(IUploadRequest, {
+  useClass: UploadRequest,
+});
+
 async function testUploadRequest() {
-  const storage = new FakeStorage();
-  const request = new UploadRequest(storage);
+  const request = container.resolve(IUploadRequest);
+  const storage = container.resolve(IAttachmentStorage);
 
   const attachment: Attachment = {
     id: "attachment-1",
