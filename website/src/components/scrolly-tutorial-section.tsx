@@ -49,23 +49,23 @@ export function ScrollyTutorialSection({
 
 	return (
 		<section
-			className="relative overflow-hidden border-y border-[#3b4a3d] bg-[#101417]"
+			className="relative overflow-hidden border-y border-border bg-page-bg"
 			id={id}
 		>
-			<div className="absolute inset-y-0 left-0 hidden bg-[#0b0f12] xl:block xl:w-1/2" />
-			<div className="absolute inset-y-0 right-0 hidden bg-[#13181c] xl:block xl:w-1/2" />
+			<div className="absolute inset-y-0 left-0 hidden bg-surface-deep xl:block xl:w-1/2" />
+			<div className="absolute inset-y-0 right-0 hidden bg-surface-alt xl:block xl:w-1/2" />
 
 			<div className="relative">
 				<div className="mx-auto w-full xl:min-w-[1020px] xl:max-w-[1440px] xl:px-0">
-					<div className="bg-[#13181c] px-6 py-16 xl:ml-auto xl:w-1/2 xl:px-0 xl:py-28">
+					<div className="bg-surface-alt px-6 py-16 xl:ml-auto xl:w-1/2 xl:px-0 xl:py-28">
 						<div className="mx-auto max-w-[42rem] xl:ml-0 xl:w-[420px] xl:max-w-none xl:pl-[85px]">
-							<p className="font-mono text-[0.68rem] uppercase tracking-[0.28em] text-[#75ff9e]">
+							<p className="font-mono text-[0.68rem] uppercase tracking-[0.28em] text-accent">
 								{eyebrow}
 							</p>
-							<h2 className="mt-4 text-4xl leading-none font-black tracking-[-0.05em] text-[#e0e2e7] md:text-[3.2rem]">
+							<h2 className="mt-4 text-4xl leading-none font-black tracking-[-0.05em] text-page-fg md:text-[3.2rem]">
 								{title}
 							</h2>
-							<p className="mt-6 text-[15px] leading-8 text-[#bacbb9] md:text-base">
+							<p className="mt-6 text-[15px] leading-8 text-page-muted md:text-base">
 								{description}
 							</p>
 
@@ -105,7 +105,7 @@ function ScrollyTutorialStepBlock({
 					{step.previewNodes.length > 0 ? (
 						step.previewNodes
 					) : (
-						<div className="rounded-[1.5rem] border border-white/8 bg-white/[0.03] px-5 py-4 text-sm leading-7 text-[#bacbb9]">
+						<div className="rounded-[1.5rem] border border-border-soft bg-surface-glass px-5 py-4 text-sm leading-7 text-page-muted">
 							Add a code block or a component under this heading to populate the
 							left preview panel.
 						</div>
@@ -115,17 +115,17 @@ function ScrollyTutorialStepBlock({
 
 			<div className="mt-8 xl:mt-0 xl:w-[420px]">
 				<div className="relative pl-10">
-					<div className="absolute bottom-0 left-4 top-0 w-px bg-[#3b4a3d]" />
-					<div className="absolute left-[9px] top-2 h-3 w-3 rounded-full border border-[#75ff9e]/65 bg-[#13181c]" />
+					<div className="absolute bottom-0 left-4 top-0 w-px bg-border" />
+					<div className="absolute left-[9px] top-2 h-3 w-3 rounded-full border border-accent-border bg-surface-alt" />
 
-					<p className="font-mono text-[0.68rem] uppercase tracking-[0.28em] text-[#75ff9e]">
+					<p className="font-mono text-[0.68rem] uppercase tracking-[0.28em] text-accent">
 						{getStepEyebrow(stepIndex)}
 					</p>
-					<h3 className="mt-3 text-[2rem] leading-none font-black tracking-[-0.04em] text-[#e0e2e7]">
+					<h3 className="mt-3 text-[2rem] leading-none font-black tracking-[-0.04em] text-page-fg">
 						{step.title}
 					</h3>
 
-					<div className="mt-5 space-y-5 text-[15px] leading-8 text-[#d0d7de] [&_a]:text-[#75ff9e] [&_code]:rounded-sm [&_code]:bg-black/30 [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:font-mono [&_code]:text-[0.92em] [&_code]:text-[#9fffb5] [&_li]:ml-6 [&_li]:list-disc [&_li]:text-[15px] [&_li]:leading-8 [&_strong]:font-semibold [&_ul]:space-y-2">
+					<div className="mt-5 space-y-5 text-[15px] leading-8 text-page-soft [&_a]:text-accent [&_code]:rounded-sm [&_code]:bg-black/30 [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:font-mono [&_code]:text-[0.92em] [&_code]:text-code-symbol [&_li]:ml-6 [&_li]:list-disc [&_li]:text-[15px] [&_li]:leading-8 [&_strong]:font-semibold [&_ul]:space-y-2">
 						{step.contentNodes}
 					</div>
 				</div>

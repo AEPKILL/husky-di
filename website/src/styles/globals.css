@@ -23,31 +23,144 @@
 	--font-sans: "Inter", "DINish", ui-sans-serif, system-ui, sans-serif;
 	--font-mono: "JetBrains Mono", "Berkeley Mono", ui-monospace, monospace;
 
-	--color-page-bg: #0f111a;
-	--color-page-fg: #e4e6eb;
-	--color-page-muted: #a0aab5;
-	--color-accent: #00e676;
-	--color-selection: rgba(41, 121, 255, 0.28);
-	--color-term-bg: #0b0f14;
-	--color-term-fg: #d8dee9;
-	--color-term-green: #00e676;
-	--color-term-amber: #ffbf69;
-	--color-term-dim: #6f7c8f;
+	--base-neutral-ink: #06090c;
+	--base-neutral: #101417;
+	--base-contrast-high: #e0e2e7;
+	--base-contrast-low: #bacbb9;
+	--base-accent: #75ff9e;
+	--base-info: #b0c6ff;
+	--base-amber: #ffb866;
+
+	--color-page-bg: var(--base-neutral);
+	--color-page-fg: var(--base-contrast-high);
+	--color-page-soft: color-mix(
+		in oklab,
+		var(--base-contrast-high) 86%,
+		var(--base-contrast-low)
+	);
+	--color-page-muted: var(--base-contrast-low);
+	--color-page-subtle: color-mix(
+		in oklab,
+		var(--base-contrast-high) 72%,
+		var(--base-contrast-low)
+	);
+	--color-page-dim: color-mix(
+		in oklab,
+		var(--base-contrast-low) 68%,
+		var(--base-neutral)
+	);
+	--color-accent: var(--base-accent);
+	--color-accent-muted: color-mix(
+		in oklab,
+		var(--base-accent) 78%,
+		var(--base-contrast-high)
+	);
+	--color-accent-soft: color-mix(in oklab, var(--base-accent) 12%, transparent);
+	--color-accent-soft-strong: color-mix(
+		in oklab,
+		var(--base-accent) 20%,
+		transparent
+	);
+	--color-accent-border: color-mix(
+		in oklab,
+		var(--base-accent) 56%,
+		var(--base-neutral)
+	);
+	--color-accent-contrast: color-mix(
+		in oklab,
+		var(--base-neutral) 96%,
+		var(--base-neutral-ink)
+	);
+	--color-border: color-mix(
+		in oklab,
+		var(--base-accent) 18%,
+		var(--base-neutral)
+	);
+	--color-border-soft: color-mix(
+		in oklab,
+		var(--base-contrast-high) 8%,
+		transparent
+	);
+	--color-border-strong: color-mix(
+		in oklab,
+		var(--base-contrast-high) 14%,
+		var(--base-neutral)
+	);
+	--color-surface-deep: color-mix(
+		in oklab,
+		var(--base-neutral) 72%,
+		var(--base-neutral-ink)
+	);
+	--color-surface: color-mix(
+		in oklab,
+		var(--base-neutral) 84%,
+		var(--base-neutral-ink)
+	);
+	--color-surface-alt: color-mix(
+		in oklab,
+		var(--base-neutral) 92%,
+		var(--base-contrast-high) 8%
+	);
+	--color-surface-panel: color-mix(
+		in oklab,
+		var(--base-neutral) 80%,
+		var(--base-contrast-high) 20%
+	);
+	--color-surface-panel-strong: color-mix(
+		in oklab,
+		var(--base-neutral) 68%,
+		var(--base-contrast-high) 32%
+	);
+	--color-surface-glass: color-mix(
+		in oklab,
+		var(--base-contrast-high) 3%,
+		transparent
+	);
+	--color-surface-glass-strong: color-mix(
+		in oklab,
+		var(--base-contrast-high) 5%,
+		transparent
+	);
+	--color-selection: color-mix(in oklab, var(--base-info) 28%, transparent);
+	--color-term-bg: var(--color-surface-deep);
+	--color-term-fg: color-mix(
+		in oklab,
+		var(--base-contrast-high) 92%,
+		var(--base-contrast-low)
+	);
+	--color-term-green: var(--base-accent);
+	--color-term-amber: var(--base-amber);
+	--color-term-dim: color-mix(
+		in oklab,
+		var(--base-contrast-low) 62%,
+		var(--base-neutral)
+	);
+	--color-code-keyword: var(--base-amber);
+	--color-code-symbol: color-mix(
+		in oklab,
+		var(--base-accent) 82%,
+		var(--base-contrast-high)
+	);
+	--color-code-type: var(--base-info);
+	--color-code-call: color-mix(
+		in oklab,
+		var(--base-info) 74%,
+		var(--base-contrast-high)
+	);
+	--color-code-comment: var(--color-page-muted);
 	--radius-sm: 0.5rem;
 	--motion-fast: 120ms;
 	--ease-default: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 [data-theme="light"] {
-	--color-page-bg: #fafbfc;
-	--color-page-fg: #1a1d26;
-	--color-page-muted: #5a6070;
-	--color-selection: rgba(41, 121, 255, 0.2);
-	--color-term-bg: #f3f5f7;
-	--color-term-fg: #1f2833;
-	--color-term-green: #008f4c;
-	--color-term-amber: #a15c00;
-	--color-term-dim: #6a7380;
+	--base-neutral-ink: #ffffff;
+	--base-neutral: #fafbfc;
+	--base-contrast-high: #1a1d26;
+	--base-contrast-low: #5a6070;
+	--base-accent: #008f4c;
+	--base-info: #2f6dff;
+	--base-amber: #a15c00;
 }
 
 @layer base {

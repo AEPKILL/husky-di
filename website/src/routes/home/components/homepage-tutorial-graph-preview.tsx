@@ -21,7 +21,7 @@ export function HomepageTutorialGraphPreview() {
 			<div className="space-y-4">
 				<img
 					alt={HOME_PAGE_DEPENDENCY_GRAPH_IMAGE_ALT}
-					className="w-full rounded-2xl border border-white/8 shadow-2xl"
+					className="w-full rounded-2xl border border-border-soft shadow-2xl"
 					loading="lazy"
 					src={HOME_PAGE_DEPENDENCY_GRAPH_IMAGE_URL}
 				/>
@@ -29,7 +29,7 @@ export function HomepageTutorialGraphPreview() {
 				<div className="flex flex-wrap gap-2">
 					{HOME_PAGE_DEPENDENCY_GRAPH_BULLETS.map((bullet) => (
 						<span
-							className="rounded-full border border-[#31403a] bg-[#10161b] px-3 py-1 font-mono text-[0.68rem] uppercase tracking-[0.18em] text-[#9ed8ad]"
+							className="rounded-full border border-border bg-surface-alt px-3 py-1 font-mono text-[0.68rem] uppercase tracking-[0.18em] text-accent-muted"
 							key={bullet}
 						>
 							{bullet}

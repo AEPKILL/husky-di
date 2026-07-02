@@ -52,6 +52,12 @@ It should not be used to describe:
 
 ### Core Tokens
 
+Implementation note: the website runtime now uses a two-layer token model.
+Foundation palette variables such as `--base-neutral`, `--base-accent`, and
+`--base-info` define the small set of source tones, while semantic
+`--color-*` tokens derive the component-facing backgrounds, borders, text, and
+code colors from that palette.
+
 | Token                    | Role                        | Value                       |
 | ------------------------ | --------------------------- | --------------------------- |
 | `--color-bg`             | primary page background     | `#0F111A`                   |

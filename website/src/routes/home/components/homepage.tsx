@@ -12,11 +12,11 @@ import { HomepageTutorialSection } from "./homepage-tutorial-section";
 
 export function Homepage() {
 	return (
-		<div className="bg-[#101417] text-[#e0e2e7]">
+		<div className="bg-page-bg text-page-fg">
 			<main>
 				<HomepageHeroSection />
 				<div id="homepage-workflow">
-					<DiWorkflowAnimation className="border-b border-[#3b4a3d]" />
+					<DiWorkflowAnimation className="border-b border-border" />
 				</div>
 				<HomepageTutorialSection />
 				<HomepageCtaSection />

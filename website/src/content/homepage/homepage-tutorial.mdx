@@ -2,19 +2,19 @@ import { HomepageTutorialGraphPreview } from "@/routes/home/components/homepage-
 import { HomepageTutorialWorkflowPreview } from "@/routes/home/components/homepage-tutorial-workflow-preview"
 import { ScrollyTutorialSection } from "@/components/scrolly-tutorial-section"
 
-<section className="border-y border-[#273138] bg-[#101417]">
+<section className="border-y border-border bg-page-bg">
   <div className="mx-auto max-w-6xl px-6 py-16 md:px-10 md:py-20">
-    <div className="font-mono text-[0.68rem] uppercase tracking-[0.28em] text-[#75ff9e]">
+    <div className="font-mono text-[0.68rem] uppercase tracking-[0.28em] text-accent">
       {"Tutorial-First Docs"}
     </div>
     <h2
-      className="mt-4 max-w-4xl text-4xl leading-none font-black tracking-[-0.05em] text-[#e0e2e7] md:text-[3.4rem]"
+      className="mt-4 max-w-4xl text-4xl leading-none font-black tracking-[-0.05em] text-page-fg md:text-[3.4rem]"
       style={{ fontFamily: "var(--font-display)" }}
     >
       {"Learn Husky DI the same way you inspect a real container"}
     </h2>
 
-    <div className="mt-6 max-w-3xl space-y-4 text-[15px] leading-8 text-[#bacbb9]">
+    <div className="mt-6 max-w-3xl space-y-4 text-[15px] leading-8 text-page-muted">
       The goal here is not to dump API snippets onto the homepage. We want a
       tutorial surface that can grow with the project and stay maintainable when
       the explanation gets longer.
@@ -24,27 +24,27 @@ import { ScrollyTutorialSection } from "@/components/scrolly-tutorial-section"
       component whenever the concept is easier to understand visually.
     </div>
 
-    <ol className="mt-8 grid gap-3 text-sm leading-7 text-[#d7dbe2] sm:grid-cols-2 xl:grid-cols-4">
-      <li className="rounded-2xl border border-white/8 bg-white/[0.03] px-4 py-4">
-        <strong className="block font-mono text-[0.68rem] uppercase tracking-[0.24em] text-[#75ff9e]">
+    <ol className="mt-8 grid gap-3 text-sm leading-7 text-page-soft sm:grid-cols-2 xl:grid-cols-4">
+      <li className="rounded-2xl border border-border-soft bg-surface-glass px-4 py-4">
+        <strong className="block font-mono text-[0.68rem] uppercase tracking-[0.24em] text-accent">
           {"Step 1"}
         </strong>
         <span className="mt-1 block">{"Make the graph visible before wiring services."}</span>
       </li>
-      <li className="rounded-2xl border border-white/8 bg-white/[0.03] px-4 py-4">
-        <strong className="block font-mono text-[0.68rem] uppercase tracking-[0.24em] text-[#75ff9e]">
+      <li className="rounded-2xl border border-border-soft bg-surface-glass px-4 py-4">
+        <strong className="block font-mono text-[0.68rem] uppercase tracking-[0.24em] text-accent">
           {"Step 2"}
         </strong>
         <span className="mt-1 block">{"Register identifiers with explicit runtime names."}</span>
       </li>
-      <li className="rounded-2xl border border-white/8 bg-white/[0.03] px-4 py-4">
-        <strong className="block font-mono text-[0.68rem] uppercase tracking-[0.24em] text-[#75ff9e]">
+      <li className="rounded-2xl border border-border-soft bg-surface-glass px-4 py-4">
+        <strong className="block font-mono text-[0.68rem] uppercase tracking-[0.24em] text-accent">
           {"Step 3"}
         </strong>
         <span className="mt-1 block">{"Resolve through the container instead of hand-plumbing objects."}</span>
       </li>
-      <li className="rounded-2xl border border-white/8 bg-white/[0.03] px-4 py-4">
-        <strong className="block font-mono text-[0.68rem] uppercase tracking-[0.24em] text-[#75ff9e]">
+      <li className="rounded-2xl border border-border-soft bg-surface-glass px-4 py-4">
+        <strong className="block font-mono text-[0.68rem] uppercase tracking-[0.24em] text-accent">
           {"Step 4"}
         </strong>
         <span className="mt-1 block">{"Swap the left pane to a live component whenever a visual demo helps."}</span>

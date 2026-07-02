@@ -27,22 +27,22 @@ export function TutorialPreviewFrame({
 	return (
 		<div
 			className={cn(
-				"overflow-hidden rounded-[1.75rem] border border-white/8 bg-[#0b0f14] shadow-[0_30px_90px_rgba(0,0,0,0.32)]",
+				"overflow-hidden rounded-[1.75rem] border border-border-soft bg-surface-deep shadow-[0_30px_90px_rgba(0,0,0,0.32)]",
 				className,
 			)}
 		>
-			<div className="flex items-center justify-between gap-4 border-b border-white/8 px-5 py-3">
+			<div className="flex items-center justify-between gap-4 border-b border-border-soft px-5 py-3">
 				<div className="min-w-0">
-					<p className="font-mono text-[0.65rem] uppercase tracking-[0.24em] text-slate-500">
+					<p className="font-mono text-[0.65rem] uppercase tracking-[0.24em] text-page-dim">
 						{eyebrow}
 					</p>
-					<p className="mt-1 truncate text-sm font-semibold text-slate-100">
+					<p className="mt-1 truncate text-sm font-semibold text-page-soft">
 						{title}
 					</p>
 				</div>
 
 				{badge ? (
-					<div className="shrink-0 rounded-full border border-white/10 bg-white/5 px-3 py-1 font-mono text-[0.68rem] uppercase tracking-[0.22em] text-slate-300">
+					<div className="shrink-0 rounded-full border border-border-strong bg-surface-glass-strong px-3 py-1 font-mono text-[0.68rem] uppercase tracking-[0.22em] text-page-subtle">
 						{badge}
 					</div>
 				) : null}

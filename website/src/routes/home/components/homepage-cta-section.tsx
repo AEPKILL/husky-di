@@ -15,12 +15,12 @@ export function HomepageCtaSection() {
 	};
 
 	return (
-		<section className="border-t border-[#3b4a3d] bg-[#191c20] py-10 text-center">
+		<section className="border-t border-border bg-surface-panel py-10 text-center">
 			<div className="mx-auto max-w-300 px-6">
-				<h2 className="mb-4 font-sans text-[32px] font-semibold leading-10 tracking-[-0.01em] text-[#e0e2e7]">
+				<h2 className="mb-4 font-sans text-[32px] font-semibold leading-10 tracking-[-0.01em] text-page-fg">
 					Ready for Production?
 				</h2>
-				<p className="mx-auto mb-6 max-w-lg text-base leading-6 text-[#bacbb9]">
+				<p className="mx-auto mb-6 max-w-lg text-base leading-6 text-page-muted">
 					Husky DI is built for developers who want explicit architecture,
 					deterministic runtime rules, and a container that stays easy to debug
 					as the graph grows.
@@ -28,7 +28,7 @@ export function HomepageCtaSection() {
 
 				<div className="flex justify-center">
 					<button
-						className="bg-[#75ff9e] px-10 py-4 font-mono text-sm font-bold uppercase text-[#101417] transition-all hover:opacity-90 active:scale-95"
+						className="bg-accent px-10 py-4 font-mono text-sm font-bold uppercase text-accent-contrast transition-all hover:opacity-90 active:scale-95"
 						onClick={handleCopy}
 						type="button"
 					>

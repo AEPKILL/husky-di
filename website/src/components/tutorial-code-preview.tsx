@@ -28,7 +28,7 @@ export function TutorialCodePreview({
 			title={title}
 		>
 			<div className="max-h-[44vh] overflow-auto px-4 py-4 md:max-h-[56vh] xl:max-h-[60vh]">
-				<pre className="font-mono text-[12px] leading-6 whitespace-pre text-[#d8dee9] md:text-[13px]">
+				<pre className="font-mono text-[12px] leading-6 whitespace-pre text-term-fg md:text-[13px]">
 					<code>{code}</code>
 				</pre>
 			</div>

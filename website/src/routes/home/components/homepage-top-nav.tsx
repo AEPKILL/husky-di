@@ -12,16 +12,16 @@ import { HomepageMaterialSymbol } from "./homepage-material-symbol";
 
 export function HomepageTopNav() {
 	return (
-		<header className="sticky top-0 z-50 border-b border-[#3b4a3d] bg-[#101417]">
+		<header className="sticky top-0 z-50 border-b border-border bg-page-bg">
 			<div className="mx-auto flex w-full max-w-[1200px] items-center justify-between px-6 py-2">
 				<div className="flex items-center gap-4">
-					<span className="font-sans text-[32px] font-bold tracking-[-0.01em] text-[#e0e2e7]">
+					<span className="font-sans text-[32px] font-bold tracking-[-0.01em] text-page-fg">
 						Husky DI
 					</span>
 
 					<nav className="ml-10 hidden gap-6 md:flex">
 						<a
-							className="border-b-2 border-[#75ff9e] pb-1 font-mono text-sm text-[#75ff9e] transition-colors duration-200"
+							className="border-b-2 border-accent pb-1 font-mono text-sm text-accent transition-colors duration-200"
 							href={HOME_PAGE_LINKS.documentation}
 							rel="noreferrer"
 							target="_blank"
@@ -29,7 +29,7 @@ export function HomepageTopNav() {
 							Documentation
 						</a>
 						<a
-							className="font-mono text-sm text-[#bacbb9] transition-colors duration-200 hover:text-[#75ff9e]"
+							className="font-mono text-sm text-page-muted transition-colors duration-200 hover:text-accent"
 							href={HOME_PAGE_LINKS.github}
 							rel="noreferrer"
 							target="_blank"
@@ -40,10 +40,10 @@ export function HomepageTopNav() {
 				</div>
 
 				<div className="flex items-center gap-4">
-					<span className="font-mono text-sm text-[#bacbb9]">
+					<span className="font-mono text-sm text-page-muted">
 						{HOME_PAGE_VERSION_LABEL}
 					</span>
-					<HomepageMaterialSymbol className="text-[#75ff9e]" name="terminal" />
+					<HomepageMaterialSymbol className="text-accent" name="terminal" />
 				</div>
 			</div>
 		</header>
