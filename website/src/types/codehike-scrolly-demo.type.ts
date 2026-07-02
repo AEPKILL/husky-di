@@ -10,6 +10,7 @@ export type CodehikeScrollyDemoStep = Readonly<{
 	id: string;
 	eyebrow: string;
 	fileName: string;
+	focusLineIndex?: number;
 	title: string;
 	summary: string;
 	details: readonly string[];

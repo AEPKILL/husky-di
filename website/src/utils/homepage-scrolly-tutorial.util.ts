@@ -10,6 +10,7 @@ import { highlight } from "codehike/code";
 import type { CodehikeScrollyDemoStep } from "@/types/codehike-scrolly-demo.type";
 
 const HOMEPAGE_SCROLLY_TUTORIAL_THEME = "slack-dark";
+const HOMEPAGE_SCROLLY_TUTORIAL_FILE_NAME = "homepage-tutorial.ts";
 
 type HomepageScrollyTutorialDefinition = Readonly<{
 	id: string;
@@ -26,7 +27,7 @@ const HOMEPAGE_SCROLLY_TUTORIAL_DEFINITIONS: readonly HomepageScrollyTutorialDef
 		{
 			id: "hard-wired-branching",
 			eyebrow: "Step 1",
-			fileName: "attachment-service.ts",
+			fileName: HOMEPAGE_SCROLLY_TUTORIAL_FILE_NAME,
 			title: "Start with the code smell dependency injection is trying to fix",
 			summary:
 				"A feature can work and still be badly wired when one object both chooses and uses its collaborators.",
@@ -37,7 +38,7 @@ const HOMEPAGE_SCROLLY_TUTORIAL_DEFINITIONS: readonly HomepageScrollyTutorialDef
 			],
 			codeblock: {
 				lang: "ts",
-				meta: "title=attachment-service.ts",
+				meta: `title=${HOMEPAGE_SCROLLY_TUTORIAL_FILE_NAME}`,
 				value: `type StorageProvider = "aws" | "sftp" | "webdav";
 
 interface Attachment {
@@ -69,7 +70,7 @@ class AttachmentService {
 		{
 			id: "extract-capability",
 			eyebrow: "Step 2",
-			fileName: "attachment-storage.ts",
+			fileName: HOMEPAGE_SCROLLY_TUTORIAL_FILE_NAME,
 			title: "Extract the behavior that changes and give it a clear name",
 			summary:
 				"Once the storage behavior becomes an interface, the business flow can stop depending on vendor-specific branches.",
@@ -80,7 +81,7 @@ class AttachmentService {
 			],
 			codeblock: {
 				lang: "ts",
-				meta: "title=attachment-storage.ts",
+				meta: `title=${HOMEPAGE_SCROLLY_TUTORIAL_FILE_NAME}`,
 				value: `type StorageProvider = "aws" | "sftp" | "webdav";
 
 interface Attachment {
@@ -115,7 +116,7 @@ class WebDavStorage implements AttachmentStorage {
 		{
 			id: "inject-dependency",
 			eyebrow: "Step 3",
-			fileName: "upload-request.ts",
+			fileName: HOMEPAGE_SCROLLY_TUTORIAL_FILE_NAME,
 			title: "Dependency injection simply means passing the dependency in",
 			summary:
 				"The object that performs the upload no longer constructs its own storage. Another part of the system chooses it first.",
@@ -126,7 +127,7 @@ class WebDavStorage implements AttachmentStorage {
 			],
 			codeblock: {
 				lang: "ts",
-				meta: "title=upload-request.ts",
+				meta: `title=${HOMEPAGE_SCROLLY_TUTORIAL_FILE_NAME}`,
 				value: `type StorageProvider = "aws" | "sftp" | "webdav";
 
 interface Attachment {
@@ -184,7 +185,7 @@ async function handleUpload(
 		{
 			id: "container-composition",
 			eyebrow: "Step 4",
-			fileName: "homepage-tutorial.ts",
+			fileName: HOMEPAGE_SCROLLY_TUTORIAL_FILE_NAME,
 			title: "Husky DI gives that composition point a single explicit home",
 			summary:
 				"The library does not invent dependency injection. It makes the wiring rules named, visible, and deterministic.",
@@ -281,7 +282,7 @@ container.register(IUploadRequest, {
 		{
 			id: "testing-seam",
 			eyebrow: "Step 5",
-			fileName: "upload-request.test.ts",
+			fileName: HOMEPAGE_SCROLLY_TUTORIAL_FILE_NAME,
 			title: "The payoff is that tests become small and mechanical",
 			summary:
 				"Once the seam is explicit, you can replace one dependency with a fake instead of wrestling with private state or hidden setup.",
@@ -292,7 +293,7 @@ container.register(IUploadRequest, {
 			],
 			codeblock: {
 				lang: "ts",
-				meta: "title=upload-request.test.ts",
+				meta: `title=${HOMEPAGE_SCROLLY_TUTORIAL_FILE_NAME}`,
 				value: `type StorageProvider = "aws" | "sftp" | "webdav";
 
 interface Attachment {
@@ -347,16 +348,22 @@ export async function createHomepageScrollyTutorialSteps(): Promise<
 	CodehikeScrollyDemoStep[]
 > {
 	const highlightedSteps = await Promise.all(
-		HOMEPAGE_SCROLLY_TUTORIAL_DEFINITIONS.map(async (definition) => {
+		HOMEPAGE_SCROLLY_TUTORIAL_DEFINITIONS.map(async (definition, index) => {
 			const code = await highlight(
 				definition.codeblock,
 				HOMEPAGE_SCROLLY_TUTORIAL_THEME,
 			);
+			const previousDefinition =
+				index > 0 ? HOMEPAGE_SCROLLY_TUTORIAL_DEFINITIONS[index - 1] : null;
 
 			return {
 				id: definition.id,
 				eyebrow: definition.eyebrow,
 				fileName: definition.fileName,
+				focusLineIndex: getFirstChangedLineIndex(
+					previousDefinition?.codeblock.value,
+					definition.codeblock.value,
+				),
 				title: definition.title,
 				summary: definition.summary,
 				details: definition.details,
@@ -366,4 +373,25 @@ export async function createHomepageScrollyTutorialSteps(): Promise<
 	);
 
 	return highlightedSteps;
+}
+
+function getFirstChangedLineIndex(
+	previousCode: string | undefined,
+	nextCode: string,
+): number {
+	if (!previousCode) {
+		return 0;
+	}
+
+	const previousLines = previousCode.split("\n");
+	const nextLines = nextCode.split("\n");
+	const shortestLength = Math.min(previousLines.length, nextLines.length);
+
+	for (let lineIndex = 0; lineIndex < shortestLength; lineIndex += 1) {
+		if (previousLines[lineIndex] !== nextLines[lineIndex]) {
+			return lineIndex;
+		}
+	}
+
+	return Math.max(0, Math.min(previousLines.length, nextLines.length - 1));
 }
