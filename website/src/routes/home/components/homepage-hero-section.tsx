@@ -65,9 +65,9 @@ export function HomepageHeroSection() {
 			</div>
 
 			<a
-				aria-label="Scroll to dependency injection workflow"
+				aria-label="Scroll to dependency injection tutorial"
 				className={`${styles.scrollIndicator} absolute bottom-6 left-1/2 z-10 -translate-x-1/2`}
-				href="#homepage-workflow"
+				href="#homepage-tutorial"
 			>
 				<span aria-hidden="true" className={styles.scrollIndicatorMouse}>
 					<span className={styles.scrollIndicatorDot} />

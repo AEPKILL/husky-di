@@ -1,80 +1,131 @@
-import { HomepageTutorialGraphPreview } from "@/routes/home/components/homepage-tutorial-graph-preview"
-import { HomepageTutorialWorkflowPreview } from "@/routes/home/components/homepage-tutorial-workflow-preview"
 import { ScrollyTutorialSection } from "@/components/scrolly-tutorial-section"
 
-<section className="border-y border-border bg-page-bg">
-  <div className="mx-auto max-w-6xl px-6 py-16 md:px-10 md:py-20">
-    <div className="font-mono text-[0.68rem] uppercase tracking-[0.28em] text-accent">
-      {"Tutorial-First Docs"}
-    </div>
-    <h2
-      className="mt-4 max-w-4xl font-display text-4xl leading-none font-black tracking-[-0.05em] text-page-fg md:text-[3.4rem]"
-    >
-      {"Learn Husky DI the same way you inspect a real container"}
-    </h2>
+<ScrollyTutorialSection id="homepage-tutorial">
+  ## A feature can work and still be badly wired
 
-    <div className="mt-6 max-w-3xl space-y-4 text-[15px] leading-8 text-page-muted">
-      The goal here is not to dump API snippets onto the homepage. We want a
-      tutorial surface that can grow with the project and stay maintainable when
-      the explanation gets longer.
+  ```ts
+  type StorageProvider = "aws" | "sftp" | "webdav";
+  
+  interface Attachment {
+    id: string;
+    localPath: string;
+    destination: StorageProvider;
+  }
+  
+  class AttachmentService {
+    async upload(
+      attachment: Attachment,
+      awsKey?: string,
+      sftpHost?: string,
+      webDavUrl?: string,
+    ) {
+      if (attachment.destination === "sftp") {
+        return this.uploadToSftp(attachment, sftpHost!);
+      }
+  
+      if (attachment.destination === "webdav") {
+        return this.uploadToWebDav(attachment, webDavUrl!);
+      }
+  
+      return this.uploadToAws(attachment, awsKey!);
+    }
+  }
+  ```
 
-      MDX gives us that authoring model: prose stays in markdown, and the left
-      panel can still render a code example, a dependency graph, or a live demo
-      component whenever the concept is easier to understand visually.
-    </div>
+  Dependency injection usually starts with discomfort, not with a framework.
+  The code above can upload a file, but it is solving too many problems in one
+  place.
 
-    <ol className="mt-8 grid gap-3 text-sm leading-7 text-page-soft sm:grid-cols-2 xl:grid-cols-4">
-      <li className="rounded-2xl border border-border-soft bg-surface-glass px-4 py-4">
-        <strong className="block font-mono text-[0.68rem] uppercase tracking-[0.24em] text-accent">
-          {"Step 1"}
-        </strong>
-        <span className="mt-1 block">{"Make the graph visible before wiring services."}</span>
-      </li>
-      <li className="rounded-2xl border border-border-soft bg-surface-glass px-4 py-4">
-        <strong className="block font-mono text-[0.68rem] uppercase tracking-[0.24em] text-accent">
-          {"Step 2"}
-        </strong>
-        <span className="mt-1 block">{"Register identifiers with explicit runtime names."}</span>
-      </li>
-      <li className="rounded-2xl border border-border-soft bg-surface-glass px-4 py-4">
-        <strong className="block font-mono text-[0.68rem] uppercase tracking-[0.24em] text-accent">
-          {"Step 3"}
-        </strong>
-        <span className="mt-1 block">{"Resolve through the container instead of hand-plumbing objects."}</span>
-      </li>
-      <li className="rounded-2xl border border-border-soft bg-surface-glass px-4 py-4">
-        <strong className="block font-mono text-[0.68rem] uppercase tracking-[0.24em] text-accent">
-          {"Step 4"}
-        </strong>
-        <span className="mt-1 block">{"Swap the left pane to a live component whenever a visual demo helps."}</span>
-      </li>
-    </ol>
-  </div>
-</section>
+  - One class owns the upload logic and the storage-selection logic.
+  - The caller has to know which optional config matters for which branch.
+  - The decision of which dependency to use happens deep inside the workflow.
 
-<ScrollyTutorialSection
-  description="This section is MDX-authored on purpose. The right rail stays great for prose, while the left rail remains free to show code or any React component that explains the current concept better."
-  eyebrow="Guided Walkthrough"
-  id="homepage-tutorial"
-  title="Build a deterministic container step by step"
->
-  ## Start from the graph, not from magic
+  That is the core smell DI is trying to remove. The goal is not "use a
+  container". The goal is "stop hard-wiring decisions into the object that just
+  wants to do its job."
 
-  <HomepageTutorialGraphPreview />
+  ## First extract the behavior that changes
 
-  Husky DI works best when the service graph is explicit. Instead of hiding
-  object creation behind decorators or framework conventions, the container
-  keeps the dependency edges inspectable.
+  ```ts
+  interface AttachmentStorage {
+    upload(attachment: Attachment): Promise<string>;
+  }
+  
+  class AwsStorage implements AttachmentStorage {
+    async upload(attachment: Attachment): Promise<string> {
+      return attachment.id;
+    }
+  }
+  
+  class SftpStorage implements AttachmentStorage {
+    async upload(attachment: Attachment): Promise<string> {
+      return attachment.id;
+    }
+  }
+  
+  class WebDavStorage implements AttachmentStorage {
+    async upload(attachment: Attachment): Promise<string> {
+      return attachment.id;
+    }
+  }
+  ```
 
-  That matters for docs too. A visual preview on the left can establish the
-  mental model faster than a paragraph trying to describe the same graph in
-  words.
+  DI gets much less mystical once the changing part is named.
 
-  - Resolution order stays deterministic and debuggable.
-  - Cycles are easier to explain when the graph is visible.
-  - We can switch this preview to any other demo component later.
+  `AttachmentService` does not really care about AWS, SFTP, or WebDAV. It cares
+  that *something* knows how to store an attachment. That is why the abstraction
+  comes first.
 
-  ## Give every dependency an explicit identity
+  - Business code depends on a capability, not a vendor.
+  - Each implementation keeps only the config it actually needs.
+  - The runtime decision is now free to move somewhere else.
+
+  ## Injection just means passing the dependency in
+
+  ```ts
+  interface Company {
+    storage: StorageProvider;
+  }
+  
+  class UploadRequest {
+    constructor(
+      private readonly storage: AttachmentStorage,
+    ) {}
+  
+    async upload(attachment: Attachment): Promise<string> {
+      return await this.storage.upload(attachment);
+    }
+  }
+  
+  async function handleUpload(
+    company: Company,
+    attachment: Attachment,
+  ) {
+    const storage =
+      company.storage === "sftp"
+        ? new SftpStorage()
+        : company.storage === "webdav"
+          ? new WebDavStorage()
+          : new AwsStorage();
+  
+    return await new UploadRequest(storage).upload(attachment);
+  }
+  ```
+
+  That single line, `new UploadRequest(storage)`, is dependency injection.
+
+  The `UploadRequest` object is not reaching out to construct its own storage.
+  Another part of the system chooses the dependency and hands it over. No
+  decorator, container, or magic is required for the idea to be true.
+
+  This is the mental model to keep:
+
+  - One place chooses dependencies.
+  - Another place uses dependencies.
+  - Those two responsibilities get cleaner when they stop living in the same
+    object.
+
+  ## Husky DI gives the composition a home
 
   ```ts
   import {
@@ -82,90 +133,95 @@ import { ScrollyTutorialSection } from "@/components/scrolly-tutorial-section"
     createServiceIdentifier,
   } from "@husky-di/core";
   
-  interface Logger {
-    log(message: string): void;
-  }
+  const IStorageProvider =
+    createServiceIdentifier<StorageProvider>("IStorageProvider");
+  const IAttachmentStorage =
+    createServiceIdentifier<AttachmentStorage>("IAttachmentStorage");
+  const IUploadRequest =
+    createServiceIdentifier<UploadRequest>("IUploadRequest");
   
-  class ConsoleLogger implements Logger {
-    log(message: string) {
-      console.log(message);
-    }
-  }
+  const container = createContainer("HomepageTutorialContainer");
   
-  const ILogger = createServiceIdentifier<Logger>("ILogger");
-  const container = createContainer("DocsContainer");
-  
-  container.register(ILogger, {
-    useClass: ConsoleLogger,
+  container.register(IStorageProvider, {
+    useValue: "sftp",
   });
+  
+  container.register(IAttachmentStorage, {
+    useFactory: (currentContainer) => {
+      const provider = currentContainer.resolve(IStorageProvider);
+  
+      if (provider === "sftp") {
+        return new SftpStorage();
+      }
+  
+      if (provider === "webdav") {
+        return new WebDavStorage();
+      }
+  
+      return new AwsStorage();
+    },
+  });
+  
+  container.register(IUploadRequest, {
+    useFactory: (currentContainer) =>
+      new UploadRequest(
+        currentContainer.resolve(IAttachmentStorage),
+      ),
+  });
+  
+  const request = container.resolve(IUploadRequest);
   ```
 
-  The first code step should make the repository vocabulary visible right away:
-  `createServiceIdentifier`, `createContainer`, and `register`.
+  This is where `husky-di` enters the story. It does not invent DI. It gives
+  the wiring a single, explicit home.
 
-  This keeps the tutorial aligned with the actual product language instead of
-  teaching a softer abstraction first and correcting it later.
+  On the homepage, that matters because it shows the real promise of the
+  library:
 
-  ## Let the container wire the graph
+  - identifiers give the runtime graph stable names
+  - `register()` keeps the assembly rules visible
+  - `resolve()` happens from a deterministic container boundary
+
+  If you want even more automation later, `@husky-di/decorator` can sit on top.
+  The important idea still stays the same: dependencies should be assembled at
+  the edge, not hidden inside the workflow object.
+
+  ## Testing gets easier because the puzzle pieces are swappable
 
   ```ts
-  import {
-    createContainer,
-    createServiceIdentifier,
-    resolve,
-  } from "@husky-di/core";
+  class FakeStorage implements AttachmentStorage {
+    public uploaded: Attachment[] = [];
   
-  interface Logger {
-    log(message: string): void;
-  }
-  
-  class ConsoleLogger implements Logger {
-    log(message: string) {
-      console.log(message);
+    async upload(attachment: Attachment): Promise<string> {
+      this.uploaded.push(attachment);
+      return attachment.id;
     }
   }
   
-  class UserService {
-    private readonly logger = resolve(ILogger);
+  async function testUploadRequest() {
+    const storage = new FakeStorage();
+    const request = new UploadRequest(storage);
   
-    getUser(id: string) {
-      this.logger.log(`load user: ${id}`);
-      return { id, name: "Ada" };
-    }
+    const attachment: Attachment = {
+      id: "attachment-1",
+      localPath: "/tmp/readme.txt",
+      destination: "aws",
+    };
+  
+    const uploadedId = await request.upload(attachment);
+  
+    console.log(uploadedId);
+    console.log(storage.uploaded.length);
   }
-  
-  const ILogger = createServiceIdentifier<Logger>("ILogger");
-  const IUserService =
-    createServiceIdentifier<UserService>("IUserService");
-  
-  const container = createContainer("DocsContainer");
-  
-  container.register(ILogger, {
-    useClass: ConsoleLogger,
-  });
-  
-  container.register(IUserService, {
-    useClass: UserService,
-  });
-  
-  const userService = container.resolve(IUserService);
   ```
 
-  The interesting part here is not just that `UserService` resolves. It is that
-  the wiring logic is centralized, repeatable, and traceable from the container
-  boundary.
+  This is the payoff beginners feel the fastest.
 
-  That gives the tutorial a clean story arc: define identifiers, register
-  providers, then resolve a feature service and let the graph do the rest.
+  You do not need to patch private state or fake half the application just to
+  test one path. You replace one dependency with a controlled implementation,
+  keep the workflow intact, and verify behavior at the seam.
 
-  ## Swap code for a live preview when the concept is visual
-
-  <HomepageTutorialWorkflowPreview />
-
-  The homepage tutorial should not be locked into code blocks. A resolution
-  trace, dependency graph, or animated workflow can be the better teaching tool
-  for a given chapter.
-
-  Keeping the step preview as a React node means MDX authors can choose the best
-  medium per step without rewriting the layout layer.
+  That is why DI keeps showing up in good architecture conversations. It is not
+  about ceremony. It is about making change, debugging, and testing feel
+  mechanical instead of fragile.
 </ScrollyTutorialSection>

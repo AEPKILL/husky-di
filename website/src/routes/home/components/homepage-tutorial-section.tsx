@@ -1,11 +1,19 @@
 /**
- * @overview Homepage wrapper that renders the MDX-authored tutorial content.
+ * @overview Homepage wrapper that renders the Code Hike powered scrollytelling
+ * tutorial content.
  * @author AEPKILL
- * @created 2026-07-01 19:25:00
+ * @created 2026-07-02 14:35:00
  */
 
-import HomepageTutorialDocument from "@/content/homepage/homepage-tutorial.mdx";
+import type { CodehikeScrollyDemoStep } from "@/types/codehike-scrolly-demo.type";
+import { HomepageScrollyTutorial } from "./homepage-scrolly-tutorial";
 
-export function HomepageTutorialSection() {
-	return <HomepageTutorialDocument />;
+export type HomepageTutorialSectionProps = Readonly<{
+	steps: readonly CodehikeScrollyDemoStep[];
+}>;
+
+export function HomepageTutorialSection({
+	steps,
+}: HomepageTutorialSectionProps) {
+	return <HomepageScrollyTutorial steps={steps} />;
 }

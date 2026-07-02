@@ -14,6 +14,7 @@ const CODEHIKE_SCROLLY_DEMO_THEME = "slack-dark";
 type CodehikeScrollyDemoDefinition = Readonly<{
 	id: string;
 	eyebrow: string;
+	fileName: string;
 	title: string;
 	summary: string;
 	details: readonly string[];
@@ -25,6 +26,7 @@ const CODEHIKE_SCROLLY_DEMO_DEFINITIONS: readonly CodehikeScrollyDemoDefinition[
 		{
 			id: "service-identifiers",
 			eyebrow: "Step 1",
+			fileName: "app.ts",
 			title: "Define services with repository-native terminology",
 			summary:
 				"Start with `createServiceIdentifier()` so the runtime name and the TypeScript type stay aligned.",
@@ -62,6 +64,7 @@ const IUserService =
 		{
 			id: "container-registration",
 			eyebrow: "Step 2",
+			fileName: "app.ts",
 			title: "Create a container and register the first dependency",
 			summary:
 				"Code Hike is just rendering here; the code itself stays faithful to Husky DI's explicit `register()` model.",
@@ -106,6 +109,7 @@ container.register(ILogger, {
 		{
 			id: "service-registration",
 			eyebrow: "Step 3",
+			fileName: "app.ts",
 			title: "Register the feature service that consumes the logger",
 			summary:
 				"The service stays small and deterministic: it reads `ILogger` through `resolve()` inside the active resolution flow.",
@@ -159,6 +163,7 @@ container.register(IUserService, {
 		{
 			id: "resolution",
 			eyebrow: "Step 4",
+			fileName: "app.ts",
 			title: "Resolve the service and let the container wire the graph",
 			summary:
 				"When this final step becomes active, the left panel shows the completed example exactly like a scrollycoding chapter would.",
@@ -227,6 +232,7 @@ export async function createCodehikeScrollyDemoSteps(): Promise<
 			return {
 				id: definition.id,
 				eyebrow: definition.eyebrow,
+				fileName: definition.fileName,
 				title: definition.title,
 				summary: definition.summary,
 				details: definition.details,

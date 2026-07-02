@@ -100,7 +100,7 @@ function CodePanel({ steps }: CodePanelProps) {
 						</p>
 					</div>
 					<div className="rounded-full border border-border-strong bg-surface-glass-strong px-3 py-1 font-mono text-[0.68rem] uppercase tracking-[0.22em] text-page-subtle">
-						app.ts
+						{activeStep.fileName}
 					</div>
 				</div>
 				<div className="p-3">

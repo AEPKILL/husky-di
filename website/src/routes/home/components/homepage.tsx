@@ -4,21 +4,22 @@
  * @created 2026-06-30 12:35:00
  */
 
-import { DiWorkflowAnimation } from "@/components/di-workflow-animation";
+import type { CodehikeScrollyDemoStep } from "@/types/codehike-scrolly-demo.type";
 import { HomepageCtaSection } from "./homepage-cta-section";
 import { HomepageFooter } from "./homepage-footer";
 import { HomepageHeroSection } from "./homepage-hero-section";
 import { HomepageTutorialSection } from "./homepage-tutorial-section";
 
-export function Homepage() {
+export type HomepageProps = Readonly<{
+	tutorialSteps: readonly CodehikeScrollyDemoStep[];
+}>;
+
+export function Homepage({ tutorialSteps }: HomepageProps) {
 	return (
 		<div className="bg-page-bg text-page-fg">
 			<main>
 				<HomepageHeroSection />
-				<div id="homepage-workflow">
-					<DiWorkflowAnimation className="border-b border-border" />
-				</div>
-				<HomepageTutorialSection />
+				<HomepageTutorialSection steps={tutorialSteps} />
 				<HomepageCtaSection />
 			</main>
 			<HomepageFooter />

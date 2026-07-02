@@ -9,6 +9,7 @@ import type { HighlightedCode } from "codehike/code";
 export type CodehikeScrollyDemoStep = Readonly<{
 	id: string;
 	eyebrow: string;
+	fileName: string;
 	title: string;
 	summary: string;
 	details: readonly string[];

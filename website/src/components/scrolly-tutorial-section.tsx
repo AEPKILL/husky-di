@@ -14,10 +14,10 @@ import { TutorialCodePreview } from "@/components/tutorial-code-preview";
 
 export type ScrollyTutorialSectionProps = Readonly<{
 	children: ReactNode;
-	description: string;
+	description?: string;
 	eyebrow?: string;
 	id?: string;
-	title: string;
+	title?: string;
 }>;
 
 type TutorialStepData = Readonly<{
@@ -46,6 +46,8 @@ export function ScrollyTutorialSection({
 	title,
 }: ScrollyTutorialSectionProps) {
 	const tutorialSteps = createTutorialSteps(children);
+	const shouldRenderIntro =
+		typeof title === "string" || typeof description === "string";
 
 	return (
 		<section
@@ -56,29 +58,39 @@ export function ScrollyTutorialSection({
 			<div className="absolute inset-y-0 right-0 hidden bg-surface-alt xl:block xl:w-1/2" />
 
 			<div className="relative">
-				<div className="mx-auto w-full xl:min-w-[1020px] xl:max-w-[1440px] xl:px-0">
-					<div className="bg-surface-alt px-6 py-16 xl:ml-auto xl:w-1/2 xl:px-0 xl:py-28">
-						<div className="mx-auto max-w-[42rem] xl:ml-0 xl:w-[420px] xl:max-w-none xl:pl-[85px]">
+				<div className="mx-auto max-w-[1180px] px-6 py-16 md:px-10 md:py-20 xl:px-6 xl:py-24">
+					{shouldRenderIntro ? (
+						<div className="mx-auto max-w-[42rem] xl:ml-auto xl:w-[420px] xl:max-w-none">
 							<p className="font-mono text-[0.68rem] uppercase tracking-[0.28em] text-accent">
 								{eyebrow}
 							</p>
-							<h2 className="mt-4 text-4xl leading-none font-black tracking-[-0.05em] text-page-fg md:text-[3.2rem]">
-								{title}
-							</h2>
-							<p className="mt-6 text-[15px] leading-8 text-page-muted md:text-base">
-								{description}
-							</p>
-
-							<div className="mt-14 space-y-16 xl:space-y-24">
-								{tutorialSteps.map((tutorialStep, tutorialStepIndex) => (
-									<ScrollyTutorialStepBlock
-										key={tutorialStep.id}
-										stepIndex={tutorialStepIndex}
-										step={tutorialStep}
-									/>
-								))}
-							</div>
+							{title ? (
+								<h2 className="mt-4 text-4xl leading-none font-black tracking-[-0.05em] text-page-fg md:text-[3.2rem]">
+									{title}
+								</h2>
+							) : null}
+							{description ? (
+								<p className="mt-6 text-[15px] leading-8 text-page-muted md:text-base">
+									{description}
+								</p>
+							) : null}
 						</div>
+					) : null}
+
+					<div
+						className={
+							shouldRenderIntro
+								? "mt-14 space-y-16 xl:mt-20 xl:space-y-24"
+								: "space-y-16 xl:space-y-24"
+						}
+					>
+						{tutorialSteps.map((tutorialStep, tutorialStepIndex) => (
+							<ScrollyTutorialStepBlock
+								key={tutorialStep.id}
+								stepIndex={tutorialStepIndex}
+								step={tutorialStep}
+							/>
+						))}
 					</div>
 				</div>
 			</div>
@@ -97,10 +109,10 @@ function ScrollyTutorialStepBlock({
 }: ScrollyTutorialStepBlockProps) {
 	return (
 		<section
-			className="scroll-mt-28 xl:relative xl:ml-[-590px] xl:flex xl:w-[1010px]"
+			className="scroll-mt-28 xl:grid xl:grid-cols-[minmax(0,420px)_minmax(0,420px)] xl:items-start xl:gap-x-[85px]"
 			id={step.id}
 		>
-			<div className="xl:w-[420px] xl:pr-[85px]">
+			<div>
 				<div className="space-y-4 xl:sticky xl:top-[20vh]">
 					{step.previewNodes.length > 0 ? (
 						step.previewNodes
@@ -113,7 +125,7 @@ function ScrollyTutorialStepBlock({
 				</div>
 			</div>
 
-			<div className="mt-8 xl:mt-0 xl:w-[420px]">
+			<div className="mt-8 xl:mt-0">
 				<div className="relative pl-10">
 					<div className="absolute bottom-0 left-4 top-0 w-px bg-border" />
 					<div className="absolute left-[9px] top-2 h-3 w-3 rounded-full border border-accent-border bg-surface-alt" />

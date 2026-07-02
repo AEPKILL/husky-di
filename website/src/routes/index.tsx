@@ -5,12 +5,15 @@
  */
 
 import { createFileRoute } from "@tanstack/react-router";
-import { HomePage } from "./home/index";
+import { HomePage, loadHomepageRouteData } from "./home/index";
 
 export const Route = createFileRoute("/")({
+	loader: loadHomepageRouteData,
 	component: HomeRoutePage,
 });
 
 function HomeRoutePage() {
-	return <HomePage />;
+	const routeData = Route.useLoaderData();
+
+	return <HomePage tutorialSteps={routeData.tutorialSteps} />;
 }
