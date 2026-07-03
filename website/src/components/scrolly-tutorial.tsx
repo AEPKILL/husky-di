@@ -26,7 +26,7 @@ import {
 const CODE_LINE_HEIGHT_PX = 24;
 const CODE_FOCUS_TOP_OFFSET_RATIO = 0.24;
 const PREVIEW_LAYER_TRAVEL_PERCENT = 104;
-const STEP_TITLE_SELECTION_TOP_PX = 1;
+const STEP_TITLE_SELECTION_TOP_PX = 48;
 
 export type ScrollyTutorialProps = Readonly<{
 	children: ReactNode;
