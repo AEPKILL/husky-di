@@ -6,8 +6,11 @@
  */
 
 export function createScrollyTutorialStepId(title: string): string {
-	return title
+	const stepId = title
+		.normalize("NFKC")
 		.toLowerCase()
-		.replace(/[^a-z0-9]+/g, "-")
+		.replace(/[^\p{Letter}\p{Number}]+/gu, "-")
 		.replace(/^-+|-+$/g, "");
+
+	return stepId || "step";
 }

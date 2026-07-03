@@ -6,11 +6,7 @@
  */
 
 import { Pre } from "codehike/code";
-import {
-	Selectable,
-	SelectionProvider,
-	useSelectedIndex,
-} from "codehike/utils/selection";
+import { SelectionProvider, useSelectedIndex } from "codehike/utils/selection";
 import {
 	Children,
 	isValidElement,
@@ -19,7 +15,6 @@ import {
 	type RefObject,
 	useEffect,
 	useRef,
-	useState,
 } from "react";
 import { CODEHIKE_TOKEN_TRANSITIONS } from "@/components/codehike-token-transitions";
 import { createScrollyTutorialStepId } from "@/utils/scrolly-tutorial-step-id.util";
@@ -30,11 +25,8 @@ import {
 
 const CODE_LINE_HEIGHT_PX = 24;
 const CODE_FOCUS_TOP_OFFSET_RATIO = 0.24;
-const INTRO_PREVIEW_TRANSITION_START_RATIO = 0.84;
-const INTRO_PREVIEW_TRANSITION_END_RATIO = 0.34;
-const INTRO_PREVIEW_SWAP_START = 0.56;
-const INTRO_PREVIEW_SWAP_END = 0.92;
 const PREVIEW_LAYER_TRAVEL_PERCENT = 104;
+const STEP_TITLE_SELECTION_TOP_PX = 1;
 
 export type ScrollyTutorialProps = Readonly<{
 	children: ReactNode;
@@ -66,115 +58,104 @@ const PROSE_TAG_NAMES = new Set(["p", "ul", "ol", "blockquote"]);
 
 export function ScrollyTutorial({ children, id }: ScrollyTutorialProps) {
 	const tutorialSteps = createTutorialSteps(children);
-	const stepArticleRefs = useRef<Array<HTMLElement | null>>([]);
-	const [introTransitionProgress, setIntroTransitionProgress] = useState(0);
-
-	useEffect(() => {
-		const updateProgress = () => {
-			const secondStepElement = stepArticleRefs.current[1];
-
-			if (!secondStepElement) {
-				setIntroTransitionProgress(0);
-				return;
-			}
-
-			const secondStepTop = secondStepElement.getBoundingClientRect().top;
-			const startY = window.innerHeight * INTRO_PREVIEW_TRANSITION_START_RATIO;
-			const endY = window.innerHeight * INTRO_PREVIEW_TRANSITION_END_RATIO;
-			const progress = (startY - secondStepTop) / (startY - endY);
-
-			setIntroTransitionProgress(clampPreviewProgress(progress));
-		};
-
-		updateProgress();
-
-		let animationFrameId = 0;
-
-		const scheduleProgressUpdate = () => {
-			cancelAnimationFrame(animationFrameId);
-			animationFrameId = requestAnimationFrame(updateProgress);
-		};
-
-		window.addEventListener("resize", scheduleProgressUpdate);
-		window.addEventListener("scroll", scheduleProgressUpdate, {
-			passive: true,
-		});
-
-		return () => {
-			cancelAnimationFrame(animationFrameId);
-			window.removeEventListener("resize", scheduleProgressUpdate);
-			window.removeEventListener("scroll", scheduleProgressUpdate);
-		};
-	}, []);
 
 	return (
 		<section className="border-y border-border bg-page-bg text-page-fg" id={id}>
 			<div className="mx-auto max-w-6xl px-6 py-14 md:px-10 md:py-18 xl:py-24">
-				<SelectionProvider
-					className="grid gap-10 xl:grid-cols-[minmax(0,1.08fr)_minmax(23rem,28rem)] xl:gap-16"
-					rootMargin={{ top: 180, height: 240 }}
-				>
-					<ScrollyTutorialPreviewRail
-						introTransitionProgress={introTransitionProgress}
-						steps={tutorialSteps}
-					/>
-
-					<div className="max-xl:pb-4 xl:relative xl:pl-8 xl:before:absolute xl:before:bottom-0 xl:before:left-[-2rem] xl:before:top-0 xl:before:border-l xl:before:border-dashed xl:before:border-border-strong">
-						<div className="space-y-0">
-							{tutorialSteps.map((step, index) => (
-								<Selectable
-									key={step.id}
-									className="py-10 first:pt-0 last:pb-[26svh] xl:min-h-[38svh] xl:py-14 data-[selected=true]:[&_article_h3]:text-page-fg data-[selected=true]:[&_article_p]:text-page-soft"
-									index={index}
-									selectOn={["scroll"]}
-								>
-									<article
-										className="w-full max-w-[30rem] space-y-5"
-										ref={(element) => {
-											stepArticleRefs.current[index] = element;
-										}}
-									>
-										<h3 className="text-[1.6rem] leading-tight font-black tracking-[-0.03em] text-page-subtle transition md:text-[1.9rem]">
-											{step.title}
-										</h3>
-										<div className="space-y-4 text-[15px] leading-8 text-page-muted transition [&_a]:text-accent [&_code]:rounded-sm [&_code]:bg-black/30 [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:font-mono [&_code]:text-[0.92em] [&_code]:text-code-symbol [&_li]:ml-6 [&_li]:list-disc [&_li]:text-[15px] [&_li]:leading-8 [&_strong]:font-semibold [&_ul]:space-y-2">
-											{step.contentNodes}
-										</div>
-									</article>
-								</Selectable>
-							))}
-						</div>
-					</div>
+				<SelectionProvider className="grid gap-10 xl:grid-cols-[minmax(0,1.08fr)_minmax(23rem,28rem)] xl:gap-16">
+					<ScrollyTutorialPreviewRail steps={tutorialSteps} />
+					<ScrollyTutorialNarrativeRail steps={tutorialSteps} />
 				</SelectionProvider>
 			</div>
 		</section>
 	);
 }
 
+type ScrollyTutorialNarrativeRailProps = Readonly<{
+	steps: readonly TutorialStepData[];
+}>;
+
+function ScrollyTutorialNarrativeRail({
+	steps,
+}: ScrollyTutorialNarrativeRailProps) {
+	const [selectedIndex, selectIndex] = useSelectedIndex();
+	const stepTitleRefs = useRef<Array<HTMLHeadingElement | null>>([]);
+
+	useEffect(() => {
+		const updateSelectedStep = () => {
+			let nextSelectedIndex = 0;
+
+			for (const [index, titleElement] of stepTitleRefs.current.entries()) {
+				if (
+					titleElement &&
+					titleElement.getBoundingClientRect().top <=
+						STEP_TITLE_SELECTION_TOP_PX
+				) {
+					nextSelectedIndex = index;
+				}
+			}
+
+			selectIndex(nextSelectedIndex);
+		};
+
+		updateSelectedStep();
+
+		window.addEventListener("resize", updateSelectedStep);
+		window.addEventListener("scroll", updateSelectedStep, {
+			passive: true,
+		});
+
+		return () => {
+			window.removeEventListener("resize", updateSelectedStep);
+			window.removeEventListener("scroll", updateSelectedStep);
+		};
+	}, [selectIndex]);
+
+	return (
+		<div className="max-xl:pb-4 xl:relative xl:pl-8 xl:before:absolute xl:before:bottom-0 xl:before:left-[-2rem] xl:before:top-0 xl:before:border-l xl:before:border-dashed xl:before:border-border-strong">
+			<div className="space-y-0">
+				{steps.map((step, index) => (
+					<div
+						className="pt-0 pb-10 last:pb-[26svh] xl:min-h-[38svh] xl:pb-14 data-[selected=true]:[&_article_h3]:text-page-fg data-[selected=true]:[&_article_p]:text-page-soft"
+						data-index={index}
+						data-selected={selectedIndex === index}
+						key={step.id}
+					>
+						<article className="w-full max-w-[30rem] space-y-5">
+							<h3
+								className="text-[1.6rem] leading-tight font-black tracking-[-0.03em] text-page-subtle transition md:text-[1.9rem]"
+								ref={(element) => {
+									stepTitleRefs.current[index] = element;
+								}}
+							>
+								{step.title}
+							</h3>
+							<div className="space-y-4 text-[15px] leading-8 text-page-muted transition [&_a]:text-accent [&_code]:rounded-sm [&_code]:bg-black/30 [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:font-mono [&_code]:text-[0.92em] [&_code]:text-code-symbol [&_li]:ml-6 [&_li]:list-disc [&_li]:text-[15px] [&_li]:leading-8 [&_strong]:font-semibold [&_ul]:space-y-2">
+								{step.contentNodes}
+							</div>
+						</article>
+					</div>
+				))}
+			</div>
+		</div>
+	);
+}
+
 type ScrollyTutorialPreviewRailProps = Readonly<{
-	introTransitionProgress: number;
 	steps: readonly TutorialStepData[];
 }>;
 
 function ScrollyTutorialPreviewRail({
-	introTransitionProgress,
 	steps,
 }: ScrollyTutorialPreviewRailProps) {
 	const [selectedIndex] = useSelectedIndex();
 	const codeSteps = useScrollyTutorialCodeStepsMap();
-	const activeStep = steps[selectedIndex] ?? steps[0];
 	const previewRailRef = useRef<HTMLDivElement | null>(null);
 	const scrollContainerRef = useRef<HTMLDivElement | null>(null);
-	const isIntroPreviewActive = introTransitionProgress < 1;
 	const introPreview = steps[0]?.preview ?? null;
-	const secondPreview = steps[1]?.preview ?? null;
-	const visiblePreview =
-		selectedIndex === 0 && secondPreview
-			? secondPreview
-			: (activeStep?.preview ?? null);
-	const previewSwapProgress = getIntroPreviewSwapProgress(
-		introTransitionProgress,
-	);
+	const visiblePreview = getVisibleTutorialPreview(steps, selectedIndex);
+	const isIntroPreviewActive = visiblePreview === introPreview;
+	const previewSwapProgress = isIntroPreviewActive ? 0 : 1;
 	const visibleCodeStep =
 		visiblePreview?.kind === "code"
 			? (codeSteps.get(visiblePreview.stepId) ?? null)
@@ -295,6 +276,23 @@ function ScrollyTutorialPreviewRail({
 			</div>
 		</div>
 	);
+}
+
+function getVisibleTutorialPreview(
+	steps: readonly TutorialStepData[],
+	selectedIndex: number,
+): TutorialPreviewDescriptor | null {
+	const lastStepIndex = Math.min(Math.max(selectedIndex, 0), steps.length - 1);
+
+	for (let stepIndex = lastStepIndex; stepIndex >= 0; stepIndex -= 1) {
+		const preview = steps[stepIndex]?.preview ?? null;
+
+		if (preview) {
+			return preview;
+		}
+	}
+
+	return null;
 }
 
 type RenderPreviewOptions = Readonly<{
@@ -486,10 +484,6 @@ function isIgnorableNode(node: ReactNode): boolean {
 	return false;
 }
 
-function clampPreviewProgress(value: number): number {
-	return Math.min(1, Math.max(0, value));
-}
-
 function normalizeWheelDelta(
 	delta: number,
 	deltaMode: number,
@@ -527,16 +521,4 @@ function assignCodePreviewToTutorialStep(step: {
 		kind: "code",
 		stepId: createScrollyTutorialStepId(step.title),
 	};
-}
-
-function getIntroPreviewSwapProgress(progress: number): number {
-	const normalizedProgress =
-		(progress - INTRO_PREVIEW_SWAP_START) /
-		(INTRO_PREVIEW_SWAP_END - INTRO_PREVIEW_SWAP_START);
-
-	return easePreviewProgress(clampPreviewProgress(normalizedProgress));
-}
-
-function easePreviewProgress(progress: number): number {
-	return progress * progress * (3 - 2 * progress);
 }
