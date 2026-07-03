@@ -2,347 +2,455 @@ import { DiWorkflowAnimation } from "@/components/di-workflow-animation"
 import { ScrollyTutorial } from "@/components/scrolly-tutorial"
 
 <ScrollyTutorial id="homepage-tutorial">
-  ## Dependency injection starts before the container
+  ## DI Starts with Responsibility Boundaries
 
   <DiWorkflowAnimation className="min-h-0 rounded-[1.5rem] bg-transparent px-0 py-0 shadow-none [&>div]:max-w-none [&>div]:rounded-[1.5rem] [&>div]:border-0 [&>div]:bg-transparent [&>div]:px-4 [&>div]:py-5 [&>div]:shadow-none [&>div]:backdrop-blur-none [&_pre]:text-[clamp(0.52rem,1.25vw,0.86rem)]" />
 
-  Dependency injection usually makes more sense when you watch the flow before
-  you stare at the API.
+  Dependency Injection, or DI, is a programming technique where an object or function receives the other objects or functions it needs instead of creating them internally.
 
-  A request comes in, something decides what implementation belongs in this
-  environment, and only then does the workflow run with that dependency in
-  place.
+  So DI is not primarily a framework trick. It is a way to organize dependencies. Its core idea is simple:
 
-  That is the idea to hold onto for the rest of the page:
+  - Declare only the capability contract you need
+  - Avoid binding yourself to a concrete implementation, and let the outside provide an implementation that satisfies the contract
 
-  - one place chooses dependencies
-  - another place uses dependencies
-  - the boundary between those two jobs is the seam DI gives you
+  This tutorial explains the mental model behind DI and where `husky-di` fits. It does not cover the full API for lifecycles, parent-child containers, middleware, or the module system.
 
-  ## A feature can work and still be badly wired
+  ## Minimal Example: A Hidden Time Dependency
 
-  ```ts title=homepage-tutorial.ts
-  type StorageProvider = "aws" | "sftp" | "webdav";
+  ```ts
+  function createReportTitle() {
+    const now = new Date();
 
-  interface Attachment {
-    id: string;
-    localPath: string;
-    destination: StorageProvider;
+    return `Report ${now.toISOString().slice(0, 10)}`;
+  }
+  ```
+
+  The smallest form of DI is not a container or a decorator. It is ordinary parameter passing.
+
+  This function is short, but it already creates a dependency internally: the current time.
+
+  The problem is that the caller cannot decide what "now" means. If a test needs a fixed date, a preview needs to simulate tomorrow, or a different environment needs a different time source, the only options are workarounds around this function.
+
+  ## Turn Time into a Capability Contract
+
+  ```ts
+  interface IClock {
+    now(): Date;
   }
 
-  class AttachmentService {
-    async upload(
-      attachment: Attachment,
-      awsKey?: string,
-      sftpHost?: string,
-      webDavUrl?: string,
-    ) {
-      if (attachment.destination === "sftp") {
-        return this.uploadToSftp(attachment, sftpHost!);
-      }
+  function createReportTitle(clock: IClock) {
+    const now = clock.now();
 
-      if (attachment.destination === "webdav") {
-        return this.uploadToWebDav(attachment, webDavUrl!);
-      }
+    return `Report ${now.toISOString().slice(0, 10)}`;
+  }
 
-      return this.uploadToAws(attachment, awsKey!);
+  const systemClock: IClock = {
+    now: () => new Date(),
+  };
+
+  const fixedClock: IClock = {
+    now: () => new Date("2026-01-01T00:00:00.000Z"),
+  };
+
+  createReportTitle(systemClock);
+  createReportTitle(fixedClock);
+  ```
+
+  Once the time source comes from the outside, the structure changes.
+
+  `createReportTitle()` no longer cares where time comes from. It only declares that it needs an `IClock` that can tell it the current time.
+
+  The concrete choice happens outside. You can give it the real system clock, or you can give it a fixed clock.
+
+  This is DI in one of its plainest forms: the user of a dependency uses it, while the selector of a dependency provides it from the outside.
+
+  After passing in `IClock`, the code is not more complicated. The dependency relationship is clearer. The code now admits something important: generating a report title does not depend only on a string template; it also depends on what the current time is.
+
+  If this kind of dependency stays inside the function, it becomes a hidden connection to the outside world. `new Date()`, `Math.random()`, `process.env`, `fetch()`, and `console.log()` can all be similar hidden dependencies.
+
+  Not all of them need to be abstracted away. My rule of thumb is this: when a dependency affects business behavior, test results, runtime environment, or replacement cost, it is usually worth naming explicitly.
+
+  ## The Problem Usually Is Not "No Framework"
+
+  ```ts
+  class SystemClock {
+    now(): Date {
+      return new Date();
+    }
+  }
+
+  class ConsoleLogger {
+    log(message: string): void {
+      console.log(message);
+    }
+  }
+
+  class DailyReportService {
+    private readonly clock = new SystemClock();
+    private readonly logger = new ConsoleLogger();
+
+    create(userId: string): string {
+      const date = this.clock.now().toISOString().slice(0, 10);
+      const title = `Report ${date}`;
+
+      this.logger.log(`create report for ${userId}`);
+
+      return `${title}: ${userId}`;
     }
   }
   ```
 
-  The first real smell is not "missing framework." It is "one object owns too
-  many decisions."
+  Continuing with the report example:
 
-  In this version, the upload workflow is entangled with the logic for choosing
-  AWS, SFTP, or WebDAV. The caller has to know which optional argument belongs
-  to which branch, and the runtime decision happens deep inside the object that
-  only wanted to upload a file.
+  This code is still short, and it works. But it mixes two responsibilities:
 
-  That is the core pressure that pushes people toward DI in the first place.
+  - It decides how to generate a daily report
+  - It also decides which time source and which logging implementation to use
 
-  ## First extract the behavior that changes
+  The issue is not whether the code is short. The issue is that `DailyReportService` now depends on two concrete classes, `SystemClock` and `ConsoleLogger`, instead of depending on the capabilities "can provide the current time" and "can record a log message".
 
-  ```ts title=homepage-tutorial.ts
-  type StorageProvider = "aws" | "sftp" | "webdav";
+  That binds business code to concrete implementations. Even if the caller wants to freeze the date, swap the logger, or collect logs in memory, it cannot express that easily without modifying `DailyReportService`.
 
-  interface Attachment {
-    id: string;
-    localPath: string;
-    destination: StorageProvider;
+  In this example, the business logic needs capability contracts, not fixed implementations. The coupling DI tries to reduce is exactly this: a business object directly knowing concrete implementations.
+
+  ## The First Step Is Not a Container, but Splitting Responsibilities
+
+  ```ts
+  interface IClock {
+    now(): Date;
   }
 
-  interface AttachmentStorage {
-    upload(attachment: Attachment): Promise<string>;
+  interface ILogger {
+    log(message: string): void;
   }
 
-  class AwsStorage implements AttachmentStorage {
-    async upload(attachment: Attachment): Promise<string> {
-      return attachment.id;
-    }
-  }
-
-  class SftpStorage implements AttachmentStorage {
-    async upload(attachment: Attachment): Promise<string> {
-      return attachment.id;
-    }
-  }
-
-  class WebDavStorage implements AttachmentStorage {
-    async upload(attachment: Attachment): Promise<string> {
-      return attachment.id;
-    }
-  }
-  ```
-
-  Once the varying behavior gets a name, the rest of the design gets less
-  mystical.
-
-  `AttachmentService` does not actually care about vendors. It cares that
-  *something* knows how to store an attachment. Pulling that capability into
-  `AttachmentStorage` lets the workflow depend on an abstraction instead of
-  three branches.
-
-  Each implementation also becomes smaller and more honest: it keeps only the
-  config and logic it truly owns.
-
-  ## Injection just means passing the dependency in
-
-  ```ts title=homepage-tutorial.ts
-  type StorageProvider = "aws" | "sftp" | "webdav";
-
-  interface Attachment {
-    id: string;
-    localPath: string;
-    destination: StorageProvider;
-  }
-
-  interface AttachmentStorage {
-    upload(attachment: Attachment): Promise<string>;
-  }
-
-  class AwsStorage implements AttachmentStorage {
-    async upload(attachment: Attachment): Promise<string> {
-      return attachment.id;
-    }
-  }
-
-  class SftpStorage implements AttachmentStorage {
-    async upload(attachment: Attachment): Promise<string> {
-      return attachment.id;
-    }
-  }
-
-  class WebDavStorage implements AttachmentStorage {
-    async upload(attachment: Attachment): Promise<string> {
-      return attachment.id;
-    }
-  }
-
-  class UploadRequest {
+  class DailyReportService {
     constructor(
-      private readonly storage: AttachmentStorage,
+      private readonly clock: IClock,
+      private readonly logger: ILogger,
     ) {}
 
-    async upload(attachment: Attachment): Promise<string> {
-      return await this.storage.upload(attachment);
+    create(userId: string): string {
+      const date = this.clock.now().toISOString().slice(0, 10);
+      const title = `Report ${date}`;
+
+      this.logger.log(`create report for ${userId}`);
+
+      return `${title}: ${userId}`;
     }
-  }
-
-  async function handleUpload(
-    attachment: Attachment,
-  ) {
-    const storage =
-      attachment.destination === "sftp"
-        ? new SftpStorage()
-        : attachment.destination === "webdav"
-          ? new WebDavStorage()
-          : new AwsStorage();
-
-    return await new UploadRequest(storage).upload(attachment);
   }
   ```
 
-  This is the conceptual center of the whole tutorial.
+  First name the points of variation. Then let the business object declare which capabilities it needs, instead of letting it decide which implementation to use.
 
-  `UploadRequest` no longer decides what storage to construct. Another part of
-  the system chooses the dependency first, then passes it into the workflow.
+  The more important change here is not the constructor syntax. It is that the dependency direction becomes clear:
 
-  No decorators or container are required for that idea to be true. DI is
-  already happening as soon as dependency selection and dependency usage stop
-  living in the same object.
+  - `DailyReportService` depends on capability contracts such as `IClock` and `ILogger`
+  - `SystemClock` and `ConsoleLogger` are only two possible implementations of those contracts
+  - External composition code is responsible for giving concrete implementations to the business object
 
-  ## Husky DI gives the composition a home
+  When an object declares the abstract capabilities it needs and the outside provides concrete implementations that satisfy those capabilities, dependency injection has happened.
 
-  ```ts title=homepage-tutorial.ts
+  ## Manual Composition Already Proves the Point
+
+  ```ts
+  const systemClock: IClock = {
+    now: () => new Date(),
+  };
+
+  const consoleLogger: ILogger = {
+    log: (message) => console.log(message),
+  };
+
+  const prodReportService = new DailyReportService(systemClock, consoleLogger);
+
+  prodReportService.create("user-1");
+
+  const fixedClock: IClock = {
+    now: () => new Date("2026-01-01T00:00:00.000Z"),
+  };
+
+  const memoryLogger: ILogger = {
+    log: () => undefined,
+  };
+
+  const testReportService = new DailyReportService(fixedClock, memoryLogger);
+
+  testReportService.create("user-1");
+  ```
+
+  In a very small program, manual composition is completely fine.
+
+  Production can pass in `systemClock` and `consoleLogger`. Tests can directly swap them for `fixedClock` and `memoryLogger`.
+
+  This is a direct benefit of DI: the business object does not need to know whether it is running in test, development, or production.
+
+  ## Why Use a Container Then?
+
+  A container is not a prerequisite for DI. Containers usually appear because manual composition becomes repetitive, scattered, and hard to inspect as a system grows.
+
+  When a project has only one `DailyReportService`, writing `new DailyReportService(clock, logger)` by hand is very clear.
+
+  But real applications usually grow more objects:
+
+  - Multiple services need the same `IClock`
+  - Multiple services need the same `ILogger`
+  - Some objects should be created fresh on every resolution
+  - Some objects should be reused as a single instance within the container
+  - Test, development, and production environments need different composition rules
+  - Modules need to define which dependencies can be used from the outside
+
+  At that point, the problem is no longer "how do I pass in one parameter?" It becomes "where should the whole dependency graph live, how should it be reused, how should it be checked, and how should it be explained?"
+
+  That is the value `husky-di` tries to provide. It does not invent DI itself; it gives dependency composition an explicit, stable, inspectable runtime model.
+
+  ## Expressing the Same Thing in `husky-di`
+
+  ```ts
+  import {
+    LifecycleEnum,
+    createContainer,
+    createServiceIdentifier,
+    resolve,
+  } from "@husky-di/core";
+
+  interface IClock {
+    now(): Date;
+  }
+
+  interface ILogger {
+    log(message: string): void;
+  }
+
+  const IClock = createServiceIdentifier<IClock>("IClock");
+  const ILogger = createServiceIdentifier<ILogger>("ILogger");
+
+  class SystemClock implements IClock {
+    now(): Date {
+      return new Date();
+    }
+  }
+
+  class ConsoleLogger implements ILogger {
+    log(message: string): void {
+      console.log(message);
+    }
+  }
+
+  class DailyReportService {
+    private readonly clock = resolve(IClock);
+    private readonly logger = resolve(ILogger);
+
+    create(userId: string): string {
+      const date = this.clock.now().toISOString().slice(0, 10);
+      const title = `Report ${date}`;
+
+      this.logger.log(`create report for ${userId}`);
+
+      return `${title}: ${userId}`;
+    }
+  }
+
+  const IDailyReportService = createServiceIdentifier<DailyReportService>(
+    "IDailyReportService",
+  );
+
+  const container = createContainer("AppContainer");
+
+  container.register(IClock, {
+    useClass: SystemClock,
+  });
+
+  container.register(ILogger, {
+    useClass: ConsoleLogger,
+    lifecycle: LifecycleEnum.singleton,
+  });
+
+  container.register(IDailyReportService, {
+    useClass: DailyReportService,
+  });
+
+  const reportService = container.resolve(IDailyReportService);
+  ```
+
+  `@husky-di/core` emphasizes explicit registration and explicit resolution.
+
+  This is still the same daily report service. The difference is that the composition rules are managed by the container.
+
+  Several things are now explicit:
+
+  - `IClock` and `ILogger` are runtime-visible dependency identifiers
+  - `register()` describes the composition relationship between an identifier and an implementation
+  - `useClass` means this identifier is implemented by this class
+  - `LifecycleEnum.singleton` describes the reuse rule for the logger instance
+  - `container.resolve()` is the resolution entry point
+  - `resolve()` inside class fields reads the current resolution context while the container is creating the object
+
+  In other words, `husky-di` does not hide dependencies. It gathers dependency relationships into one place that can be inspected and reasoned about.
+
+  One important detail: `resolve()` is not a global lookup function that can be called anywhere. It depends on the context created while a container is resolving an object. If you manually call `new DailyReportService()`, those fields cannot be resolved.
+
+  If you prefer to declare dependencies directly in constructor parameters, you can use `@husky-di/decorator` on top of `core`.
+
+  If you truly need to assemble objects manually, you can also do that inside `useFactory`.
+
+  ## Tests Only Replace Composition Rules
+
+  ```ts
   import {
     createContainer,
     createServiceIdentifier,
     resolve,
   } from "@husky-di/core";
 
-  type StorageProvider = "aws" | "sftp" | "webdav";
-
-  interface Attachment {
-    id: string;
-    localPath: string;
-    destination: StorageProvider;
+  interface IClock {
+    now(): Date;
   }
 
-  interface AttachmentStorage {
-    upload(attachment: Attachment): Promise<string>;
+  interface ILogger {
+    log(message: string): void;
   }
 
-  class AwsStorage implements AttachmentStorage {
-    async upload(attachment: Attachment): Promise<string> {
-      return attachment.id;
+  const IClock = createServiceIdentifier<IClock>("IClock");
+  const ILogger = createServiceIdentifier<ILogger>("ILogger");
+
+  class DailyReportService {
+    private readonly clock = resolve(IClock);
+    private readonly logger = resolve(ILogger);
+
+    create(userId: string): string {
+      const date = this.clock.now().toISOString().slice(0, 10);
+
+      this.logger.log(`create report for ${userId}`);
+
+      return `Report ${date}: ${userId}`;
     }
   }
 
-  class SftpStorage implements AttachmentStorage {
-    async upload(attachment: Attachment): Promise<string> {
-      return attachment.id;
-    }
-  }
+  const IDailyReportService = createServiceIdentifier<DailyReportService>(
+    "IDailyReportService",
+  );
 
-  class WebDavStorage implements AttachmentStorage {
-    async upload(attachment: Attachment): Promise<string> {
-      return attachment.id;
-    }
-  }
+  const logs: string[] = [];
 
-  const IStorageProvider =
-    createServiceIdentifier<StorageProvider>("IStorageProvider");
-  const IAttachmentStorage =
-    createServiceIdentifier<AttachmentStorage>("IAttachmentStorage");
-  const IUploadRequest =
-    createServiceIdentifier<UploadRequest>("IUploadRequest");
+  const testContainer = createContainer("TestContainer");
 
-  class UploadRequest {
-    private readonly storage = resolve(IAttachmentStorage);
-
-    async upload(attachment: Attachment): Promise<string> {
-      return await this.storage.upload(attachment);
-    }
-  }
-
-  const container = createContainer("HomepageTutorialContainer");
-
-  container.register(IStorageProvider, {
-    useValue: "sftp",
-  });
-
-  container.register(IAttachmentStorage, {
-    useFactory: () => {
-      const provider = resolve(IStorageProvider);
-
-      if (provider === "sftp") {
-        return new SftpStorage();
-      }
-
-      if (provider === "webdav") {
-        return new WebDavStorage();
-      }
-
-      return new AwsStorage();
+  testContainer.register(IClock, {
+    useValue: {
+      now: () => new Date("2026-01-01T00:00:00.000Z"),
     },
   });
 
-  container.register(IUploadRequest, {
-    useClass: UploadRequest,
+  testContainer.register(ILogger, {
+    useValue: {
+      log: (message: string) => logs.push(message),
+    },
   });
 
-  const request = container.resolve(IUploadRequest);
-  ```
-
-  This is where `husky-di` enters the story.
-
-  The library does not invent dependency injection. It gives the wiring rules a
-  single, explicit, inspectable home:
-
-  - identifiers keep runtime names stable
-  - `register()` makes assembly visible
-  - `useClass` plus `resolve()` keeps the no-decorator core workflow compact
-
-  So the code stays close to the mental model you just built, but the
-  composition stops being scattered across request handlers and setup files.
-
-  ## Testing gets easier because the puzzle pieces are swappable
-
-  ```ts title=homepage-tutorial.ts
-  import {
-    createContainer,
-    createServiceIdentifier,
-    resolve,
-  } from "@husky-di/core";
-
-  type StorageProvider = "aws" | "sftp" | "webdav";
-
-  interface Attachment {
-    id: string;
-    localPath: string;
-    destination: StorageProvider;
-  }
-
-  interface AttachmentStorage {
-    upload(attachment: Attachment): Promise<string>;
-  }
-
-  const IAttachmentStorage =
-    createServiceIdentifier<AttachmentStorage>("IAttachmentStorage");
-  const IUploadRequest =
-    createServiceIdentifier<UploadRequest>("IUploadRequest");
-
-  class UploadRequest {
-    private readonly storage = resolve(IAttachmentStorage);
-
-    async upload(attachment: Attachment): Promise<string> {
-      return await this.storage.upload(attachment);
-    }
-  }
-
-  class FakeStorage implements AttachmentStorage {
-    public readonly uploaded: Attachment[] = [];
-
-    async upload(attachment: Attachment): Promise<string> {
-      this.uploaded.push(attachment);
-      return attachment.id;
-    }
-  }
-
-  const container = createContainer("HomepageTutorialTestContainer");
-
-  container.register(IAttachmentStorage, {
-    useValue: new FakeStorage(),
+  testContainer.register(IDailyReportService, {
+    useClass: DailyReportService,
   });
 
-  container.register(IUploadRequest, {
-    useClass: UploadRequest,
-  });
+  const reportService = testContainer.resolve(IDailyReportService);
+  const report = reportService.create("user-1");
 
-  async function testUploadRequest() {
-    const request = container.resolve(IUploadRequest);
-    const storage = container.resolve(IAttachmentStorage);
+  if (report !== "Report 2026-01-01: user-1") {
+    throw new Error("Expected report to use fixed clock.");
+  }
 
-    const attachment: Attachment = {
-      id: "attachment-1",
-      localPath: "/tmp/readme.txt",
-      destination: "aws",
-    };
-
-    const uploadedId = await request.upload(attachment);
-
-    console.log(uploadedId);
-    console.log(storage.uploaded.length);
+  if (logs.length !== 1) {
+    throw new Error("Expected report creation to be logged.");
   }
   ```
 
-  This is the payoff most people feel the fastest.
+  The same `DailyReportService` does not need business-code changes in tests. Only the registrations change.
 
-  Once the seam is explicit, you can replace a real dependency with a fake
-  using the same container API. The test stays focused on the workflow
-  contract, not on vendor behavior or hidden internal state.
+  The test can now focus on the behavior of the daily report service instead of the system clock, console output, or whatever the object secretly created internally.
 
-  That is why dependency injection keeps coming up in good architecture
-  conversations. It is not about ceremony. It is about making change,
-  debugging, and testing feel mechanical instead of fragile.
+  This is one of DI's most direct testing benefits: replacing dependencies becomes replacing composition rules.
+
+  ## The Layers of `husky-di`
+
+  `husky-di` has three core packages:
+
+  - `@husky-di/core`
+
+    Solves explicit registration, resolution, lifecycle management, middleware, parent-child containers, and error traces. Use it when you need a type-safe DI container with predictable behavior.
+
+  - `@husky-di/decorator`
+
+    Solves constructor injection based on TypeScript experimental decorators. Use it when you want to declare dependencies on constructor parameters.
+
+  - `@husky-di/module`
+
+    Solves ESM-like module declarations, imports, exports, and aliasing. Use it when you need to manage larger module boundaries.
+
+  These three layers do not replace each other.
+
+  `core` is the foundation. It handles registration, resolution, lifecycles, and runtime predictability.
+
+  `decorator` enhances the declaration style. It lets you write dependencies on constructor parameters, while still relying on the container and resolution rules from `core`.
+
+  `module` enhances organizational boundaries. When a flat container is no longer enough to express the system structure, it uses declarations, imports, exports, and aliases to organize services into clearer module boundaries.
+
+  ## DI Does Not Mean More Abstractions Everywhere
+
+  DI is often useful, but it is not a reason to turn every piece of code into an interface.
+
+  These cases usually do not need extra composition:
+
+  - A simple pure function
+  - A short script with no pressure to change
+  - An object that only calls local utility functions
+  - An implementation detail with no near-term replacement need
+
+  To decide whether a dependency is worth injecting, ask three questions:
+
+  - Will it change between environments?
+  - Will it make tests unstable or slow?
+  - Will it force a business object to take on an extra selection responsibility?
+
+  If every answer is "no", a direct call is often simpler.
+
+  ## Misconception 1: DI Means Container
+
+  It does not.
+
+  As long as a dependency is provided from the outside instead of created inside the object, DI has already happened. A container is only a tool for managing composition rules.
+
+  ## Misconception 2: Once You Use a Container, Design Stops Mattering
+
+  Also no.
+
+  A container can only manage dependency relationships. It cannot decide which responsibilities should be split for you. The design benefit emphasized in this tutorial still comes from separating "choosing dependencies" from "using dependencies".
+
+  ## Misconception 3: DI Should Hide Runtime Details
+
+  For `husky-di`, it is the opposite.
+
+  This project emphasizes:
+
+  - Explicit registration
+  - Predictable resolution
+  - Clear lifecycle rules
+  - Inspectable error paths
+
+  I do not think DI should make a system feel mysterious. I would rather have a DI container make runtime behavior easier to understand.
+
+  If a project needs Spring-like configuration scanning, auto-discovery, and auto-registration, you can build a convention layer on top of `husky-di`. My preference is that this convention should still be able to fall back to clear registration results, rather than turning dependency relationships into implicit magic that is hard to trace.
+
+  ## The Core Judgment to Take Away
+
+  If you remember only one thing, remember this:
+
+  > Dependency injection is not "how do I use a container?" It is "who chooses a dependency, and who uses it?"
+
+  When choosing and using are separated:
+
+  - Business objects become more focused
+  - Replacing dependencies becomes more natural
+  - Tests become more stable
+  - System behavior becomes easier to reason about
+
+  What `husky-di` tries to do is put those composition rules into an explicit, stable, inspectable runtime model.
 </ScrollyTutorial>
