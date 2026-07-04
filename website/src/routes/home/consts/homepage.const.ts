@@ -6,10 +6,10 @@
 
 export const HOME_PAGE_LINKS = {
 	documentation:
-		"https://github.com/AEPKILL/husky-di/blob/main/packages/core/README.md#quick-start",
+		"https://github.com/AEPKILL/husky-di/blob/master/packages/core/README.md",
 	github: "https://github.com/AEPKILL/husky-di",
 	changelog:
-		"https://github.com/AEPKILL/husky-di/blob/main/packages/core/CHANGELOG.md",
+		"https://github.com/AEPKILL/husky-di/blob/master/packages/core/CHANGELOG.md",
 } as const;
 
 export const HOME_PAGE_HERO_BADGE_LABEL = "Type-Safe & Deterministic";
