@@ -6,7 +6,7 @@
 
 export const HOME_PAGE_LINKS = {
 	documentation:
-		"https://github.com/AEPKILL/husky-di/tree/main/packages/core#quick-start",
+		"https://github.com/AEPKILL/husky-di/blob/main/packages/core/README.md#quick-start",
 	github: "https://github.com/AEPKILL/husky-di",
 	changelog:
 		"https://github.com/AEPKILL/husky-di/blob/main/packages/core/CHANGELOG.md",
