@@ -20,7 +20,7 @@ export const DEFAULT_CONFIG: CodeStandardConfig = {
 		"docs",
 		"node_modules",
 	],
-	packageRootNames: ["packages", "scripts"],
+	packageRootNames: ["packages", "examples", "scripts"],
 	sourceDirectoryNames: [
 		"constants",
 		"consts",

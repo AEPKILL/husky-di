@@ -1,0 +1,21 @@
+{
+	"name": "@husky-di/example-basic",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"predev": "pnpm --filter @husky-di/core build",
+		"dev": "tsx src/main.ts",
+		"prestart": "pnpm --filter @husky-di/core build",
+		"start": "tsx src/main.ts",
+		"pretypecheck": "pnpm --filter @husky-di/core build",
+		"typecheck": "tsc -p tsconfig.json --noEmit"
+	},
+	"dependencies": {
+		"@husky-di/core": "workspace:*"
+	},
+	"devDependencies": {
+		"@types/node": "^25.5.0",
+		"tsx": "^4.20.5",
+		"typescript": "^6.0.3"
+	}
+}
