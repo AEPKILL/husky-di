@@ -12,23 +12,96 @@
 
 import type { ServiceIdentifier } from "@/types/service-identifier.type";
 
+const serviceIdentifierMetadataRegistry = new Map<
+	ServiceIdentifier<unknown>,
+	unknown
+>();
+
+/**
+ * Options for creating a service identifier.
+ *
+ * @typeParam Metadata - The metadata type associated with the identifier
+ */
+export type CreateServiceIdentifierOptions<Metadata = unknown> = {
+	/**
+	 * Optional out-of-band metadata associated with the service identifier.
+	 *
+	 * @remarks
+	 * This metadata does not participate in container registration or
+	 * resolution behavior. It is intended for external consumers such as
+	 * tooling, adapters, or documentation helpers.
+	 */
+	readonly metadata?: Metadata;
+};
+
 /**
  * Creates a type-safe service identifier from a string or symbol.
  *
  * @typeParam T - The service type
  * @param id - The identifier, either a string or symbol
+ * @param options - Optional metadata associated with the identifier
  * @returns A type-safe service identifier
  *
  * @example
  * ```typescript
  * const UserService = createServiceIdentifier<IUserService>('UserService');
  * const TokenSymbol = createServiceIdentifier<string>(Symbol('token'));
+ * const RemoteUserService = createServiceIdentifier<IUserService>(
+ *   'RemoteUserService',
+ *   { metadata: { transport: 'http' } },
+ * );
  * ```
  */
-export function createServiceIdentifier<T>(
+export function createServiceIdentifier<T, Metadata = unknown>(
 	id: string | symbol,
+	options?: CreateServiceIdentifierOptions<Metadata>,
 ): ServiceIdentifier<T> {
-	return id as ServiceIdentifier<T>;
+	const serviceIdentifier = id as ServiceIdentifier<T>;
+
+	if (options && "metadata" in options) {
+		serviceIdentifierMetadataRegistry.set(
+			serviceIdentifier as ServiceIdentifier<unknown>,
+			options.metadata,
+		);
+	}
+
+	return serviceIdentifier;
+}
+
+/**
+ * Gets metadata associated with a service identifier.
+ *
+ * @remarks
+ * Metadata is stored out of band and does not affect registration or
+ * resolution behavior. For string identifiers, metadata is associated by
+ * string equality.
+ *
+ * @typeParam Metadata - The metadata type associated with the identifier
+ * @param serviceIdentifier - The service identifier
+ * @returns The associated metadata, if any
+ */
+export function getServiceIdentifierMetadata<Metadata = unknown>(
+	serviceIdentifier: ServiceIdentifier<unknown>,
+): Metadata | undefined {
+	return serviceIdentifierMetadataRegistry.get(serviceIdentifier) as
+		| Metadata
+		| undefined;
+}
+
+/**
+ * Checks whether metadata has been associated with a service identifier.
+ *
+ * @remarks
+ * This function distinguishes between "no metadata association exists" and
+ * "metadata was explicitly associated with the value `undefined`".
+ *
+ * @param serviceIdentifier - The service identifier
+ * @returns True when metadata has been associated with the identifier
+ */
+export function hasServiceIdentifierMetadata(
+	serviceIdentifier: ServiceIdentifier<unknown>,
+): boolean {
+	return serviceIdentifierMetadataRegistry.has(serviceIdentifier);
 }
 
 /**

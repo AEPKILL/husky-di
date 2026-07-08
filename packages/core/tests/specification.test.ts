@@ -17,7 +17,10 @@ import {
 	createContainer,
 	createRegistrationPlan,
 	createServiceIdentifier,
+	getServiceIdentifierMetadata,
+	getServiceIdentifierName,
 	globalMiddleware,
+	hasServiceIdentifierMetadata,
 	IContainer,
 	LifecycleEnum,
 	ResolveContainerScopeEnum,
@@ -423,6 +426,112 @@ describe("SPEC 4.2: Service Resolution", () => {
 
 			// Assert
 			expect(instance).toBe(parentService);
+		});
+	});
+
+	describe("S1.1: Service Identifier Metadata", () => {
+		it("should return associated metadata and preserve registration and resolution semantics", () => {
+			// Arrange
+			const metadata = {
+				module: "user",
+				transport: "http",
+			};
+			const serviceIdentifier = createServiceIdentifier<
+				ServiceA,
+				typeof metadata
+			>("IServiceWithMetadata", {
+				metadata,
+			});
+
+			childContainer.register(serviceIdentifier, {
+				useClass: ServiceA,
+			});
+
+			// Act
+			const resolvedMetadata =
+				getServiceIdentifierMetadata<typeof metadata>(serviceIdentifier);
+			const instance = childContainer.resolve("IServiceWithMetadata");
+			const identifierName = getServiceIdentifierName(serviceIdentifier);
+
+			// Assert
+			expect(resolvedMetadata).toEqual(metadata);
+			expect(hasServiceIdentifierMetadata(serviceIdentifier)).toBe(true);
+			expect(instance).toBeInstanceOf(ServiceA);
+			expect(identifierName).toBe("IServiceWithMetadata");
+		});
+
+		it("should return undefined and false when no metadata association exists", () => {
+			// Arrange
+			const serviceIdentifier = createServiceIdentifier<ServiceA>(
+				"IServiceWithoutMetadataInSpec",
+			);
+
+			// Act
+			const resolvedMetadata = getServiceIdentifierMetadata(serviceIdentifier);
+			const hasMetadata = hasServiceIdentifierMetadata(serviceIdentifier);
+
+			// Assert
+			expect(resolvedMetadata).toBeUndefined();
+			expect(hasMetadata).toBe(false);
+		});
+
+		it("should treat string metadata association as keyed by string equality", () => {
+			// Arrange
+			const metadata = {
+				tag: "billing",
+			};
+
+			createServiceIdentifier<ServiceA, typeof metadata>("IStringMetadataKey", {
+				metadata,
+			});
+
+			// Act
+			const resolvedMetadata =
+				getServiceIdentifierMetadata<typeof metadata>("IStringMetadataKey");
+			const hasMetadata = hasServiceIdentifierMetadata("IStringMetadataKey");
+
+			// Assert
+			expect(resolvedMetadata).toEqual(metadata);
+			expect(hasMetadata).toBe(true);
+		});
+
+		it("should treat symbol metadata association as keyed by symbol identity", () => {
+			// Arrange
+			const metadata = {
+				tag: "remote",
+			};
+			const symbolIdentifier = Symbol("ISymbolMetadataKey");
+
+			createServiceIdentifier<ServiceA, typeof metadata>(symbolIdentifier, {
+				metadata,
+			});
+
+			// Act
+			const resolvedMetadata =
+				getServiceIdentifierMetadata<typeof metadata>(symbolIdentifier);
+			const hasMetadata = hasServiceIdentifierMetadata(symbolIdentifier);
+
+			// Assert
+			expect(resolvedMetadata).toEqual(metadata);
+			expect(hasMetadata).toBe(true);
+		});
+
+		it("should report metadata association when metadata is explicitly undefined", () => {
+			// Arrange
+			const serviceIdentifier = createServiceIdentifier<ServiceA>(
+				"IUndefinedMetadataInSpec",
+				{
+					metadata: undefined,
+				},
+			);
+
+			// Act
+			const resolvedMetadata = getServiceIdentifierMetadata(serviceIdentifier);
+			const hasMetadata = hasServiceIdentifierMetadata(serviceIdentifier);
+
+			// Assert
+			expect(resolvedMetadata).toBeUndefined();
+			expect(hasMetadata).toBe(true);
 		});
 	});
 

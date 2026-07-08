@@ -84,7 +84,9 @@ export {
 } from "@/utils/resolve-record.util";
 export {
 	createServiceIdentifier,
+	getServiceIdentifierMetadata,
 	getServiceIdentifierName,
+	hasServiceIdentifierMetadata,
 } from "@/utils/service-identifier.util";
 export {
 	createContainerId,

@@ -37,6 +37,28 @@ type ServiceIdentifier<T> =
   | symbol;
 ```
 
+`createServiceIdentifier()` **MAY** associate out-of-band metadata with a
+created string or symbol service identifier.
+
+```typescript
+type CreateServiceIdentifierOptions<Metadata = unknown> = {
+  readonly metadata?: Metadata;
+};
+
+function createServiceIdentifier<T, Metadata = unknown>(
+  id: string | symbol,
+  options?: CreateServiceIdentifierOptions<Metadata>,
+): ServiceIdentifier<T>;
+
+function getServiceIdentifierMetadata<Metadata = unknown>(
+  serviceIdentifier: ServiceIdentifier<unknown>,
+): Metadata | undefined;
+
+function hasServiceIdentifierMetadata(
+  serviceIdentifier: ServiceIdentifier<unknown>,
+): boolean;
+```
+
 ### 3.2 Registration Options
 
 A registration **MUST** specify exactly one provider strategy:
@@ -188,6 +210,24 @@ When resolving a ServiceIdentifier, the container **MUST** search in the followi
 2. If not found, `parent` is defined, and `recursive !== false`, recursively search in the parent container.
 
 Parent-container fallback **MUST** remain enabled by default.
+
+**S1.1 Service Identifier Metadata**  
+Service identifier metadata **MUST NOT** affect registration, lookup,
+resolution, display name extraction, or equality semantics.
+
+- `getServiceIdentifierMetadata(serviceIdentifier)` **MUST** return the
+  associated metadata value when one exists.
+- `getServiceIdentifierMetadata(serviceIdentifier)` **MUST** return `undefined`
+  when no metadata association exists.
+- `hasServiceIdentifierMetadata(serviceIdentifier)` **MUST** return `true`
+  when metadata has been associated with the identifier, even if that metadata
+  value is explicitly `undefined`.
+- `hasServiceIdentifierMetadata(serviceIdentifier)` **MUST** return `false`
+  when no metadata association exists.
+- For string identifiers, metadata association **MUST** be keyed by string
+  equality.
+- For symbol identifiers, metadata association **MUST** be keyed by symbol
+  identity.
 
 **S2. Optional Resolution**  
 When `optional: true` is specified:
