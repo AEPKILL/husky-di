@@ -304,6 +304,34 @@ describe("SPEC 4.1: Service Registration", () => {
 			expect(() => cleanup()).not.toThrow();
 		});
 
+		it("should allow applying the same plan multiple times to the same container", () => {
+			// Arrange
+			const ITestValue = createServiceIdentifier<{ id: number }>("ITestValue");
+			const plan = createRegistrationPlan((register) => {
+				register(ITestValue, { useValue: { id: 1 } });
+				register(ITestValue, { useValue: { id: 2 } });
+			});
+
+			// Act
+			const cleanup1 = container.applyRegistrationPlan(plan);
+			const cleanup2 = container.applyRegistrationPlan(plan);
+
+			// Assert
+			expect(
+				container.resolve(ITestValue, { multiple: true }).map((i) => i.id),
+			).toEqual([1, 2, 1, 2]);
+			expect(container.resolve(ITestValue).id).toBe(2);
+
+			cleanup2();
+			expect(
+				container.resolve(ITestValue, { multiple: true }).map((i) => i.id),
+			).toEqual([1, 2]);
+			expect(container.resolve(ITestValue).id).toBe(2);
+
+			cleanup1();
+			expect(container.isRegistered(ITestValue)).toBe(false);
+		});
+
 		it("should roll back registered entries when a later plan entry fails", () => {
 			// Arrange
 			const ITestValue = createServiceIdentifier<{ id: number }>("ITestValue");

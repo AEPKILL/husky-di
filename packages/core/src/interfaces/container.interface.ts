@@ -464,6 +464,10 @@ export interface IServiceRegistry {
 	 * removes only the registrations created by this plan, leaving unrelated
 	 * registrations for the same service identifiers intact.
 	 *
+	 * The same registration plan may be applied multiple times, including to
+	 * the same container. Each application creates its own registrations and
+	 * returns an independent cleanup function.
+	 *
 	 * If any entry fails to register, entries already registered by this plan
 	 * are removed before the original error is rethrown.
 	 *

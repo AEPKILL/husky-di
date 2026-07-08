@@ -18,7 +18,8 @@ import type { ServiceIdentifier } from "@/types/service-identifier.type";
  * Creates a reusable registration plan.
  *
  * @param configure - Callback used to declare registration entries
- * @returns A reusable registration plan that can be applied to a container
+ * @returns A reusable registration plan that can be applied to one or more containers,
+ * including repeated applications to the same container
  *
  * @example
  * ```typescript

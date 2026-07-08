@@ -467,6 +467,7 @@ const cleanup = container.applyRegistrationPlan(plan);
 Why this is useful:
 
 - you can reuse the same registration set across multiple containers
+- you can apply the same plan multiple times to the same container, and each application returns its own cleanup
 - `applyRegistrationPlan()` returns a cleanup function
 - if one step fails while applying the plan, previously applied registrations are rolled back automatically
 

@@ -45,6 +45,10 @@ The plan cleanup returned by `applyRegistrationPlan()` removes only the registra
 entries created by that plan. It must not call `unregisterAll()` by identifier,
 because that would remove unrelated sibling registrations.
 
+The same plan may be applied more than once, including to the same container.
+Each application creates an independent set of registrations and returns its own
+cleanup function.
+
 If a plan application fails after some entries were already registered, the
 container rolls those entries back before rethrowing the original error.
 
@@ -56,5 +60,7 @@ container rolls those entries back before rethrowing the original error.
   recipe rather than a one-off bulk operation.
 - Plan application remains a thin composition over current core behavior.
   It does not introduce a second registry path or a separate lifecycle model.
+- Reapplying the same plan is an explicit, valid operation rather than an error
+  case that needs special tracking in the core container.
 - Plan cleanup can be used safely alongside other registrations for the same
   `ServiceIdentifier`.

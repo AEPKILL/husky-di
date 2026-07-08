@@ -168,8 +168,10 @@ The container **MUST** support `unregisterAll(serviceIdentifier)` by `ServiceIde
 A container **MUST** support applying a `RegistrationPlan`.
 
 - Plan entries **MUST** be registered in declaration order.
+- The same `RegistrationPlan` **MAY** be applied multiple times, including to the same container.
 - Applying a plan **MUST** return a disposer function.
 - Calling the returned disposer **MUST** remove exactly the registrations created by that plan.
+- Each plan application **MUST** return an independent disposer associated only with that application.
 - Calling the returned disposer after those registrations have already been removed **MUST** be a no-op.
 - The plan disposer **MUST NOT** remove unrelated registrations for the same `ServiceIdentifier`.
 - If any entry fails to register, the container **MUST** remove entries already registered by that plan and rethrow the failure.
