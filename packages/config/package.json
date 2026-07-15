@@ -3,16 +3,27 @@
 	"version": "0.0.0",
 	"private": true,
 	"type": "module",
+	"engines": {
+		"node": ">=23.6"
+	},
 	"exports": {
 		"./biome/base.json": "./biome/base.json",
 		"./biome/package-config.json": "./biome/package-config.json",
-		"./lint-staged": "./lint-staged.config.js",
-		"./rslib": "./rslib.config.js",
+		"./lint-staged": "./lint-staged.config.ts",
+		"./rslib": "./rslib.config.ts",
 		"./tsconfig/base.json": "./tsconfig/base.json",
-		"./vitest": "./vitest.config.js"
+		"./vitest": "./vitest.config.ts"
+	},
+	"scripts": {
+		"typecheck": "tsc -p tsconfig.json --noEmit"
 	},
 	"dependencies": {
 		"@rslib/core": "^0.20.1",
 		"vitest": "^4.1.2"
+	},
+	"devDependencies": {
+		"@types/node": "^25.5.0",
+		"lint-staged": "^16.4.0",
+		"typescript": "^6.0.3"
 	}
 }

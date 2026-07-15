@@ -4,7 +4,9 @@
  * @created 2026-07-15 22:15:00
  */
 
-const lintStagedConfiguration = {
+import type { Configuration } from "lint-staged";
+
+const lintStagedConfiguration: Configuration = {
 	"*.{js,ts,jsx,tsx}": ["biome check --write --no-errors-on-unmatched"],
 	"*.json": ["biome check --write --no-errors-on-unmatched"],
 	"*.{css,scss,sass,less}": ["biome check --write --no-errors-on-unmatched"],

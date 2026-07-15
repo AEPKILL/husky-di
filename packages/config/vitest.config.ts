@@ -5,9 +5,13 @@
  */
 
 import { fileURLToPath } from "node:url";
+import type { ViteUserConfig } from "vitest/config";
 import { defineConfig, mergeConfig } from "vitest/config";
 
-export function createVitestConfig(configFileUrl, overrides = {}) {
+export function createVitestConfig(
+	configFileUrl: string,
+	overrides: ViteUserConfig = {},
+): ViteUserConfig {
 	const baseConfiguration = defineConfig({
 		test: {},
 		resolve: {
