@@ -24,6 +24,7 @@
 		"three": "^0.185.0"
 	},
 	"devDependencies": {
+		"@husky-di/config": "workspace:*",
 		"@mdx-js/rollup": "^3.1.1",
 		"@tailwindcss/vite": "^4.3.1",
 		"@types/mdx": "^2.0.14",

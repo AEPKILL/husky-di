@@ -26,6 +26,7 @@
 	},
 	"devDependencies": {
 		"@biomejs/biome": "2.4.15",
+		"@husky-di/config": "workspace:*",
 		"@rslib/core": "^0.20.1",
 		"@types/node": "^25.5.0",
 		"reflect-metadata": "^0.2.2",

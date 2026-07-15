@@ -1,0 +1,13 @@
+{
+	"files": {
+		"includes": [
+			"*.js",
+			"*.json",
+			"*.ts",
+			"src/**",
+			"tests/**",
+			"plugins/**",
+			"!!dist"
+		]
+	}
+}

@@ -1,10 +1,7 @@
 /**
- * @filename: lint-staged.config.js
- * @type {import('lint-staged').Configuration}
- *
+ * @overview Re-exports the shared workspace lint-staged configuration.
+ * @author AEPKILL
+ * @created 2026-07-15 22:15:00
  */
-export default {
-	"*.{js,ts,jsx,tsx}": ["biome check --write --no-errors-on-unmatched"],
-	"*.json": ["biome check --write --no-errors-on-unmatched"],
-	"*.{css,scss,sass,less}": ["biome check --write --no-errors-on-unmatched"],
-};
+
+export { default } from "@husky-di/config/lint-staged";

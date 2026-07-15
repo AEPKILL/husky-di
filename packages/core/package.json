@@ -21,6 +21,7 @@
 		"bench": "vitest bench --run"
 	},
 	"devDependencies": {
+		"@husky-di/config": "workspace:*",
 		"@rslib/core": "^0.20.1",
 		"@types/node": "^25.5.0",
 		"typescript": "^6.0.3",

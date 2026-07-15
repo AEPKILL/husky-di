@@ -1,25 +1,7 @@
-import { defineConfig } from "@rslib/core";
+/**
+ * @overview Re-exports the shared workspace Rslib configuration.
+ * @author AEPKILL
+ * @created 2026-07-15 22:15:00
+ */
 
-export default defineConfig({
-	resolve: {
-		alias: {
-			"@": "./src",
-		},
-	},
-	output: {
-		sourceMap: true,
-	},
-	lib: [
-		{
-			bundle: false,
-			format: "esm",
-			syntax: ["node 18"],
-			dts: true,
-		},
-		{
-			bundle: false,
-			format: "cjs",
-			syntax: ["node 18"],
-		},
-	],
-});
+export { default } from "@husky-di/config/rslib";

@@ -13,6 +13,7 @@
 		"typecheck": "tsc -p tsconfig.json --noEmit"
 	},
 	"devDependencies": {
+		"@husky-di/config": "workspace:*",
 		"@types/node": "^25.5.0",
 		"tsx": "^4.21.0",
 		"typescript": "^6.0.3"
