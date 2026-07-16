@@ -12,7 +12,7 @@
 		"./lint-staged": "./lint-staged.config.ts",
 		"./rslib": "./rslib.config.ts",
 		"./tsconfig/base.json": "./tsconfig/base.json",
-		"./vitest": "./vitest.config.ts"
+		"./vitest": "./vitest-config.factory.ts"
 	},
 	"scripts": {
 		"typecheck": "tsc -p tsconfig.json --noEmit"

@@ -12,6 +12,7 @@
 	"editor.codeActionsOnSave": {
 		"source.fixAll.biome": "explicit"
 	},
+	"vitest.configSearchPatternInclude": "packages/{core,decorator,module}/vitest.config.ts",
 	"[javascript]": {
 		"editor.defaultFormatter": "biomejs.biome"
 	},
