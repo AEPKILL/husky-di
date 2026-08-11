@@ -1,0 +1,10 @@
+{
+	"extends": "@husky-di/config/tsconfig/base.json",
+	"compilerOptions": {
+		"rootDir": "./src",
+		"paths": {
+			"@/*": ["./src/*"]
+		}
+	},
+	"include": ["src"]
+}

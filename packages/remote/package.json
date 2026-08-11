@@ -1,0 +1,32 @@
+{
+	"name": "@husky-di/remote",
+	"version": "0.0.0",
+	"type": "module",
+	"exports": {
+		".": {
+			"types": "./dist/index.d.ts",
+			"import": "./dist/index.js",
+			"require": "./dist/index.cjs"
+		}
+	},
+	"main": "./dist/index.cjs",
+	"types": "./dist/index.d.ts",
+	"files": [
+		"dist"
+	],
+	"scripts": {
+		"build": "rslib build",
+		"dev": "rslib build --watch",
+		"test": "vitest run"
+	},
+	"devDependencies": {
+		"@husky-di/config": "workspace:*",
+		"@rslib/core": "^0.20.1",
+		"@types/node": "^25.5.0",
+		"typescript": "^6.0.3",
+		"vitest": "^4.1.2"
+	},
+	"publishConfig": {
+		"access": "public"
+	}
+}
