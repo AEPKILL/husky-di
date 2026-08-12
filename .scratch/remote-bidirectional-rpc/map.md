@@ -34,6 +34,7 @@ Status: open
 - 高级能力渐进暴露：重连、重试、ACK、codec 和未来 streaming 只在相关场景中出现，不污染默认调用路径。
 - 名称和结构遵循使用者心智模型：`Connector` 主动连接，`Acceptor` 被动接收；连接后双方都通过同一种 `RpcPeer` 模型调用与暴露服务。只有拓扑确实不对称的地方才使用不同 API。
 - 状态、错误和所有权必须可发现：断线时何时失败、谁负责 `dispose()`、批量调用如何表达部分失败，都要能从类型、命名和返回值看出，不能依赖隐藏上下文或隐式队列。
+- “常见路径不暴露 transport”只约束 RPC caller；adapter author 同样是使用者，必须能从公开 Connector/Acceptor/Physical Connection seam 看见建连、监听、传输单位、I/O admission/backpressure、failure、ownership 与 disposal 的真实成本。
 - 优先复用现有词汇和平台原语；不为假想扩展增加 wrapper、options 或透传方法。任何 public member 都必须通过删除测试：删除后若没有把必要复杂度转嫁给使用者，就不应存在。
 
 ## 尚未明确
@@ -45,6 +46,7 @@ Status: open
 ## 不在范围内
 
 - 本次 Wayfinder 工作中的生产实现；只有决策地图抵达目的地后才进入实施阶段。
+- 第一版的 Container 集成；本阶段在不假设 Container、Container 解析或 proxy registration 的前提下决定 exposure seam。
 - WebSocket、TCP、MessagePort、WebTransport 或其他具体协议的内置生产 adapter。范围内只有协议无关接缝和用于验证的内存 adapter。
 - 任一对等端进程重启后的持久化会话恢复。
 - 第一版中的流式 RPC 实现；范围内只有保留兼容接缝。

@@ -1,4 +1,4 @@
-# 决定服务 expose 与 Container 集成
+# 决定服务 exposure seam
 
 Type: prototype
 Status: open
@@ -7,4 +7,4 @@ Parent: [协议无关的双向 RPC](../map.md)
 
 ## 问题
 
-本地服务 expose 和远程 proxy registration 应当在什么 seam 与 `@husky-di/core` 相接？决定已 expose 的 `RemoteServiceIdentifier` 如何定位或 resolve 本地 implementation、是否每次 call 都重新 resolve、Acceptor 级 exposure 如何作用于当前和未来的 peer、proxy 如何注册进 Container，以及由哪个 cleanup 或 disposal owner 移除 registration；这些操作都不能与连接建立耦合。
+不考虑 Container 集成时，本地服务 exposure 应当由哪个准确的公开 owner 与 method 表达？决定直接借用 implementation 是否足够，若不足则哪个真实场景要求 factory/provider；还需决定 implementation 如何与 `RemoteServiceIdentifier` 绑定、一次 exposure 作用于哪些当前和未来 peer、重复 wire name如何处理、cleanup 与 aggregate disposal 如何撤销 exposure，以及多个 Connector/Acceptor 是否共享同一 exposure 集。这些操作都不能与连接建立耦合，也不能复制到主动/被动 topology 上。
