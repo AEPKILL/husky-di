@@ -1,9 +1,9 @@
 /**
- * @overview PROTOTYPE ONLY — concrete WebSocket RPC adapter implementations.
+ * @overview 仅供原型验证——WebSocket RPC 适配器的具体实现。
  *
- * The platform interfaces intentionally match only the browser WebSocket and
- * `ws` members this prototype uses. Constructor injection keeps this throwaway
- * design type-checkable without adding Express or `ws` as repository deps.
+ * 平台接口刻意只描述此原型实际使用的浏览器 WebSocket 与 `ws` 成员。
+ * 通过构造器注入，这份一次性设计无需将 Express 或 `ws` 添加为仓库依赖，
+ * 也能通过类型检查。
  *
  * @author AEPKILL
  * @created 2026-08-13 00:20:00
@@ -15,6 +15,8 @@ import type {
 	IRpcAcceptorAdapter,
 	IRpcConnectorAdapter,
 } from "./public-interface";
+
+// ── 平台最小结构类型与公开 adapter factory ────────────────────────────────
 
 export interface IWebSocketFrameLimits {
 	readonly maxInboundFrames: number;
@@ -210,6 +212,8 @@ export function createBrowserWebSocketConnectorAdapter(
 	};
 }
 
+// ── 平台兼容实现：Node / `ws` 被动端 ─────────────────────────────────────
+
 class WebSocketConnectionListener implements IPhysicalConnectionListener {
 	public readonly closed: Promise<void>;
 	private readonly _resolveClosed: () => void;
@@ -315,7 +319,7 @@ class WebSocketConnectionListener implements IPhysicalConnectionListener {
 			return;
 		}
 		if (pathname !== this._path) {
-			// Another upgrade router may own unmatched paths.
+			// 未匹配的路径可能由其他 upgrade 路由器负责。
 			return;
 		}
 
@@ -359,8 +363,7 @@ class WebSocketConnectionListener implements IPhysicalConnectionListener {
 		this._server.off("error", this._onFailure);
 		this._server.off("close", this._onServerClose);
 		this._webSocketServer.off("error", this._onFailure);
-		// The borrowed HTTP server and already accepted WebSockets remain owned
-		// by the application and RPC topology respectively.
+		// 借入的 HTTP 服务器与已接受的 WebSocket，分别仍归应用和 RPC 拓扑所有。
 	}
 
 	private _attachLiveFailureListeners(): void {
@@ -480,6 +483,8 @@ class NodeWebSocketPhysicalConnection implements IPhysicalConnection {
 	}
 }
 
+// ── 平台兼容实现：浏览器主动端 ────────────────────────────────────────────
+
 class BrowserWebSocketPhysicalConnection implements IPhysicalConnection {
 	public readonly frames: AsyncIterable<Uint8Array>;
 	private readonly _queue: BoundedFrameQueue;
@@ -518,8 +523,8 @@ class BrowserWebSocketPhysicalConnection implements IPhysicalConnection {
 			this._assertWritable();
 		}
 
-		// Browser send() consumes the passed bytes synchronously. bufferedAmount is
-		// the only portable admission signal; browsers expose no drain event.
+		// 浏览器的 send() 会同步消费所传入的字节。bufferedAmount 是唯一可移植的
+		// 准入信号；浏览器没有提供 drain 事件。
 		this._webSocket.send(frame.slice().buffer);
 	}
 
@@ -542,8 +547,8 @@ class BrowserWebSocketPhysicalConnection implements IPhysicalConnection {
 		this._disposed = true;
 		this._detach();
 		this._queue.fail(new Error("The WebSocket connection was disposed"));
-		// Browsers have no terminate(); local I/O fails immediately, while close()
-		// may still transmit bytes already queued by the user agent.
+		// 浏览器没有 terminate()；本地 I/O 会立即失败，但 close() 仍可能发出
+		// 用户代理已经排队的字节。
 		this._webSocket.close();
 	}
 
@@ -599,6 +604,8 @@ class BrowserWebSocketPhysicalConnection implements IPhysicalConnection {
 	}
 }
 
+// ── 两端共享：帧队列与内部工具 ────────────────────────────────────────────
+
 class BoundedFrameQueue implements AsyncIterable<Uint8Array> {
 	public readonly termination: Promise<void>;
 	private readonly _resolveTermination: () => void;
@@ -620,8 +627,8 @@ class BoundedFrameQueue implements AsyncIterable<Uint8Array> {
 			resolveTermination = resolve;
 			rejectTermination = reject;
 		});
-		// Receive iteration observes the same failure. Avoid an unhandled rejection
-		// when no graceful end() caller is currently awaiting termination.
+		// 接收迭代也会观察到同一个错误。当前若没有等待 termination 的优雅 end()
+		// 调用方，则应避免产生未处理的 Promise 拒绝。
 		void this.termination.catch(() => undefined);
 		this._resolveTermination = () => resolveTermination?.();
 		this._rejectTermination = (error) => rejectTermination?.(error);

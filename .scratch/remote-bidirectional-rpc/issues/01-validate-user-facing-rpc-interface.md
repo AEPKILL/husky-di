@@ -47,7 +47,7 @@ Parent: [协议无关的双向 RPC](../map.md)
 ### 2026-08-12：成熟方案研究与三案原型
 
 - [面向使用者的 RPC interface 人体工学研究](../research/user-facing-rpc-interface-ergonomics.md)：以 Connect、Comlink、vscode-jsonrpc、Cap'n Proto、WHATWG `AbortSignal` 和 ECMAScript `Promise.allSettled` 的一方资料核对 runtime contract、proxy、exposure、stable handle、cancellation、batch、error、ownership 与 adapter seam。
-- [面向使用者的 RPC interface 公共声明](../user-facing-rpc-interface/public-interface.ts)、[root-centered](../user-facing-rpc-interface/root-centered.usage.ts)、[contract-centered](../user-facing-rpc-interface/contract-centered.usage.ts)、[functional-seams](../user-facing-rpc-interface/functional-seams.usage.ts)、[内存 adapter](../user-facing-rpc-interface/in-memory.usage.ts)与[类型校验](../user-facing-rpc-interface/type-validation.usage.ts)示例：公共 declarations、共享 fixture 与每个 caller usage 独立成文件，用同一场景比较三种结构。
+- [面向使用者的 RPC interface 公共声明](../user-facing-rpc-interface/public-interface.ts)、root-centered 的 [Connector](../user-facing-rpc-interface/root-centered/connector.usage.ts) 与 [Acceptor](../user-facing-rpc-interface/root-centered/acceptor.usage.ts)、contract-centered 的 [Connector](../user-facing-rpc-interface/contract-centered/connector.usage.ts) 与 [Acceptor](../user-facing-rpc-interface/contract-centered/acceptor.usage.ts)、functional-seams 的 [Connector](../user-facing-rpc-interface/functional-seams/connector.usage.ts) 与 [Acceptor](../user-facing-rpc-interface/functional-seams/acceptor.usage.ts)、[内存 adapter 场景](../user-facing-rpc-interface/in-memory/scenario.ts)与[类型校验](../user-facing-rpc-interface/type-validation.usage.ts)示例：公共 declarations、共享 fixture 与每个 caller topology 独立成文件，用同一场景比较三种结构。
 - 当前推荐以 root-centered 草案进入 HITL 评审：`createRemoteServiceIdentifier()` 以逐方法 descriptor map 固化 runtime contract，`createRpc()` 统一 exposure 和 session ownership；`Connector` / `Acceptor` 只保留主动 / 被动 topology。
 - 本票保持 `claimed`。尚待使用者裁决 RPC root 的 naming / aggregate ownership、cancellation 参数、`Acceptor.onPeer()` 和 adapter transport model；裁决前不把原型视为已接受 interface，也不更新地图的 Decisions so far。
 
@@ -65,7 +65,14 @@ Parent: [协议无关的双向 RPC](../map.md)
 
 ### 2026-08-13：独立 usage 与 WebSocket / Express 装配
 
-- 根据使用者反馈，每种结构、内存装配、类型校验和 [WebSocket / Express 装配](../user-facing-rpc-interface/websocket-express.usage.ts)现在各有独立文件；公共业务 fixture 保留在同目录，不从一种 usage 导入另一种 usage。
+- 根据使用者反馈，每种结构、内存装配、类型校验、WebSocket / Express 的[浏览器 Connector](../user-facing-rpc-interface/websocket-express/connector.usage.ts)、[Express Acceptor](../user-facing-rpc-interface/websocket-express/acceptor.usage.ts)和[平台兼容层](../user-facing-rpc-interface/websocket-express/platform.ts)现在各有独立文件；公共业务 fixture 保留在同目录，不从一种 usage 导入另一种 usage。应用文件只展示 adapter 选择、RPC 装配与调用；Express、Node HTTP 和 `ws` 的结构类型与桥接集中在平台文件。
 - [WebSocket adapter 原型](../user-facing-rpc-interface/websocket-adapters.ts)没有隐藏 Connector / Acceptor seam：浏览器 connector 展开 startup abort、`bufferedAmount` admission 与无 `terminate()` 的限制；Node acceptor 展开 `ws` 的 `noServer` / `handleUpgrade`、完整 frame copy、双限 bounded queue、close/error 映射和 listener ownership。
 - Express 只作为普通 HTTP request listener，与 RPC 共用一个外部 `http.Server`；adapter 只订阅 `/rpc` upgrade，dispose 会移除订阅并关闭自己的 `WebSocketServer` router，但不会关闭借用的 HTTP server 或已转交给 RPC topology 的连接。Express middleware 不会自动处理 Upgrade；认证/session 不属于本原型，若未来需要，adapter 必须提供可排序、可拒绝的 upgrade 接缝，不能假设另挂一个 EventEmitter listener 就足够。
-- 仓库没有 Express / `ws` 的直接依赖，因此 throwaway prototype 以两者真实使用成员的泛型最小结构类型和 constructor injection 保持可编译，没有把传递依赖当成可用公共依赖；`express()` 与 `createServer(app)` 的两步装配仍在 usage 中可见，而具体 application 类型由调用方流入，所以原型自身不依赖 `@types/node`。示例同时展开了 `ws` 的 EventEmitter overload、具体 Node HTTP/stream types 与最小 adapter port 之间的薄适配。该 adapter 是验证 framed-pull seam 现实成本的原型，不表示地图已经决定内置 WebSocket production adapter。
+- 仓库没有 Express / `ws` 的直接依赖，因此 throwaway prototype 以两者真实使用成员的泛型最小结构类型和 constructor injection 保持可编译，没有把传递依赖当成可用公共依赖；`express()` 与 `createServer(app)` 的两步装配仍在 usage 中可见，而具体 application 类型由调用方流入，所以原型自身不依赖 `@types/node`。平台兼容文件展开了 `ws` 的 EventEmitter overload、具体 Node HTTP/stream types 与最小 adapter port 之间的薄适配。该 adapter 是验证 framed-pull seam 现实成本的原型，不表示地图已经决定内置 WebSocket production adapter。
+
+### 2026-08-14：按 Connector / Acceptor topology 拆分 usage
+
+- 所有候选现在按类别进入独立目录；每个目录的 `connector.usage.ts` 与 `acceptor.usage.ts` 分别只创建一种 topology。独立入口各自管理自身 owner；需要验证共享 services / exposure 的旧场景则由同目录 `scenario.ts` 显式创建公共 owner 并注入两侧，不通过模块级可变状态暗中耦合。
+- 每个 caller 候选的 `remote-services.ts` 只保存两端共用的不可变 descriptor。现代三案 `refined-root/`、`direct-tasks/` 和 `eager-connection/` 另有本目录专属的 `rpc-interface.ts`；较早三案继续共用顶层 `public-interface.ts`。
+- [内存场景](../user-facing-rpc-interface/in-memory/scenario.ts)只编排独立的 [Connector 用例](../user-facing-rpc-interface/in-memory/connector.usage.ts)与 [Acceptor 用例](../user-facing-rpc-interface/in-memory/acceptor.usage.ts)；WebSocket / Express 也按共享 descriptor、Connector、Acceptor 与 platform 分开。旧根级 usage 路径已删除，不保留 redirect 或 barrel。
+- Transport 成本探针位于 `transport-seams/`，固定拆成 `rpc-interface.ts`、`physical-io.usage.ts`、`connector.usage.ts`、`acceptor.usage.ts` 与 `scenario.ts`；Physical I/O、主动/被动生命周期和固定场景不再混在单个大文件中。

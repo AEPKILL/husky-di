@@ -1,19 +1,21 @@
 /**
- * @overview PROTOTYPE ONLY — shared declarations for RPC interface comparison.
+ * @overview 仅供原型验证——用于比较 RPC 接口的共享声明。
  *
- * This file is a throwaway discussion asset for
- * "验证面向用户的 RPC 接口". It is not a package proposal and must not be
- * exported from @husky-di/remote. Usage examples live beside this file as
- * separate *.usage.ts modules.
+ * 本文件是“验证面向用户的 RPC 接口”议题的一次性讨论材料。它不是包 API 提案，
+ * 也绝不得从 `@husky-di/remote` 导出。用法示例作为独立的 `*.usage.ts`
+ * 模块与本文件并列存放。
  *
- * Evidence: ../research/user-facing-rpc-interface-ergonomics.md
+ * 依据：../research/user-facing-rpc-interface-ergonomics.md
  *
  * @author AEPKILL
  * @created 2026-08-12 21:34:00
  */
 
-// Stand-ins for existing @husky-di/core declarations keep this prototype a
-// single independently type-checkable file.
+// 下列占位声明代替现有的 `@husky-di/core` 声明，使该原型保持为
+// 可独立执行类型检查的单文件。
+
+// ── 面向调用方与契约作者的共享类型 ──────────────────────────────────────
+
 export type Cleanup = () => void;
 
 export interface IDisposable {
@@ -35,7 +37,7 @@ export declare function createServiceIdentifier<T>(
 	id: string | symbol,
 ): ServiceIdentifier<T>;
 
-// biome-ignore lint/suspicious/noExplicitAny: Method-key extraction must accept every parameter list without constraining variance.
+// biome-ignore lint/suspicious/noExplicitAny: 方法键提取必须接受任意参数列表，且不限制变型。
 type AnyMethod = (...args: any[]) => unknown;
 
 type IsAny<T> = 0 extends 1 & T ? true : false;
@@ -125,7 +127,7 @@ type ValidateMethodDefinition<
 			: never
 		: never;
 
-type ValidateMethodDefinitions<T, Definitions extends object> = {
+export type ValidateMethodDefinitions<T, Definitions extends object> = {
 	readonly [K in keyof Definitions]: K extends RemoteMethodKey<T>
 		? ValidateMethodDefinition<Extract<T[K], AnyMethod>, Definitions[K]>
 		: never;
@@ -190,79 +192,72 @@ export declare class RpcError extends Error {
 	readonly remote?: RemoteError;
 }
 
+// ── Adapter 作者接口与平台无关的内存实现 ─────────────────────────────────
+
 /**
- * One finite-lived, full-duplex Physical Connection.
+ * 一条生命期有限的全双工物理连接。
  *
- * Each `frames` item is exactly one complete encoded RPC frame. A message
- * transport can preserve its native boundary; a byte-stream adapter must add
- * and remove framing. The RPC implementation owns frame contents and codec.
+ * `frames` 中的每一项都恰好是一个编码完整的 RPC 帧。消息传输可以保留原生边界；
+ * 字节流适配器必须负责分帧与重组。帧内容和编解码器归 RPC 实现负责。
  */
 export interface IPhysicalConnection extends IDisposable {
 	/**
-	 * Single-consumer receive stream in transport order. Normal remote shutdown
-	 * ends iteration; transport failure throws from the iterator.
+	 * 按传输顺序提供的单消费者接收流。远程正常关闭时迭代结束；
+	 * 传输失败时迭代器抛出错误。
 	 *
-	 * Yielding a frame transfers a stable buffer to the RPC implementation; the
-	 * adapter must never mutate or reuse it. A push-only transport must use a
-	 * bounded queue when it cannot pause its source. Overflow is a connection
-	 * failure that throws from this iterator, never permission to grow without
-	 * bound.
+	 * 产出一帧即把内容稳定的缓冲区移交给 RPC 实现；适配器绝不得修改或复用它。
+	 * 仅支持推送的传输在无法暂停数据源时，必须使用有界队列。队列溢出属于
+	 * 连接故障，必须由该迭代器抛出，绝不意味着允许队列无界增长。
 	 */
 	readonly frames: AsyncIterable<Uint8Array>;
 
 	/**
-	 * Sends one complete frame.
+	 * 发送一个完整帧。
 	 *
-	 * Fulfillment means the adapter has copied/consumed the caller's bytes and
-	 * admitted the frame through its local backpressure mechanism. It does not
-	 * mean the peer received, decoded or acknowledged the frame.
+	 * Promise 完成表示适配器已复制或消费调用方的字节，并已通过本地背压机制
+	 * 接纳该帧。这不表示对等端已收到、解码或确认该帧。
 	 *
-	 * The RPC implementation awaits sends sequentially, so adapters need not
-	 * define ordering for concurrent calls.
+	 * RPC 实现会依次等待每次发送，因此适配器无需定义并发调用的顺序。
 	 */
 	send(frame: Uint8Array): Promise<void>;
 
 	/**
-	 * Gracefully finishes outbound transport after earlier sends. Later sends
-	 * reject. A transport without half-close may close both directions.
+	 * 在先前的发送完成后优雅结束出站传输。后续发送会被拒绝。
+	 * 不支持半关闭的传输可以同时关闭两个方向。
 	 *
-	 * This is deliberately distinct from synchronous `dispose()`, which aborts
-	 * pending I/O and need not flush.
+	 * 它刻意与同步的 `dispose()` 区分开；后者会中止待处理 I/O，且无需刷新缓冲区。
 	 */
 	end(): Promise<void>;
 }
 
-/** Active topology port. Each call creates a fresh Physical Connection. */
+/** 主动拓扑端口。每次调用都会创建一条新的物理连接。 */
 export interface IRpcConnectorAdapter {
 	/**
-	 * May be called again after loss to provide a replacement connection.
-	 * Abort rejects the pending attempt; configuration errors belong in the
-	 * concrete adapter factory and throw before this method is reached.
+	 * 连接丢失后可再次调用，以提供替代连接。中止会拒绝正在进行的尝试；
+	 * 配置错误应由具体适配器工厂处理，并在执行到该方法前抛出。
 	 */
 	connect(signal: AbortSignal): Promise<IPhysicalConnection>;
 }
 
-/** A live passive listener returned only after the endpoint is ready. */
+/** 仅在端点就绪后才返回的活跃被动监听器。 */
 export interface IPhysicalConnectionListener extends IDisposable {
-	/** Resolves after normal disposal; rejects on a later listener failure. */
+	/** 正常释放后完成；监听器后续失败时被拒绝。 */
 	readonly closed: Promise<void>;
 }
 
-/** Passive topology port. */
+/** 被动拓扑端口。 */
 export interface IRpcAcceptorAdapter {
 	/**
-	 * Starts listening and transfers ownership of every accepted connection to
-	 * `accept`. The returned listener owns only the adapter's subscription or
-	 * listening resource, never an externally supplied HTTP server.
+	 * 开始监听，并将每条已接受连接的所有权移交给 `accept`。返回的监听器
+	 * 只拥有适配器的订阅或监听资源，绝不拥有从外部传入的 HTTP 服务器。
 	 *
-	 * The promise fulfills only when listening is ready; `accept` is not called
-	 * before fulfillment. Initial failure rejects this promise. A later listener
-	 * failure rejects `listener.closed`. The signal only covers startup: after
-	 * this promise settles the adapter stops observing it, and the returned
-	 * listener alone controls the live endpoint.
+	 * 只有监听就绪后 Promise 才会完成；在此之前不会调用 `accept`。初始失败会
+	 * 拒绝该 Promise，监听器后续失败则会拒绝 `listener.closed`。信号只覆盖
+	 * 启动阶段：该 Promise 完成或被拒绝后，适配器便停止观察该信号，此后只有
+	 * 返回的监听器能控制活跃端点。
 	 *
-	 * The RPC-supplied `accept` never throws and takes ownership synchronously.
-	 * The adapter must not invoke it after listener disposal or closure.
+	 * RPC 提供的 `accept` 绝不抛出错误，并会同步接管所有权。监听器被释放或
+	 * 关闭后，适配器不得再调用它。
 	 */
 	listen(
 		accept: (connection: IPhysicalConnection) => void,
@@ -276,9 +271,9 @@ export interface MemoryRpcAdapterPair {
 }
 
 /**
- * Concrete test adapter using the same public seam as production adapters.
- * TransformStream writer promises make local backpressure observable instead
- * of hiding an unbounded queue in the prototype.
+ * 具体的测试适配器，使用与生产适配器相同的公开边界。
+ * `TransformStream` 写入器的 Promise 让本地背压可被观察，而不是在原型中
+ * 隐藏一个无界队列。
  */
 export function createMemoryRpcAdapterPair(): MemoryRpcAdapterPair {
 	let acceptConnection: ((connection: IPhysicalConnection) => void) | undefined;
@@ -384,7 +379,7 @@ class MemoryPhysicalConnection implements IPhysicalConnection {
 			throw new Error("The in-memory Physical Connection has ended its writes");
 		}
 
-		// Copy before awaiting so the caller may reuse its buffer immediately.
+		// 在等待前先复制，以便调用方可立即复用其缓冲区。
 		await this._writer.write(frame.slice());
 	}
 
@@ -441,30 +436,31 @@ function createMemoryPhysicalConnectionPair(): readonly [
 	];
 }
 
+// ── Adapter 传输接缝候选 ─────────────────────────────────────────────────
+
 /**
- * ADAPTER DESIGN ALTERNATIVES
+ * 适配器设计备选方案
  *
- * These three exact seams expose the complexity that the first prototype hid.
- * The root/contract/functional drafts below currently use the framed-pull seam
- * above; choosing the transport unit and consumption model remains HITL.
+ * 下列三种具体边界暴露了第一个原型所隐藏的复杂度。后文以根对象、契约和函数为中心的
+ * 草案目前都使用上文的完整帧拉取边界；传输单元和消费模型的选择仍需人工参与决策（HITL）。
  */
 export namespace AdapterAlternatives {
 	/**
-	 * Alternative 1 — raw byte chunks + AsyncIterable.
+	 * 备选方案 1——原始字节块 + `AsyncIterable`。
 	 *
-	 * Framing belongs to the RPC implementation. This maps naturally to TCP, but
-	 * discards WebSocket/MessagePort boundaries. The common framed-pull candidate
-	 * now also keeps graceful `end()` distinct from abortive `dispose()`.
+	 * 分帧归 RPC 实现负责。该方案可以自然映射到 TCP，但会丢弃 WebSocket 和
+	 * `MessagePort` 的边界。通用的完整帧拉取候选方案如今也明确区分优雅结束的 `end()`
+	 * 和中止式的 `dispose()`。
 	 */
 	export namespace RawByteStream {
 		export interface IPhysicalConnection extends IDisposable {
-			/** Ordered chunks; chunk boundaries carry no protocol meaning. */
+			/** 有序字节块；块边界不携带任何协议含义。 */
 			readonly bytes: AsyncIterable<Uint8Array>;
 
-			/** Local admission/backpressure only, never delivery or ACK. */
+			/** 只表示本地接纳或背压，绝不表示已投递或已确认。 */
 			write(bytes: Uint8Array): Promise<void>;
 
-			/** Gracefully finishes the write side after earlier writes. */
+			/** 在先前的写入完成后优雅结束写入端。 */
 			end(): Promise<void>;
 		}
 
@@ -473,18 +469,16 @@ export namespace AdapterAlternatives {
 		}
 
 		export interface IRpcAcceptorAdapter {
-			/** Fulfills when ready; iteration throws on later listener failure. */
+			/** 就绪后完成；监听器后续失败时，迭代会抛出错误。 */
 			listen(signal: AbortSignal): Promise<AsyncIterable<IPhysicalConnection>>;
 		}
 	}
 
 	/**
-	 * Alternative 2 — Web Platform streams end to end.
+	 * 备选方案 2——端到端使用 Web 平台流。
 	 *
-	 * Backpressure, graceful close, cancellation and stream errors are
-	 * standardized, but adapter authors must construct stream controllers
-	 * correctly and RPC code must lock readers/writers. Chunk boundaries still
-	 * carry no protocol meaning.
+	 * 背压、优雅关闭、取消和流错误均已标准化，但适配器作者必须正确构造流控制器，
+	 * RPC 代码也必须锁定读取器和写入器。字节块边界仍不携带任何协议含义。
 	 */
 	export namespace WebStreams {
 		export interface IPhysicalConnection extends IDisposable {
@@ -497,17 +491,17 @@ export namespace AdapterAlternatives {
 		}
 
 		export interface IRpcAcceptorAdapter {
-			/** Fulfills when ready; stream error reports later listener failure. */
+			/** 就绪后完成；监听器后续失败由流错误报告。 */
 			listen(signal: AbortSignal): Promise<ReadableStream<IPhysicalConnection>>;
 		}
 	}
 
 	/**
-	 * Alternative 3 — complete messages + callbacks.
+	 * 备选方案 3——完整消息 + 回调。
 	 *
-	 * This closely maps WebSocket and MessagePort. A raw byte transport must add
-	 * framing in its adapter. Inbound callbacks have no portable demand signal,
-	 * so the adapter must bound pre-attach and runtime buffering itself.
+	 * 该方案与 WebSocket 和 `MessagePort` 高度契合。原始字节传输必须在适配器中
+	 * 增加分帧。入站回调没有可跨平台使用的需求信号，因此适配器必须自行限制
+	 * 挂接前和运行时的缓冲规模。
 	 */
 	export namespace MessageCallbacks {
 		export interface PhysicalConnectionEvents {
@@ -517,10 +511,10 @@ export namespace AdapterAlternatives {
 		}
 
 		export interface IPhysicalConnection extends IDisposable {
-			/** Installs the sole sink exactly once and starts inbound delivery. */
+			/** 恰好安装一次唯一的接收端，并开始投递入站数据。 */
 			attach(events: PhysicalConnectionEvents): void;
 
-			/** Local admission/backpressure only, never delivery or ACK. */
+			/** 只表示本地接纳或背压，绝不表示已投递或已确认。 */
 			send(frame: Uint8Array): Promise<void>;
 		}
 
@@ -534,15 +528,16 @@ export namespace AdapterAlternatives {
 		}
 
 		export interface IRpcAcceptorAdapter extends IDisposable {
-			/** Fulfills when ready; later failure calls events.error exactly once. */
+			/** 就绪后完成；后续失败恰好调用一次 `events.error`。 */
 			listen(events: AcceptorEvents, signal: AbortSignal): Promise<void>;
 		}
 	}
 }
 
-// The result keeps the peer handle, not merely its array index. A caller can
-// correlate it with the exact object from Acceptor.peers even if peers change
-// while the batch is in flight.
+// ── 面向调用方的批量结果与公开接口草案 ───────────────────────────────────
+
+// 结果保留对等端句柄，而不只是其数组下标。即使批量调用进行期间对等端集合发生变化，
+// 调用方仍可将结果与 `Acceptor.peers` 中的确切对象关联。
 export type RpcPeerResult<Peer, T> =
 	| {
 			readonly peer: Peer;
@@ -581,12 +576,11 @@ export type RemoteServiceGroup<
 };
 
 /**
- * DRAFT A — ROOT-CENTERED
+ * 草案 A——以根对象为中心
  *
- * Mental model: one local RPC root owns shared exposure and every topology it
- * creates. Connector owns one stable Logical Session peer; Acceptor owns all
- * accepted peers. This is the recommended baseline because it hides the most
- * session/registry machinery behind the fewest concepts.
+ * 心智模型：一个本地 RPC 根对象拥有共享的服务暴露，以及它创建的每个拓扑。
+ * 连接器拥有一个稳定的逻辑会话对等端；接收器拥有所有已接受的对等端。
+ * 这是建议作为基线的方案，因为它用最少的概念隐藏了最多会话与注册表机制。
  */
 export namespace RootCentered {
 	export interface IRemoteServiceIdentifier<
@@ -595,8 +589,8 @@ export namespace RootCentered {
 	> {
 		readonly serviceIdentifier: ServiceIdentifier<T>;
 		readonly wireName: string;
-		// Runtime canonical form normalizes every `true` entry to
-		// `{ type: "unary", cancelable: false }` and freezes the result.
+		// 运行时规范形式会把每个 `true` 条目归一化为
+		// `{ type: "unary", cancelable: false }`，并冻结结果。
 		readonly methods: NormalizedRpcMethodDefinitions<Definitions>;
 	}
 
@@ -612,54 +606,53 @@ export namespace RootCentered {
 	): IRemoteServiceIdentifier<T, Definitions>;
 
 	export interface IRpcPeer {
-		// Safe before a Physical Connection exists. Calls, not proxy creation,
-		// perform I/O. The same proxy remains usable after transient reconnect.
+		// 在物理连接建立前即可安全调用。执行 I/O 的是方法调用，而不是代理创建。
+		// 短暂断线并重连后，同一个代理仍可使用。
 		resolve<T, Definitions extends RpcMethodDefinitions<T>>(
 			service: IRemoteServiceIdentifier<T, Definitions>,
 		): RemoteService<T, Definitions>;
 	}
 
 	export interface IConnector extends IDisposable {
-		// Identity is fixed as soon as the Connector is created.
+		// 连接器一经创建，该对等端的身份便确定不变。
 		readonly peer: IRpcPeer;
 
-		// Establishes the initial Physical Connection. Once it succeeds, the
-		// implementation may restore that Logical Session after transient loss.
+		// 建立初始物理连接。首次成功后，实现可以在短暂断线后恢复该逻辑会话。
 		connect(): Promise<void>;
 	}
 
 	export interface IAcceptor extends IDisposable {
-		// A fresh, ordinary readonly array snapshot on every read.
+		// 每次读取都返回一个新的普通只读数组快照。
 		readonly peers: readonly IRpcPeer[];
 
-		// Subscribe before listen() when every newly accepted Logical Session
-		// must receive a server-initiated call. Cleanup removes this listener.
+		// 如果每个新接受的逻辑会话都必须收到服务器主动发起的调用，应在 `listen()` 前订阅。
+		// 清理函数会移除该监听器。
 		onPeer(listener: (peer: IRpcPeer) => void): Cleanup;
 
-		// Fulfills when the adapter is ready to accept Physical Connections.
+		// 适配器准备好接受物理连接后完成。
 		listen(): Promise<void>;
 
-		// The returned group is stable. Each method call snapshots peers at that
-		// instant, invokes them concurrently, and returns results in snapshot order.
+		// 返回的服务组对象保持稳定。每次方法调用都会截取当时的对等端快照、
+		// 并发调用快照中的对等端，并按快照顺序返回结果。
 		resolveAll<T, Definitions extends RpcMethodDefinitions<T>>(
 			service: IRemoteServiceIdentifier<T, Definitions>,
 		): RemoteServiceGroup<IRpcPeer, T, Definitions>;
 	}
 
-	// The adapter-author interface is deliberately part of this prototype.
+	// 适配器作者接口被刻意纳入该原型。
 	export type RpcConnectorAdapter = IRpcConnectorAdapter;
 	export type RpcAcceptorAdapter = IRpcAcceptorAdapter;
 
 	export interface IRpc extends IDisposable {
-		// The RPC root borrows the implementation. Cleanup removes only this
-		// exposure; neither cleanup nor root disposal disposes the implementation.
+		// RPC 根对象只借用该实现。清理函数只移除该服务暴露；
+		// 无论调用清理函数还是释放根对象，都不会释放该实现。
 		expose<T, Definitions extends RpcMethodDefinitions<T>>(
 			service: IRemoteServiceIdentifier<T, Definitions>,
 			implementation: T,
 		): Cleanup;
 
-		// These members only select active/passive topology. They intentionally
-		// do not duplicate expose() or remote-service resolution.
+		// 这两个成员只用于选择主动或被动拓扑。它们刻意不重复
+		// `expose()` 或远程服务解析能力。
 		connector(adapter: RpcConnectorAdapter): IConnector;
 		acceptor(adapter: RpcAcceptorAdapter): IAcceptor;
 	}
@@ -668,18 +661,17 @@ export namespace RootCentered {
 }
 
 /**
- * DRAFT B — CONTRACT-CENTERED
+ * 草案 B——以契约为中心
  *
- * Mental model: a RemoteContract owns all discoverable operations for one
- * service. A separate Services catalog owns exposure; Connector/Acceptor
- * borrow that catalog. This maximizes per-service autocomplete and allows one
- * catalog to be shared by several topologies, but it makes a descriptor act
- * like a facade and adds ownership plus binding concepts.
+ * 心智模型：一个 RemoteContract 拥有单个服务的所有可发现操作。独立的 Services
+ * 目录拥有服务暴露，Connector/Acceptor 只借用该目录。这样可以最大化单个服务的
+ * 自动补全，并让多个拓扑共享同一目录；代价是 descriptor 会充当 facade，且额外
+ * 引入所有权和 binding 概念。
  */
 export namespace ContractCentered {
 	declare const rpcPeerBrand: unique symbol;
 
-	// Opaque Logical Session handle; the brand is not a user-facing member.
+	// 不透明的 Logical Session handle；brand 不是面向用户的成员。
 	export type IRpcPeer = { readonly [rpcPeerBrand]: never };
 
 	export type RpcExposure<T> = {
@@ -695,8 +687,8 @@ export namespace ContractCentered {
 		readonly wireName: string;
 		readonly methods: NormalizedRpcMethodDefinitions<Definitions>;
 
-		// Contract-centric convenience methods replace peer.resolve,
-		// services.expose and acceptor.resolveAll.
+		// 以契约为中心的便捷方法取代 peer.resolve、services.expose 和
+		// acceptor.resolveAll。
 		provide(implementation: T): RpcExposure<T>;
 		from(peer: IRpcPeer): RemoteService<T, Definitions>;
 		fromAll(acceptor: IAcceptor): RemoteServiceGroup<IRpcPeer, T, Definitions>;
@@ -714,8 +706,7 @@ export namespace ContractCentered {
 	): IRemoteContract<T, Definitions>;
 
 	export interface IRpcServices extends IDisposable {
-		// add() owns the binding, not the topology. Cleanup removes only this
-		// exposure and is idempotent.
+		// add() 拥有 binding，而不是 topology。Cleanup 只移除该 exposure，且幂等。
 		add<T>(exposure: RpcExposure<T>): Cleanup;
 	}
 
@@ -737,24 +728,23 @@ export namespace ContractCentered {
 
 	export declare function createRpcConnector(options: {
 		readonly adapter: RpcConnectorAdapter;
-		// Borrowed: disposing the Connector does not dispose services.
+		// 借用：释放 Connector 不会释放 services。
 		readonly services: IRpcServices;
 	}): IConnector;
 
 	export declare function createRpcAcceptor(options: {
 		readonly adapter: RpcAcceptorAdapter;
-		// Borrowed: several topologies may share this catalog.
+		// 借用：多个 topology 可以共享该目录。
 		readonly services: IRpcServices;
 	}): IAcceptor;
 }
 
 /**
- * DRAFT C — FUNCTIONAL / EXPLICIT SEAMS
+ * 草案 C——函数式/显式接缝
  *
- * Mental model: exposure, topology and resolution are independent functions.
- * This maximizes substitution and makes every dependency visible, but callers
- * must learn and import many shallow operations. It is included because it is
- * the strongest counterweight to Draft A's aggregate ownership.
+ * 心智模型：exposure、topology 和 resolution 是彼此独立的函数。这样可以最大化
+ * 可替换性并让每个依赖都清晰可见，但调用方必须学习并导入许多浅层操作。保留该方案，
+ * 是因为它最能与草案 A 的聚合所有权形成对照。
  */
 export namespace FunctionalSeams {
 	export interface IRemoteServiceIdentifier<
@@ -781,7 +771,7 @@ export namespace FunctionalSeams {
 
 	declare const rpcPeerBrand: unique symbol;
 
-	// Opaque Logical Session handle; the brand is not a user-facing member.
+	// 不透明的 Logical Session handle；brand 不是面向用户的成员。
 	export type IRpcPeer = { readonly [rpcPeerBrand]: never };
 
 	export interface IConnector extends IDisposable {
@@ -841,98 +831,84 @@ export namespace FunctionalSeams {
 }
 
 /**
- * SHARED RUNTIME RULES FOR ALL THREE DRAFTS
+ * 三个草案共用的运行时规则
  *
- * Configuration and ordering
- * - Contract creation synchronously throws TypeError for a non-object or empty
- *   methods map, a non-callable implementation member, an unknown method kind
- *   or option, an invalid cancelable value, an empty wire name, or a
- *   constructor/symbol identifier without an explicit wire name. Error messages
- *   identify the exact method/property path.
- * - Each `true` method entry is normalized and frozen as
- *   `{ type: "unary", cancelable: false }`. TypeScript validates keys and handler
- *   signatures; runtime validation covers JavaScript and escaped `any` values.
- * - Exposure synchronously rejects duplicate wire names and disposed owners.
- * - Every draft supports a direct implementation for this first phase.
- *   Container-specific resolution and implementation disposal are absent;
- *   Draft B's binding wrapper exists only as a deletion-test alternative.
- * - Concrete adapter factories synchronously validate inert configuration and
- *   perform no I/O. connect()/listen() operational failures reject.
- * - Proxy/group creation is synchronous, performs no I/O and is allowed before
- *   connect()/listen().
+ * 配置与顺序
+ * - 创建契约时，若 methods map 不是对象或为空、实现成员不可调用、method kind 或
+ *   option 未知、cancelable 值无效、wire name 为空，或者 constructor/symbol
+ *   identifier 没有显式 wire name，则同步抛出 TypeError。错误消息应指出准确的
+ *   method/property 路径。
+ * - 每个值为 `true` 的 method 条目都会归一化为
+ *   `{ type: "unary", cancelable: false }` 并被冻结。TypeScript 校验 key 和
+ *   handler 签名；运行时校验覆盖 JavaScript 以及绕过类型检查的 `any` 值。
+ * - exposure 遇到重复 wire name 或已释放的 owner 时同步拒绝。
+ * - 第一阶段的每个草案都支持直接传入 implementation；不包含 Container 专用解析和
+ *   implementation 释放。草案 B 的 binding wrapper 仅作为删除测试的备选项存在。
+ * - 具体 adapter factory 同步校验不触发 I/O 的配置，并且自身不执行 I/O；
+ *   connect()/listen() 的运行失败通过 Promise reject 报告。
+ * - proxy/group 的创建是同步且不执行 I/O 的，允许发生在 connect()/listen() 前。
  *
- * Adapter seam
- * - Connector is the sole caller of adapter.connect() and never calls it
- *   concurrently. Each successful call transfers one Physical Connection to it.
- * - Acceptor calls adapter.listen() once, owns the returned listener, and owns
- *   every Physical Connection delivered after listen readiness.
- * - Adapter signals only cancel the pending connect/listen operation. A live
- *   listener is controlled only by listener.dispose(); a live connection by
- *   end()/dispose().
- * - Topology disposal aborts pending adapter work, disposes its listener and all
- *   owned Physical Connections. It never disposes an external HTTP server that
- *   a concrete adapter merely borrows.
- * - `frames` is a single-consumer ordered stream. Completion is normal remote
- *   shutdown; iteration throw is transport failure. Yield transfers a stable
- *   buffer that the adapter cannot reuse. A push source uses bounded buffering
- *   and fails the connection on overflow; an unbounded private queue is invalid.
- * - send() promises express only local admission/backpressure, never delivery,
- *   decoding or ACK. end() flushes an intentional graceful write shutdown;
- *   dispose() is abortive and need not flush.
- * - The framed-pull candidate makes a raw byte adapter own framing/reassembly;
- *   codec and frame contents remain inside the RPC implementation. Until the
- *   later envelope/framing ticket specifies its format and limits, this is a
- *   complete implementation contract for message transports only—not yet TCP.
+ * Adapter 接缝
+ * - Connector 是 adapter.connect() 的唯一调用者，且绝不并发调用它。每次成功调用
+ *   都会向 Connector 移交一条 Physical Connection。
+ * - Acceptor 只调用一次 adapter.listen()，拥有返回的 listener，并拥有监听就绪后
+ *   投递的每条 Physical Connection。
+ * - Adapter signal 只取消尚未完成的 connect/listen 操作。活跃 listener 仅由
+ *   listener.dispose() 控制；活跃 connection 由 end()/dispose() 控制。
+ * - 释放 topology 会中止待处理的 adapter 工作，并释放其 listener 和拥有的所有
+ *   Physical Connection；不会释放具体 adapter 仅借用的外部 HTTP server。
+ * - `frames` 是单消费者有序流。正常完成表示远端正常关闭，迭代抛错表示传输失败。
+ *   yield 会移交 adapter 不得复用的稳定 buffer。push source 必须使用有界缓冲，
+ *   溢出时令连接失败；无界私有队列不合法。
+ * - send() Promise 只表示本地准入/背压，绝不表示投递、解码或 ACK。end() 刷新并
+ *   执行有意的优雅写端关闭；dispose() 为中止式释放，无需刷新。
+ * - 在 framed-pull 候选中，raw-byte adapter 负责 framing/reassembly；codec 与帧
+ *   内容仍留在 RPC 实现内部。在后续 envelope/framing issue 确定格式和上限前，
+ *   该契约只足以完整实现 message transport，还不足以完整实现 TCP。
  *
- * Invocation
- * - Every selected method is Promise-normalized. Non-selected members such as
- *   SearchService.cacheSize are absent from the proxy type and runtime surface.
- * - A call with no Physical Connection rejects RpcError(unavailable), without
- *   an offline queue. A dispatched call whose terminal result is lost rejects
- *   RpcError(interrupted); remote side effects may already have happened.
- * - Remote application failure, unknown service/method, malformed protocol,
- *   cancellation and disposed handles reject the method Promise. They never
- *   synchronously throw from a proxy method.
- * - Abort is cooperative. It signals the handler but cannot promise that the
- *   handler stopped or that side effects were rolled back.
- * - A group method snapshots peers when called, dispatches concurrently, waits
- *   for every item to settle and returns peer-tagged results in snapshot order.
- *   One peer failure never rejects or discards the other peer results.
+ * 调用
+ * - 所有选中的 method 都会被 Promise 化。未选成员（如 SearchService.cacheSize）
+ *   不存在于 proxy 类型和运行时表面。
+ * - 没有 Physical Connection 时，调用以 RpcError(unavailable) reject，且不进入
+ *   offline queue。已发出的调用若丢失最终结果，则以 RpcError(interrupted)
+ *   reject；此时远端副作用可能已经发生。
+ * - 远端应用失败、未知 service/method、畸形协议、取消和已释放 handle 都会令 method
+ *   Promise reject；proxy method 绝不同步抛出这些错误。
+ * - Abort 是协作式的：它会通知 handler，但不能保证 handler 已停止或副作用已回滚。
+ * - group method 在调用时截取 peer 快照，并发分发，等待每一项 settled，然后按快照
+ *   顺序返回带 peer 标识的结果。单个 peer 失败绝不会 reject 或丢弃其他 peer 的结果。
  *
- * Ownership
- * - Cleanup and dispose() are idempotent. No close(), stop(), disconnect() or
- *   per-proxy release alias is public.
- * - Disposed peer/proxy objects remain ordinary handles whose later method
- *   calls reject RpcError(disposed). They are not silently rebound.
- * - Logical Session peer/proxy identity survives transient Physical Connection
- *   replacement, but not a process restart.
+ * 所有权
+ * - Cleanup 与 dispose() 均幂等。不公开 close()、stop()、disconnect() 或逐 proxy
+ *   release 等同义入口。
+ * - 已释放的 peer/proxy 对象仍是普通 handle；之后的方法调用以
+ *   RpcError(disposed) reject，不会悄悄重新绑定。
+ * - Logical Session 的 peer/proxy 身份可跨越短暂的 Physical Connection 替换，
+ *   但不能跨越进程重启。
  *
- * DELETION TEST
- * - Keep runtime contract metadata: TypeScript erases method names.
- * - Keep expose separate from Connector/Acceptor: both sides expose identically.
- * - Keep connect()/listen(): callers must await readiness and initial failure.
- * - Keep Connector.peer and Acceptor.peers: one-peer and many-peer association.
- *   Batch results carry the exact peer handle; no speculative public session id
- *   is needed for correlation.
- * - Keep resolve/resolveAll: default unary and fan-out tasks need different
- *   result types; neither should expose raw sendRequest/service/method/args.
- * - Keep onPeer in the draft: without it, passive-side per-peer bidirectional
- *   initiation requires polling. This is a HITL decision, not yet accepted.
- * - Keep Cleanup/dispose(): they are the repository's only lifecycle vocabulary.
- * - Keep ConnectorAdapter.connect, AcceptorAdapter.listen, PhysicalConnection,
- *   frames/send/end, listener.closed and disposal: removing any one makes adapter
- *   authors invent an untracked ownership, readiness, I/O or failure convention.
- * - Delete public connection state: it races with the next call and does not
- *   remove the need to handle Promise rejection.
- * - Delete codec hooks, ACK, retry policy, reconnect policy, pendingCalls,
- *   arbitrary options, streaming placeholders and proxy disposal: they are not
- *   part of the adapter author's irreducible task or the default caller path.
+ * 删除测试
+ * - 保留运行时契约元数据：TypeScript 会擦除 method 名称。
+ * - expose 与 Connector/Acceptor 分离：两端暴露服务的方式相同。
+ * - 保留 connect()/listen()：调用方必须等待就绪状态和初始失败。
+ * - 保留 Connector.peer 与 Acceptor.peers：用于关联单 peer 与多 peer。批量结果携带
+ *   确切 peer handle，无需为关联而猜测性地公开 session id。
+ * - 保留 resolve/resolveAll：默认 unary 与扇出任务需要不同结果类型；两者都不应
+ *   暴露原始的 sendRequest/service/method/args。
+ * - 草案中保留 onPeer：否则被动端只能轮询，才能针对每个 peer 发起双向调用。
+ *   这仍是待人工裁决的决定，尚未接受。
+ * - 保留 Cleanup/dispose()：它们是仓库唯一的 lifecycle 词汇。
+ * - 保留 ConnectorAdapter.connect、AcceptorAdapter.listen、PhysicalConnection、
+ *   frames/send/end、listener.closed 和释放能力：删除其中任意一项，都会迫使 adapter
+ *   作者自行发明未被追踪的所有权、就绪状态、I/O 或失败约定。
+ * - 删除公开连接状态：它会和下一次调用竞态，也不能免除处理 Promise reject 的需要。
+ * - 删除 codec hook、ACK、retry policy、reconnect policy、pendingCalls、任意 option、
+ *   streaming placeholder 和 proxy disposal：它们不属于 adapter 作者不可再缩减的任务，
+ *   也不属于默认调用路径。
  *
- * RECOMMENDATION TO TEST WITH THE USER
- * - Draft A has the deepest module: two conceptual factory entry points,
- *   aggregate ownership and repository-native resolve/expose vocabulary.
- * - Draft B improves service-local discovery and explicit sharing, but adds a
- *   facade descriptor, binding object, branded options and manual dispose order.
- * - Draft C exposes seams most literally, but its seven top-level operations
- *   make implementation structure leak into every caller.
+ * 留待与用户验证的建议
+ * - 草案 A 的模块最深：只有两个概念上的 factory 入口、聚合所有权，以及仓库原生的
+ *   resolve/expose 词汇。
+ * - 草案 B 改善单服务发现能力和显式共享，但增加 facade descriptor、binding 对象、
+ *   branded option 和手动释放顺序。
+ * - 草案 C 最直接地暴露接缝，但七个顶层操作会让实现结构泄漏到每个调用方。
  */
