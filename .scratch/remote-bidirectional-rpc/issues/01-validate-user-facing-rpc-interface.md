@@ -18,7 +18,7 @@ Parent: [协议无关的双向 RPC](../map.md)
 - Adapter interface 必须能由内存 adapter 完整实现，并足够具体地判断 message/byte transport 的适配成本；RPC caller 无需看到这些 members，但 adapter author 不能依赖未写出的约定。若精确 framing 格式与上限尚未决定，必须明确说明 raw-byte adapter 仍被什么后续 contract 阻塞，不能假装其已可实现。
 - Connector/Acceptor 只表达主动/被动连接拓扑；本地服务注册与远程暴露必须形成独立关注点，不能在二者上复制等价 API。精确抽象仍待确认。
 - 连接或重连不要求重新注册、重新获取 peer 或重新获取既有 proxy；多 peer 结果必须能与对应 peer 明确关联。
-- TypeScript 只暴露 `methods` 逐方法 map 明确选择的远程方法，并准确表达 method kind、Promise 化、取消和批量结果；单个 method value 的 `true` 等价于 `{ type: "unary", cancelable: false }`。运行时所需信息不能假设可从 TypeScript 类型读取。
+- TypeScript 只暴露 `methods` 逐方法 map 明确选择的远程方法，并准确表达 method kind、Promise 化、取消和批量结果。普通 unary method value 可以写成 `true`、`{ type: "unary" }` 或 `{ type: "unary", cancelable: false }`；前两种都在 factory 边界归一化为最后一种。只有本地 handler 具有一个必填尾随 `AbortSignal` 时才允许且必须显式写 `cancelable: true`；显式 `cancelable: undefined` 非法。factory 产出的 runtime descriptor 始终包含 boolean `cancelable`。运行时所需信息不能假设可从 TypeScript 类型读取。
 - 配置错误同步抛出；连接不存在、调用中断、远端错误、未知方法与对象已 disposed 等调用期错误通过 Promise reject；批量调用的单 peer 错误保留在该 peer 的结果中。
 - 生命周期只保留与仓库现有约定一致的幂等 `Cleanup` 和 `dispose()`；`close()`、`stop()`、`disconnect()` 等同义入口必须有不可替代的语义才可公开。
 - 每个 public member 都记录它服务的具体场景，并通过删除测试；没有具体场景的 options、wrapper、别名或未来扩展点不得进入草案。
@@ -33,7 +33,7 @@ Parent: [协议无关的双向 RPC](../map.md)
 - 本地服务注册/暴露应与 Connector/Acceptor 拆开；二者不应各自复制同一套 API。
 - 第一期不考虑 Container 集成；原型必须支持直接传入本地 implementation，是否还需要 resolver/provider shape 只能由独立的真实场景证明。
 - Adapter author 也是实际使用者；`RpcConnectorAdapter`、`RpcAcceptorAdapter`、Physical Connection 的建连、监听、双向 I/O、failure、backpressure、ownership 与 dispose 不能以 type hole 隐藏。ACK、重试和 RPC `pendingCalls` 仍不属于 adapter interface。
-- Remote method contract 使用逐方法 map；每项将调用 `type` 与 handler `cancelable` metadata 放在一起。`true` 只作为单项 unary/noncancelable shorthand，不支持会隐式暴露全部方法的顶层 `methods: true`；静态类型和 factory runtime 都必须校验配置。
+- Remote method contract 使用逐方法 map；每项将调用 `type` 与 handler `cancelable` metadata 放在一起。普通 unary object 可以省略 `cancelable` 并默认取 `false`，`true` 继续作为单项 unary/noncancelable shorthand；cancelable handler 仍必须显式写 `cancelable: true`。不支持会隐式暴露全部方法的顶层 `methods: true`；静态类型和 factory runtime 都必须校验配置，并把输出统一归一化为必填 boolean。
 
 尚未决定：
 
@@ -59,7 +59,7 @@ Parent: [协议无关的双向 RPC](../map.md)
 
 ### 2026-08-12：逐方法 descriptor 与原型拆分
 
-- 根据使用者反馈，平行的 `methods[]` / `cancelableMethods[]` 已合并为逐方法 descriptor map：完整值为 `{ type: "unary", cancelable: boolean }`；只有单项 `true` 是 shorthand，并在 factory 边界归一化为 unary/noncancelable。
+- 根据使用者反馈，平行的 `methods[]` / `cancelableMethods[]` 已合并为逐方法 descriptor map。caller 输入可以使用单项 `true` shorthand 或 object descriptor；factory 边界会把两者都归一化为完整的 `{ type: "unary", cancelable: boolean }` runtime value。
 - TypeScript 负例验证非函数 key、顶层 `methods: true`、错误 cancellation slot、未知 method kind 与未知 option 都会失败；runtime factory 仍须为 JavaScript / `any` 做同样的 shape validation，且不能假称能反射 TypeScript method key。
 - 原型已在同一目录按职责拆分：`public-interface.ts`、共享 `fixtures.ts`、三种结构各自的 `*.usage.ts`、独立内存装配、独立类型探针，以及 WebSocket adapter / Express 装配，避免公共声明、adapter implementation、场景和类型探针混在一个文件。
 
@@ -76,3 +76,9 @@ Parent: [协议无关的双向 RPC](../map.md)
 - 每个 caller 候选的 `remote-services.ts` 只保存两端共用的不可变 descriptor。现代三案 `refined-root/`、`direct-tasks/` 和 `eager-connection/` 另有本目录专属的 `rpc-interface.ts`；较早三案继续共用顶层 `public-interface.ts`。
 - [内存场景](../user-facing-rpc-interface/in-memory/scenario.ts)只编排独立的 [Connector 用例](../user-facing-rpc-interface/in-memory/connector.usage.ts)与 [Acceptor 用例](../user-facing-rpc-interface/in-memory/acceptor.usage.ts)；WebSocket / Express 也按共享 descriptor、Connector、Acceptor 与 platform 分开。旧根级 usage 路径已删除，不保留 redirect 或 barrel。
 - Transport 成本探针位于 `transport-seams/`，固定拆成 `rpc-interface.ts`、`physical-io.usage.ts`、`connector.usage.ts`、`acceptor.usage.ts` 与 `scenario.ts`；Physical I/O、主动/被动生命周期和固定场景不再混在单个大文件中。
+
+### 2026-08-14：省略 `cancelable` 默认取 `false`
+
+- 根据使用者反馈，普通 unary method 的 caller 输入接受 `true | { type: "unary", cancelable?: false }`。`{ type: "unary" }` 与显式 `cancelable: false` 等价，`true` shorthand 继续保留。
+- `cancelable` 的省略只适用于不接收取消控制参数的普通 handler。具有一个必填尾随 `AbortSignal` 的 handler 仍必须显式写 `{ type: "unary", cancelable: true }`；显式 `cancelable: undefined` 或其他非 boolean 值必须被静态校验和 runtime validation 拒绝。
+- factory 必须区分 caller input 与 normalized output：输入可以省略 `cancelable`，但产出的 runtime descriptor 始终是冻结的 `{ type: "unary", cancelable: boolean }`，不得保留 shorthand 或缺失字段。

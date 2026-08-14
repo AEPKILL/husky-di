@@ -12,7 +12,7 @@
 2. **普通调用应只剩 proxy method + Promise。** Connect 的 `createClient(descriptor, transport)` 和 Comlink 的 `wrap(endpoint)` 都把序列化、request id、错误回传藏到 seam 后面。
 3. **对象 handle 的稳定范围必须说清。** Cap'n Proto 明确区分 connection-scoped capability 与可跨新连接恢复的 persistent token。husky-di 的普通 proxy 应绑定 Logical Session、跨 Physical Connection 重连保持稳定，但不承诺跨进程重启。
 4. **adapter author 也是使用者，transport seam 不能留白。** 第一阶段候选必须完整写出主动 `connect(signal)`、被动 `listen(accept, signal)`、Physical Connection 的 framed pull receive、`send()` backpressure、graceful `end()`、failure、ownership 与 abortive `dispose()`。ACK、协议级 flow control、重连队列和 pending-call bookkeeping 仍留在后续协议设计中。
-5. **逐方法 descriptor 应同时承载调用形态与 handler 能力。** Protobuf-ES 以每个方法的 `methodKind` 判别 unary / 三种 streaming，并据此映射 client 类型；gRPC 未写 `stream` 的方法天然是 unary。husky-di 因而用逐方法 map，并允许单个方法值 `true` 简写为 `{ type: "unary", cancelable: false }`；不接受顶层 `methods: true`。
+5. **逐方法 descriptor 应同时承载调用形态与 handler 能力。** Protobuf-ES 以每个方法的 `methodKind` 判别 unary / 三种 streaming，并据此映射 client 类型；gRPC 未写 `stream` 的方法天然是 unary。husky-di 因而用逐方法 map：普通 unary 可以写成单个 `true`，也可以在 `{ type: "unary" }` 中省略默认值为 `false` 的 `cancelable`；cancelable handler 则必须显式写 `cancelable: true`。两种简写都会在 factory 边界变成含必填 boolean 的完整 descriptor；不接受顶层 `methods: true`。
 
 ## 证据矩阵
 
@@ -53,7 +53,7 @@ type UnaryMethodConfiguration<F extends AnyMethod> =
   | (Extract<Parameters<F>[number], AbortSignal> extends never
       ? true | {
           readonly type: "unary";
-          readonly cancelable: false;
+          readonly cancelable?: false;
         }
       : never)
   | (F extends (...args: [...infer _Args, AbortSignal]) => unknown
@@ -69,8 +69,31 @@ type RemoteMethodsConfiguration<T> = {
   >;
 };
 
+type NonUndefinedCancelable<C> = Exclude<
+  C[Extract<"cancelable", keyof C>],
+  undefined
+>;
+
+type RejectExplicitUndefined<C> = C extends object
+  ? "cancelable" extends keyof C
+    ? Pick<C, Extract<"cancelable", keyof C>> extends Required<
+        Pick<C, Extract<"cancelable", keyof C>>
+      >
+      ? C extends { readonly cancelable: boolean }
+        ? C
+        : never
+      : [NonUndefinedCancelable<C>] extends [never]
+        ? never
+        : [NonUndefinedCancelable<C>] extends [false]
+          ? C
+          : never
+    : C
+  : C;
+
 type ExactRemoteMethodsConfiguration<T, M> = M &
-  Record<Exclude<keyof M, RemoteMethodKey<T>>, never>;
+  Record<Exclude<keyof M, RemoteMethodKey<T>>, never> & {
+    [K in keyof M]: RejectExplicitUndefined<M[K]>;
+  };
 
 type IsCancelableConfiguration<C> = C extends {
   readonly cancelable: true;
@@ -93,10 +116,11 @@ export interface RemoteServiceIdentifier<
   readonly wireName: string;
   /**
    * 唯一、非空、冻结的 callable surface；运行时只保存 normalized form。
-   * `true` 在创建时已经变成 `{ type: "unary", cancelable: false }`。
+   * `true` 或缺失的 `cancelable` 在创建时已经变成
+   * `{ type: "unary", cancelable: false }`。
    */
   readonly methods: Readonly<{
-    [K in keyof M]: NormalizedMethodConfiguration<M[K]>;
+    [K in keyof M]: NormalizedMethodConfiguration<Exclude<M[K], undefined>>;
   }>;
 }
 
@@ -123,11 +147,15 @@ type RemoteMethod<F, Cancelable extends boolean> =
       : (...args: A) => Promise<Awaited<R>>
     : never;
 
+type RequiredKey<T> = {
+  [K in keyof T]-?: Pick<T, K> extends Required<Pick<T, K>> ? K : never;
+}[keyof T];
+
 export type RemoteService<
   T,
   M extends RemoteMethodsConfiguration<T>,
 > = {
-  readonly [K in Extract<keyof M, RemoteMethodKey<T>>]: RemoteMethod<
+  readonly [K in Extract<RequiredKey<M>, RemoteMethodKey<T>>]: RemoteMethod<
     Extract<T[K], AnyMethod>,
     IsCancelableConfiguration<M[K]>
   >;
@@ -204,7 +232,7 @@ export type RemoteServiceGroup<
   T,
   M extends RemoteMethodsConfiguration<T>,
 > = {
-  readonly [K in Extract<keyof M, RemoteMethodKey<T>>]: RemoteGroupMethod<
+  readonly [K in Extract<RequiredKey<M>, RemoteMethodKey<T>>]: RemoteGroupMethod<
     Extract<T[K], AnyMethod>,
     IsCancelableConfiguration<M[K]>
   >;
@@ -311,7 +339,7 @@ export declare function createRpc(): IRpc;
 
 逐方法 `type` 不是为未来 streaming 预留的无类型 options bag，而是稳定的判别字段。Protobuf-ES 当前 descriptor 直接使用 `"unary" | "server_streaming" | "client_streaming" | "bidi_streaming"`，Connect 根据该字段导出不同的请求与返回类型；TypeScript 对这种 discriminated union 可以做 narrowing 和 exhaustive checking。[Protobuf-ES method types](https://github.com/bufbuild/protobuf-es/blob/f55f8733a732cdc9a74bef7d29b21b3edad52392/packages/protobuf/src/types.ts#L150-L232) · [Connect client mapping](https://github.com/connectrpc/connect-es/blob/f213f1a8c98d323db5a2701d319fb3aaace84a89/packages/connect/src/promise-client.ts#L31-L70) · [TypeScript discriminated unions](https://www.typescriptlang.org/docs/handbook/2/narrowing.html#discriminated-unions)
 
-`true` 只存在于单个 method value，并在 factory 边界立即归一化；核心、wire schema 与调试输出只看完整 object。这个默认也与 gRPC 一致：request / response 都没有 `stream` 修饰的 service method 就是 unary，只有显式 `stream` 才成为 server、client 或 bidirectional streaming。[gRPC 四种 method kind](https://grpc.io/docs/what-is-grpc/core-concepts/#service-definition) 顶层 `methods: true` 不被支持，因为它会把 interface 里的所有函数无意间扩大为 wire attack surface，也无法逐方法承载未来 streaming 和 handler 能力。
+`true` shorthand 与 object 中缺失的 `cancelable` 都只存在于 caller 输入，并在 factory 边界立即归一化；核心、wire schema 与调试输出只看含必填 boolean 的完整 object。这个默认也与 gRPC 一致：request / response 都没有 `stream` 修饰的 service method 就是 unary，只有显式 `stream` 才成为 server、client 或 bidirectional streaming。[gRPC 四种 method kind](https://grpc.io/docs/what-is-grpc/core-concepts/#service-definition) 顶层 `methods: true` 不被支持，因为它会把 interface 里的所有函数无意间扩大为 wire attack surface，也无法逐方法承载未来 streaming 和 handler 能力。
 
 这是 **HITL 待选候选**，不是已接受的规范。选择 complete-frame 单位，是为了让 WebSocket、MessagePort 等 message transport 保留原生边界；对这类 transport，本候选已经是一份完整 implementation contract。raw-byte/TCP adapter 必须自行增加/移除 framing，但在后续 ticket 决定 framing format、最大 frame size 和 buffering limits 之前，还不能称为可完整实现。RPC 实现按顺序 `await send()`，因此 adapter 不必定义并发 send ordering；`send()` 只暴露本地 admission/backpressure，不偷偷承诺远端 delivery。`end()` 等待先前 send 后 graceful 结束 outbound；`dispose()` 则是可中断 pending I/O 且不保证 flush 的 abortive teardown。ACK、协议级 flow control、重连队列与 `pendingCalls` 仍由后续 ticket 决定。
 
@@ -332,7 +360,7 @@ const ISearch = createServiceIdentifier<SearchService>(Symbol("ISearch"));
 const RemoteSearch = createRemoteServiceIdentifier(ISearch, {
   wireName: "example.search.v1",
   methods: {
-    ping: true,
+    ping: { type: "unary" },
     search: { type: "unary", cancelable: true },
   },
 });
@@ -423,8 +451,9 @@ serverRpc.dispose();
 
 ## 精确行为与 ordering
 
-- `createRemoteServiceIdentifier()` 在 TypeScript 层验证：`methods` 必须是逐方法 object map，key 只能是 `T` 的函数成员且不能有多余 key；value 只能是 `true` 或当前 method kind 对应的 discriminated configuration；`cancelable: true` 只允许在本地 handler 有且只有一个必填尾随 `AbortSignal` 时使用，反过来含直接 `AbortSignal` 参数的方法也不能使用 `true` / `cancelable: false`，避免把控制参数误编码成 wire payload。`true` 保留字面量推断，并等价于 `{ type: "unary", cancelable: false }`。未来增加 streaming kind 时，其参数与返回流形态也必须由对应 union member 校验，不能只检查字符串。
-- factory 同时做运行时验证，覆盖纯 JavaScript、`any` 和 assertion 绕过：`methods` 必须是非 null、非 array、至少一个 own string key 的 object；value 必须严格为 `true`，或只含已知字段且精确满足 `{ type: "unary", cancelable: boolean }` 的完整 object。factory 立即把 `true` shorthand 归一化并冻结结果；不接受顶层 `methods: true`、未知 method kind、缺失/非 boolean `cancelable`、symbol key、空 map、constructor/symbol identifier 缺少 `wireName` 或空 `wireName`。失败同步抛带精确 property path 的 `TypeError`。string identifier 默认以自身为 Wire Service Name。TypeScript interface 在运行时已擦除，因此 factory 不能声称验证 key 属于 `T`。
+- `createRemoteServiceIdentifier()` 在 TypeScript 层验证：`methods` 必须是逐方法 object map，key 只能是 `T` 的函数成员且不能有多余 key；value 只能是 `true` 或当前 method kind 对应的 discriminated configuration。普通 unary method 接受 `true | { type: "unary", cancelable?: false }`，其中省略与显式 `false` 等价；`cancelable: true` 只允许在本地 handler 有且只有一个必填尾随 `AbortSignal` 时使用，并且这种 handler 必须显式写 `cancelable: true`。含直接 `AbortSignal` 参数的方法不能使用 shorthand、省略或 `cancelable: false`，避免把控制参数误编码成 wire payload；显式 `cancelable: undefined` 也非法。未来增加 streaming kind 时，其参数与返回流形态必须由对应 union member 校验，不能只检查字符串。
+- 预先声明 methods map 时使用 `satisfies RemoteMethodsConfiguration<T>` 保留实际 key；直接标注成宽 `Partial` 会擦除选择信息，因此 proxy 只把 required key 视为确定存在，绝不把 optional key 当成已暴露方法。
+- factory 同时做运行时验证，覆盖纯 JavaScript、`any` 和 assertion 绕过：`methods` 必须是非 null、非 array、至少一个 own string key 的 object；value 必须严格为 `true`，或是只含已知字段的 `{ type: "unary", cancelable?: boolean }`。object 没有 own `cancelable` 属性时按 `false` 处理；一旦存在，该值就必须严格为 boolean，因此显式 `undefined` 非法。factory 立即把 `true` shorthand 和缺失字段都归一化并冻结为 `{ type: "unary", cancelable: boolean }`；normalized runtime output 绝不保留 shorthand 或缺失字段。不接受顶层 `methods: true`、未知 method kind、未知 option、非 boolean `cancelable`、symbol key、空 map、constructor/symbol identifier 缺少 `wireName` 或空 `wireName`。失败同步抛带精确 property path 的 `TypeError`。string identifier 默认以自身为 Wire Service Name。TypeScript interface 在运行时已擦除，因此 factory 不能声称验证 key 属于 `T`。
 - `IRpc.expose()` 同步验证重复 Wire Service Name、已 disposed root、无效 implementation，以及 descriptor 中每个 method key 在 implementation 上确实解析为 function；这样纯 JavaScript 调用仍会在暴露阶段得到 runtime validation。失败不留下部分 exposure。RPC 借用 implementation，不随 exposure cleanup 或 root dispose 销毁它。成功返回幂等 `Cleanup`；cleanup 返回后，新到达的 call 不再 dispatch，已经 dispatch 的 call 允许自然结束。
 - exposure 与 topology 正交：一次 exposure 对该 root 创建的所有当前和未来 peer 生效；Connector/Acceptor 不提供同义方法。
 - `resolve()` / `resolveAll()` 只建立稳定 proxy/group handle，不进行网络 I/O、不要求远端当时已 expose，也不排队调用。

@@ -43,11 +43,16 @@ export type RemoteMethodKey<T> = {
 		: never;
 }[keyof T];
 
+/** 省略 `cancelable` 等价于 false；严格的 handler 校验由共享 validator 提供。 */
 export type RpcMethodDefinition =
 	| true
 	| {
 			readonly type: "unary";
-			readonly cancelable: boolean;
+			readonly cancelable?: false;
+	  }
+	| {
+			readonly type: "unary";
+			readonly cancelable: true;
 	  };
 
 export type RpcMethodDefinitions<T> = Partial<
@@ -77,11 +82,18 @@ type RemoteMethod<F, Definition> = F extends (
 		: (...args: Args) => Promise<Awaited<Result>>
 	: never;
 
+type RequiredKey<T> = {
+	[K in keyof T]-?: Pick<T, K> extends Required<Pick<T, K>> ? K : never;
+}[keyof T];
+
+/** 宽化为 Partial 后的 optional key 不能被误认为运行时已经选择。 */
+type SelectedMethodKey<Definitions> = Extract<RequiredKey<Definitions>, string>;
+
 export type RemoteService<T, Definitions extends RpcMethodDefinitions<T>> = {
-	readonly [K in Extract<keyof Definitions, RemoteMethodKey<T>>]: RemoteMethod<
-		T[K],
-		Definitions[K]
-	>;
+	readonly [K in Extract<
+		SelectedMethodKey<Definitions>,
+		RemoteMethodKey<T>
+	>]: RemoteMethod<T[K], Definitions[K]>;
 };
 
 export type RpcBatchResult<T> =
@@ -113,7 +125,7 @@ export type RemoteServiceGroup<
 	Definitions extends RpcMethodDefinitions<T>,
 > = {
 	readonly [K in Extract<
-		keyof Definitions,
+		SelectedMethodKey<Definitions>,
 		RemoteMethodKey<T>
 	>]: RemoteGroupMethod<T[K], Definitions[K]>;
 };

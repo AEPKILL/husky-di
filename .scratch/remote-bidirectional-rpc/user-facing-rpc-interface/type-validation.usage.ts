@@ -5,8 +5,13 @@
  * @created 2026-08-12 23:20:00
  */
 
-import { ISession } from "./fixtures";
-import type { ServiceIdentifier } from "./public-interface";
+import type { SessionService } from "./fixtures";
+import { IClientEvents, ISession } from "./fixtures";
+import type {
+	RpcMethodDefinitions,
+	RpcUnaryMethodDefinition,
+	ServiceIdentifier,
+} from "./public-interface";
 import {
 	ContractCentered,
 	FunctionalSeams,
@@ -21,22 +26,89 @@ interface InvalidSpecialSignalService {
 	run(signal: SpecialSignal): void;
 }
 
+declare const typeValidationPeer: RootCentered.IRpcPeer;
+
 /**
- * `cancelable` 是处理器的注入元数据：值为 true 时，实现方法必须以一个 AbortSignal
- * 作为末尾参数，而代理方法会将该参数变为可选。本函数只用于编译期探测，绝不应被调用。
+ * `cancelable` 是处理器的注入元数据：省略时默认为 false；值为 true 时，实现方法
+ * 必须以一个 AbortSignal 作为末尾参数，而代理方法会将该参数变为可选。本函数只用于
+ * 编译期探测，绝不应被调用。
  */
 export function typeValidationUsage(): void {
-	RootCentered.createRemoteServiceIdentifier(ISession, {
-		methods: { ping: true },
-	});
+	const shorthandDescriptor = RootCentered.createRemoteServiceIdentifier(
+		ISession,
+		{
+			methods: { ping: true },
+		},
+	);
+	const shorthandCancelable: false =
+		shorthandDescriptor.methods.ping.cancelable;
+	void shorthandCancelable;
 
 	RootCentered.createRemoteServiceIdentifier(ISession, {
 		methods: { ping: { type: "unary", cancelable: false } },
 	});
 
+	const defaultedDescriptor = RootCentered.createRemoteServiceIdentifier(
+		ISession,
+		{
+			methods: { ping: { type: "unary" } },
+		},
+	);
+	const defaultedCancelable: false =
+		defaultedDescriptor.methods.ping.cancelable;
+	void defaultedCancelable;
+
+	RootCentered.createRemoteServiceIdentifier(IClientEvents, {
+		methods: { changed: { type: "unary" } },
+	});
+
+	const annotatedPing: RpcUnaryMethodDefinition<SessionService["ping"]> = {
+		type: "unary",
+	};
 	RootCentered.createRemoteServiceIdentifier(ISession, {
-		// @ts-expect-error 只有 `true` 会补全“一元调用且不可取消”的默认值。
-		methods: { ping: { type: "unary" } },
+		methods: { ping: annotatedPing },
+	});
+
+	const checkedMethods = {
+		ping: { type: "unary" },
+	} satisfies RpcMethodDefinitions<SessionService>;
+	const checkedDescriptor = RootCentered.createRemoteServiceIdentifier(
+		ISession,
+		{
+			methods: checkedMethods,
+		},
+	);
+	const checkedRemote = typeValidationPeer.resolve(checkedDescriptor);
+	void checkedRemote.ping;
+	// @ts-expect-error 精确 map 没有选择 login，proxy 不得暴露该方法。
+	void checkedRemote.login;
+
+	const widenedMethods: RpcMethodDefinitions<SessionService> = checkedMethods;
+	const widenedDescriptor = RootCentered.createRemoteServiceIdentifier(
+		ISession,
+		{
+			methods: widenedMethods,
+		},
+	);
+	const widenedRemote = typeValidationPeer.resolve(widenedDescriptor);
+	// @ts-expect-error Partial 的 optional key 不能被当成确定选择的方法。
+	void widenedRemote.ping;
+
+	const cancelableDescriptor = RootCentered.createRemoteServiceIdentifier(
+		ISession,
+		{
+			methods: { login: { type: "unary", cancelable: true } },
+		},
+	);
+	const normalizedCancelable: true =
+		cancelableDescriptor.methods.login.cancelable;
+	void normalizedCancelable;
+
+	RootCentered.createRemoteServiceIdentifier(ISession, {
+		methods: {
+			// @ts-expect-error 显式 undefined 不是省略，无法形成稳定的规范化输入。
+			ping: { type: "unary", cancelable: undefined },
+		},
 	});
 
 	// @ts-expect-error methods 必须是按方法显式声明的允许列表。
@@ -55,6 +127,11 @@ export function typeValidationUsage(): void {
 	RootCentered.createRemoteServiceIdentifier(ISession, {
 		// @ts-expect-error login 的 AbortSignal 不得作为网络传输参数。
 		methods: { login: true },
+	});
+
+	RootCentered.createRemoteServiceIdentifier(ISession, {
+		// @ts-expect-error 省略 cancelable 等价于 false，不能吞掉 handler 的 AbortSignal。
+		methods: { login: { type: "unary" } },
 	});
 
 	RootCentered.createRemoteServiceIdentifier(ISession, {

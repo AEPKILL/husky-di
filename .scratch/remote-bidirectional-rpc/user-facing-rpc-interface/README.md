@@ -123,3 +123,6 @@ pnpm --filter @husky-di/remote exec tsc \
   --lib ES2023,DOM \
   /absolute/path/to/candidate.ts
 ```
+
+`type-validation.usage.ts` 还应额外加上 `--exactOptionalPropertyTypes` 再执行一次，
+确保 `cancelable` 的省略语义不依赖使用者的 TypeScript 配置。

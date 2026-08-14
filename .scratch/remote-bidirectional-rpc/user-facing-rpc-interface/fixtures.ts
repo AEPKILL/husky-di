@@ -49,7 +49,7 @@ export const remoteSessionOptions = {
 	wireName: "example.session.v1",
 	methods: {
 		login: { type: "unary", cancelable: true },
-		ping: true,
+		ping: { type: "unary" },
 	},
 } as const;
 

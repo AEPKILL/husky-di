@@ -83,11 +83,12 @@ export type RemoteMethodKey<T> = {
 		: never;
 }[keyof T];
 
+/** `cancelable` 省略时按 false 处理；只有可取消 handler 才必须显式写 true。 */
 export type RpcUnaryMethodDefinition<F extends AnyMethod = AnyMethod> =
 	| (HasNoParameters<F> extends true
-			? true | { readonly type: "unary"; readonly cancelable: false }
+			? true | { readonly type: "unary"; readonly cancelable?: false }
 			: ParametersContainAbortSignal<F> extends false
-				? true | { readonly type: "unary"; readonly cancelable: false }
+				? true | { readonly type: "unary"; readonly cancelable?: false }
 				: never)
 	| (HasValidCancellationSlot<F> extends true
 			? {
@@ -102,28 +103,50 @@ export type RpcMethodDefinitions<T> = Partial<{
 	>;
 }>;
 
+type ValidateNonCancelableMethodDefinition<F extends AnyMethod, Definition> =
+	HasNoParameters<F> extends true
+		? Definition
+		: ParametersContainAbortSignal<F> extends false
+			? Definition
+			: never;
+
+type NonUndefinedCancelableValue<Definition> = Exclude<
+	Definition[Extract<"cancelable", keyof Definition>],
+	undefined
+>;
+
+type ValidateNonCancelableOption<Definition> =
+	"cancelable" extends keyof Definition
+		? Pick<
+				Definition,
+				Extract<"cancelable", keyof Definition>
+			> extends Required<
+				Pick<Definition, Extract<"cancelable", keyof Definition>>
+			>
+			? Definition extends { readonly cancelable: false }
+				? Definition
+				: never
+			: [NonUndefinedCancelableValue<Definition>] extends [never]
+				? never
+				: [NonUndefinedCancelableValue<Definition>] extends [false]
+					? Definition
+					: never
+		: Definition;
+
 type ValidateMethodDefinition<
 	F extends AnyMethod,
 	Definition,
 > = Definition extends true
-	? HasNoParameters<F> extends true
-		? Definition
-		: ParametersContainAbortSignal<F> extends false
-			? Definition
-			: never
+	? ValidateNonCancelableMethodDefinition<F, Definition>
 	: Definition extends { readonly type: "unary" }
 		? Exclude<keyof Definition, "type" | "cancelable"> extends never
 			? Definition extends { readonly cancelable: true }
 				? HasValidCancellationSlot<F> extends true
 					? Definition
 					: never
-				: Definition extends { readonly cancelable: false }
-					? HasNoParameters<F> extends true
-						? Definition
-						: ParametersContainAbortSignal<F> extends false
-							? Definition
-							: never
-					: never
+				: ValidateNonCancelableOption<Definition> extends never
+					? never
+					: ValidateNonCancelableMethodDefinition<F, Definition>
 			: never
 		: never;
 
@@ -133,7 +156,12 @@ export type ValidateMethodDefinitions<T, Definitions extends object> = {
 		: never;
 };
 
-type SelectedMethodKey<Definitions> = Extract<keyof Definitions, string>;
+type RequiredKey<T> = {
+	[K in keyof T]-?: Pick<T, K> extends Required<Pick<T, K>> ? K : never;
+}[keyof T];
+
+/** 宽化为 Partial 后的 optional key 不能被误认为运行时已经选择。 */
+type SelectedMethodKey<Definitions> = Extract<RequiredKey<Definitions>, string>;
 
 type IsCancelableMethod<Definition> = Definition extends {
 	readonly cancelable: true;
@@ -141,12 +169,15 @@ type IsCancelableMethod<Definition> = Definition extends {
 	? true
 	: false;
 
-type NormalizedRpcMethodDefinition<Definition> = Definition extends true
-	? { readonly type: "unary"; readonly cancelable: false }
-	: Definition;
+type NormalizedRpcMethodDefinition<Definition> = {
+	readonly type: "unary";
+	readonly cancelable: IsCancelableMethod<Definition>;
+};
 
 type NormalizedRpcMethodDefinitions<Definitions> = Readonly<{
-	[K in keyof Definitions]: NormalizedRpcMethodDefinition<Definitions[K]>;
+	[K in keyof Definitions]: NormalizedRpcMethodDefinition<
+		Exclude<Definitions[K], undefined>
+	>;
 }>;
 
 type RemoteMethod<F, Definition> = F extends (
@@ -589,7 +620,7 @@ export namespace RootCentered {
 	> {
 		readonly serviceIdentifier: ServiceIdentifier<T>;
 		readonly wireName: string;
-		// 运行时规范形式会把每个 `true` 条目归一化为
+		// 运行时规范形式会把每个 `true` 条目或省略 `cancelable` 的配置归一化为
 		// `{ type: "unary", cancelable: false }`，并冻结结果。
 		readonly methods: NormalizedRpcMethodDefinitions<Definitions>;
 	}
@@ -838,9 +869,10 @@ export namespace FunctionalSeams {
  *   option 未知、cancelable 值无效、wire name 为空，或者 constructor/symbol
  *   identifier 没有显式 wire name，则同步抛出 TypeError。错误消息应指出准确的
  *   method/property 路径。
- * - 每个值为 `true` 的 method 条目都会归一化为
- *   `{ type: "unary", cancelable: false }` 并被冻结。TypeScript 校验 key 和
- *   handler 签名；运行时校验覆盖 JavaScript 以及绕过类型检查的 `any` 值。
+ * - 每个值为 `true` 或省略 `cancelable` 的 unary method 条目都会归一化为
+ *   `{ type: "unary", cancelable: false }` 并被冻结。显式 `cancelable: undefined`
+ *   仍是无效配置。TypeScript 校验 key 和 handler 签名；运行时校验覆盖 JavaScript
+ *   以及绕过类型检查的 `any` 值。
  * - exposure 遇到重复 wire name 或已释放的 owner 时同步拒绝。
  * - 第一阶段的每个草案都支持直接传入 implementation；不包含 Container 专用解析和
  *   implementation 释放。草案 B 的 binding wrapper 仅作为删除测试的备选项存在。
