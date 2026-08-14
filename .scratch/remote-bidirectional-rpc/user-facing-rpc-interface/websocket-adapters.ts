@@ -9,17 +9,19 @@
  * @created 2026-08-13 00:20:00
  */
 
+import { Observable, type Subscriber } from "rxjs";
+
 import type {
-	IPhysicalConnection,
-	IPhysicalConnectionListener,
+	IConnection,
+	IConnectionListener,
 	IRpcAcceptorAdapter,
 	IRpcConnectorAdapter,
-} from "./public-interface";
+} from "./rpc-interface";
 
 // ── 平台最小结构类型与公开 adapter factory ────────────────────────────────
 
-export interface IWebSocketFrameLimits {
-	readonly maxInboundFrames: number;
+export interface IWebSocketMessageLimits {
+	readonly maxInboundMessages: number;
 	readonly maxInboundBytes: number;
 }
 
@@ -97,7 +99,8 @@ export type CreateNodeWebSocketServer = (
 	options: INodeWebSocketServerOptions,
 ) => INodeWebSocketServer;
 
-export interface WebSocketAcceptorAdapterOptions extends IWebSocketFrameLimits {
+export interface WebSocketAcceptorAdapterOptions
+	extends IWebSocketMessageLimits {
 	readonly server: IHttpServer;
 	readonly path: `/${string}`;
 	readonly maxPayloadBytes: number;
@@ -167,7 +170,7 @@ export function createWebSocketAcceptorAdapter(
 }
 
 export interface BrowserWebSocketConnectorAdapterOptions
-	extends IWebSocketFrameLimits {
+	extends IWebSocketMessageLimits {
 	readonly url: string | URL | (() => string | URL);
 	readonly protocols?: string | readonly string[];
 	readonly maxOutboundBufferedBytes: number;
@@ -207,14 +210,14 @@ export function createBrowserWebSocketConnectorAdapter(
 			const webSocket = createWebSocket(url, options.protocols);
 			webSocket.binaryType = "arraybuffer";
 			await waitForBrowserWebSocketOpen(webSocket, signal);
-			return new BrowserWebSocketPhysicalConnection(webSocket, options);
+			return new BrowserWebSocketConnection(webSocket, options);
 		},
 	};
 }
 
 // ── 平台兼容实现：Node / `ws` 被动端 ─────────────────────────────────────
 
-class WebSocketConnectionListener implements IPhysicalConnectionListener {
+class WebSocketConnectionListener implements IConnectionListener {
 	public readonly closed: Promise<void>;
 	private readonly _resolveClosed: () => void;
 	private readonly _rejectClosed: (error: Error) => void;
@@ -228,8 +231,8 @@ class WebSocketConnectionListener implements IPhysicalConnectionListener {
 		private readonly _server: IHttpServer,
 		private readonly _webSocketServer: INodeWebSocketServer,
 		private readonly _path: string,
-		private readonly _limits: IWebSocketFrameLimits,
-		private readonly _accept: (connection: IPhysicalConnection) => void,
+		private readonly _limits: IWebSocketMessageLimits,
+		private readonly _accept: (connection: IConnection) => void,
 		private readonly _onDispose: () => void,
 	) {
 		let resolveClosed: (() => void) | undefined;
@@ -333,9 +336,7 @@ class WebSocketConnectionListener implements IPhysicalConnectionListener {
 						webSocket.terminate();
 						return;
 					}
-					this._accept(
-						new NodeWebSocketPhysicalConnection(webSocket, this._limits),
-					);
+					this._accept(new NodeWebSocketConnection(webSocket, this._limits));
 				},
 			);
 		} catch (error) {
@@ -373,36 +374,40 @@ class WebSocketConnectionListener implements IPhysicalConnectionListener {
 	}
 }
 
-class NodeWebSocketPhysicalConnection implements IPhysicalConnection {
-	public readonly frames: AsyncIterable<Uint8Array>;
-	private readonly _queue: BoundedFrameQueue;
+class NodeWebSocketConnection implements IConnection {
+	public readonly messages: Observable<Uint8Array>;
+	private readonly _source: BoundedMessageSource;
+	private _closeStarted = false;
 	private _disposed = false;
-	private _writeEnded = false;
-
-	public get disposed(): boolean {
-		return this._disposed;
-	}
 
 	public constructor(
 		private readonly _webSocket: INodeWebSocket,
-		limits: IWebSocketFrameLimits,
+		limits: IWebSocketMessageLimits,
 	) {
-		this._queue = new BoundedFrameQueue(limits, (error) => {
-			this._webSocket.close(1009, error.message);
-			this._detachInboundMessage();
-		});
-		this.frames = this._queue;
+		this._source = new BoundedMessageSource(
+			limits,
+			(error) => {
+				this._webSocket.close(1009, error.message);
+				this._detachInboundMessage();
+			},
+			() =>
+				this._abort(
+					new Error("The WebSocket connection was abandoned by its subscriber"),
+				),
+		);
+		this.messages = this._source.messages;
 		this._webSocket.on("message", this._onMessage);
 		this._webSocket.on("close", this._onClose);
 		this._webSocket.on("error", this._onError);
 	}
 
-	public async send(frame: Uint8Array): Promise<void> {
+	public async send(message: Uint8Array): Promise<void> {
 		this._assertWritable();
-		const stableFrame = frame.slice();
+		const stableMessage = message.slice();
 		await new Promise<void>((resolve, reject) => {
-			this._webSocket.send(stableFrame, { binary: true }, (error) => {
+			this._webSocket.send(stableMessage, { binary: true }, (error) => {
 				if (error) {
+					this._abort(error);
 					reject(error);
 				} else {
 					resolve();
@@ -411,45 +416,42 @@ class NodeWebSocketPhysicalConnection implements IPhysicalConnection {
 		});
 	}
 
-	public async end(): Promise<void> {
-		if (this._disposed) {
-			throw new Error("The WebSocket Physical Connection is disposed");
+	public close(): Promise<void> {
+		if (!this._closeStarted && !this._disposed) {
+			this._closeStarted = true;
+			this._webSocket.close(1000, "RPC close");
 		}
-		if (this._writeEnded) {
-			return this._queue.termination;
-		}
-		this._writeEnded = true;
-		this._webSocket.close(1000, "RPC end");
-		await this._queue.termination;
+		return this._source.termination;
 	}
 
-	public dispose(): void {
+	private _abort(error: Error): void {
 		if (this._disposed) {
 			return;
 		}
 		this._disposed = true;
 		this._detach();
-		this._queue.fail(new Error("The WebSocket connection was disposed"));
+		this._source.abort(error);
 		this._webSocket.terminate();
 	}
 
 	private readonly _onMessage: NodeMessageListener = (data, isBinary) => {
 		if (!isBinary) {
-			this._queue.fail(new TypeError("RPC WebSocket frames must be binary"));
-			this._webSocket.close(1003, "Binary frames required");
+			const error = new TypeError("RPC WebSocket messages must be binary");
+			this._webSocket.close(1003, "Binary messages required");
 			this._detachInboundMessage();
+			this._source.fail(error);
 			return;
 		}
-		this._queue.push(copyFrame(data));
+		this._source.push(copyMessage(data));
 	};
 
 	private readonly _onClose: NodeCloseListener = (code) => {
 		this._disposed = true;
 		this._detach();
 		if (code === 1000) {
-			this._queue.finish();
+			this._source.complete();
 		} else {
-			this._queue.fail(new Error(`WebSocket closed abnormally (${code})`));
+			this._source.fail(new Error(`WebSocket closed abnormally (${code})`));
 		}
 	};
 
@@ -458,17 +460,17 @@ class NodeWebSocketPhysicalConnection implements IPhysicalConnection {
 			return;
 		}
 		this._disposed = true;
-		this._queue.fail(error);
+		this._source.fail(error);
 		this._detach();
 		this._webSocket.terminate();
 	};
 
 	private _assertWritable(): void {
 		if (this._disposed || this._webSocket.readyState !== 1) {
-			throw new Error("The WebSocket Physical Connection is unavailable");
+			throw new Error("The WebSocket Connection is unavailable");
 		}
-		if (this._writeEnded) {
-			throw new Error("The WebSocket Physical Connection ended its writes");
+		if (this._closeStarted) {
+			throw new Error("The WebSocket Connection is closing");
 		}
 	}
 
@@ -485,38 +487,41 @@ class NodeWebSocketPhysicalConnection implements IPhysicalConnection {
 
 // ── 平台兼容实现：浏览器主动端 ────────────────────────────────────────────
 
-class BrowserWebSocketPhysicalConnection implements IPhysicalConnection {
-	public readonly frames: AsyncIterable<Uint8Array>;
-	private readonly _queue: BoundedFrameQueue;
+class BrowserWebSocketConnection implements IConnection {
+	public readonly messages: Observable<Uint8Array>;
+	private readonly _source: BoundedMessageSource;
+	private _closeStarted = false;
 	private _disposed = false;
-	private _writeEnded = false;
-
-	public get disposed(): boolean {
-		return this._disposed;
-	}
 
 	public constructor(
 		private readonly _webSocket: WebSocket,
 		private readonly _options: BrowserWebSocketConnectorAdapterOptions,
 	) {
-		this._queue = new BoundedFrameQueue(_options, (error) => {
-			this._webSocket.close(1009, error.message);
-			this._detachInboundMessage();
-		});
-		this.frames = this._queue;
+		this._source = new BoundedMessageSource(
+			_options,
+			(error) => {
+				this._webSocket.close(1009, error.message);
+				this._detachInboundMessage();
+			},
+			() =>
+				this._abort(
+					new Error("The WebSocket connection was abandoned by its subscriber"),
+				),
+		);
+		this.messages = this._source.messages;
 		this._webSocket.addEventListener("message", this._onMessage);
 		this._webSocket.addEventListener("close", this._onClose);
 		this._webSocket.addEventListener("error", this._onError);
 	}
 
-	public async send(frame: Uint8Array): Promise<void> {
+	public async send(message: Uint8Array): Promise<void> {
 		this._assertWritable();
-		if (frame.byteLength > this._options.maxOutboundBufferedBytes) {
-			throw new RangeError("One RPC frame exceeds the WebSocket send limit");
+		if (message.byteLength > this._options.maxOutboundBufferedBytes) {
+			throw new RangeError("One RPC message exceeds the WebSocket send limit");
 		}
 
 		while (
-			this._webSocket.bufferedAmount + frame.byteLength >
+			this._webSocket.bufferedAmount + message.byteLength >
 			this._options.maxOutboundBufferedBytes
 		) {
 			await waitForBrowserDrainTick(this._webSocket);
@@ -525,28 +530,30 @@ class BrowserWebSocketPhysicalConnection implements IPhysicalConnection {
 
 		// 浏览器的 send() 会同步消费所传入的字节。bufferedAmount 是唯一可移植的
 		// 准入信号；浏览器没有提供 drain 事件。
-		this._webSocket.send(frame.slice().buffer);
+		try {
+			this._webSocket.send(message.slice().buffer);
+		} catch (error) {
+			const failure = toError(error);
+			this._abort(failure);
+			throw failure;
+		}
 	}
 
-	public async end(): Promise<void> {
-		if (this._disposed) {
-			throw new Error("The WebSocket Physical Connection is disposed");
+	public close(): Promise<void> {
+		if (!this._closeStarted && !this._disposed) {
+			this._closeStarted = true;
+			this._webSocket.close(1000, "RPC close");
 		}
-		if (this._writeEnded) {
-			return this._queue.termination;
-		}
-		this._writeEnded = true;
-		this._webSocket.close(1000, "RPC end");
-		await this._queue.termination;
+		return this._source.termination;
 	}
 
-	public dispose(): void {
+	private _abort(error: Error): void {
 		if (this._disposed) {
 			return;
 		}
 		this._disposed = true;
 		this._detach();
-		this._queue.fail(new Error("The WebSocket connection was disposed"));
+		this._source.abort(error);
 		// 浏览器没有 terminate()；本地 I/O 会立即失败，但 close() 仍可能发出
 		// 用户代理已经排队的字节。
 		this._webSocket.close();
@@ -554,21 +561,22 @@ class BrowserWebSocketPhysicalConnection implements IPhysicalConnection {
 
 	private readonly _onMessage = (event: MessageEvent<unknown>): void => {
 		if (!(event.data instanceof ArrayBuffer)) {
-			this._queue.fail(new TypeError("RPC WebSocket frames must be binary"));
-			this._webSocket.close(1003, "Binary frames required");
+			const error = new TypeError("RPC WebSocket messages must be binary");
+			this._webSocket.close(1003, "Binary messages required");
 			this._detachInboundMessage();
+			this._source.fail(error);
 			return;
 		}
-		this._queue.push(new Uint8Array(event.data.slice(0)));
+		this._source.push(new Uint8Array(event.data.slice(0)));
 	};
 
 	private readonly _onClose = (event: CloseEvent): void => {
 		this._disposed = true;
 		this._detach();
 		if (event.code === 1000) {
-			this._queue.finish();
+			this._source.complete();
 		} else {
-			this._queue.fail(
+			this._source.fail(
 				new Error(`WebSocket closed abnormally (${event.code})`),
 			);
 		}
@@ -579,17 +587,17 @@ class BrowserWebSocketPhysicalConnection implements IPhysicalConnection {
 			return;
 		}
 		this._disposed = true;
-		this._queue.fail(new Error("The browser WebSocket transport failed"));
+		this._source.fail(new Error("The browser WebSocket transport failed"));
 		this._detach();
 		this._webSocket.close();
 	};
 
 	private _assertWritable(): void {
 		if (this._disposed || this._webSocket.readyState !== 1) {
-			throw new Error("The WebSocket Physical Connection is unavailable");
+			throw new Error("The WebSocket Connection is unavailable");
 		}
-		if (this._writeEnded) {
-			throw new Error("The WebSocket Physical Connection ended its writes");
+		if (this._closeStarted) {
+			throw new Error("The WebSocket Connection is closing");
 		}
 	}
 
@@ -604,102 +612,140 @@ class BrowserWebSocketPhysicalConnection implements IPhysicalConnection {
 	}
 }
 
-// ── 两端共享：帧队列与内部工具 ────────────────────────────────────────────
+// ── 两端共享：消息源与内部工具 ────────────────────────────────────────────
 
-class BoundedFrameQueue implements AsyncIterable<Uint8Array> {
+class BoundedMessageSource {
+	public readonly messages: Observable<Uint8Array>;
 	public readonly termination: Promise<void>;
 	private readonly _resolveTermination: () => void;
 	private readonly _rejectTermination: (error: unknown) => void;
-	private readonly _frames: Uint8Array[] = [];
+	private readonly _messages: Uint8Array[] = [];
 	private _bufferedBytes = 0;
-	private _failure: unknown;
+	private _drainScheduled = false;
+	private _failure: Error | undefined;
 	private _finished = false;
-	private _taken = false;
-	private _wake: (() => void) | undefined;
+	private _subscribed = false;
+	private _subscriber: Subscriber<Uint8Array> | undefined;
 
 	public constructor(
-		private readonly _limits: IWebSocketFrameLimits,
+		private readonly _limits: IWebSocketMessageLimits,
 		private readonly _onOverflow: (error: RangeError) => void,
+		private readonly _onAbandon: () => void,
 	) {
+		this.messages = new Observable((subscriber) => {
+			if (this._subscribed) {
+				queueMicrotask(() => {
+					subscriber.error(
+						new TypeError("Connection messages allow one subscription"),
+					);
+				});
+				return;
+			}
+
+			this._subscribed = true;
+			this._subscriber = subscriber;
+			this._scheduleDrain();
+			return () => {
+				this._subscriber = undefined;
+				if (!this._finished) {
+					this._onAbandon();
+				}
+			};
+		});
+
 		let resolveTermination: (() => void) | undefined;
 		let rejectTermination: ((error: unknown) => void) | undefined;
 		this.termination = new Promise<void>((resolve, reject) => {
 			resolveTermination = resolve;
 			rejectTermination = reject;
 		});
-		// 接收迭代也会观察到同一个错误。当前若没有等待 termination 的优雅 end()
+		// Observable 也会观察到同一个错误。当前若没有等待 termination 的 close()
 		// 调用方，则应避免产生未处理的 Promise 拒绝。
 		void this.termination.catch(() => undefined);
 		this._resolveTermination = () => resolveTermination?.();
 		this._rejectTermination = (error) => rejectTermination?.(error);
 	}
 
-	public push(frame: Uint8Array): void {
+	public push(message: Uint8Array): void {
 		if (this._finished) {
 			return;
 		}
 		if (
-			this._frames.length >= this._limits.maxInboundFrames ||
-			this._bufferedBytes + frame.byteLength > this._limits.maxInboundBytes
+			this._messages.length >= this._limits.maxInboundMessages ||
+			this._bufferedBytes + message.byteLength > this._limits.maxInboundBytes
 		) {
-			const error = new RangeError("WebSocket RPC inbound buffer overflow");
+			const error = new RangeError(
+				"WebSocket RPC inbound message buffer overflow",
+			);
 			this.fail(error);
 			this._onOverflow(error);
 			return;
 		}
 
-		this._frames.push(frame);
-		this._bufferedBytes += frame.byteLength;
-		this._wake?.();
-		this._wake = undefined;
+		this._messages.push(message);
+		this._bufferedBytes += message.byteLength;
+		this._scheduleDrain();
 	}
 
-	public finish(): void {
+	public complete(): void {
 		if (this._finished) {
 			return;
 		}
 		this._finished = true;
+		this._scheduleDrain();
 		this._resolveTermination();
-		this._wake?.();
-		this._wake = undefined;
 	}
 
 	public fail(error: unknown): void {
 		if (this._finished) {
 			return;
 		}
-		this._failure = error;
+		this._failure = toError(error);
 		this._finished = true;
-		this._rejectTermination(error);
-		this._wake?.();
-		this._wake = undefined;
+		this._scheduleDrain();
+		this._rejectTermination(this._failure);
 	}
 
-	public [Symbol.asyncIterator](): AsyncIterator<Uint8Array> {
-		if (this._taken) {
-			throw new TypeError("Physical Connection frames are single-consumer");
+	public abort(error: Error): void {
+		if (this._finished) {
+			return;
 		}
-		this._taken = true;
-		return this._iterate();
+		this._messages.length = 0;
+		this._bufferedBytes = 0;
+		this.fail(error);
 	}
 
-	private async *_iterate(): AsyncGenerator<Uint8Array> {
-		while (true) {
-			const frame = this._frames.shift();
-			if (frame) {
-				this._bufferedBytes -= frame.byteLength;
-				yield frame;
-				continue;
-			}
-			if (this._failure !== undefined) {
-				throw this._failure;
-			}
-			if (this._finished) {
+	private _scheduleDrain(): void {
+		if (this._drainScheduled || !this._subscriber) {
+			return;
+		}
+		this._drainScheduled = true;
+		queueMicrotask(() => this._drain());
+	}
+
+	private _drain(): void {
+		this._drainScheduled = false;
+		const subscriber = this._subscriber;
+		if (!subscriber || subscriber.closed) {
+			return;
+		}
+
+		for (let message = this._messages.shift(); message; ) {
+			this._bufferedBytes -= message.byteLength;
+			subscriber.next(message);
+			if (subscriber.closed) {
 				return;
 			}
-			await new Promise<void>((resolve) => {
-				this._wake = resolve;
-			});
+			message = this._messages.shift();
+		}
+
+		if (!this._finished) {
+			return;
+		}
+		if (this._failure) {
+			subscriber.error(this._failure);
+		} else {
+			subscriber.complete();
 		}
 	}
 }
@@ -767,18 +813,18 @@ async function waitForBrowserDrainTick(webSocket: WebSocket): Promise<void> {
 	});
 }
 
-function copyFrame(
+function copyMessage(
 	data: ArrayBuffer | Uint8Array | readonly Uint8Array[],
 ): Uint8Array {
 	if (!(data instanceof ArrayBuffer) && !(data instanceof Uint8Array)) {
 		const size = data.reduce((total, part) => total + part.byteLength, 0);
-		const frame = new Uint8Array(size);
+		const message = new Uint8Array(size);
 		let offset = 0;
 		for (const part of data) {
-			frame.set(part, offset);
+			message.set(part, offset);
 			offset += part.byteLength;
 		}
-		return frame;
+		return message;
 	}
 	return data instanceof Uint8Array
 		? Uint8Array.from(data)
@@ -789,8 +835,8 @@ function toError(error: unknown): Error {
 	return error instanceof Error ? error : new Error(String(error));
 }
 
-function validateLimits(limits: IWebSocketFrameLimits): void {
-	assertPositiveInteger(limits.maxInboundFrames, "maxInboundFrames");
+function validateLimits(limits: IWebSocketMessageLimits): void {
+	assertPositiveInteger(limits.maxInboundMessages, "maxInboundMessages");
 	assertPositiveInteger(limits.maxInboundBytes, "maxInboundBytes");
 }
 

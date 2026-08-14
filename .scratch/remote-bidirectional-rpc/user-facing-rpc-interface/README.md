@@ -1,128 +1,106 @@
-# 面向用户的 RPC 接口原型
+# 暂定的面向用户 RPC interface
 
-这些文件是**用完即弃、仅用于编译验证的设计探针**。它们用同一组真实工作流比较
-不同的公开接口形态；其中任何一个都不是已接受的包接口或生产实现。
+这里现在只保留一套 compile-only throwaway prototype。它是当前讨论基线，尚未成为
+`@husky-di/remote` 的生产 interface；旧候选源码已经删除，历史取舍保留在 issue
+评论和研究记录中。
 
-## 按读者阅读
+## 当前形态
 
-调用 adapter factory、填写配置并把 adapter 交给 RPC，属于应用装配；实现
-adapter factory、转换平台事件并处理背压与连接生命周期，才属于平台兼容代码。
+- `createRpcConnector({ adapter })` 创建主动 topology owner，并公开一个稳定的
+  `connector.peer`。
+- 单个 Logical Session 的 `expose()` 与 `resolve()` 都位于 `RpcPeer`；Connector
+  不复制这些成员。
+- `createRpcAcceptor({ adapter })` 创建被动 topology owner。它公开 `peers`、
+  `onPeer()`、`resolveAll()`，并用集合级 `expose()` 原子覆盖所有当前及未来 peer。
+- Connector 与 Acceptor 各自拥有其 exposure、Logical Session 和连接；Acceptor 还拥有
+  listener。两者只借用本地 implementation、adapter 借用的外部 HTTP server 等外部资源。
+- `Cleanup` 只移除一次 exposure 或订阅；`Connector`、`Acceptor` 和 listener 使用
+  `dispose()`。一次性的 `IConnection` 不再公开 `dispose()`，只以幂等 `close()`
+  结束连接。
 
-- 应用开发者：先读 `fixtures.ts`，再选择一个候选目录，分别查看
-  `connector.usage.ts` 与 `acceptor.usage.ts`；具体装配可参考
-  `in-memory/scenario.ts` 和 `websocket-express/`。
-- Adapter 作者：先读 `transport-seams/rpc-interface.ts`，再分别查看该目录中的
-  Connector、Acceptor 与 Physical I/O 用例；WebSocket 实现位于
-  `websocket-adapters.ts`，Express、`ws` 与 Node 类型的薄适配位于
-  `websocket-express/platform.ts`。
-- 接口评审者：结合 `public-interface.ts`、`type-validation.usage.ts`，以及现代
-  三案各自的 `rpc-interface.ts` 阅读。
+浏览器主动端的核心用法：
 
-## 目录约定
+```ts
+const connector = createRpcConnector({ adapter });
 
-每类 usage 位于独立目录。一个候选目录中的文件职责固定如下：
+const cleanup = connector.peer.expose(remoteClientEvents, clientEvents);
+const session = connector.peer.resolve(remoteSession);
 
-- `connector.usage.ts` 只展示主动 topology，不创建 Acceptor。
-- `acceptor.usage.ts` 只展示被动 topology，不创建 Connector。
-- `remote-services.ts` 只保存两种 topology 共用的不可变远端服务 descriptor，
-  不持有 RPC、adapter、exposure 或 topology 的生命周期。
+try {
+  await connector.connect();
+  await session.ping();
+} finally {
+  cleanup();
+  connector.dispose();
+}
+```
 
-`refined-root/`、`direct-tasks/` 与 `eager-connection/` 是现代三案；每个目录还
-包含独立的 `rpc-interface.ts`，让候选声明与用户代码同处一类目录。
-`root-centered/`、`contract-centered/` 与 `functional-seams/` 是较早一轮的
-比较集，共用顶层 `public-interface.ts`。后两者的 `scenario.ts` 只编排两侧
-高层 usage，用来保留“两个 topology 显式借用同一公共 owner”的原始对比场景。
+Express 被动端的核心用法：
 
-`in-memory/connector.usage.ts` 与 `in-memory/acceptor.usage.ts` 分别拥有各自
-topology；`in-memory/scenario.ts` 只负责创建 adapter pair 并编排两端，不把两种
-RPC 用法重新混入同一文件。`websocket-express/` 同样将共享 descriptor、浏览器
-Connector、Express Acceptor 和 `platform.ts` 分开。
+```ts
+const acceptor = createRpcAcceptor({ adapter });
 
-`transport-seams/` 不声明业务 descriptor。其文件固定为
-`rpc-interface.ts`、`physical-io.usage.ts`、`connector.usage.ts`、
-`acceptor.usage.ts` 与 `scenario.ts`：接口、三种 I/O 成本、两种 topology
-生命周期和固定对比场景彼此分离。
+const cleanup = acceptor.expose(remoteSession, sessionService);
+const clients = acceptor.resolveAll(remoteClientEvents);
 
-## 场景矩阵
+try {
+  await acceptor.listen();
+  await clients.changed("maintenance-scheduled");
+} finally {
+  cleanup();
+  acceptor.dispose();
+}
+```
 
-每个面向调用方的候选方案都应让下列成本清晰可见：
+## Connection seam
 
-| 场景 | 原型必须展示的内容 |
-| --- | --- |
-| 契约编写 | 稳定的线上名称、明确的方法白名单和取消元数据 |
-| 主动端装配 | 本地回调暴露与一个具体的 Connector Adapter |
-| 首次连接前 | 稳定的 peer 和 proxy 是否已经可以存在 |
-| 启动失败 | 重试会保留还是替换 owner、peer 和 proxy |
-| 取消 | 调用方参数及 handler 所见 `AbortSignal` 的准确契约 |
-| 短暂断线 | 替换 Physical Connection 后既有 proxy 是否仍可使用 |
-| 被动端装配 | 一个具体的 Acceptor Adapter 和可观察的监听就绪状态 |
-| 新 Logical Session | 如何在没有订阅竞态的情况下观察首个 peer |
-| 单个 peer | 与一个稳定 `RpcPeer` 关联的直接调用 |
-| 全部 peer | 快照时点、并发扇出以及带 peer 标识的局部失败 |
-| 局部清理 | 如何结束一个 exposure 或 topology 而不结束其同级资源 |
-| 聚合清理 | `rpc.dispose()` 拥有什么、仅借用什么 |
+```ts
+interface IConnection {
+  readonly messages: Observable<Uint8Array>;
+  send(message: Uint8Array): Promise<void>;
+  close(): Promise<void>;
+}
+```
 
-面向 Adapter 的候选方案还需展示 message transport、raw-byte transport
-和内存映射；接收失败、出站本地准入、framing 所有权、启动/后续失败以及
-幂等释放都不能停留在未写明的约定中。
+`messages` 是 hot、单订阅的完整 encoded RPC message 源。正常远端关闭时 complete，
+传输故障或 buffer overflow 时 error。取消唯一 subscription 表示放弃连接，adapter
+会在内部终止底层传输，不需要另一个公开的 abort/dispose member。
 
-调用方文件有意接收共享的 Connector/Acceptor Adapter port，而不重复
-transport 构造。阅读每个调用方候选时，应同时查看
-`transport-seams/rpc-interface.ts`、`physical-io.usage.ts` 及相应 topology
-用例：前者检验应用侧人体工学，后者让 WebSocket、TCP 和内存实现成本可见。
-这些是用法与契约探针，不是运行时验证。当前目录中已有
-`websocket-adapters.ts`，以及 `public-interface.ts` 中的
-`createMemoryRpcAdapterPair()`，它们提供了具体的完整帧原型。
+Observable 不提供 consumer backpressure。无法暂停的 push transport 必须限制自己
+实际持有的消息数和字节数；RPC implementation 如果把消息转交给异步队列，该队列
+也必须独立有界。`send()` 的 Promise 只表示本地复制/消费与 admission，不表示远端
+delivery、decode 或 ACK。`close()` 会同步禁止后续 send，并异步完成 graceful close。
 
-## 候选方案
+## 文件
 
-- `refined-root/`：显式的 Connector 与 Acceptor owner；
-  创建对象和等待 `connect()` / `listen()` 就绪相互分离。
-- `direct-tasks/`：`await rpc.connect()` 与
-  `await rpc.listen()` 直接返回可用 handle。
-- `eager-connection/`：`rpc.connect()` / `rpc.listen()`
-  同步返回 handle，并由其中的 Promise 暴露就绪状态。
-- `transport-seams/`：固定主动/被动 topology，以同一个 ping/pong 工作流比较
-  三种 Physical Connection I/O 接口。目录中的 adapter factory 都明确只是
-  未实现的成本草图；这些文件验证接口用法与书面契约，不验证其实现。
-
-## 调用方形态覆盖表
-
-| 压力点 | 精炼 root | 直接 task | 立即返回的 handle |
-| --- | --- | --- | --- |
-| 首次连接前的 proxy | 可以 | 形态上不可能 | 可以 |
-| 首次失败后重试 | 保留同一 connector、peer 和 proxy | 重新执行整个 task；失败时没有 handle | 释放并重建 connector 和 proxy |
-| 后续断线恢复 | 调用方执行 `connector.connect()` | 需要隐藏的自动策略 | 需要隐藏的自动策略 |
-| 无竞态地接收首个 peer | 在 `listen()` 前订阅 | 将回调传给 `listen()` | 将回调传给 `listen()` |
-| 监听就绪 | `await acceptor.listen()` | `await rpc.listen()` 返回 listener | `await acceptor.ready` |
-| 监听后续失败 | 形态上被隐藏 | `listener.closed` reject | `acceptor.closed` reject |
-| 定向一个/全部 peer | `peer.resolve()` / `resolveAll()` | `peer.proxy()` / `listener.all()` | `peer.resolve()` / `resolveAll()` |
-| 局部/聚合清理 | 均有展示 | 均有展示 | 均有展示 |
-
-直接 task 候选中的 `proxy()` / `all()` 命名是有意保留的：这样命名本身仍是
-一个可见的设计维度，而不会被悄悄视为与领域术语 `resolve()` /
-`resolveAll()` 等价。
-
-已有的 `root-centered/`、`contract-centered/` 和 `functional-seams/` 目录属于
-较早一轮的比较集。在后续评审明确否决并删除某种形态之前，继续保留它们。
+- `rpc-interface.ts`：唯一的 caller 与 adapter interface 声明。
+- `fixtures.ts`：两端共用的业务类型、implementation 与 descriptor options。
+- `type-validation.usage.ts`：逐方法 map、取消参数和 proxy shape 的编译期负例。
+- `connection.usage.ts`：RPC implementation 如何订阅消息、发送并关闭连接。
+- `websocket-adapters.ts`：浏览器 Connector adapter 与 Node/`ws` Acceptor adapter。
+- `websocket-express/connector.usage.ts`：浏览器主动端装配。
+- `websocket-express/acceptor.usage.ts`：Express 共享 HTTP server 的被动端装配。
+- `websocket-express/remote-services.ts`：两端共享的 immutable descriptor。
+- `websocket-express/platform.ts`：Express、Node HTTP 与 `ws` 的薄类型适配。
 
 ## 验证
 
-在仓库根目录使用 `@husky-di/remote` 安装的 TypeScript 可执行文件，对每个
-文件执行严格的单文件检查：
+从仓库根目录执行：
 
 ```sh
+pnpm exec biome check \
+  .scratch/remote-bidirectional-rpc/user-facing-rpc-interface
+
 pnpm --filter @husky-di/remote exec tsc \
   --ignoreConfig \
   --noEmit \
   --strict \
+  --exactOptionalPropertyTypes \
   --skipLibCheck \
   --target ES2022 \
   --module ESNext \
   --moduleResolution bundler \
   --lib ES2023,DOM \
-  /absolute/path/to/candidate.ts
+  "${PWD}"/.scratch/remote-bidirectional-rpc/user-facing-rpc-interface/*.ts \
+  "${PWD}"/.scratch/remote-bidirectional-rpc/user-facing-rpc-interface/websocket-express/*.ts
 ```
-
-`type-validation.usage.ts` 还应额外加上 `--exactOptionalPropertyTypes` 再执行一次，
-确保 `cancelable` 的省略语义不依赖使用者的 TypeScript 配置。

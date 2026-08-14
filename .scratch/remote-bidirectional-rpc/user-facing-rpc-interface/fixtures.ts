@@ -1,14 +1,13 @@
 /**
- * @overview 仅用于原型——RPC 用法比较所共用的服务。
+ * @overview 仅用于原型——暂定 RPC 用法所共用的服务。
  *
- * 这些值让每个用法示例专注于其公开 API 形态，同时各草案仍自行构造远程
- * descriptor。
+ * 这些值让 Connector 与 Acceptor 用法专注于暂定 interface，而不重复业务实现。
  *
  * @author AEPKILL
  * @created 2026-08-12 23:20:00
  */
 
-import type { ServiceIdentifier } from "./public-interface";
+import type { ServiceIdentifier } from "./rpc-interface";
 
 export interface SessionService {
 	login(
