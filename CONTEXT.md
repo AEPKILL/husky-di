@@ -91,19 +91,6 @@ The decorator package supports only TypeScript experimental decorators, not ES d
 
 The module system is inspired by ESM semantics: imports must be explicit, export boundaries must be explicit, and naming conflicts should surface when a module is created instead of turning into ambiguity at runtime.
 
-### 远程 RPC
-
-- **Physical Connection**：由 Connector 建立或由 Acceptor 接收的一次具有有限生命周期的全双工连接。Physical Connection 暂时中断不一定会结束对应的 Logical Session。
-- **Logical Session**：两个 peer 之间保存在内存中的 RPC 关系。只要两端进程仍然存活，一个 Logical Session 就可以跨越多次 Physical Connection；任一 peer 进程重启都会结束该 session。
-- **Connector**：主动向远程 endpoint 建立 Physical Connection 的连接建立角色。
-- **Acceptor**：被动等待 Physical Connection，并为每个已接受关系产生 peer 的连接建立角色。
-- **RpcPeer**：协议无关、在连接两端拥有相同对称能力的 RPC peer。无论连接源自 Connector 还是 Acceptor，peer 都可以暴露本地服务、获取远程服务 proxy、发起 call 或处理 call。RpcPeer 及其 registration 可以在 Physical Connection 不存在时继续存在。
-- **RemoteServiceIdentifier**：从核心 `ServiceIdentifier` 推导出的远程调用 contract。它选择显式暴露的方法，将远程返回值映射为 Promise，并在不改变原 identifier 本地 DI identity 的前提下，为服务提供稳定的 Wire Service Name。
-- **Wire Service Name**：用于在 peer 之间标识远程服务的稳定字符串。字符串 ServiceIdentifier 可以默认提供自身名称；constructor 和 Symbol identifier 必须显式提供 Wire Service Name。
-- **Remote Method**：由 RemoteServiceIdentifier 显式选择、以字符串命名的方法。Remote Method 共同组成 callable surface；普通属性和其他未选成员不会被远程暴露。
-- **Acceptor Peer Snapshot**：Acceptor 当前观察到的 peer 只读数组。它是普通数组快照，不是在数组上附加 RPC 方法的自定义 collection。
-- **Remote Service Group**：通过 Acceptor 的 `resolveAll()` 获取的类型安全批量 proxy。它可以在任何 Physical Connection 存在之前获取；每次方法调用都会在调用时对适用的 peer 取 snapshot，并独立报告每个 peer 的结果。
-
 ## Behavioral constraints
 
 - The same `ServiceIdentifier` can be registered multiple times in the same container.

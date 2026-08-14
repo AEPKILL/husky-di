@@ -1,8 +1,8 @@
 # 暂定的面向用户 RPC interface
 
-这里现在只保留一套 compile-only throwaway prototype。它是当前讨论基线，尚未成为
-`@husky-di/remote` 的生产 interface；旧候选源码已经删除，历史取舍保留在 issue
-评论和研究记录中。
+这里现在只保留一套 throwaway prototype source，作为下一轮讨论的参考。它尚未成为
+`@husky-di/remote` 的生产 interface，也不接入当前 workspace 的依赖或验证流程；旧候选
+源码和讨论材料已经删除。
 
 ## 当前形态
 
@@ -82,25 +82,3 @@ delivery、decode 或 ACK。`close()` 会同步禁止后续 send，并异步完�
 - `websocket-express/acceptor.usage.ts`：Express 共享 HTTP server 的被动端装配。
 - `websocket-express/remote-services.ts`：两端共享的 immutable descriptor。
 - `websocket-express/platform.ts`：Express、Node HTTP 与 `ws` 的薄类型适配。
-
-## 验证
-
-从仓库根目录执行：
-
-```sh
-pnpm exec biome check \
-  .scratch/remote-bidirectional-rpc/user-facing-rpc-interface
-
-pnpm --filter @husky-di/remote exec tsc \
-  --ignoreConfig \
-  --noEmit \
-  --strict \
-  --exactOptionalPropertyTypes \
-  --skipLibCheck \
-  --target ES2022 \
-  --module ESNext \
-  --moduleResolution bundler \
-  --lib ES2023,DOM \
-  "${PWD}"/.scratch/remote-bidirectional-rpc/user-facing-rpc-interface/*.ts \
-  "${PWD}"/.scratch/remote-bidirectional-rpc/user-facing-rpc-interface/websocket-express/*.ts
-```

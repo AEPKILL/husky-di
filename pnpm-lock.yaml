@@ -29,9 +29,6 @@ importers:
       lint-staged:
         specifier: ^16.4.0
         version: 16.4.0
-      rxjs:
-        specifier: 7.8.2
-        version: 7.8.2
       turbo:
         specifier: ^2.9.12
         version: 2.9.12
