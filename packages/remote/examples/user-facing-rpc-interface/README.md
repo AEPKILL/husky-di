@@ -10,11 +10,11 @@ pnpm --filter @husky-di/remote typecheck
 
 ## 当前形态
 
-- `createRpcConnector({ adapter })` 创建主动 topology owner，并公开一个稳定的
+- `createRpcConnector()` 创建主动 topology owner，并公开一个稳定的
   `connector.peer`。
 - 单个 Logical Session 的 `expose()` 与 `resolve()` 都位于 `RpcPeer`；Connector
   不复制这些成员。
-- `createRpcAcceptor({ adapter })` 创建被动 topology owner。它公开 `peers`、
+- `createRpcAcceptor()` 创建被动 topology owner。它公开 `peers`、
   `peer$`、`resolveAll()`，并用集合级 `expose()` 原子覆盖所有当前及未来 peer。
 - Connector 与 Acceptor 各自拥有其 exposure、Logical Session 和连接；Acceptor 还接管
   adapter 的监听生命周期。两者只借用本地 implementation、adapter 借用的外部
@@ -30,12 +30,12 @@ pnpm --filter @husky-di/remote typecheck
 浏览器主动端的核心用法：
 
 ```ts
-const connector = createRpcConnector({ adapter });
+const connector = createRpcConnector();
 const cleanup = connector.peer.expose(remoteClientEvents, clientEvents);
 const session = connector.peer.resolve(remoteSession);
 
 try {
-  await connector.connect();
+  await connector.connect(createConnectorAdapter());
   await session.ping();
 } finally {
   cleanup();
@@ -46,7 +46,7 @@ try {
 Express 被动端的核心用法：
 
 ```ts
-const acceptor = createRpcAcceptor({ adapter });
+const acceptor = createRpcAcceptor();
 const cleanup = acceptor.expose(remoteSession, sessionService);
 const clients = acceptor.resolveAll(remoteClientEvents);
 acceptor.peer$.subscribe({
@@ -60,13 +60,23 @@ acceptor.peer$.subscribe({
 });
 
 try {
-  await acceptor.listen();
+  await acceptor.listen(createAcceptorAdapter());
   await clients.changed("maintenance-scheduled");
 } finally {
   cleanup();
   acceptor.dispose();
 }
 ```
+
+Owner factory 只创建稳定的 topology 与 peer，不要求 adapter，也不启动 I/O。调用方先
+完成 `expose()`、`resolve()` / `resolveAll()` 与 `peer$` 订阅，再在 `try` 内创建 adapter
+并传给 `connect(adapter)` / `listen(adapter)`。Connector 只接管 adapter 兑现的 connection；
+Acceptor 从方法调用起接管 adapter 本身。这种 deferred injection 让 adapter factory 的同步
+校验故障也进入同一个 `finally`，已建立的 exposure、订阅与 owner 都能正常收尾。
+
+同一 adapter 的重叠启动调用共享一次启动。Connector 正在建连时收到不同 adapter 会直接
+拒绝且不保留它；Acceptor 收到不同 adapter 时会先 dispose 它再拒绝，避免 inline 创建的
+disposable adapter 泄漏。Acceptor 就绪后用同一 adapter 重复调用 `listen()` 会直接完成。
 
 每次调用单 peer remote proxy 方法都会立即发起一次 RPC，并返回单一结果的 Promise；
 调用失败时 Promise 拒绝。标记为 `cancelable: true` 的方法在 caller 侧接受可选的
@@ -77,7 +87,7 @@ try {
 中返回完整结果数组。单 peer 失败仍以 `RpcPeerResult.rejected` 留在数组中；caller signal
 取消整个 batch 并拒绝顶层 Promise，而不是返回一组 canceled results。`peer$` 是不重放
 历史的新 Logical Session hot 事件流；`peers` 继续提供当前只读快照。
-`acceptor.listen()` 的 Promise 只表达启动就绪或失败；就绪后的 lifecycle 由 `peer$`
+`acceptor.listen(adapter)` 的 Promise 只表达启动就绪或失败；就绪后的 lifecycle 由 `peer$`
 表达，正常 dispose 时 complete，后续故障时 error。
 
 `message$`、`connection$` 与 `peer$` 是随时间到达的持续事件源，因此使用
@@ -124,7 +134,8 @@ emit；每个 next 只向这一 consumer 移交一次物理 connection 所有权
 
 WebSocket Acceptor adapter 只借用应用的 HTTP server。`dispose()` 会移除 Upgrade 监听，
 但不会关闭这个 server，也不会关闭已经移交给 Acceptor 的 physical connections。Owner 级
-`connect()` / `listen()` 不额外暴露 signal，由 owner 的 `dispose()` 结束其生命周期。
+`connect(adapter)` / `listen(adapter)` 不额外暴露 signal，由 owner 的 `dispose()` 结束其
+生命周期。
 
 ## 文件
 

@@ -17,14 +17,7 @@ import { remoteClientEvents, remoteSession } from "./remote-services";
 export async function browserWebSocketClientUsage(
 	url = "wss://example.test/rpc",
 ): Promise<void> {
-	const connector = createRpcConnector({
-		adapter: createBrowserWebSocketConnectorAdapter({
-			url,
-			maxInboundMessages: 64,
-			maxInboundBytes: 4 << 20,
-			maxOutboundBufferedBytes: 1 << 20,
-		}),
-	});
+	const connector = createRpcConnector();
 	const stopClientEvents = connector.peer.expose(
 		remoteClientEvents,
 		clientEvents,
@@ -32,7 +25,14 @@ export async function browserWebSocketClientUsage(
 	const session = connector.peer.resolve(remoteSession);
 
 	try {
-		await connector.connect();
+		await connector.connect(
+			createBrowserWebSocketConnectorAdapter({
+				url,
+				maxInboundMessages: 64,
+				maxInboundBytes: 4 << 20,
+				maxOutboundBufferedBytes: 1 << 20,
+			}),
+		);
 		await session.ping();
 	} finally {
 		stopClientEvents();

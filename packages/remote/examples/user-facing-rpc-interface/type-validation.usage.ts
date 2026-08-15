@@ -15,6 +15,7 @@ import {
 	type IRpcAcceptor,
 	type IRpcAcceptorAdapter,
 	type IRpcConnector,
+	type IRpcConnectorAdapter,
 	type IRpcPeer,
 	type RpcMethodDefinitions,
 	type RpcPeerResult,
@@ -38,6 +39,7 @@ declare const typeValidationPeer: IRpcPeer;
 declare const typeValidationAcceptor: IRpcAcceptor;
 declare const typeValidationAcceptorAdapter: IRpcAcceptorAdapter;
 declare const typeValidationConnector: IRpcConnector;
+declare const typeValidationConnectorAdapter: IRpcConnectorAdapter;
 
 /** 本函数只供 TypeScript 编译期探测，绝不应被调用。 */
 export function typeValidationUsage(): void {
@@ -119,8 +121,12 @@ export function typeValidationUsage(): void {
 	> = cancelableBatch.login("aepkill", "secret", callerSignal);
 	// @ts-expect-error batch caller cancellation 也只接受 AbortSignal。
 	cancelableBatch.login("aepkill", "secret", "not-a-signal");
-	const connectResult: Promise<void> = typeValidationConnector.connect();
-	const listenResult: Promise<void> = typeValidationAcceptor.listen();
+	const connectResult: Promise<void> = typeValidationConnector.connect(
+		typeValidationConnectorAdapter,
+	);
+	const listenResult: Promise<void> = typeValidationAcceptor.listen(
+		typeValidationAcceptorAdapter,
+	);
 	const peer$: Observable<IRpcPeer> = typeValidationAcceptor.peer$;
 	const connection$: Observable<IConnection> =
 		typeValidationAcceptorAdapter.connection$;
@@ -137,6 +143,10 @@ export function typeValidationUsage(): void {
 	void adapterListenResult;
 	void adapterDisposed;
 	typeValidationAcceptorAdapter.dispose();
+	// @ts-expect-error 每次建连必须显式提供 connector adapter。
+	typeValidationConnector.connect();
+	// @ts-expect-error 首次启动必须显式提供 acceptor adapter。
+	typeValidationAcceptor.listen();
 	// @ts-expect-error connection 通过 connection$ 交付，listen 不再接受 callback。
 	typeValidationAcceptorAdapter.listen(() => undefined, callerSignal);
 	// @ts-expect-error Acceptor lifecycle terminal 由 peer$ 表达，不再公开 closed。

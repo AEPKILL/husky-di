@@ -25,16 +25,7 @@ export async function webSocketExpressServerUsage<
 	app.get("/health", (_request, response) => response.sendStatus(204));
 	const httpServer = platform.createHttpServer(app);
 
-	const acceptor = createRpcAcceptor({
-		adapter: createWebSocketAcceptorAdapter({
-			server: httpServer,
-			path: "/rpc",
-			maxPayloadBytes: 4 << 20,
-			maxInboundMessages: 64,
-			maxInboundBytes: 4 << 20,
-			createWebSocketServer: platform.createWebSocketServer,
-		}),
-	});
+	const acceptor = createRpcAcceptor();
 	const stopSessionExposure = acceptor.expose(remoteSession, sessionService);
 	const allClientEvents = acceptor.resolveAll(remoteClientEvents);
 	acceptor.peer$.subscribe({
@@ -49,14 +40,23 @@ export async function webSocketExpressServerUsage<
 		error: reportAcceptorFailure,
 	});
 
-	// listen() 同步开始启动；所借用的 HTTP 服务器就绪后才开放 Upgrade 处理。
+	// listen(adapter) 同步开始启动；所借用的 HTTP 服务器就绪后才开放 Upgrade 处理。
 	// Express middleware 不处理 Upgrade 请求；身份认证被有意排除在该原型之外。
 	try {
-		const rpcReady = acceptor.listen();
+		const rpcReady = acceptor.listen(
+			createWebSocketAcceptorAdapter({
+				server: httpServer,
+				path: "/rpc",
+				maxPayloadBytes: 4 << 20,
+				maxInboundMessages: 64,
+				maxInboundBytes: 4 << 20,
+				createWebSocketServer: platform.createWebSocketServer,
+			}),
+		);
 		try {
 			httpServer.listen(3_000);
 		} catch (error) {
-			// listen() 已启动；在重抛同步故障前接住它随后可能产生的拒绝。
+			// listen(adapter) 已启动；在重抛同步故障前接住它随后可能产生的拒绝。
 			void rpcReady.catch(() => undefined);
 			throw error;
 		}

@@ -355,10 +355,12 @@ export interface IRpcConnector extends IDisposable {
 	readonly peer: IRpcPeer;
 
 	/**
-	 * 启动或恢复同一 Logical Session。并发调用合并；首次失败后可以在同一 owner、
-	 * peer 和 proxy 上重试。
+	 * 用 adapter 启动或恢复同一 Logical Session；只接管其兑现的 connection，不接管
+	 * adapter。同一 adapter 的重叠调用合并；进行中的 attempt 收到不同 adapter，或当前
+	 * connection 仍可用时再次调用，都会拒绝且不调用或保留新 adapter。失败或连接终止后
+	 * 可在同一 owner、peer 和 proxy 上重试。
 	 */
-	connect(): Promise<void>;
+	connect(adapter: IRpcConnectorAdapter): Promise<void>;
 }
 
 export interface IRpcAcceptor extends IDisposable {
@@ -381,10 +383,11 @@ export interface IRpcAcceptor extends IDisposable {
 	readonly peer$: Observable<IRpcPeer>;
 
 	/**
-	 * Adapter 就绪后完成。并发调用合并，成功后再次调用直接完成；启动失败终止该
-	 * Acceptor，重试必须创建新 owner。
+	 * 调用即把 adapter 所有权交给 Acceptor。首次调用会先订阅 connection$ 再启动 adapter；
+	 * 同一 adapter 的重叠调用合并，就绪后的重复调用直接完成。其他 adapter 会被立即 dispose
+	 * 并拒绝；启动失败会 dispose 已接管的 adapter 并终止该 Acceptor。
 	 */
-	listen(): Promise<void>;
+	listen(adapter: IRpcAcceptorAdapter): Promise<void>;
 
 	/**
 	 * 每次远程方法调用时截取 peers 快照，并保留每项结果对应的 peer。单 peer 失败留在
@@ -395,12 +398,8 @@ export interface IRpcAcceptor extends IDisposable {
 	): RemoteServiceGroup<IRpcPeer, T, Definitions>;
 }
 
-/** 创建 owner 但不执行 I/O；Connector 接管 adapter 返回的连接。 */
-export declare function createRpcConnector(options: {
-	readonly adapter: IRpcConnectorAdapter;
-}): IRpcConnector;
+/** 创建未启动 owner；peer 及其 expose、resolve 在 connect 前即可使用。 */
+export declare function createRpcConnector(): IRpcConnector;
 
-/** 创建 owner 但不执行 I/O；Acceptor 接管 adapter，但不释放 adapter 借用的外部资源。 */
-export declare function createRpcAcceptor(options: {
-	readonly adapter: IRpcAcceptorAdapter;
-}): IRpcAcceptor;
+/** 创建未启动 owner；expose、resolveAll 与 peer$ 在 listen 前即可使用。 */
+export declare function createRpcAcceptor(): IRpcAcceptor;
