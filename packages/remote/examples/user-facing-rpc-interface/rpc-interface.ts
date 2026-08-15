@@ -1,9 +1,9 @@
 /**
- * @overview 仅供原型验证——暂定的双向 RPC 公开 interface。
+ * @overview @husky-di/remote 设计示例——暂定的双向 RPC 公开 interface。
  *
  * 当前只保留 peer-owned exposure、独立 Connector/Acceptor owner，以及
- * Observable complete-message transport seam。它不是 `@husky-di/remote`
- * 的生产接口。
+ * Promise unary/topology/transport command 与 Observable event seam。它不是
+ * `@husky-di/remote` 的生产接口。
  *
  * @author AEPKILL
  * @created 2026-08-14 22:41:11
@@ -76,19 +76,35 @@ export type RemoteMethodKey<T> = {
 		: never;
 }[keyof T];
 
-/** `cancelable` 省略时按 false 处理；只有可取消 handler 才必须显式写 true。 */
-export type RpcUnaryMethodDefinition<F extends AnyMethod = AnyMethod> =
-	| (HasNoParameters<F> extends true
-			? true | { readonly type: "unary"; readonly cancelable?: false }
-			: ParametersContainAbortSignal<F> extends false
+/**
+ * `cancelable` 省略时按 false 处理；只有可取消 handler 才必须显式写 true。
+ * 本地 handler 必须保留尾随 AbortSignal；远程 caller 可在同一位置选择性传入 signal。
+ */
+export type RpcUnaryMethodDefinition<F extends AnyMethod = AnyMethod> = (IsAny<
+	Awaited<ReturnType<F>>
+> extends true
+	? unknown
+	: Extract<Awaited<ReturnType<F>>, Observable<unknown>> extends never
+		? unknown
+		: never) &
+	(
+		| (HasNoParameters<F> extends true
 				? true | { readonly type: "unary"; readonly cancelable?: false }
+				: ParametersContainAbortSignal<F> extends false
+					?
+							| true
+							| {
+									readonly type: "unary";
+									readonly cancelable?: false;
+							  }
+					: never)
+		| (HasValidCancellationSlot<F> extends true
+				? {
+						readonly type: "unary";
+						readonly cancelable: true;
+					}
 				: never)
-	| (HasValidCancellationSlot<F> extends true
-			? {
-					readonly type: "unary";
-					readonly cancelable: true;
-				}
-			: never);
+	);
 
 export type RpcMethodDefinitions<T> = Partial<{
 	readonly [K in RemoteMethodKey<T>]: RpcUnaryMethodDefinition<
@@ -126,21 +142,21 @@ type ValidateNonCancelableOption<Definition> =
 					: never
 		: Definition;
 
-type ValidateMethodDefinition<
-	F extends AnyMethod,
-	Definition,
-> = Definition extends true
-	? ValidateNonCancelableMethodDefinition<F, Definition>
-	: Definition extends { readonly type: "unary" }
-		? Exclude<keyof Definition, "type" | "cancelable"> extends never
-			? Definition extends { readonly cancelable: true }
-				? HasValidCancellationSlot<F> extends true
-					? Definition
+type ValidateMethodDefinition<F extends AnyMethod, Definition> =
+	Definition extends RpcUnaryMethodDefinition<F>
+		? Definition extends true
+			? ValidateNonCancelableMethodDefinition<F, Definition>
+			: Definition extends { readonly type: "unary" }
+				? Exclude<keyof Definition, "type" | "cancelable"> extends never
+					? Definition extends { readonly cancelable: true }
+						? HasValidCancellationSlot<F> extends true
+							? Definition
+							: never
+						: ValidateNonCancelableOption<Definition> extends never
+							? never
+							: ValidateNonCancelableMethodDefinition<F, Definition>
 					: never
-				: ValidateNonCancelableOption<Definition> extends never
-					? never
-					: ValidateNonCancelableMethodDefinition<F, Definition>
-			: never
+				: never
 		: never;
 
 export type ValidateMethodDefinitions<T, Definitions extends object> = {
@@ -254,7 +270,7 @@ export interface IConnection {
 	 * raw-byte adapter 负责 framing/reassembly。无法暂停的 push source 必须使用
 	 * 有界缓存。取消唯一 subscription 表示放弃该连接，adapter 会在内部中止它。
 	 */
-	readonly messages: Observable<Uint8Array>;
+	readonly message$: Observable<Uint8Array>;
 
 	/**
 	 * Promise 只表示 adapter 已复制或消费输入，并完成本地 admission/backpressure；
@@ -264,8 +280,9 @@ export interface IConnection {
 
 	/**
 	 * 幂等地优雅关闭整条连接。调用会同步进入 closing 状态，使后续 send 拒绝；
-	 * Promise 在底层关闭完成时兑现，关闭失败时拒绝。异常传输由 adapter 内部中止，
-	 * 不再向调用方暴露第二个 abortive lifecycle member。
+	 * Promise 在底层关闭完成时兑现，关闭失败时拒绝；已有 message$ 订阅会先观察到
+	 * 对应 terminal。异常传输由 adapter 内部中止，不再向调用方暴露第二个 abortive
+	 * lifecycle member。
 	 */
 	close(): Promise<void>;
 }
@@ -275,20 +292,16 @@ export interface IRpcConnectorAdapter {
 	connect(signal: AbortSignal): Promise<IConnection>;
 }
 
-export interface IConnectionListener extends IDisposable {
-	/** 正常 dispose 时完成；监听器后续故障时拒绝。 */
-	readonly closed: Promise<void>;
-}
-
-export interface IRpcAcceptorAdapter {
+export interface IRpcAcceptorAdapter extends IDisposable {
 	/**
-	 * 就绪后兑现并返回 listener；在此之前不调用 accept。每条连接通过 accept
-	 * 同步移交所有权。signal 只覆盖启动阶段。
+	 * Acceptor 在 listen 前持有唯一订阅，以无竞态观察 hot、不重放的连接流。listen
+	 * 兑现前不 emit；每个 next 同步且仅一次地把 connection 所有权移交给 Acceptor。
+	 * 正常 dispose 时 complete，启动或后续监听故障时 error。
 	 */
-	listen(
-		accept: (connection: IConnection) => void,
-		signal: AbortSignal,
-	): Promise<IConnectionListener>;
+	readonly connection$: Observable<IConnection>;
+
+	/** Adapter 就绪后兑现；signal 只取消启动阶段，后续生命周期由 dispose 结束。 */
+	listen(signal: AbortSignal): Promise<void>;
 }
 
 // ── 暂定的 caller interface ──────────────────────────────────────────────
@@ -327,7 +340,11 @@ export interface IRpcPeer {
 		implementation: T,
 	): Cleanup;
 
-	/** 同步创建稳定 proxy；实际调用没有可用连接时异步拒绝。 */
+	/**
+	 * 同步创建稳定 proxy；实际调用没有可用连接时异步拒绝。可取消 method 接受可选的
+	 * 尾随 AbortSignal；取消时会终止远端调用、中止注入给本地 handler 的 signal，
+	 * 并以 canceled RpcError 拒绝 Promise。
+	 */
 	resolve<T, Definitions extends RpcMethodDefinitions<T>>(
 		service: IRemoteServiceIdentifier<T, Definitions>,
 	): RemoteService<T, Definitions>;
@@ -345,9 +362,6 @@ export interface IRpcConnector extends IDisposable {
 }
 
 export interface IRpcAcceptor extends IDisposable {
-	/** 尚未 listen 就 dispose 也会完成；启动或后续监听故障时拒绝。 */
-	readonly closed: Promise<void>;
-
 	/** 每次读取都返回当前 Logical Session 对应 peer 的新只读快照。 */
 	readonly peers: readonly IRpcPeer[];
 
@@ -361,10 +375,10 @@ export interface IRpcAcceptor extends IDisposable {
 	): Cleanup;
 
 	/**
-	 * 在 listen 前订阅即可无竞态观察新 Logical Session；listener 返回值会被忽略，
-	 * 异步失败必须由 listener 自行处理。
+	 * 在 listen 前订阅即可无竞态观察新 Logical Session 的 hot 事件流；不重放历史，
+	 * dispose 时 complete，Acceptor 故障时 error。
 	 */
-	onPeer(listener: (peer: IRpcPeer) => void): Cleanup;
+	readonly peer$: Observable<IRpcPeer>;
 
 	/**
 	 * Adapter 就绪后完成。并发调用合并，成功后再次调用直接完成；启动失败终止该
@@ -372,7 +386,10 @@ export interface IRpcAcceptor extends IDisposable {
 	 */
 	listen(): Promise<void>;
 
-	/** 每次远程方法调用时截取 peers 快照，并保留每项结果对应的 peer。 */
+	/**
+	 * 每次远程方法调用时截取 peers 快照，并保留每项结果对应的 peer。单 peer 失败留在
+	 * 结果数组中；caller signal 取消整个 batch，并以 canceled RpcError 拒绝 Promise。
+	 */
 	resolveAll<T, Definitions extends RpcMethodDefinitions<T>>(
 		service: IRemoteServiceIdentifier<T, Definitions>,
 	): RemoteServiceGroup<IRpcPeer, T, Definitions>;
@@ -383,7 +400,7 @@ export declare function createRpcConnector(options: {
 	readonly adapter: IRpcConnectorAdapter;
 }): IRpcConnector;
 
-/** 创建 owner 但不执行 I/O；Acceptor 不释放 adapter 借用的外部资源。 */
+/** 创建 owner 但不执行 I/O；Acceptor 接管 adapter，但不释放 adapter 借用的外部资源。 */
 export declare function createRpcAcceptor(options: {
 	readonly adapter: IRpcAcceptorAdapter;
 }): IRpcAcceptor;

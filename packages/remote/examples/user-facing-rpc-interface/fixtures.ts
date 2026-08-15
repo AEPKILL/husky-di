@@ -1,5 +1,5 @@
 /**
- * @overview 仅用于原型——暂定 RPC 用法所共用的服务。
+ * @overview @husky-di/remote 设计示例——RPC 用法所共用的服务。
  *
  * 这些值让 Connector 与 Acceptor 用法专注于暂定 interface，而不重复业务实现。
  *

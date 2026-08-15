@@ -17,7 +17,8 @@
 	"scripts": {
 		"build": "rslib build",
 		"dev": "rslib build --watch",
-		"test": "vitest run"
+		"test": "pnpm run typecheck && vitest run",
+		"typecheck": "tsc -p tsconfig.json && tsc -p tests/tsconfig.json && tsc -p examples/user-facing-rpc-interface/tsconfig.json"
 	},
 	"devDependencies": {
 		"@husky-di/config": "workspace:*",

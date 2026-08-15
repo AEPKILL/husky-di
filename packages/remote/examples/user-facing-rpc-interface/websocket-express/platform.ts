@@ -1,5 +1,5 @@
 /**
- * @overview 仅供原型验证——Express、Node HTTP 与 `ws` 的平台兼容层。
+ * @overview @husky-di/remote 设计示例——Express、Node HTTP 与 `ws` 的平台兼容层。
  *
  * 这里集中放置平台结构类型和不可避免的 `ws` 桥接代码，避免这些细节泄漏到
  * 应用侧的 RPC 使用示例中。

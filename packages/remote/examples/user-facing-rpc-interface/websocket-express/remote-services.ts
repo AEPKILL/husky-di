@@ -1,5 +1,5 @@
 /**
- * @overview 仅供原型验证——浏览器 Connector 与 Express Acceptor 共享的远端服务描述。
+ * @overview @husky-di/remote 设计示例——Connector 与 Acceptor 共享的远端服务描述。
  *
  * 这里只共享不可变的协议 descriptor；两端各自创建并释放 topology owner。
  *

@@ -1,5 +1,5 @@
 /**
- * @overview 仅供原型验证——浏览器通过 WebSocket 主动连接 RPC 的应用侧用法。
+ * @overview @husky-di/remote 设计示例——浏览器通过 WebSocket 主动连接 RPC。
  *
  * 本文件只展示 Connector 的真实应用装配与调用代码。Connector 负责主动建连；
  * 单个 Logical Session 的 exposure 与 resolution 都位于其稳定 RpcPeer。

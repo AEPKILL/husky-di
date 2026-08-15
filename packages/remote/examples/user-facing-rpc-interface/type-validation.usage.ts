@@ -1,16 +1,23 @@
 /**
- * @overview 仅用于原型验证——暂定远程方法 interface 的编译期校验用例。
+ * @overview @husky-di/remote 设计示例——远程方法 interface 的编译期校验用例。
  *
  * @author AEPKILL
  * @created 2026-08-12 23:20:00
  */
 
+import type { Observable } from "rxjs";
+
 import type { SessionService } from "./fixtures";
 import { IClientEvents, ISession } from "./fixtures";
 import {
 	createRemoteServiceIdentifier,
+	type IConnection,
+	type IRpcAcceptor,
+	type IRpcAcceptorAdapter,
+	type IRpcConnector,
 	type IRpcPeer,
 	type RpcMethodDefinitions,
+	type RpcPeerResult,
 	type RpcUnaryMethodDefinition,
 	type ServiceIdentifier,
 } from "./rpc-interface";
@@ -23,7 +30,14 @@ interface InvalidSpecialSignalService {
 	run(signal: SpecialSignal): void;
 }
 
+interface InvalidObservableHandlerService {
+	run(): string | Promise<Observable<string>>;
+}
+
 declare const typeValidationPeer: IRpcPeer;
+declare const typeValidationAcceptor: IRpcAcceptor;
+declare const typeValidationAcceptorAdapter: IRpcAcceptorAdapter;
+declare const typeValidationConnector: IRpcConnector;
 
 /** 本函数只供 TypeScript 编译期探测，绝不应被调用。 */
 export function typeValidationUsage(): void {
@@ -31,7 +45,8 @@ export function typeValidationUsage(): void {
 		methods: { ping: true },
 	});
 	const shorthandRemote = typeValidationPeer.resolve(shorthandDescriptor);
-	void shorthandRemote.ping;
+	const pingResult: Promise<boolean> = shorthandRemote.ping();
+	void pingResult;
 	// @ts-expect-error 精确 map 没有选择 login，proxy 不得暴露该方法。
 	void shorthandRemote.login;
 
@@ -71,9 +86,63 @@ export function typeValidationUsage(): void {
 	const cancelableDescriptor = createRemoteServiceIdentifier(ISession, {
 		methods: { login: { type: "unary", cancelable: true } },
 	});
-	void typeValidationPeer
-		.resolve(cancelableDescriptor)
-		.login("aepkill", "secret");
+	const cancelableRemote = typeValidationPeer.resolve(cancelableDescriptor);
+	const callerSignal = new AbortController().signal;
+	const loginResult: Promise<string> = cancelableRemote.login(
+		"aepkill",
+		"secret",
+	);
+	const loginWithSignalResult: Promise<string> = cancelableRemote.login(
+		"aepkill",
+		"secret",
+		callerSignal,
+	);
+	void loginResult;
+	void loginWithSignalResult;
+	// @ts-expect-error caller cancellation 只接受 AbortSignal。
+	cancelableRemote.login("aepkill", "secret", "not-a-signal");
+
+	const remoteClientEvents = createRemoteServiceIdentifier(IClientEvents, {
+		methods: { changed: true },
+	});
+	const batchResult: Promise<readonly RpcPeerResult<IRpcPeer, void>[]> =
+		typeValidationAcceptor
+			.resolveAll(remoteClientEvents)
+			.changed("maintenance-scheduled");
+	const cancelableBatch =
+		typeValidationAcceptor.resolveAll(cancelableDescriptor);
+	const cancelableBatchResult: Promise<
+		readonly RpcPeerResult<IRpcPeer, string>[]
+	> = cancelableBatch.login("aepkill", "secret");
+	const batchWithSignalResult: Promise<
+		readonly RpcPeerResult<IRpcPeer, string>[]
+	> = cancelableBatch.login("aepkill", "secret", callerSignal);
+	// @ts-expect-error batch caller cancellation 也只接受 AbortSignal。
+	cancelableBatch.login("aepkill", "secret", "not-a-signal");
+	const connectResult: Promise<void> = typeValidationConnector.connect();
+	const listenResult: Promise<void> = typeValidationAcceptor.listen();
+	const peer$: Observable<IRpcPeer> = typeValidationAcceptor.peer$;
+	const connection$: Observable<IConnection> =
+		typeValidationAcceptorAdapter.connection$;
+	const adapterListenResult: Promise<void> =
+		typeValidationAcceptorAdapter.listen(callerSignal);
+	const adapterDisposed: boolean = typeValidationAcceptorAdapter.disposed;
+	void batchResult;
+	void cancelableBatchResult;
+	void batchWithSignalResult;
+	void connectResult;
+	void listenResult;
+	void peer$;
+	void connection$;
+	void adapterListenResult;
+	void adapterDisposed;
+	typeValidationAcceptorAdapter.dispose();
+	// @ts-expect-error connection 通过 connection$ 交付，listen 不再接受 callback。
+	typeValidationAcceptorAdapter.listen(() => undefined, callerSignal);
+	// @ts-expect-error Acceptor lifecycle terminal 由 peer$ 表达，不再公开 closed。
+	void typeValidationAcceptor.closed;
+	// @ts-expect-error adapter lifecycle terminal 由 connection$ 表达，不再公开 closed。
+	void typeValidationAcceptorAdapter.closed;
 
 	createRemoteServiceIdentifier(ISession, {
 		methods: {
@@ -122,5 +191,17 @@ export function typeValidationUsage(): void {
 	createRemoteServiceIdentifier(invalidSpecialSignal, {
 		// @ts-expect-error 取消信号注入要求参数类型必须恰好为 AbortSignal。
 		methods: { run: { type: "unary", cancelable: true } },
+	});
+
+	const invalidObservableHandler =
+		"invalid-observable-handler" as ServiceIdentifier<InvalidObservableHandlerService>;
+	// @ts-expect-error Observable handler result 也必须让公开 method-definition type 归 never。
+	const invalidObservableDefinition: RpcUnaryMethodDefinition<
+		InvalidObservableHandlerService["run"]
+	> = true;
+	void invalidObservableDefinition;
+	createRemoteServiceIdentifier(invalidObservableHandler, {
+		// @ts-expect-error Awaited 后的 Observable 会引入未定义的 streaming 语义。
+		methods: { run: true },
 	});
 }

@@ -1,5 +1,5 @@
 /**
- * @overview 仅用于原型验证——暂定 IConnection 的完整消息消费方式。
+ * @overview @husky-di/remote 设计示例——IConnection 的完整消息消费方式。
  *
  * @author AEPKILL
  * @created 2026-08-14 23:55:00
@@ -18,7 +18,7 @@ export async function runConnectionPingPong(
 	let subscription: Subscription | undefined;
 	const pong = new Promise<void>((resolve, reject) => {
 		let received = false;
-		subscription = connection.messages.subscribe({
+		subscription = connection.message$.subscribe({
 			next(message) {
 				if (received) {
 					return;

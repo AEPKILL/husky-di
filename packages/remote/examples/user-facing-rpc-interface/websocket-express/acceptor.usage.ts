@@ -1,5 +1,5 @@
 /**
- * @overview 仅供原型验证——WebSocket RPC 与 Express 共享 HTTP 服务器的应用侧用法。
+ * @overview @husky-di/remote 设计示例——WebSocket RPC 与 Express 共享 HTTP 服务器。
  *
  * 本文件只展示 Acceptor 的真实应用装配与调用代码。Express、Node HTTP 与 `ws`
  * 的平台兼容细节集中在同目录的 `platform.ts`。
@@ -37,21 +37,29 @@ export async function webSocketExpressServerUsage<
 	});
 	const stopSessionExposure = acceptor.expose(remoteSession, sessionService);
 	const allClientEvents = acceptor.resolveAll(remoteClientEvents);
-	const stopNewPeerNotifications = acceptor.onPeer((peer) => {
-		void peer
-			.resolve(remoteClientEvents)
-			.changed("session-opened")
-			.catch((error) => {
-				console.warn("Could not welcome the new client", error);
-			});
+	acceptor.peer$.subscribe({
+		next(peer) {
+			void peer
+				.resolve(remoteClientEvents)
+				.changed("session-opened")
+				.catch((error) =>
+					console.warn("Could not welcome the new client", error),
+				);
+		},
+		error: reportAcceptorFailure,
 	});
-	void acceptor.closed.catch(reportAcceptorFailure);
 
-	// listen() 同步挂接 Upgrade 处理，然后等待所借用的 HTTP 服务器就绪。
+	// listen() 同步开始启动；所借用的 HTTP 服务器就绪后才开放 Upgrade 处理。
 	// Express middleware 不处理 Upgrade 请求；身份认证被有意排除在该原型之外。
 	try {
 		const rpcReady = acceptor.listen();
-		httpServer.listen(3_000);
+		try {
+			httpServer.listen(3_000);
+		} catch (error) {
+			// listen() 已启动；在重抛同步故障前接住它随后可能产生的拒绝。
+			void rpcReady.catch(() => undefined);
+			throw error;
+		}
 		await rpcReady;
 
 		const firstClient = acceptor.peers[0];
@@ -72,7 +80,6 @@ export async function webSocketExpressServerUsage<
 	} finally {
 		// 应用先移除可撤销注册，再停止 Upgrade 和会话，最后关闭借用的 HTTP server。
 		// 适配器绝不会关闭这个服务器。
-		stopNewPeerNotifications();
 		stopSessionExposure();
 		acceptor.dispose();
 		httpServer.close();
