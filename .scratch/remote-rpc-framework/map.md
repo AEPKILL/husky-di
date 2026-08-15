@@ -26,6 +26,14 @@ Status: open
 
 ## Decisions so far
 
+- [验证生产级 RPC 使用者 Interface](issues/01-validate-production-rpc-interface.md)：caller
+  surface 采用 cold Connector/Acceptor owner、稳定 peer、显式 `connect(adapter)` /
+  `listen(adapter)`、异步 `close()`、统一 `event$`、session/owner-scoped exposure、稳定
+  `resolveAll()` group 以及默认/自定义 Protocol 注入；三个公开 Observable 均可多订阅，
+  resource ownership 由角色契约而非订阅数量决定。精确 Protocol、Descriptor、Transport、
+  lifecycle、Recovery 和 call-state seam 仍由对应后续票决定。Prototype context：
+  `codex/prototype-rpc-interface@20a9e83`。
+
 ## Not yet specified
 
 - Protocol、Session、call-state 与 transport 各自的内部 Module 拆分和文件落点；只有相应行为决策完成后才会清晰。
