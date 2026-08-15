@@ -91,6 +91,15 @@ The decorator package supports only TypeScript experimental decorators, not ES d
 
 The module system is inspired by ESM semantics: imports must be explicit, export boundaries must be explicit, and naming conflicts should surface when a module is created instead of turning into ambiguity at runtime.
 
+### Remote RPC
+
+- **RPC Peer / `RpcPeer`**: The remote counterpart participating in a bidirectional RPC relationship. It is the subject of exposure and remote resolution, distinct from the topology owner and the transport connection.
+- **RPC Topology Owner**: The owner of an active or passive connection topology and its lifecycle. `RpcConnector` owns an active one-to-one topology; `RpcAcceptor` owns a passive one-to-many topology.
+- **Logical Session**: The stable RPC relationship represented by an `RpcPeer`. It can span a sequence of transient Physical Connections while preserving the peer seen by callers.
+- **Physical Connection**: A finite-lived, full-duplex transport channel carrying a Logical Session. It may be replaced without replacing the session's `RpcPeer`.
+- **Session Recovery**: Reattaching a Logical Session to a replacement Physical Connection while preserving its peer identity and retained call state. It ends when the retained session can no longer be resumed.
+- **Remote Service Group**: A stable remote-service view over the Logical Peers currently owned by an `RpcAcceptor`. Each invocation targets a fresh peer snapshot and keeps every result associated with its peer.
+
 ## Behavioral constraints
 
 - The same `ServiceIdentifier` can be registered multiple times in the same container.
