@@ -29,6 +29,18 @@ type ParametersContainAbortSignal<F extends AnyMethod> = ContainsAbortSignal<
 	Parameters<F>[number]
 >;
 
+type HasAnyParameter<F extends AnyMethod> = IsAny<Parameters<F>[number]>;
+
+type HasUnsupportedUnaryResult<F extends AnyMethod> =
+	IsAny<Awaited<ReturnType<F>>> extends true
+		? true
+		: Extract<
+					Awaited<ReturnType<F>>,
+					Observable<unknown> | AsyncIterable<unknown>
+				> extends never
+			? false
+			: true;
+
 type IsNever<T> = [T] extends [never] ? true : false;
 
 type HasNoParameters<F extends AnyMethod> =
@@ -40,18 +52,20 @@ type HasNoParameters<F extends AnyMethod> =
 
 type HasValidCancellationSlot<F extends AnyMethod> =
 	Parameters<F> extends [...infer Head, infer Last]
-		? IsAny<Last> extends true
+		? number extends Parameters<F>["length"]
 			? false
-			: [Last] extends [AbortSignal]
-				? [AbortSignal] extends [Last]
-					? ContainsAbortSignal<Head[number]> extends false
-						? true
+			: IsAny<Last> extends true
+				? false
+				: [Last] extends [AbortSignal]
+					? [AbortSignal] extends [Last]
+						? ContainsAbortSignal<Head[number]> extends false
+							? true
+							: false
 						: false
 					: false
-				: false
 		: false;
 
-export type RemoteMethodKey<T> = {
+type RemoteMethodKey<T> = {
 	[K in keyof T]-?: K extends string
 		? T[K] extends AnyMethod
 			? K
@@ -63,22 +77,20 @@ export type RemoteMethodKey<T> = {
  * v1 selected methods are unary by definition. A cancelable local handler must
  * reserve exactly one required trailing AbortSignal; the remote proxy makes it optional.
  */
-export type RpcUnaryMethodDefinition<F extends AnyMethod = AnyMethod> = (IsAny<
-	Awaited<ReturnType<F>>
-> extends true
-	? unknown
-	: Extract<Awaited<ReturnType<F>>, Observable<unknown>> extends never
-		? unknown
-		: never) &
-	(HasNoParameters<F> extends true
-		? true
-		: ParametersContainAbortSignal<F> extends false
-			? true
-			: HasValidCancellationSlot<F> extends true
-				? { readonly cancelable: true }
-				: never);
+type RpcUnaryMethodDefinition<F extends AnyMethod = AnyMethod> =
+	HasAnyParameter<F> extends true
+		? never
+		: HasUnsupportedUnaryResult<F> extends true
+			? never
+			: HasNoParameters<F> extends true
+				? true
+				: ParametersContainAbortSignal<F> extends false
+					? true
+					: HasValidCancellationSlot<F> extends true
+						? { readonly cancelable: true }
+						: never;
 
-export type RpcMethodDefinitions<T> = Partial<{
+type RpcMethodDefinitions<T> = Partial<{
 	readonly [K in RemoteMethodKey<T>]: RpcUnaryMethodDefinition<
 		Extract<T[K], AnyMethod>
 	>;
@@ -109,6 +121,12 @@ type RequiredKey<T> = {
 
 type SelectedMethodKey<Definitions> = Extract<RequiredKey<Definitions>, string>;
 
+type NonEmptyMethodDefinitions<Definitions extends object> = [
+	SelectedMethodKey<Definitions>,
+] extends [never]
+	? never
+	: unknown;
+
 type IsCancelableMethod<Definition> = Definition extends {
 	readonly cancelable: true;
 }
@@ -125,26 +143,41 @@ type RemoteMethod<F, Definition> = F extends (
 		: (...args: Args) => Promise<Awaited<Result>>
 	: never;
 
-export type RemoteService<T, Definitions extends RpcMethodDefinitions<T>> = {
+type RemoteService<T, Definitions extends RpcMethodDefinitions<T>> = {
 	readonly [K in Extract<
 		SelectedMethodKey<Definitions>,
 		RemoteMethodKey<T>
 	>]: RemoteMethod<Extract<T[K], AnyMethod>, Definitions[K]>;
 };
 
+type RemoteServiceImplementation<
+	T,
+	Definitions extends RpcMethodDefinitions<T>,
+> = {
+	[K in Extract<SelectedMethodKey<Definitions>, RemoteMethodKey<T>>]-?: Extract<
+		T[K],
+		AnyMethod
+	>;
+};
+
 declare const remoteServiceDescriptorBrand: unique symbol;
 
-/** Opaque runtime descriptor shared by both RPC peers. */
+/**
+ * Opaque runtime descriptor shared by both RPC peers. The implementation retains the
+ * original local ServiceIdentifier and a normalized immutable wire contract; callers
+ * cannot read either through this Interface or treat object reference as service identity.
+ */
 export interface IRemoteServiceDescriptor<
 	T,
 	Definitions extends RpcMethodDefinitions<T>,
 > {
-	readonly [remoteServiceDescriptorBrand]: {
-		readonly service: T;
-		readonly definitions: Definitions;
-	};
+	readonly [remoteServiceDescriptorBrand]: (
+		service: T,
+		definitions: Definitions,
+	) => readonly [T, Definitions];
 }
 
+/** Creates a non-empty unary descriptor without consulting ServiceIdentifier metadata. */
 export declare function createRemoteServiceDescriptor<
 	T,
 	const Definitions extends RpcMethodDefinitions<T>,
@@ -153,7 +186,9 @@ export declare function createRemoteServiceDescriptor<
 	options: {
 		/** Required cross-language identity; never inferred from a class, string, or symbol. */
 		readonly wireName: string;
-		readonly methods: Definitions & ValidateMethodDefinitions<T, Definitions>;
+		readonly methods: Definitions &
+			ValidateMethodDefinitions<T, Definitions> &
+			NonEmptyMethodDefinitions<Definitions>;
 	},
 ): IRemoteServiceDescriptor<T, Definitions>;
 
@@ -341,14 +376,15 @@ export interface IRpcAcceptorAdapter extends IDisposable {
 
 export interface IRpcPeer {
 	/**
-	 * Exposes a borrowed implementation for this Logical Session. The exposure lives
-	 * until Cleanup or peer termination. A duplicate Wire Service Name throws without
-	 * changing the registry. Cleanup affects future dispatch only; an in-flight call keeps
-	 * the implementation captured when it was dispatched.
+	 * Exposes the selected handlers from a borrowed implementation for this Logical
+	 * Session. Unselected service members are not required. The exposure lives until
+	 * Cleanup or peer termination. A duplicate Wire Service Name throws without changing
+	 * the registry. Cleanup affects future dispatch only; an in-flight call keeps the
+	 * implementation captured when it was dispatched.
 	 */
 	expose<T, Definitions extends RpcMethodDefinitions<T>>(
 		service: IRemoteServiceDescriptor<T, Definitions>,
-		implementation: T,
+		implementation: NoInfer<RemoteServiceImplementation<T, Definitions>>,
 	): Cleanup;
 
 	/** Returns a stable proxy whose calls survive transparent Session Recovery. */
@@ -391,13 +427,14 @@ export interface IRpcAcceptor extends IRpcTopologyOwner {
 	readonly peers: readonly IRpcPeer[];
 
 	/**
-	 * Atomically exposes one borrowed implementation to every current and future peer.
-	 * Duplicate Wire Service Names reject without partial registration; Cleanup removes
-	 * this registration from the owner scope and every retained peer.
+	 * Atomically exposes the selected handlers from one borrowed implementation to every
+	 * current and future peer. Unselected service members are not required. Duplicate Wire
+	 * Service Names reject without partial registration; Cleanup removes this registration
+	 * from the owner scope and every retained peer.
 	 */
 	expose<T, Definitions extends RpcMethodDefinitions<T>>(
 		service: IRemoteServiceDescriptor<T, Definitions>,
-		implementation: T,
+		implementation: NoInfer<RemoteServiceImplementation<T, Definitions>>,
 	): Cleanup;
 
 	/**

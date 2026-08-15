@@ -1,7 +1,8 @@
 # PROTOTYPE — 生产级 RPC 使用者 Interface
 
-这是一个只用于回答 Wayfinder 票“验证生产级 RPC 使用者 Interface”的 throwaway
-prototype，不是 `@husky-di/remote` 的生产导出，也不包含运行时实现。
+这是一个用于回答 Wayfinder 票“验证生产级 RPC 使用者 Interface”和“决定 Remote Service
+Descriptor 的 identity 与类型映射”的 throwaway prototype，不是 `@husky-di/remote` 的生产
+导出，也不包含运行时实现。
 
 ## 要回答的问题
 
@@ -9,6 +10,11 @@ prototype，不是 `@husky-di/remote` 的生产导出，也不包含运行时实
 最小的 caller Interface 能否完整表达双向 unary、稳定 `IRpcPeer`、Topology Owner、透明
 Session Recovery、hot multicast Observable、Protocol 注入、独立 Transport Adapter 包和
 稳定 Remote Service Group？每个 public member 是否都能由一个具体工作流证明？
+
+在这个 Interface 内，单一 opaque Remote Service Descriptor 能否原样复用本地
+`ServiceIdentifier<T>`、以显式 `wireName` 建立独立 wire identity、精确选择可远程调用的
+methods，并让 `expose()` 只要求选中 handlers、让 `resolve()` / `resolveAll()` 推导对应的
+异步远端方法？
 
 ```bash
 pnpm --filter @husky-di/core build
@@ -34,6 +40,16 @@ pnpm --filter @husky-di/remote typecheck
   `event$` 用最后一个 `topology-closed` event 区分正常关闭与失败，随后 complete，永不 error。
 - v1 只有 unary，所以 method allowlist 只用 `true` 或 `{ cancelable: true }`，不重复写
   `type: "unary"`。
+- Descriptor 由单一 `createRemoteServiceDescriptor()` 创建并保持 opaque；它在内部保留原始
+  `ServiceIdentifier`、显式 `wireName` 和 immutable allowlist，但不把它们变成 caller 可依赖
+  的 properties。Descriptor object reference 本身不具有 service identity 语义。
+- `ServiceIdentifier` 只保留 core 的本地 equality，`wireName` 是唯一远端 service identity；
+  metadata 不参与创建、路由或判重。Factory 不做全局注册，重复只在同一 Logical Session
+  的 active exposure namespace 内原子失败。
+- `expose()` 只要求 allowlist 中选中的 handlers；完整业务 implementation 仍可结构赋值。
+  空 allowlist、`any` 参数/结果、Observable/AsyncIterable 结果和不精确的取消参数被拒绝。
+- v1 的本地 method key 同时是 wire method name，不提供 alias。精确类型保证只覆盖单一、
+  非泛型 call signature；generic 与 overloaded methods 不属于受支持的远端契约形状。
 
 ## Guided walkthroughs
 
@@ -42,11 +58,13 @@ pnpm --filter @husky-di/remote typecheck
 见 [`websocket-express/remote-services.ts`](./websocket-express/remote-services.ts)。Descriptor
 显式复用 `@husky-di/core` 的 `ServiceIdentifier<T>`，要求稳定 `wireName`，并只允许选中
 method。同步 handler 在 remote proxy 上变为 `Promise`；cancelable handler 的尾随
-`AbortSignal` 在 caller 侧变为可选。
+`AbortSignal` 在 caller 侧变为可选。完整 service 可以直接用于 exposure，但只实现 allowlist
+中 handlers 的最小对象也有效。
 
 [`type-validation.usage.ts`](./type-validation.usage.ts) 同时证明 properties、Observable
-result、未知 method option、缺失 wire name、错误 cancellation slot、streaming 与
-notification shape 都会在编译期失败。
+或 AsyncIterable result、`any` 参数/结果、空 allowlist、未知 method option、缺失 wire name、
+错误 cancellation slot、streaming 与 notification shape 都会在编译期失败；它也证明
+Descriptor 不能被当作公开数据结构读取。
 
 ### 2. 浏览器 Connector
 
@@ -95,7 +113,7 @@ subscriber 负责脱敏。
 
 | Member | 必要工作流 |
 | --- | --- |
-| `createRemoteServiceDescriptor()` | 把本地 service identity、跨语言 wire identity 与显式 method allowlist 绑定为一个 runtime descriptor。 |
+| `createRemoteServiceDescriptor()` | 把原始本地 service identity、显式跨语言 wire identity 与 method allowlist 封装为一个 opaque runtime descriptor。 |
 | 两个 owner factory | Connector 与 Acceptor 的 topology、Adapter role 和返回类型不同；两个命名入口比 discriminated overload 更直接。 |
 | factory `protocol?` | 默认路径零配置，同时允许完整替换 wire semantics；Protocol 的内部 SPI 由后续票决定。 |
 | `connector.connect(adapter)` | 调用者选择每一次 Physical Connection attempt；Connector 只接管兑现的 Connection，Protocol 保持原 Session identity。 |
@@ -119,8 +137,10 @@ subscriber 负责脱敏。
   检查，事件终态属于 `event$`，主动 teardown completion 属于 `close()`。
 - `RpcBatchResultStatusEnum`：直接使用标准的 `"fulfilled" | "rejected"` discriminant。
 - `type: "unary"`：v1 没有第二种 call kind，这个标签没有区分能力。
+- 两阶段 wire contract/binding builder、method alias 与公开 Descriptor getters：v1 没有证明
+  它们能提供值得额外 Interface 的 caller leverage。
 - 内嵌 WebSocket Adapter Implementation：原型只验证 package seam，不实现另一个 package。
 
 Protocol 构造 SPI、Transport Adapter 的精确 ownership/terminal contract、event payload、错误
-race 与 Remote Service Descriptor identity 都只在这里保持可编译轮廓；它们分别由后续
-Wayfinder 票收敛，不能把这个 prototype 当成那些票的既定答案。
+race 仍只在这里保持可编译轮廓；它们分别由后续 Wayfinder 票收敛。Descriptor identity 与
+类型映射已由本原型具体化，但本文件依然不是生产实现或 normative specification。

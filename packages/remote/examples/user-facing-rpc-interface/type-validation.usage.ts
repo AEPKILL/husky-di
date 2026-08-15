@@ -8,8 +8,12 @@
 import type { ServiceIdentifier } from "@husky-di/core";
 import type { Observable } from "rxjs";
 
-import type { SessionService } from "./fixtures";
-import { customProtocol, IClientEvents, ISession } from "./fixtures";
+import {
+	customProtocol,
+	IClientEvents,
+	ISession,
+	sessionService,
+} from "./fixtures";
 import {
 	createRemoteServiceDescriptor,
 	createRpcAcceptor,
@@ -23,9 +27,7 @@ import {
 	type IRpcPeer,
 	RpcError,
 	type RpcEvent,
-	type RpcMethodDefinitions,
 	type RpcPeerResult,
-	type RpcUnaryMethodDefinition,
 } from "./rpc-interface";
 
 interface SpecialSignal extends AbortSignal {
@@ -38,6 +40,51 @@ interface InvalidSpecialSignalService {
 
 interface InvalidObservableHandlerService {
 	run(): string | Promise<Observable<string>>;
+}
+
+interface InvalidAsyncIterableHandlerService {
+	run(): AsyncIterable<string>;
+}
+
+interface InvalidAnyParameterService {
+	// biome-ignore lint/suspicious/noExplicitAny: verifies that untyped wire parameters are rejected.
+	run(value: any): string;
+}
+
+interface InvalidAnyResultService {
+	// biome-ignore lint/suspicious/noExplicitAny: verifies that untyped wire results are rejected.
+	run(): any;
+}
+
+interface InvalidPromiseAnyResultService {
+	// biome-ignore lint/suspicious/noExplicitAny: verifies that awaited untyped wire results are rejected.
+	run(): Promise<any>;
+}
+
+interface InvalidOptionalSignalService {
+	run(signal?: AbortSignal): void;
+}
+
+interface InvalidVariadicCancellationService {
+	run(...args: [...values: string[], signal: AbortSignal]): void;
+}
+
+interface PingOnlyService {
+	ping(): boolean;
+}
+
+interface SupportedParameterShapesService {
+	join(separator: string, ...values: string[]): string;
+	search(query: string, limit?: number): readonly string[];
+}
+
+interface UnsupportedGenericService {
+	identity<T>(value: T): T;
+}
+
+interface UnsupportedOverloadedService {
+	parse(value: string): string;
+	parse(value: number): number;
 }
 
 declare const typeValidationPeer: IRpcPeer;
@@ -59,30 +106,71 @@ export function typeValidationUsage(): void {
 	void pingResult;
 	// @ts-expect-error The exact allowlist did not select login.
 	void pingRemote.login;
+	// A selected-method implementation does not need unexposed members of SessionService.
+	const pingExposure = typeValidationPeer.expose(pingDescriptor, {
+		ping: () => true,
+	});
+	// A complete implementation remains structurally assignable.
+	typeValidationPeer.expose(pingDescriptor, sessionService);
+	pingExposure();
+	// @ts-expect-error Every selected method is required by expose().
+	typeValidationPeer.expose(pingDescriptor, {});
+	typeValidationPeer.expose(pingDescriptor, {
+		// @ts-expect-error The implementation must preserve the local method contract.
+		ping: () => "not-a-boolean",
+	});
+	// @ts-expect-error Descriptor runtime fields stay behind the opaque Interface.
+	void pingDescriptor.wireName;
 
-	const annotatedPing: RpcUnaryMethodDefinition<SessionService["ping"]> = true;
-	const checkedMethods = {
-		ping: annotatedPing,
-	} satisfies RpcMethodDefinitions<SessionService>;
+	const checkedMethods = { ping: true } as const;
 	const checkedDescriptor = createRemoteServiceDescriptor(ISession, {
 		wireName: "example.session-checked.v1",
 		methods: checkedMethods,
 	});
 	void typeValidationPeer.resolve(checkedDescriptor).ping;
 
-	const widenedMethods: RpcMethodDefinitions<SessionService> = checkedMethods;
-	const widenedDescriptor = createRemoteServiceDescriptor(ISession, {
-		wireName: "example.session-widened.v1",
-		methods: widenedMethods,
+	const pingOnlyIdentifier = "ping-only" as ServiceIdentifier<PingOnlyService>;
+	const pingOnlyDescriptor = createRemoteServiceDescriptor(pingOnlyIdentifier, {
+		wireName: "example.ping-only.v1",
+		methods: { ping: true },
 	});
-	const widenedRemote = typeValidationPeer.resolve(widenedDescriptor);
-	// @ts-expect-error Optional keys on a widened map are not runtime selections.
-	void widenedRemote.ping;
+	// @ts-expect-error Descriptor service types are invariant in both directions.
+	pingOnlyDescriptor satisfies typeof pingDescriptor;
+	// @ts-expect-error Descriptor service types are invariant in both directions.
+	pingDescriptor satisfies typeof pingOnlyDescriptor;
+
+	const parameterShapesIdentifier =
+		"parameter-shapes" as ServiceIdentifier<SupportedParameterShapesService>;
+	const parameterShapesDescriptor = createRemoteServiceDescriptor(
+		parameterShapesIdentifier,
+		{
+			wireName: "example.parameter-shapes.v1",
+			methods: { join: true, search: true },
+		},
+	);
+	const parameterShapesRemote = typeValidationPeer.resolve(
+		parameterShapesDescriptor,
+	);
+	const joined: Promise<string> = parameterShapesRemote.join(",", "a", "b");
+	const found: Promise<readonly string[]> = parameterShapesRemote.search(
+		"query",
+		10,
+	);
+	void joined;
+	void found;
 
 	const cancelableDescriptor = createRemoteServiceDescriptor(ISession, {
 		wireName: "example.session-login.v1",
 		methods: { login: { cancelable: true } },
 	});
+	const completeDescriptor = createRemoteServiceDescriptor(ISession, {
+		wireName: "example.session-complete.v1",
+		methods: { login: { cancelable: true }, ping: true },
+	});
+	// @ts-expect-error Descriptor method selections are invariant in both directions.
+	pingDescriptor satisfies typeof completeDescriptor;
+	// @ts-expect-error Descriptor method selections are invariant in both directions.
+	completeDescriptor satisfies typeof pingDescriptor;
 	const cancelableRemote = typeValidationPeer.resolve(cancelableDescriptor);
 	const callerSignal = new AbortController().signal;
 	const loginResult: Promise<string> = cancelableRemote.login(
@@ -227,6 +315,18 @@ export function typeValidationUsage(): void {
 	createRemoteServiceDescriptor(ISession, { methods: { ping: true } });
 
 	createRemoteServiceDescriptor(ISession, {
+		wireName: "example.empty.v1",
+		// @ts-expect-error A Remote Service Descriptor must select at least one method.
+		methods: {},
+	});
+	const possiblyEmptyMethods: { readonly ping?: true } = {};
+	createRemoteServiceDescriptor(ISession, {
+		wireName: "example.possibly-empty.v1",
+		// @ts-expect-error Optional keys do not prove that any method is selected at runtime.
+		methods: possiblyEmptyMethods,
+	});
+
+	createRemoteServiceDescriptor(ISession, {
 		wireName: "example.invalid-methods.v1",
 		// @ts-expect-error methods must be an explicit per-method allowlist.
 		methods: true,
@@ -290,4 +390,78 @@ export function typeValidationUsage(): void {
 		// @ts-expect-error Awaited Observable results are rejected by the allowlist.
 		methods: { run: true },
 	});
+
+	const invalidAsyncIterableHandler =
+		"invalid-async-iterable-handler" as ServiceIdentifier<InvalidAsyncIterableHandlerService>;
+	createRemoteServiceDescriptor(invalidAsyncIterableHandler, {
+		wireName: "example.invalid-async-iterable.v1",
+		// @ts-expect-error AsyncIterable results imply unsupported streaming semantics.
+		methods: { run: true },
+	});
+
+	const invalidAnyParameter =
+		"invalid-any-parameter" as ServiceIdentifier<InvalidAnyParameterService>;
+	createRemoteServiceDescriptor(invalidAnyParameter, {
+		wireName: "example.invalid-any-parameter.v1",
+		// @ts-expect-error any cannot provide an exact wire argument contract.
+		methods: { run: true },
+	});
+
+	const invalidAnyResult =
+		"invalid-any-result" as ServiceIdentifier<InvalidAnyResultService>;
+	createRemoteServiceDescriptor(invalidAnyResult, {
+		wireName: "example.invalid-any-result.v1",
+		// @ts-expect-error any cannot provide an exact wire result contract.
+		methods: { run: true },
+	});
+	const invalidPromiseAnyResult =
+		"invalid-promise-any-result" as ServiceIdentifier<InvalidPromiseAnyResultService>;
+	createRemoteServiceDescriptor(invalidPromiseAnyResult, {
+		wireName: "example.invalid-promise-any-result.v1",
+		// @ts-expect-error Promise<any> cannot provide an exact awaited wire result contract.
+		methods: { run: true },
+	});
+
+	const invalidOptionalSignal =
+		"invalid-optional-signal" as ServiceIdentifier<InvalidOptionalSignalService>;
+	createRemoteServiceDescriptor(invalidOptionalSignal, {
+		wireName: "example.invalid-optional-signal.v1",
+		// @ts-expect-error Cancellation injection needs one required trailing AbortSignal.
+		methods: { run: { cancelable: true } },
+	});
+	const invalidVariadicCancellation =
+		"invalid-variadic-cancellation" as ServiceIdentifier<InvalidVariadicCancellationService>;
+	createRemoteServiceDescriptor(invalidVariadicCancellation, {
+		wireName: "example.invalid-variadic-cancellation.v1",
+		// @ts-expect-error A variadic prefix cannot safely gain an optional caller signal.
+		methods: { run: { cancelable: true } },
+	});
+
+	// TypeScript cannot reliably reject generic or overloaded call signatures. These
+	// probes record their lossy mapping, which is why v1 declares both shapes unsupported.
+	const unsupportedGeneric =
+		"unsupported-generic" as ServiceIdentifier<UnsupportedGenericService>;
+	const genericDescriptor = createRemoteServiceDescriptor(unsupportedGeneric, {
+		wireName: "example.unsupported-generic.v1",
+		methods: { identity: true },
+	});
+	const genericResult: Promise<unknown> = typeValidationPeer
+		.resolve(genericDescriptor)
+		.identity("value");
+	void genericResult;
+
+	const unsupportedOverloaded =
+		"unsupported-overloaded" as ServiceIdentifier<UnsupportedOverloadedService>;
+	const overloadedDescriptor = createRemoteServiceDescriptor(
+		unsupportedOverloaded,
+		{
+			wireName: "example.unsupported-overloaded.v1",
+			methods: { parse: true },
+		},
+	);
+	const overloadedRemote = typeValidationPeer.resolve(overloadedDescriptor);
+	const lastOverloadResult: Promise<number> = overloadedRemote.parse(1);
+	void lastOverloadResult;
+	// @ts-expect-error The conditional mapping retained only the final overload.
+	overloadedRemote.parse("value");
 }
