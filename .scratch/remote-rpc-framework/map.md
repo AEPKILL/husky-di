@@ -39,11 +39,21 @@ Status: open
   cancelable call；metadata、Descriptor reference 和全局 registry 均不参与行为，generic 与
   overload 明确不受支持。Prototype context：
   `codex/prototype-remote-service-descriptor@fe94e02`。
+- [调研默认 RPC Protocol 候选](issues/02-research-default-rpc-protocol-candidates.md)：没有开放
+  Protocol 可直接复用；RSocket 最接近但仍需实质性的 call-state profile，AMQP 只提供过重的
+  recoverable-delivery substrate，因此在没有通用 interoperability 目标的当前范围内，默认采用
+  专用 unary-recovery wire contract。Research context：
+  `research/default-rpc-protocol-candidates@0fbeb14e0882f14f2eba4613f075d6eb0ae4e102`。
+- [调研可恢复 RPC 的交付保证](issues/03-research-resumable-rpc-delivery-guarantees.md)：只有同一
+  retained Session 被接受恢复、transport 与 call ledger 连续且单一 owner 成立时，才能承诺
+  原 call identity 的 Session-scoped at-most-once handler dispatch 与 terminal replay；证据
+  丢失必须暴露 outcome unknown，且 terminal ACK 不能单独释放全部去重证据。Research
+  context：
+  `research/resumable-rpc-delivery-guarantees-v2@d5b16c1a774deae1b506dda1d25382c835141d7b`。
 
 ## Not yet specified
 
 - Protocol、Session、call-state 与 transport 各自的内部 Module 拆分和文件落点；只有相应行为决策完成后才会清晰。
-- Session 保留期、pending call、terminal-result ledger、消息和事件缓冲的具体默认上限；它们依赖交付状态机与资源模型。
 - 最终规范的 requirement 编号、章节结构、ADR 候选和实施 ticket 切片；它们会随公开 Interface 与 wire contract 收敛。
 
 ## Out of scope
