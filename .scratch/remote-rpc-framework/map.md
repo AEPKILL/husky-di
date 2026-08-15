@@ -33,6 +33,12 @@ Status: open
   resource ownership 由角色契约而非订阅数量决定。精确 Protocol、Descriptor、Transport、
   lifecycle、Recovery 和 call-state seam 仍由对应后续票决定。Prototype context：
   `codex/prototype-rpc-interface@20a9e83`。
+- [决定 Remote Service Descriptor 的 identity 与类型映射](issues/04-decide-remote-service-descriptor.md)：
+  单一 opaque Descriptor 原样保留 local `ServiceIdentifier`、以显式 `wireName` 建立独立 wire
+  identity，并用非空 unary allowlist 精确推导 selected-handler exposure、Promise proxy 与
+  cancelable call；metadata、Descriptor reference 和全局 registry 均不参与行为，generic 与
+  overload 明确不受支持。Prototype context：
+  `codex/prototype-remote-service-descriptor@fe94e02`。
 
 ## Not yet specified
 

@@ -98,6 +98,8 @@ The module system is inspired by ESM semantics: imports must be explicit, export
 - **Logical Session**: The stable RPC relationship represented by an `RpcPeer`. It can span a sequence of transient Physical Connections while preserving the peer seen by callers.
 - **Physical Connection**: A finite-lived, full-duplex transport channel carrying a Logical Session. It may be replaced without replacing the session's `RpcPeer`.
 - **Session Recovery**: Reattaching a Logical Session to a replacement Physical Connection while preserving its peer identity and retained call state. It ends when the retained session can no longer be resumed.
+- **Remote Service Descriptor**: An opaque description of a remotely callable service that relates one local `ServiceIdentifier` to an explicit Wire Service Name and a non-empty unary method allowlist.
+- **Wire Service Name**: The explicit stable identity by which RPC Peers refer to a remote service. It is independent of local `ServiceIdentifier` equality and metadata.
 - **Remote Service Group**: A stable remote-service view over the Logical Peers currently owned by an `RpcAcceptor`. Each invocation targets a fresh peer snapshot and keeps every result associated with its peer.
 
 ## Behavioral constraints
