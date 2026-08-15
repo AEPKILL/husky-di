@@ -1,7 +1,7 @@
 # 验证生产级 RPC 使用者 Interface
 
 Type: prototype
-Status: open
+Status: claimed
 Blocked by:
 Parent: [协议可替换的双向 RPC 框架](../map.md)
 

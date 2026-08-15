@@ -1,36 +1,19 @@
 /**
- * @overview @husky-di/remote 设计示例——暂定的双向 RPC 公开 interface。
+ * @overview @husky-di/remote throwaway prototype for the production caller Interface.
  *
- * 当前只保留 peer-owned exposure、独立 Connector/Acceptor owner，以及
- * Promise unary/topology/transport command 与 Observable event seam。它不是
- * `@husky-di/remote` 的生产接口。
+ * This file models the proposed public package surface. It intentionally leaves the
+ * Protocol implementation seam opaque for the dedicated Protocol decision ticket.
  *
  * @author AEPKILL
- * @created 2026-08-14 22:41:11
+ * @created 2026-08-15 00:00:00
  */
 
+import type { Cleanup, IDisposable, ServiceIdentifier } from "@husky-di/core";
 import type { Observable } from "rxjs";
 
-// ── 共享契约与远程方法映射 ──────────────────────────────────────────────
+// ── Remote Service Descriptor ────────────────────────────────────────────
 
-export type Cleanup = () => void;
-
-export interface IDisposable {
-	readonly disposed: boolean;
-	dispose(): void;
-}
-
-export type ServiceIdentifier<T> =
-	| (abstract new (
-			...args: never[]
-	  ) => T)
-	| (new (
-			...args: never[]
-	  ) => T)
-	| string
-	| symbol;
-
-// biome-ignore lint/suspicious/noExplicitAny: 方法键提取必须接受任意参数列表，且不限制变型。
+// biome-ignore lint/suspicious/noExplicitAny: method extraction must preserve arbitrary parameter variance.
 type AnyMethod = (...args: any[]) => unknown;
 
 type IsAny<T> = 0 extends 1 & T ? true : false;
@@ -77,8 +60,8 @@ export type RemoteMethodKey<T> = {
 }[keyof T];
 
 /**
- * `cancelable` 省略时按 false 处理；只有可取消 handler 才必须显式写 true。
- * 本地 handler 必须保留尾随 AbortSignal；远程 caller 可在同一位置选择性传入 signal。
+ * v1 selected methods are unary by definition. A cancelable local handler must
+ * reserve exactly one required trailing AbortSignal; the remote proxy makes it optional.
  */
 export type RpcUnaryMethodDefinition<F extends AnyMethod = AnyMethod> = (IsAny<
 	Awaited<ReturnType<F>>
@@ -87,24 +70,13 @@ export type RpcUnaryMethodDefinition<F extends AnyMethod = AnyMethod> = (IsAny<
 	: Extract<Awaited<ReturnType<F>>, Observable<unknown>> extends never
 		? unknown
 		: never) &
-	(
-		| (HasNoParameters<F> extends true
-				? true | { readonly type: "unary"; readonly cancelable?: false }
-				: ParametersContainAbortSignal<F> extends false
-					?
-							| true
-							| {
-									readonly type: "unary";
-									readonly cancelable?: false;
-							  }
-					: never)
-		| (HasValidCancellationSlot<F> extends true
-				? {
-						readonly type: "unary";
-						readonly cancelable: true;
-					}
-				: never)
-	);
+	(HasNoParameters<F> extends true
+		? true
+		: ParametersContainAbortSignal<F> extends false
+			? true
+			: HasValidCancellationSlot<F> extends true
+				? { readonly cancelable: true }
+				: never);
 
 export type RpcMethodDefinitions<T> = Partial<{
 	readonly [K in RemoteMethodKey<T>]: RpcUnaryMethodDefinition<
@@ -112,54 +84,20 @@ export type RpcMethodDefinitions<T> = Partial<{
 	>;
 }>;
 
-type ValidateNonCancelableMethodDefinition<F extends AnyMethod, Definition> =
-	HasNoParameters<F> extends true
-		? Definition
-		: ParametersContainAbortSignal<F> extends false
-			? Definition
-			: never;
-
-type NonUndefinedCancelableValue<Definition> = Exclude<
-	Definition[Extract<"cancelable", keyof Definition>],
-	undefined
->;
-
-type ValidateNonCancelableOption<Definition> =
-	"cancelable" extends keyof Definition
-		? Pick<
-				Definition,
-				Extract<"cancelable", keyof Definition>
-			> extends Required<
-				Pick<Definition, Extract<"cancelable", keyof Definition>>
-			>
-			? Definition extends { readonly cancelable: false }
-				? Definition
-				: never
-			: [NonUndefinedCancelableValue<Definition>] extends [never]
-				? never
-				: [NonUndefinedCancelableValue<Definition>] extends [false]
-					? Definition
-					: never
-		: Definition;
-
 type ValidateMethodDefinition<F extends AnyMethod, Definition> =
 	Definition extends RpcUnaryMethodDefinition<F>
 		? Definition extends true
-			? ValidateNonCancelableMethodDefinition<F, Definition>
-			: Definition extends { readonly type: "unary" }
-				? Exclude<keyof Definition, "type" | "cancelable"> extends never
-					? Definition extends { readonly cancelable: true }
-						? HasValidCancellationSlot<F> extends true
-							? Definition
-							: never
-						: ValidateNonCancelableOption<Definition> extends never
-							? never
-							: ValidateNonCancelableMethodDefinition<F, Definition>
+			? Definition
+			: Definition extends { readonly cancelable: true }
+				? Exclude<keyof Definition, "cancelable"> extends never
+					? HasValidCancellationSlot<F> extends true
+						? Definition
+						: never
 					: never
 				: never
 		: never;
 
-export type ValidateMethodDefinitions<T, Definitions extends object> = {
+type ValidateMethodDefinitions<T, Definitions extends object> = {
 	readonly [K in keyof Definitions]: K extends RemoteMethodKey<T>
 		? ValidateMethodDefinition<Extract<T[K], AnyMethod>, Definitions[K]>
 		: never;
@@ -169,7 +107,6 @@ type RequiredKey<T> = {
 	[K in keyof T]-?: Pick<T, K> extends Required<Pick<T, K>> ? K : never;
 }[keyof T];
 
-/** 宽化为 Partial 后的 optional key 不能被误认为运行时已经选择。 */
 type SelectedMethodKey<Definitions> = Extract<RequiredKey<Definitions>, string>;
 
 type IsCancelableMethod<Definition> = Definition extends {
@@ -195,10 +132,32 @@ export type RemoteService<T, Definitions extends RpcMethodDefinitions<T>> = {
 	>]: RemoteMethod<Extract<T[K], AnyMethod>, Definitions[K]>;
 };
 
-export enum RpcBatchResultStatusEnum {
-	fulfilled = "fulfilled",
-	rejected = "rejected",
+declare const remoteServiceDescriptorBrand: unique symbol;
+
+/** Opaque runtime descriptor shared by both RPC peers. */
+export interface IRemoteServiceDescriptor<
+	T,
+	Definitions extends RpcMethodDefinitions<T>,
+> {
+	readonly [remoteServiceDescriptorBrand]: {
+		readonly service: T;
+		readonly definitions: Definitions;
+	};
 }
+
+export declare function createRemoteServiceDescriptor<
+	T,
+	const Definitions extends RpcMethodDefinitions<T>,
+>(
+	serviceIdentifier: ServiceIdentifier<T>,
+	options: {
+		/** Required cross-language identity; never inferred from a class, string, or symbol. */
+		readonly wireName: string;
+		readonly methods: Definitions & ValidateMethodDefinitions<T, Definitions>;
+	},
+): IRemoteServiceDescriptor<T, Definitions>;
+
+// ── Remote results and errors ────────────────────────────────────────────
 
 export enum RpcErrorCodeEnum {
 	unavailable = "unavailable",
@@ -211,195 +170,273 @@ export enum RpcErrorCodeEnum {
 	protocol = "protocol",
 }
 
-export interface RemoteError {
+export interface IRpcRemoteError {
 	readonly name: string;
 	readonly message: string;
 }
 
 export declare class RpcError extends Error {
+	private constructor();
+
 	readonly code: RpcErrorCodeEnum;
-	readonly remote?: RemoteError;
+	readonly remote?: IRpcRemoteError;
 }
 
-export type RpcPeerResult<Peer, T> =
+export type RpcPeerResult<T> =
 	| {
-			readonly peer: Peer;
-			readonly status: RpcBatchResultStatusEnum.fulfilled;
+			readonly peer: IRpcPeer;
+			readonly status: "fulfilled";
 			readonly value: T;
 	  }
 	| {
-			readonly peer: Peer;
-			readonly status: RpcBatchResultStatusEnum.rejected;
+			readonly peer: IRpcPeer;
+			readonly status: "rejected";
 			readonly reason: RpcError;
 	  };
 
-type RemoteGroupMethod<Peer, F, Definition> = F extends (
+type RemoteGroupMethod<F, Definition> = F extends (
 	...args: infer Args
 ) => infer Result
 	? IsCancelableMethod<Definition> extends true
 		? Args extends [...infer Params, AbortSignal]
 			? (
 					...args: [...Params, signal?: AbortSignal]
-				) => Promise<readonly RpcPeerResult<Peer, Awaited<Result>>[]>
+				) => Promise<readonly RpcPeerResult<Awaited<Result>>[]>
 			: never
-		: (
-				...args: Args
-			) => Promise<readonly RpcPeerResult<Peer, Awaited<Result>>[]>
+		: (...args: Args) => Promise<readonly RpcPeerResult<Awaited<Result>>[]>
 	: never;
 
 export type RemoteServiceGroup<
-	Peer,
 	T,
 	Definitions extends RpcMethodDefinitions<T>,
 > = {
 	readonly [K in Extract<
 		SelectedMethodKey<Definitions>,
 		RemoteMethodKey<T>
-	>]: RemoteGroupMethod<Peer, Extract<T[K], AnyMethod>, Definitions[K]>;
+	>]: RemoteGroupMethod<Extract<T[K], AnyMethod>, Definitions[K]>;
 };
 
-// ── Adapter seam ─────────────────────────────────────────────────────────
+// ── Read-only observations ───────────────────────────────────────────────
 
-/** 一条生命期有限、不可重开的全双工连接。 */
-export interface IConnection {
+export type RpcCallDirection = "incoming" | "outgoing";
+
+export type RpcEvent =
+	| {
+			readonly type: "topology-closed";
+			readonly outcome: "closed";
+	  }
+	| {
+			readonly type: "topology-closed";
+			readonly outcome: "failed";
+			readonly error: RpcError;
+	  }
+	| {
+			readonly type: "peer-opened";
+			readonly peer: IRpcPeer;
+	  }
+	| {
+			readonly type: "peer-recovering";
+			readonly peer: IRpcPeer;
+	  }
+	| {
+			readonly type: "peer-recovered";
+			readonly peer: IRpcPeer;
+	  }
+	| {
+			readonly type: "peer-closed";
+			readonly peer: IRpcPeer;
+			readonly outcome: "closed";
+	  }
+	| {
+			readonly type: "peer-closed";
+			readonly peer: IRpcPeer;
+			readonly outcome: "failed";
+			readonly error: RpcError;
+	  }
+	| {
+			readonly type: "call-started";
+			/** Local observation identity; never the default Protocol's wire call identity. */
+			readonly observationId: string;
+			readonly peer: IRpcPeer;
+			readonly direction: RpcCallDirection;
+			readonly service: string;
+			readonly method: string;
+			/**
+			 * Detached local observation snapshot excluding caller and injected cancellation
+			 * signals. Values are unredacted but share no mutable application objects.
+			 */
+			readonly args: readonly unknown[];
+	  }
+	| {
+			readonly type: "call-finished";
+			readonly observationId: string;
+			readonly peer: IRpcPeer;
+			readonly direction: RpcCallDirection;
+			readonly service: string;
+			readonly method: string;
+			/** See call-started args; repeated so this hot event is self-contained. */
+			readonly args: readonly unknown[];
+			readonly outcome: "fulfilled";
+			/** Detached, unredacted local observation snapshot of the fulfilled result. */
+			readonly result: unknown;
+	  }
+	| {
+			readonly type: "call-finished";
+			readonly observationId: string;
+			readonly peer: IRpcPeer;
+			readonly direction: RpcCallDirection;
+			readonly service: string;
+			readonly method: string;
+			/** See call-started args; repeated so this hot event is self-contained. */
+			readonly args: readonly unknown[];
+			readonly outcome: "rejected";
+			readonly error: RpcError;
+	  };
+
+// ── Transport Adapter seam ──────────────────────────────────────────────
+
+/** A finite-lived, ordered, full-duplex Physical Connection. */
+export interface IRpcConnection {
 	/**
-	 * 按传输顺序提供的 hot、单订阅消息源。订阅回调不会在 subscribe() 返回前执行；
-	 * 远端正常关闭时 complete，传输失败或缓冲溢出时 error。
-	 *
-	 * 每一项都是内容稳定的完整 encoded RPC message。消息 transport 保留原生边界；
-	 * raw-byte adapter 负责 framing/reassembly。无法暂停的 push source 必须使用
-	 * 有界缓存。取消唯一 subscription 表示放弃该连接，adapter 会在内部中止它。
+	 * Complete encoded Protocol messages in transport order. The source is hot,
+	 * multicast, and has no replay. Subscriptions observe; they never own the connection.
+	 * All subscribers see the same message value and must not mutate its bytes.
+	 * A normal Physical Connection terminal completes the stream; a failure errors it.
 	 */
 	readonly message$: Observable<Uint8Array>;
 
-	/**
-	 * Promise 只表示 adapter 已复制或消费输入，并完成本地 admission/backpressure；
-	 * 不表示远端已经收到、解码或确认消息。RPC 会依次等待每次调用。
-	 */
+	/** Resolves after local copy/admission, not remote delivery, decode, or ACK. */
 	send(message: Uint8Array): Promise<void>;
 
-	/**
-	 * 幂等地优雅关闭整条连接。调用会同步进入 closing 状态，使后续 send 拒绝；
-	 * Promise 在底层关闭完成时兑现，关闭失败时拒绝；已有 message$ 订阅会先观察到
-	 * 对应 terminal。异常传输由 adapter 内部中止，不再向调用方暴露第二个 abortive
-	 * lifecycle member。
-	 */
+	/** Idempotent graceful close; calling it immediately rejects later send attempts. */
 	close(): Promise<void>;
 }
 
 export interface IRpcConnectorAdapter {
-	/** 兑现后把新连接的所有权移交给 Connector；signal 只取消建连阶段。 */
-	connect(signal: AbortSignal): Promise<IConnection>;
+	/**
+	 * Creates exactly one Physical Connection. The caller owns the Adapter and decides
+	 * when and which Adapter to use; Connection ownership transfers on fulfillment.
+	 */
+	connect(signal: AbortSignal): Promise<IRpcConnection>;
 }
 
 export interface IRpcAcceptorAdapter extends IDisposable {
 	/**
-	 * Acceptor 在 listen 前持有唯一订阅，以无竞态观察 hot、不重放的连接流。listen
-	 * 兑现前不 emit；每个 next 同步且仅一次地把 connection 所有权移交给 Acceptor。
-	 * 正常 dispose 时 complete，启动或后续监听故障时 error。
+	 * Accepted Physical Connections. The source is hot, multicast, and has no replay.
+	 * Each accepted Connection is emitted once by the source; every subscriber observes
+	 * the same object identity. Subscribing neither grants nor releases authority.
+	 * Passing this Adapter to IRpcAcceptor.listen makes that Acceptor the owner of every
+	 * subsequently emitted Connection, including emissions before startup completes.
+	 * Calling send or close without owner authority violates this Interface.
+	 * The source must not emit before listen is invoked.
+	 * Normal listener termination completes the stream; listener failure errors it.
 	 */
-	readonly connection$: Observable<IConnection>;
+	readonly connection$: Observable<IRpcConnection>;
 
-	/** Adapter 就绪后兑现；signal 只取消启动阶段，后续生命周期由 dispose 结束。 */
+	/** Topology-owner port that resolves when listening is ready. */
 	listen(signal: AbortSignal): Promise<void>;
 }
 
-// ── 暂定的 caller interface ──────────────────────────────────────────────
-
-declare const remoteServiceIdentifierBrand: unique symbol;
-
-/** 不透明远程服务契约；runtime implementation 保留规范化后的 descriptor。 */
-export interface IRemoteServiceIdentifier<
-	T,
-	Definitions extends RpcMethodDefinitions<T>,
-> {
-	readonly [remoteServiceIdentifierBrand]: {
-		readonly service: T;
-		readonly definitions: Definitions;
-	};
-}
-
-export declare function createRemoteServiceIdentifier<
-	T,
-	const Definitions extends RpcMethodDefinitions<T>,
->(
-	serviceIdentifier: ServiceIdentifier<T>,
-	options: {
-		readonly wireName?: string;
-		readonly methods: Definitions & ValidateMethodDefinitions<T, Definitions>;
-	},
-): IRemoteServiceIdentifier<T, Definitions>;
+// ── Caller-facing deep Modules ──────────────────────────────────────────
 
 export interface IRpcPeer {
 	/**
-	 * 在该 Logical Session 上暴露借用的 implementation。注册跨越 Physical
-	 * Connection 替换而继续有效；Cleanup 只移除这一次 exposure。
+	 * Exposes a borrowed implementation for this Logical Session. The exposure lives
+	 * until Cleanup or peer termination. A duplicate Wire Service Name throws without
+	 * changing the registry. Cleanup affects future dispatch only; an in-flight call keeps
+	 * the implementation captured when it was dispatched.
 	 */
 	expose<T, Definitions extends RpcMethodDefinitions<T>>(
-		service: IRemoteServiceIdentifier<T, Definitions>,
+		service: IRemoteServiceDescriptor<T, Definitions>,
 		implementation: T,
 	): Cleanup;
 
-	/**
-	 * 同步创建稳定 proxy；实际调用没有可用连接时异步拒绝。可取消 method 接受可选的
-	 * 尾随 AbortSignal；取消时会终止远端调用、中止注入给本地 handler 的 signal，
-	 * 并以 canceled RpcError 拒绝 Promise。
-	 */
+	/** Returns a stable proxy whose calls survive transparent Session Recovery. */
 	resolve<T, Definitions extends RpcMethodDefinitions<T>>(
-		service: IRemoteServiceIdentifier<T, Definitions>,
+		service: IRemoteServiceDescriptor<T, Definitions>,
 	): RemoteService<T, Definitions>;
 }
 
-export interface IRpcConnector extends IDisposable {
-	/** 从 Connector 创建起保持稳定，包括首次连接前和连接间隙。 */
+interface IRpcTopologyOwner {
+	/**
+	 * Lifecycle and call observations. The stream is hot, multicast, and without
+	 * replay; subscribe/unsubscribe never starts, stops, or otherwise owns RPC resources.
+	 * It emits exactly one topology-closed event before completion and never errors.
+	 */
+	readonly event$: Observable<RpcEvent>;
+
+	/** Idempotently closes every resource owned by this Topology Owner. */
+	close(): Promise<void>;
+}
+
+export interface IRpcConnector extends IRpcTopologyOwner {
+	/** Stable from factory return through every Physical Connection replacement. */
 	readonly peer: IRpcPeer;
 
 	/**
-	 * 用 adapter 启动或恢复同一 Logical Session；只接管其兑现的 connection，不接管
-	 * adapter。同一 adapter 的重叠调用合并；进行中的 attempt 收到不同 adapter，或当前
-	 * connection 仍可用时再次调用，都会拒绝且不调用或保留新 adapter。失败或连接终止后
-	 * 可在同一 owner、peer 和 proxy 上重试。
+	 * Attaches one Adapter-created Physical Connection to the stable Logical Session.
+	 * The Connector owns only the fulfilled Connection, never the Adapter. A rejected
+	 * attempt does not choose a future Adapter or end the retained Session; the caller
+	 * may retry with another Adapter while the later recovery ticket defines time bounds.
 	 */
 	connect(adapter: IRpcConnectorAdapter): Promise<void>;
 }
 
-export interface IRpcAcceptor extends IDisposable {
-	/** 每次读取都返回当前 Logical Session 对应 peer 的新只读快照。 */
+export interface IRpcAcceptor extends IRpcTopologyOwner {
+	/**
+	 * A fresh readonly snapshot of all retained Logical Peers. Membership changes before
+	 * the matching event$ next notification, so subscribe-then-read plus stable identity
+	 * and deduplication provides a race-free bootstrap.
+	 */
 	readonly peers: readonly IRpcPeer[];
 
 	/**
-	 * 对所有当前及未来 peer 原子暴露借用的 implementation。Cleanup 从同一作用域
-	 * 移除 exposure；相同 Wire Service Name 冲突会同步拒绝且不留下部分注册。
+	 * Atomically exposes one borrowed implementation to every current and future peer.
+	 * Duplicate Wire Service Names reject without partial registration; Cleanup removes
+	 * this registration from the owner scope and every retained peer.
 	 */
 	expose<T, Definitions extends RpcMethodDefinitions<T>>(
-		service: IRemoteServiceIdentifier<T, Definitions>,
+		service: IRemoteServiceDescriptor<T, Definitions>,
 		implementation: T,
 	): Cleanup;
 
 	/**
-	 * 在 listen 前订阅即可无竞态观察新 Logical Session 的 hot 事件流；不重放历史，
-	 * dispose 时 complete，Acceptor 故障时 error。
-	 */
-	readonly peer$: Observable<IRpcPeer>;
-
-	/**
-	 * 调用即把 adapter 所有权交给 Acceptor。首次调用会先订阅 connection$ 再启动 adapter；
-	 * 同一 adapter 的重叠调用合并，就绪后的重复调用直接完成。其他 adapter 会被立即 dispose
-	 * 并拒绝；启动失败会 dispose 已接管的 adapter 并终止该 Acceptor。
+	 * Starts the passive topology and takes ownership of the Acceptor Adapter when called.
+	 * It subscribes to Adapter connections before starting the listener. Synchronous
+	 * validation failure and rejected startup must release that Adapter.
 	 */
 	listen(adapter: IRpcAcceptorAdapter): Promise<void>;
 
 	/**
-	 * 每次远程方法调用时截取 peers 快照，并保留每项结果对应的 peer。单 peer 失败留在
-	 * 结果数组中；caller signal 取消整个 batch，并以 canceled RpcError 拒绝 Promise。
+	 * Returns a stable Remote Service Group. Every remote method invocation captures a
+	 * fresh peer snapshot and associates each result with its stable peer.
 	 */
 	resolveAll<T, Definitions extends RpcMethodDefinitions<T>>(
-		service: IRemoteServiceIdentifier<T, Definitions>,
-	): RemoteServiceGroup<IRpcPeer, T, Definitions>;
+		service: IRemoteServiceDescriptor<T, Definitions>,
+	): RemoteServiceGroup<T, Definitions>;
 }
 
-/** 创建未启动 owner；peer 及其 expose、resolve 在 connect 前即可使用。 */
-export declare function createRpcConnector(): IRpcConnector;
+declare const rpcProtocolBrand: unique symbol;
 
-/** 创建未启动 owner；expose、resolveAll 与 peer$ 在 listen 前即可使用。 */
-export declare function createRpcAcceptor(): IRpcAcceptor;
+/**
+ * Opaque caller-side Protocol handle. Its implementation Interface is deliberately
+ * deferred to the dedicated Protocol Module seam ticket.
+ */
+export interface IRpcProtocol {
+	readonly [rpcProtocolBrand]: never;
+}
+
+/** The package's one built-in Protocol, used implicitly unless another is injected. */
+export declare const defaultRpcProtocol: IRpcProtocol;
+
+export interface RpcTopologyOptions {
+	readonly protocol?: IRpcProtocol;
+}
+
+export declare function createRpcConnector(
+	options?: RpcTopologyOptions,
+): IRpcConnector;
+
+export declare function createRpcAcceptor(
+	options?: RpcTopologyOptions,
+): IRpcAcceptor;

@@ -31,6 +31,7 @@
 		"access": "public"
 	},
 	"dependencies": {
+		"@husky-di/core": "workspace:*",
 		"rxjs": "^7.8.2"
 	}
 }

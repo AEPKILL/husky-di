@@ -1,26 +1,31 @@
 /**
- * @overview @husky-di/remote 设计示例——远程方法 interface 的编译期校验用例。
+ * @overview Positive and negative type probes for the RPC Interface throwaway prototype.
  *
  * @author AEPKILL
- * @created 2026-08-12 23:20:00
+ * @created 2026-08-15 00:00:00
  */
 
+import type { ServiceIdentifier } from "@husky-di/core";
 import type { Observable } from "rxjs";
 
 import type { SessionService } from "./fixtures";
-import { IClientEvents, ISession } from "./fixtures";
+import { customProtocol, IClientEvents, ISession } from "./fixtures";
 import {
-	createRemoteServiceIdentifier,
-	type IConnection,
+	createRemoteServiceDescriptor,
+	createRpcAcceptor,
+	createRpcConnector,
+	defaultRpcProtocol,
 	type IRpcAcceptor,
 	type IRpcAcceptorAdapter,
+	type IRpcConnection,
 	type IRpcConnector,
 	type IRpcConnectorAdapter,
 	type IRpcPeer,
+	RpcError,
+	type RpcEvent,
 	type RpcMethodDefinitions,
 	type RpcPeerResult,
 	type RpcUnaryMethodDefinition,
-	type ServiceIdentifier,
 } from "./rpc-interface";
 
 interface SpecialSignal extends AbortSignal {
@@ -40,53 +45,43 @@ declare const typeValidationAcceptor: IRpcAcceptor;
 declare const typeValidationAcceptorAdapter: IRpcAcceptorAdapter;
 declare const typeValidationConnector: IRpcConnector;
 declare const typeValidationConnectorAdapter: IRpcConnectorAdapter;
+declare const typeValidationConnection: IRpcConnection;
+declare const typeValidationEvent: RpcEvent;
 
-/** 本函数只供 TypeScript 编译期探测，绝不应被调用。 */
+/** This function exists only for TypeScript validation and must never be called. */
 export function typeValidationUsage(): void {
-	const shorthandDescriptor = createRemoteServiceIdentifier(ISession, {
+	const pingDescriptor = createRemoteServiceDescriptor(ISession, {
+		wireName: "example.session-ping.v1",
 		methods: { ping: true },
 	});
-	const shorthandRemote = typeValidationPeer.resolve(shorthandDescriptor);
-	const pingResult: Promise<boolean> = shorthandRemote.ping();
+	const pingRemote = typeValidationPeer.resolve(pingDescriptor);
+	const pingResult: Promise<boolean> = pingRemote.ping();
 	void pingResult;
-	// @ts-expect-error 精确 map 没有选择 login，proxy 不得暴露该方法。
-	void shorthandRemote.login;
+	// @ts-expect-error The exact allowlist did not select login.
+	void pingRemote.login;
 
-	createRemoteServiceIdentifier(ISession, {
-		methods: { ping: { type: "unary", cancelable: false } },
-	});
-	createRemoteServiceIdentifier(ISession, {
-		methods: { ping: { type: "unary" } },
-	});
-	createRemoteServiceIdentifier(IClientEvents, {
-		methods: { changed: { type: "unary" } },
-	});
-
-	const annotatedPing: RpcUnaryMethodDefinition<SessionService["ping"]> = {
-		type: "unary",
-	};
-	createRemoteServiceIdentifier(ISession, {
-		methods: { ping: annotatedPing },
-	});
-
+	const annotatedPing: RpcUnaryMethodDefinition<SessionService["ping"]> = true;
 	const checkedMethods = {
-		ping: { type: "unary" },
+		ping: annotatedPing,
 	} satisfies RpcMethodDefinitions<SessionService>;
-	const checkedDescriptor = createRemoteServiceIdentifier(ISession, {
+	const checkedDescriptor = createRemoteServiceDescriptor(ISession, {
+		wireName: "example.session-checked.v1",
 		methods: checkedMethods,
 	});
 	void typeValidationPeer.resolve(checkedDescriptor).ping;
 
 	const widenedMethods: RpcMethodDefinitions<SessionService> = checkedMethods;
-	const widenedDescriptor = createRemoteServiceIdentifier(ISession, {
+	const widenedDescriptor = createRemoteServiceDescriptor(ISession, {
+		wireName: "example.session-widened.v1",
 		methods: widenedMethods,
 	});
 	const widenedRemote = typeValidationPeer.resolve(widenedDescriptor);
-	// @ts-expect-error Partial 的 optional key 不能被当成确定选择的方法。
+	// @ts-expect-error Optional keys on a widened map are not runtime selections.
 	void widenedRemote.ping;
 
-	const cancelableDescriptor = createRemoteServiceIdentifier(ISession, {
-		methods: { login: { type: "unary", cancelable: true } },
+	const cancelableDescriptor = createRemoteServiceDescriptor(ISession, {
+		wireName: "example.session-login.v1",
+		methods: { login: { cancelable: true } },
 	});
 	const cancelableRemote = typeValidationPeer.resolve(cancelableDescriptor);
 	const callerSignal = new AbortController().signal;
@@ -101,117 +96,198 @@ export function typeValidationUsage(): void {
 	);
 	void loginResult;
 	void loginWithSignalResult;
-	// @ts-expect-error caller cancellation 只接受 AbortSignal。
+	// @ts-expect-error Caller cancellation accepts only AbortSignal.
 	cancelableRemote.login("aepkill", "secret", "not-a-signal");
 
-	const remoteClientEvents = createRemoteServiceIdentifier(IClientEvents, {
+	const remoteClientEvents = createRemoteServiceDescriptor(IClientEvents, {
+		wireName: "example.client-events.v1",
 		methods: { changed: true },
 	});
-	const batchResult: Promise<readonly RpcPeerResult<IRpcPeer, void>[]> =
+	const batchResult: Promise<readonly RpcPeerResult<void>[]> =
 		typeValidationAcceptor
 			.resolveAll(remoteClientEvents)
 			.changed("maintenance-scheduled");
 	const cancelableBatch =
 		typeValidationAcceptor.resolveAll(cancelableDescriptor);
-	const cancelableBatchResult: Promise<
-		readonly RpcPeerResult<IRpcPeer, string>[]
-	> = cancelableBatch.login("aepkill", "secret");
-	const batchWithSignalResult: Promise<
-		readonly RpcPeerResult<IRpcPeer, string>[]
-	> = cancelableBatch.login("aepkill", "secret", callerSignal);
-	// @ts-expect-error batch caller cancellation 也只接受 AbortSignal。
+	const cancelableBatchResult: Promise<readonly RpcPeerResult<string>[]> =
+		cancelableBatch.login("aepkill", "secret");
+	const batchWithSignalResult: Promise<readonly RpcPeerResult<string>[]> =
+		cancelableBatch.login("aepkill", "secret", callerSignal);
+	// @ts-expect-error Batch cancellation also accepts only AbortSignal.
 	cancelableBatch.login("aepkill", "secret", "not-a-signal");
-	const connectResult: Promise<void> = typeValidationConnector.connect(
-		typeValidationConnectorAdapter,
-	);
-	const listenResult: Promise<void> = typeValidationAcceptor.listen(
-		typeValidationAcceptorAdapter,
-	);
-	const peer$: Observable<IRpcPeer> = typeValidationAcceptor.peer$;
-	const connection$: Observable<IConnection> =
-		typeValidationAcceptorAdapter.connection$;
-	const adapterListenResult: Promise<void> =
-		typeValidationAcceptorAdapter.listen(callerSignal);
-	const adapterDisposed: boolean = typeValidationAcceptorAdapter.disposed;
 	void batchResult;
 	void cancelableBatchResult;
 	void batchWithSignalResult;
-	void connectResult;
-	void listenResult;
-	void peer$;
-	void connection$;
-	void adapterListenResult;
-	void adapterDisposed;
-	typeValidationAcceptorAdapter.dispose();
-	// @ts-expect-error 每次建连必须显式提供 connector adapter。
-	typeValidationConnector.connect();
-	// @ts-expect-error 首次启动必须显式提供 acceptor adapter。
-	typeValidationAcceptor.listen();
-	// @ts-expect-error connection 通过 connection$ 交付，listen 不再接受 callback。
-	typeValidationAcceptorAdapter.listen(() => undefined, callerSignal);
-	// @ts-expect-error Acceptor lifecycle terminal 由 peer$ 表达，不再公开 closed。
-	void typeValidationAcceptor.closed;
-	// @ts-expect-error adapter lifecycle terminal 由 connection$ 表达，不再公开 closed。
-	void typeValidationAcceptorAdapter.closed;
 
-	createRemoteServiceIdentifier(ISession, {
-		methods: {
-			// @ts-expect-error 显式 undefined 不是省略，无法形成稳定输入。
-			ping: { type: "unary", cancelable: undefined },
-		},
+	const connector = createRpcConnector();
+	const customProtocolConnector = createRpcConnector({
+		protocol: customProtocol,
+	});
+	const explicitDefaultProtocolConnector = createRpcConnector({
+		protocol: defaultRpcProtocol,
+	});
+	const acceptor = createRpcAcceptor();
+	const connectorConnect: Promise<void> = connector.connect(
+		typeValidationConnectorAdapter,
+	);
+	const acceptorListen: Promise<void> = acceptor.listen(
+		typeValidationAcceptorAdapter,
+	);
+	const connectorClose: Promise<void> = connector.close();
+	const event$: Observable<RpcEvent> = acceptor.event$;
+	const currentPeers: readonly IRpcPeer[] = acceptor.peers;
+	const exposureResult = acceptor.expose(remoteClientEvents, {
+		changed: () => undefined,
+	});
+	const acceptedConnections: Observable<IRpcConnection> =
+		typeValidationAcceptorAdapter.connection$;
+	const firstConnectionObservation = acceptedConnections.subscribe(
+		(connection) => void connection.message$,
+	);
+	const secondConnectionObservation = acceptedConnections.subscribe(
+		(connection) => void connection.message$,
+	);
+	// Adapter implementor probe: application callers use acceptor.listen(adapter).
+	const adapterListenResult: Promise<void> =
+		typeValidationAcceptorAdapter.listen(callerSignal);
+	const messages: Observable<Uint8Array> = typeValidationConnection.message$;
+	void customProtocolConnector;
+	void explicitDefaultProtocolConnector;
+	void connectorConnect;
+	void acceptorListen;
+	void connectorClose;
+	void event$;
+	void currentPeers;
+	void exposureResult;
+	void firstConnectionObservation;
+	void secondConnectionObservation;
+	void adapterListenResult;
+	void messages;
+	exposureResult();
+	if (typeValidationEvent.type === "call-started") {
+		const callArguments: readonly unknown[] = typeValidationEvent.args;
+		void callArguments;
+		// @ts-expect-error Call argument snapshots are readonly observations.
+		typeValidationEvent.args.push("late argument");
+	}
+	if (
+		typeValidationEvent.type === "call-finished" &&
+		typeValidationEvent.outcome === "fulfilled"
+	) {
+		const callResult: unknown = typeValidationEvent.result;
+		void callResult;
+	}
+	if (
+		typeValidationEvent.type === "topology-closed" &&
+		typeValidationEvent.outcome === "failed"
+	) {
+		const terminalError: RpcError = typeValidationEvent.error;
+		void terminalError;
+	}
+	if (
+		typeValidationEvent.type === "topology-closed" &&
+		typeValidationEvent.outcome === "closed"
+	) {
+		// @ts-expect-error A normal terminal has no failure payload.
+		void typeValidationEvent.error;
+	}
+
+	// @ts-expect-error Connector Adapter creates one connection and is not owner-disposable.
+	typeValidationConnectorAdapter.dispose();
+	// @ts-expect-error Owners use role-specific connect/listen, not a generic start command.
+	typeValidationConnector.start();
+	// @ts-expect-error Topology terminal state is observed through event$, not a Promise property.
+	void typeValidationConnector.closed;
+	// @ts-expect-error Connector and Acceptor Adapter roles are not interchangeable.
+	typeValidationConnector.connect(typeValidationAcceptorAdapter);
+	// @ts-expect-error Connector and Acceptor Adapter roles are not interchangeable.
+	typeValidationAcceptor.listen(typeValidationConnectorAdapter);
+	// @ts-expect-error Lifecycle and call observations are unified under event$.
+	void typeValidationAcceptor.peer$;
+	// @ts-expect-error Observable consumers cannot produce Physical Connections.
+	typeValidationAcceptorAdapter.connection$.next(typeValidationConnection);
+	// @ts-expect-error A readonly peer snapshot cannot be mutated.
+	typeValidationAcceptor.peers.push(typeValidationPeer);
+	// @ts-expect-error Observable consumers cannot produce RPC events.
+	typeValidationAcceptor.event$.next({
+		type: "peer-opened",
+		peer: typeValidationPeer,
+	});
+	// @ts-expect-error Observable subscriptions never own a Physical Connection.
+	typeValidationConnection.message$.next(Uint8Array.of(0));
+	// @ts-expect-error Protocol is an opaque value supplied by a conforming package.
+	createRpcConnector({ protocol: {} });
+	// @ts-expect-error RpcError instances are created by the RPC Implementation.
+	new RpcError();
+	// Factories create cold Topology Owners without starting I/O.
+	createRpcConnector({});
+	createRpcAcceptor({ protocol: customProtocol });
+
+	// @ts-expect-error A stable wireName is mandatory and never inferred.
+	createRemoteServiceDescriptor(ISession, { methods: { ping: true } });
+
+	createRemoteServiceDescriptor(ISession, {
+		wireName: "example.invalid-methods.v1",
+		// @ts-expect-error methods must be an explicit per-method allowlist.
+		methods: true,
 	});
 
-	// @ts-expect-error methods 必须是按方法显式声明的允许列表。
-	createRemoteServiceIdentifier(ISession, { methods: true });
-
-	createRemoteServiceIdentifier(ISession, {
-		// @ts-expect-error version 不是可调用成员。
+	createRemoteServiceDescriptor(ISession, {
+		wireName: "example.invalid-property.v1",
+		// @ts-expect-error version is not callable.
 		methods: { version: true },
 	});
 
-	createRemoteServiceIdentifier(ISession, {
-		// @ts-expect-error ping 没有必需的末尾 AbortSignal 参数。
-		methods: { ping: { type: "unary", cancelable: true } },
+	createRemoteServiceDescriptor(ISession, {
+		wireName: "example.invalid-unary-tag.v1",
+		// @ts-expect-error v1 selected methods are already unary; type is redundant.
+		methods: { ping: { type: "unary" } },
 	});
 
-	createRemoteServiceIdentifier(ISession, {
-		// @ts-expect-error login 的 AbortSignal 不得作为网络传输参数。
+	createRemoteServiceDescriptor(ISession, {
+		wireName: "example.invalid-cancelable-ping.v1",
+		// @ts-expect-error ping has no required trailing AbortSignal.
+		methods: { ping: { cancelable: true } },
+	});
+
+	createRemoteServiceDescriptor(ISession, {
+		wireName: "example.invalid-login.v1",
+		// @ts-expect-error login's AbortSignal cannot cross the wire as an argument.
 		methods: { login: true },
 	});
 
-	createRemoteServiceIdentifier(ISession, {
-		// @ts-expect-error 省略 cancelable 等价于 false，不能吞掉 AbortSignal。
-		methods: { login: { type: "unary" } },
-	});
-
-	createRemoteServiceIdentifier(ISession, {
-		// @ts-expect-error 当前阶段尚未定义流式调用类型。
+	createRemoteServiceDescriptor(ISession, {
+		wireName: "example.invalid-stream.v1",
+		// @ts-expect-error v1 defines neither streaming nor notification methods.
 		methods: { ping: { type: "server-streaming" } },
 	});
 
-	createRemoteServiceIdentifier(ISession, {
+	createRemoteServiceDescriptor(ISession, {
+		wireName: "example.invalid-option.v1",
 		methods: {
-			// @ts-expect-error 方法定义不接受未知属性。
-			ping: { type: "unary", timeout: 1_000 },
+			// @ts-expect-error Method definitions accept no speculative timeout option.
+			login: { cancelable: true, timeout: 1_000 },
 		},
 	});
 
 	const invalidSpecialSignal =
 		"invalid-special-signal" as ServiceIdentifier<InvalidSpecialSignalService>;
-	createRemoteServiceIdentifier(invalidSpecialSignal, {
-		// @ts-expect-error 取消信号注入要求参数类型必须恰好为 AbortSignal。
-		methods: { run: { type: "unary", cancelable: true } },
+	createRemoteServiceDescriptor(invalidSpecialSignal, {
+		wireName: "example.invalid-special-signal.v1",
+		// @ts-expect-error Cancellation injection requires exactly AbortSignal.
+		methods: { run: { cancelable: true } },
 	});
 
 	const invalidObservableHandler =
 		"invalid-observable-handler" as ServiceIdentifier<InvalidObservableHandlerService>;
-	// @ts-expect-error Observable handler result 也必须让公开 method-definition type 归 never。
+	// @ts-expect-error Observable results imply unsupported streaming semantics.
 	const invalidObservableDefinition: RpcUnaryMethodDefinition<
 		InvalidObservableHandlerService["run"]
 	> = true;
 	void invalidObservableDefinition;
-	createRemoteServiceIdentifier(invalidObservableHandler, {
-		// @ts-expect-error Awaited 后的 Observable 会引入未定义的 streaming 语义。
+	createRemoteServiceDescriptor(invalidObservableHandler, {
+		wireName: "example.invalid-observable.v1",
+		// @ts-expect-error Awaited Observable results are rejected by the allowlist.
 		methods: { run: true },
 	});
 }

@@ -1,53 +1,23 @@
 /**
- * @overview @husky-di/remote 设计示例——IConnection 的完整消息消费方式。
+ * @overview Protocol-side consumption of the proposed Physical Connection Interface.
  *
  * @author AEPKILL
- * @created 2026-08-14 23:55:00
+ * @created 2026-08-15 00:00:00
  */
 
-import type { Subscription } from "rxjs";
-
-import type { IConnection } from "./rpc-interface";
+import type { IRpcConnection } from "@husky-di/remote";
+import { firstValueFrom, take } from "rxjs";
 
 const PING_MESSAGE = Uint8Array.of(0x70, 0x69, 0x6e, 0x67);
 const PONG_MESSAGE = Uint8Array.of(0x70, 0x6f, 0x6e, 0x67);
 
 export async function runConnectionPingPong(
-	connection: IConnection,
+	connection: IRpcConnection,
 ): Promise<void> {
-	let subscription: Subscription | undefined;
-	const pong = new Promise<void>((resolve, reject) => {
-		let received = false;
-		subscription = connection.message$.subscribe({
-			next(message) {
-				if (received) {
-					return;
-				}
-				received = true;
-				try {
-					assertPong(message);
-					resolve();
-				} catch (error) {
-					reject(error);
-				}
-			},
-			error: reject,
-			complete() {
-				if (!received) {
-					reject(new Error("Connection closed before pong"));
-				}
-			},
-		});
-	});
-
-	try {
-		await Promise.all([connection.send(PING_MESSAGE), pong]);
-		await connection.close();
-	} catch (error) {
-		// 取消唯一订阅会让 adapter 在内部中止无法继续使用的连接。
-		subscription?.unsubscribe();
-		throw error;
-	}
+	const firstMessage = firstValueFrom(connection.message$.pipe(take(1)));
+	await connection.send(PING_MESSAGE);
+	assertPong(await firstMessage);
+	await connection.close();
 }
 
 function assertPong(message: Uint8Array): void {

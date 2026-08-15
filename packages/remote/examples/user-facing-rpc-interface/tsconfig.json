@@ -2,7 +2,12 @@
 	"extends": "../../tsconfig.json",
 	"compilerOptions": {
 		"exactOptionalPropertyTypes": true,
-		"rootDir": "."
+		"paths": {
+			"@husky-di/remote": ["./rpc-interface.ts"],
+			"@husky-di/remote-websocket": ["./websocket-adapters.ts"]
+		},
+		"rootDir": ".",
+		"types": ["node"]
 	},
 	"include": ["**/*.ts"]
 }

@@ -1,151 +1,126 @@
-# 暂定的面向用户 RPC interface
+# PROTOTYPE — 生产级 RPC 使用者 Interface
 
-这是 `@husky-di/remote` 子包内的一套自包含设计示例，作为下一轮实现讨论的参考。它尚未
-成为该包的生产 interface，也不会从 `src/index.ts` 导出；remote 包的类型检查会验证这里
-的接口、adapter 和用法。
+这是一个只用于回答 Wayfinder 票“验证生产级 RPC 使用者 Interface”的 throwaway
+prototype，不是 `@husky-di/remote` 的生产导出，也不包含运行时实现。
+
+## 要回答的问题
+
+在不暴露 Handshake、Session、ACK、Codec、call ledger 等 Implementation 细节的前提下，
+最小的 caller Interface 能否完整表达双向 unary、稳定 `IRpcPeer`、Topology Owner、透明
+Session Recovery、hot multicast Observable、Protocol 注入、独立 Transport Adapter 包和
+稳定 Remote Service Group？每个 public member 是否都能由一个具体工作流证明？
 
 ```bash
+pnpm --filter @husky-di/core build
 pnpm --filter @husky-di/remote typecheck
 ```
 
-## 当前形态
+## 当前假设
 
-- `createRpcConnector()` 创建主动 topology owner，并公开一个稳定的
-  `connector.peer`。
-- 单个 Logical Session 的 `expose()` 与 `resolve()` 都位于 `RpcPeer`；Connector
-  不复制这些成员。
-- `createRpcAcceptor()` 创建被动 topology owner。它公开 `peers`、
-  `peer$`、`resolveAll()`，并用集合级 `expose()` 原子覆盖所有当前及未来 peer。
-- Connector 与 Acceptor 各自拥有其 exposure、Logical Session 和连接；Acceptor 还接管
-  adapter 的监听生命周期。两者只借用本地 implementation、adapter 借用的外部
-  HTTP server 等外部资源。
-- `Cleanup` 只移除一次 exposure；Observable 订阅由 `Subscription.unsubscribe()` 取消。
-  `Connector` 与 `Acceptor` 使用 `dispose()`；Acceptor 会一并 dispose 它接管的 adapter。
-  一次性的 `IConnection` 不再公开 `dispose()`，只以幂等 `close()` 结束连接。
-- 本地 exposed handler 仍可以同步返回或返回 Promise。远程 unary 与批量 proxy 返回
-  Promise；持续的 transport 消息、物理连接与 peer 事件保持 RxJS Observable。
-  Observable handler 会引入 0/多项 emission 的 streaming 语义，当前 unary descriptor
-  会在类型层拒绝它。
+- `createRpcConnector({ protocol? })` 与 `createRpcAcceptor({ protocol? })` 创建尚未启动 I/O
+  的 Topology Owner；省略 `protocol` 使用包内唯一默认 Protocol。
+- Connector Adapter 只创建一次 Physical Connection。调用者决定何时及用哪个 Adapter
+  调用 `connect(adapter)`；Connector 只接管兑现的 Connection，并让 Protocol 尝试把它
+  恢复到原 Logical Session。Acceptor 通过 `listen(adapter)` 接管持续监听 Adapter。
+- `IRpcPeer` 只负责 session-scoped `expose()` / `resolve()`；Connector 暴露一个从创建起
+  稳定的 peer，Acceptor 负责集合级 `expose()` / `resolveAll()`。
+- `expose()` 返回 core `Cleanup`。实际 inbound invocation 才查询当前 exposure，因此移除
+  registration 不替换稳定 proxy，也不改变已经 dispatch 的调用，只影响后续 invocation。
+- `peers` 提供当前快照；单一 `event$` 提供 peer lifecycle 与 call observation，其中 call
+  observation 携带参数、成功结果或失败。所有公开 Observable 都是 hot、multicast、无
+  replay，订阅只观察且不拥有资源。
+- `close()` 只表示 caller 发起的关闭命令何时完成。Topology terminal、peer lifecycle 与 call
+  observation 都通过一个 `event$` 表达，不再提供把事件伪装成状态的 `closed` Promise。
+  `event$` 用最后一个 `topology-closed` event 区分正常关闭与失败，随后 complete，永不 error。
+- v1 只有 unary，所以 method allowlist 只用 `true` 或 `{ cancelable: true }`，不重复写
+  `type: "unary"`。
 
-浏览器主动端的核心用法：
+## Guided walkthroughs
 
-```ts
-const connector = createRpcConnector();
-const cleanup = connector.peer.expose(remoteClientEvents, clientEvents);
-const session = connector.peer.resolve(remoteSession);
+### 1. 定义双方共享的 Remote Service Descriptor
 
-try {
-  await connector.connect(createConnectorAdapter());
-  await session.ping();
-} finally {
-  cleanup();
-  connector.dispose();
-}
-```
+见 [`websocket-express/remote-services.ts`](./websocket-express/remote-services.ts)。Descriptor
+显式复用 `@husky-di/core` 的 `ServiceIdentifier<T>`，要求稳定 `wireName`，并只允许选中
+method。同步 handler 在 remote proxy 上变为 `Promise`；cancelable handler 的尾随
+`AbortSignal` 在 caller 侧变为可选。
 
-Express 被动端的核心用法：
+[`type-validation.usage.ts`](./type-validation.usage.ts) 同时证明 properties、Observable
+result、未知 method option、缺失 wire name、错误 cancellation slot、streaming 与
+notification shape 都会在编译期失败。
 
-```ts
-const acceptor = createRpcAcceptor();
-const cleanup = acceptor.expose(remoteSession, sessionService);
-const clients = acceptor.resolveAll(remoteClientEvents);
-acceptor.peer$.subscribe({
-  next(peer) {
-    void peer
-      .resolve(remoteClientEvents)
-      .changed("session-opened")
-      .catch(reportFailure);
-  },
-  error: reportFailure,
-});
+### 2. 浏览器 Connector
 
-try {
-  await acceptor.listen(createAcceptorAdapter());
-  await clients.changed("maintenance-scheduled");
-} finally {
-  cleanup();
-  acceptor.dispose();
-}
-```
+见 [`websocket-express/connector.usage.ts`](./websocket-express/connector.usage.ts)。调用者先
+创建稳定 peer、暴露反向调用、取得稳定 proxy、订阅 observation，最后才 `connect()` I/O。
+观察到 `peer-recovering` 后，调用者选择新的 Adapter 再次 `connect()`；随后继续使用原
+proxy，并等待断线前发起的 pending call，证明 Physical Connection replacement 不改变
+peer、proxy、exposure 或 call continuity。
 
-Owner factory 只创建稳定的 topology 与 peer，不要求 adapter，也不启动 I/O。调用方先
-完成 `expose()`、`resolve()` / `resolveAll()` 与 `peer$` 订阅，再在 `try` 内创建 adapter
-并传给 `connect(adapter)` / `listen(adapter)`。Connector 只接管 adapter 兑现的 connection；
-Acceptor 从方法调用起接管 adapter 本身。这种 deferred injection 让 adapter factory 的同步
-校验故障也进入同一个 `finally`，已建立的 exposure、订阅与 owner 都能正常收尾。
+### 3. Node HTTP Acceptor
 
-同一 adapter 的重叠启动调用共享一次启动。Connector 正在建连时收到不同 adapter 会直接
-拒绝且不保留它；Acceptor 收到不同 adapter 时会先 dispose 它再拒绝，避免 inline 创建的
-disposable adapter 泄漏。Acceptor 就绪后用同一 adapter 重复调用 `listen()` 会直接完成。
+见 [`websocket-express/acceptor.usage.ts`](./websocket-express/acceptor.usage.ts)。Acceptor
+原子地把 implementation 暴露给所有当前及未来 peers；`resolveAll()` 返回稳定 Group，
+每次 method invocation 重新截取 peer snapshot，并让每个 fulfilled/rejected result 携带
+对应的稳定 peer。
 
-每次调用单 peer remote proxy 方法都会立即发起一次 RPC，并返回单一结果的 Promise；
-调用失败时 Promise 拒绝。标记为 `cancelable: true` 的方法在 caller 侧接受可选的
-尾随 `AbortSignal`；signal 取消协议调用、中止 runtime 注入给本地 handler 的 signal，
-并以 `RpcErrorCodeEnum.canceled` 拒绝 Promise。
+### 4. 独立 Transport Adapter seam
 
-`resolveAll()` 返回稳定的批量 proxy；每次调用其远程方法时截取 peer 快照，并在 Promise
-中返回完整结果数组。单 peer 失败仍以 `RpcPeerResult.rejected` 留在数组中；caller signal
-取消整个 batch 并拒绝顶层 Promise，而不是返回一组 canceled results。`peer$` 是不重放
-历史的新 Logical Session hot 事件流；`peers` 继续提供当前只读快照。
-`acceptor.listen(adapter)` 的 Promise 只表达启动就绪或失败；就绪后的 lifecycle 由 `peer$`
-表达，正常 dispose 时 complete，后续故障时 error。
+[`websocket-adapters.ts`](./websocket-adapters.ts) 模拟独立
+`@husky-di/remote-websocket` 包的 public Interface；Node/WebSocket 类型没有进入 remote
+core。[`connection.usage.ts`](./connection.usage.ts) 证明 Protocol 只需要完整 encoded
+message stream、local-admission `send()` 和幂等 `close()`。Acceptor Adapter 用 hot、
+multicast、无 replay 的 `Observable<IRpcConnection>` 报告接受的 Connection。
 
-`message$`、`connection$` 与 `peer$` 是随时间到达的持续事件源，因此使用
-Observable。只有一个完成结果的 remote proxy、topology 启动与 transport I/O 使用
-Promise，调用方可以自然地使用 `async` / `await`。
+订阅数量不建立 Connection ownership：即使只有一个订阅者也能转交引用。把 Adapter 传给
+`acceptor.listen(adapter)` 才让 Acceptor 成为随后 Connections 的 owner；其他订阅者只观察，
+持有同一个引用并不授予调用 `send()` / `close()` 的 authority。非 owner 调用它们属于契约
+违例；这个规则是角色契约，而不是 TypeScript 能提供的 linear ownership 保证。Adapter 在
+自己的 `listen()` 被调用前不得 emit；Acceptor 先订阅，再启动 Adapter，并拥有启动完成前后
+的全部 emission。每条 Connection 由 source emit 一次，所有订阅者看到相同 object identity。
 
-直接持有 Observable 的属性和变量使用“单次 emission 名称 + `$`”，例如 `message$`、
-`connection$` 与 `peer$`。`ping()`、`changed()` 是返回 Promise 的协议方法，因此保持
-原方法名。
+`message$` 的各订阅者同样看到相同 message value，必须把 bytes 当作只读。Call event 的
+`args` 是排除本地 `AbortSignal` 的 detached observation snapshot，成功 `result` 也与业务
+活值断开，因此 observer 不能借此改写 RPC。两者都不自动脱敏或记录；日志与 tracing
+subscriber 负责脱敏。
 
-## Transport seams
+本原型中的三个 Observable 及其 terminal 语义是：
 
-```ts
-interface IConnection {
-  readonly message$: Observable<Uint8Array>;
-  send(message: Uint8Array): Promise<void>;
-  close(): Promise<void>;
-}
+| Stream | Type | Terminal |
+| --- | --- | --- |
+| Topology observation | `Observable<RpcEvent>` | 发出一个 `topology-closed` 后 complete；不 error。 |
+| Physical messages | `Observable<Uint8Array>` | 正常 Connection terminal 时 complete；Transport failure 时 error。 |
+| Accepted Connections | `Observable<IRpcConnection>` | 正常 listener terminal 时 complete；listener failure 时 error。 |
 
-interface IRpcAcceptorAdapter extends IDisposable {
-  readonly connection$: Observable<IConnection>;
-  listen(signal: AbortSignal): Promise<void>;
-}
-```
+## Public member 的工作流证明
 
-`message$` 是 hot、单订阅的完整 encoded RPC message 源。正常远端关闭时 complete，
-传输故障或 buffer overflow 时 error。取消唯一 subscription 表示放弃连接，adapter
-会在内部终止底层传输，不需要另一个公开的 abort/dispose member。
+| Member | 必要工作流 |
+| --- | --- |
+| `createRemoteServiceDescriptor()` | 把本地 service identity、跨语言 wire identity 与显式 method allowlist 绑定为一个 runtime descriptor。 |
+| 两个 owner factory | Connector 与 Acceptor 的 topology、Adapter role 和返回类型不同；两个命名入口比 discriminated overload 更直接。 |
+| factory `protocol?` | 默认路径零配置，同时允许完整替换 wire semantics；Protocol 的内部 SPI 由后续票决定。 |
+| `connector.connect(adapter)` | 调用者选择每一次 Physical Connection attempt；Connector 只接管兑现的 Connection，Protocol 保持原 Session identity。 |
+| `acceptor.listen(adapter)` | passive topology 需要持续拥有并终止 listener，而不是逐 Connection 调用。 |
+| `close()` | 只等待 caller 发起的幂等网络 teardown；自然终止和 fatal failure 属于 `event$`。 |
+| `connector.peer` | 一对一 topology 中稳定 Logical Session 的 caller anchor。 |
+| `peer.expose()` / `peer.resolve()` | 分别表达双向 RPC 的本地 implementation 与远端 proxy，两个动词不能无损合并。 |
+| exposure `Cleanup` | 动态调用时查询 registration；Cleanup 可让后续 invocation 停止命中该 implementation，而不销毁 peer/owner。 |
+| `acceptor.peers` | hot、无 replay observation 不能回答晚订阅者的当前 membership；只读 snapshot 补足它。 |
+| `acceptor.expose()` | 原子覆盖当前及未来 peers，避免 caller 重复注册与 handshake race。 |
+| `acceptor.resolveAll()` | 隐藏 fresh snapshot、并发、逐 peer failure 与 peer/result association。 |
+| `event$` | 一个只读 stream 覆盖 Topology terminal、peer lifecycle、Recovery 和 call telemetry，避免多个浅 Observable。 |
+| Adapter `connection$` / Connection members | 分别表达可多订阅的 connection observation、单一 Topology Owner、ordered inbound messages、local-admission send 与 resource termination。 |
 
-Observable 不提供 consumer backpressure。无法暂停的 push transport 必须限制自己
-实际持有的消息数和字节数；RPC implementation 如果把消息转交给异步队列，该队列
-也必须独立有界。`send()` 的 Promise 只表示本地复制/消费与 admission，不表示远端
-delivery、decode 或 ACK；RPC implementation 必须串行等待每次发送。
+## 主动删除的 Interface
 
-`close()` 是幂等的 eager command：调用本身同步禁止后续 send，Promise 等待同一个
-graceful-close 结果；已有 `message$` 订阅会先收到对应 terminal。Connector adapter 的
-`connect(signal)` 也返回 Promise，signal 只取消 connection 所有权移交前的建连阶段。
+- 通用 `start()`：Connector 与 Acceptor 的依赖、所有权和恢复动作不同，保留领域动词
+  `connect(adapter)` / `listen(adapter)`。
+- `peer$`：并入 `event$`；当前 membership 由 `peers` snapshot 回答。
+- 同步 `dispose()` / `disposed`：网络 teardown 需要可等待结果；状态布尔值会诱导 TOCTOU
+  检查，事件终态属于 `event$`，主动 teardown completion 属于 `close()`。
+- `RpcBatchResultStatusEnum`：直接使用标准的 `"fulfilled" | "rejected"` discriminant。
+- `type: "unary"`：v1 没有第二种 call kind，这个标签没有区分能力。
+- 内嵌 WebSocket Adapter Implementation：原型只验证 package seam，不实现另一个 package。
 
-Acceptor 必须先建立对 adapter `connection$` 的唯一订阅，再调用 `listen(signal)`，因此
-不会丢失启动与就绪之间的连接。这个 hot 流不重放历史，`listen(signal)` 兑现前不
-emit；每个 next 只向这一 consumer 移交一次物理 connection 所有权。Adapter 正常
-`dispose()` 时 `connection$` complete，启动或后续监听故障时 error。这取代了原先
-公开的 listener 对象和 `listener.closed`。
-
-WebSocket Acceptor adapter 只借用应用的 HTTP server。`dispose()` 会移除 Upgrade 监听，
-但不会关闭这个 server，也不会关闭已经移交给 Acceptor 的 physical connections。Owner 级
-`connect(adapter)` / `listen(adapter)` 不额外暴露 signal，由 owner 的 `dispose()` 结束其
-生命周期。
-
-## 文件
-
-- `rpc-interface.ts`：唯一的 caller 与 adapter interface 声明。
-- `fixtures.ts`：两端共用的业务类型、implementation 与 descriptor options。
-- `type-validation.usage.ts`：逐方法 map、Promise proxy、取消参数和 batch shape 的
-  编译期正反例。
-- `connection.usage.ts`：RPC implementation 如何订阅消息、发送并关闭连接。
-- `websocket-adapters.ts`：浏览器 Connector adapter 与 Node/`ws` Acceptor adapter。
-- `websocket-express/connector.usage.ts`：浏览器主动端装配。
-- `websocket-express/acceptor.usage.ts`：Express 共享 HTTP server 的被动端装配。
-- `websocket-express/remote-services.ts`：两端共享的 immutable descriptor。
-- `websocket-express/platform.ts`：Express、Node HTTP 与 `ws` 的薄类型适配。
+Protocol 构造 SPI、Transport Adapter 的精确 ownership/terminal contract、event payload、错误
+race 与 Remote Service Descriptor identity 都只在这里保持可编译轮廓；它们分别由后续
+Wayfinder 票收敛，不能把这个 prototype 当成那些票的既定答案。

@@ -141,6 +141,9 @@ importers:
 
   packages/remote:
     dependencies:
+      '@husky-di/core':
+        specifier: workspace:*
+        version: link:../core
       rxjs:
         specifier: ^7.8.2
         version: 7.8.2

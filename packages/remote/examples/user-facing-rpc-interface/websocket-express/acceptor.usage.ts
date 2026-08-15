@@ -1,91 +1,82 @@
 /**
- * @overview @husky-di/remote 设计示例——WebSocket RPC 与 Express 共享 HTTP 服务器。
- *
- * 本文件只展示 Acceptor 的真实应用装配与调用代码。Express、Node HTTP 与 `ws`
- * 的平台兼容细节集中在同目录的 `platform.ts`。
+ * @overview Node HTTP Acceptor common path for the RPC Interface throwaway prototype.
  *
  * @author AEPKILL
- * @created 2026-08-13 00:20:00
+ * @created 2026-08-15 00:00:00
  */
+
+import type { Server } from "node:http";
+
+import type { Cleanup } from "@husky-di/core";
+import { createRpcAcceptor, type IRpcPeer } from "@husky-di/remote";
+import { createNodeWebSocketAcceptorAdapter } from "@husky-di/remote-websocket";
+import type { Subscription } from "rxjs";
 
 import { sessionService } from "../fixtures";
-import { createRpcAcceptor, RpcBatchResultStatusEnum } from "../rpc-interface";
-import { createWebSocketAcceptorAdapter } from "../websocket-adapters";
-import type { IExpressApplication, WebSocketExpressPlatform } from "./platform";
 import { remoteClientEvents, remoteSession } from "./remote-services";
 
-/**
- * Express 继续处理普通 HTTP 请求。WebSocket 适配器借用同一个服务器，
- * 且只处理 `/rpc` 的 Upgrade 请求。
- */
-export async function webSocketExpressServerUsage<
-	TApplication extends IExpressApplication,
->(platform: WebSocketExpressPlatform<TApplication>): Promise<void> {
-	const app = platform.express();
-	app.get("/health", (_request, response) => response.sendStatus(204));
-	const httpServer = platform.createHttpServer(app);
-
+export async function nodeAcceptorUsage(httpServer: Server): Promise<void> {
 	const acceptor = createRpcAcceptor();
-	const stopSessionExposure = acceptor.expose(remoteSession, sessionService);
-	const allClientEvents = acceptor.resolveAll(remoteClientEvents);
-	acceptor.peer$.subscribe({
-		next(peer) {
-			void peer
-				.resolve(remoteClientEvents)
-				.changed("session-opened")
-				.catch((error) =>
-					console.warn("Could not welcome the new client", error),
-				);
-		},
-		error: reportAcceptorFailure,
-	});
 
-	// listen(adapter) 同步开始启动；所借用的 HTTP 服务器就绪后才开放 Upgrade 处理。
-	// Express middleware 不处理 Upgrade 请求；身份认证被有意排除在该原型之外。
+	let stopExposure: Cleanup | undefined;
+	let observations: Subscription | undefined;
 	try {
-		const rpcReady = acceptor.listen(
-			createWebSocketAcceptorAdapter({
+		stopExposure = acceptor.expose(remoteSession, sessionService);
+		const clients = acceptor.resolveAll(remoteClientEvents);
+		const currentPeers = new Set<IRpcPeer>();
+		observations = acceptor.event$.subscribe({
+			next(event) {
+				if (event.type === "peer-opened") {
+					currentPeers.add(event.peer);
+					void event.peer
+						.resolve(remoteClientEvents)
+						.changed("session-opened")
+						.catch(reportFailure);
+				} else if (event.type === "peer-closed") {
+					currentPeers.delete(event.peer);
+				} else if (
+					event.type === "topology-closed" &&
+					event.outcome === "failed"
+				) {
+					reportFailure(event.error);
+				}
+			},
+		});
+		// Subscribe first, then merge the snapshot by stable peer identity.
+		for (const peer of acceptor.peers) {
+			currentPeers.add(peer);
+		}
+
+		await acceptor.listen(
+			createNodeWebSocketAcceptorAdapter({
 				server: httpServer,
 				path: "/rpc",
 				maxPayloadBytes: 4 << 20,
 				maxInboundMessages: 64,
 				maxInboundBytes: 4 << 20,
-				createWebSocketServer: platform.createWebSocketServer,
 			}),
 		);
-		try {
-			httpServer.listen(3_000);
-		} catch (error) {
-			// listen(adapter) 已启动；在重抛同步故障前接住它随后可能产生的拒绝。
-			void rpcReady.catch(() => undefined);
-			throw error;
-		}
-		await rpcReady;
+		const deliveries = await clients.changed("maintenance-scheduled");
 
-		const firstClient = acceptor.peers[0];
-		if (firstClient) {
-			await firstClient.resolve(remoteClientEvents).changed("server-ready");
-		}
-
-		const deliveries = await allClientEvents.changed("maintenance-scheduled");
 		for (const delivery of deliveries) {
-			if (delivery.status === RpcBatchResultStatusEnum.rejected) {
+			if (delivery.status === "rejected") {
 				console.warn(
-					"Client notification failed",
+					"Client event failed",
 					delivery.peer,
 					delivery.reason.code,
 				);
 			}
 		}
 	} finally {
-		// 应用先移除可撤销注册，再停止 Upgrade 和会话，最后关闭借用的 HTTP server。
-		// 适配器绝不会关闭这个服务器。
-		stopSessionExposure();
-		acceptor.dispose();
-		httpServer.close();
+		stopExposure?.();
+		try {
+			await acceptor.close();
+		} finally {
+			observations?.unsubscribe();
+		}
 	}
 }
 
-function reportAcceptorFailure(error: unknown): void {
-	console.error("RPC acceptor failed", error);
+function reportFailure(error: unknown): void {
+	console.error("RPC failure", error);
 }

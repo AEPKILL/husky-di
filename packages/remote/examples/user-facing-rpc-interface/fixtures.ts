@@ -1,13 +1,12 @@
 /**
- * @overview @husky-di/remote 设计示例——RPC 用法所共用的服务。
- *
- * 这些值让 Connector 与 Acceptor 用法专注于暂定 interface，而不重复业务实现。
+ * @overview Shared business fixtures for the RPC Interface throwaway prototype.
  *
  * @author AEPKILL
- * @created 2026-08-12 23:20:00
+ * @created 2026-08-15 00:00:00
  */
 
-import type { ServiceIdentifier } from "./rpc-interface";
+import type { ServiceIdentifier } from "@husky-di/core";
+import type { IRpcProtocol } from "@husky-di/remote";
 
 export interface SessionService {
 	login(
@@ -47,11 +46,15 @@ export const clientEvents: ClientEvents = {
 export const remoteSessionOptions = {
 	wireName: "example.session.v1",
 	methods: {
-		login: { type: "unary", cancelable: true },
-		ping: { type: "unary" },
+		login: { cancelable: true },
+		ping: true,
 	},
 } as const;
 
 export const remoteClientEventsOptions = {
+	wireName: "example.client-events.v1",
 	methods: { changed: true },
 } as const;
+
+/** Supplied by a separate custom Protocol package in the real caller workflow. */
+export declare const customProtocol: IRpcProtocol;
