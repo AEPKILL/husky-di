@@ -11,6 +11,7 @@ Status: open
 
 - 权威领域词汇以根目录的 [`CONTEXT.md`](../../CONTEXT.md) 为准。
 - 每个决策会话都应使用 `grilling`、`domain-modeling`、`codebase-design` 和 `ponytail`；prototype ticket 还应使用 `prototype`，research ticket 应使用 `research`。
+- 公开 Interface 与 Module seam 必须遵从 SOLID；同时以 deep-module 与 `ponytail` 约束避免为了形式上的 SOLID 暴露没有真实变体的浅抽象。
 - 当前 [`user-facing-rpc-interface`](../../packages/remote/examples/user-facing-rpc-interface/README.md) 是高保真设计输入，不是已接受的生产 Interface；已删除的旧 Wayfinder 地图和历史研究也不是现行决议。
 - 本地图只完成规划与规范路线，不实施生产代码。后续代码变更必须使用 `husky-di-code-standard`，并让 normative specification 与 `specification.test.ts` 在同一变更中更新。
 - v1 只支持双向 unary 调用；本地同步结果在远端变为 Promise，不支持 notification 或 streaming。
@@ -50,10 +51,15 @@ Status: open
   丢失必须暴露 outcome unknown，且 terminal ACK 不能单独释放全部去重证据。Research
   context：
   `research/resumable-rpc-delivery-guarantees-v2@d5b16c1a774deae1b506dda1d25382c835141d7b`。
+- [决定公开 Protocol Module seam](issues/05-decide-public-protocol-module-seam.md)：Framework
+  保持 caller semantics，以 structural、role-specific Protocol factory 创建隔离的 owner/session
+  runtime；所有 Implementation 遵守固定 v1 profile、内部协商不得降级、故障按最小范围隔离，
+  并以共享 semantic conformance suite 证明可替换。默认 Protocol 的 Codec、Handshake、
+  Connection、Session、Call State 与 Host Bridge 是清晰但 private 的责任区。
 
 ## Not yet specified
 
-- Protocol、Session、call-state 与 transport 各自的内部 Module 拆分和文件落点；只有相应行为决策完成后才会清晰。
+- 默认 Protocol 各责任区的精确 private Interface、类/函数切分与文件落点；只有 wire、Session、call-state、resource 与 security 行为决策完成后才会清晰。
 - 最终规范的 requirement 编号、章节结构、ADR 候选和实施 ticket 切片；它们会随公开 Interface 与 wire contract 收敛。
 
 ## Out of scope
