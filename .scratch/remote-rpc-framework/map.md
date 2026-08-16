@@ -21,7 +21,7 @@ Status: open
 - 对外提供一个深的 Protocol seam；Handshake、Session、ACK、Codec 等可在 Implementation 内部分层。包内提供恰好一个默认 Protocol，并公开精确、可由其他语言实现的 wire specification；v1 只交付 TypeScript Implementation。
 - `@husky-di/remote` 只定义 Transport Adapter seam。WebSocket 等正式 Adapter 放入独立包，例如 `@husky-di/remote-websocket`；当前地图不实施这些包。
 - `resolveAll()` 返回稳定的 Remote Service Group；每次方法调用重新截取当前 Logical Peer 快照，并保持结果与稳定 `RpcPeer` 的关联。
-- 复用 `@husky-di/core` 的基础类型，但 v1 不自动接入 Container。业务认证、授权和限流留给 application/Transport Adapter；畸形输入防御、资源上限和 Session Recovery 安全属于 RPC Protocol。
+- 复用 `@husky-di/core` 的基础类型，但 v1 不自动接入 Container。业务认证、授权和限流留给 application/Transport Adapter；Transport framing validation 与 admission limits 属于 Adapter，decoded wire input validation、Protocol state resource limits 和 Session Recovery 安全属于 RPC Protocol。
 - 正式运行时目标是 Node.js 与浏览器互通；公开 Interface 不泄漏 Node 或 WebSocket 类型。Deno、Bun 和 Worker 保持设计兼容，但不进入 v1 验证矩阵。
 - v1 只提供只读生命周期与调用事件用于日志、Tracing 和 Metrics，不提供可改写调用流程的 middleware/interceptor。
 
@@ -61,6 +61,11 @@ Status: open
   per-direction sequence 和统一累计 Message Receipt ACK 承载 `call`/`cancel`/`result`/`error`；
   已知 record 可安全忽略未知尾字段，unknown kind/required semantic change 则 fault 或升级 profile，
   并以 prose、JSON Schema、raw-byte vectors 与 stateful transcripts 共同定义跨语言 contract。
+- [决定 Physical Connection Adapter 契约](issues/07-decide-physical-connection-adapter-contract.md)：
+  Connector/Acceptor 统一采用先订阅 `connection$` 再启动的一次性交接，三-member Connection 提供
+  完整有序 message、串行 Local Admission send 与 Direct Connection Close；Adapter 在最早入口
+  强制 finite limits，并以共享黑盒 conformance 证明 message/stream、ownership、terminal、
+  backpressure 与 failure isolation，不公开平台类型、`IDisposable`、capacity surface 或 error Code。
 
 ## Not yet specified
 
