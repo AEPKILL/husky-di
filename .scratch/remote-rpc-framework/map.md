@@ -56,6 +56,11 @@ Status: open
   runtime；所有 Implementation 遵守固定 v1 profile、内部协商不得降级、故障按最小范围隔离，
   并以共享 semantic conformance suite 证明可替换。默认 Protocol 的 Codec、Handshake、
   Connection、Session、Call State 与 Host Bridge 是清晰但 private 的责任区。
+- [决定默认 Protocol 的 wire grammar、Codec 与版本协商](issues/06-decide-default-protocol-wire-contract.md)：
+  默认采用 exact-match `husky-di-rpc/1` strict UTF-8 JSON profile，以显式 fresh/resume bootstrap、
+  per-direction sequence 和统一累计 Message Receipt ACK 承载 `call`/`cancel`/`result`/`error`；
+  已知 record 可安全忽略未知尾字段，unknown kind/required semantic change 则 fault 或升级 profile，
+  并以 prose、JSON Schema、raw-byte vectors 与 stateful transcripts 共同定义跨语言 contract。
 
 ## Not yet specified
 

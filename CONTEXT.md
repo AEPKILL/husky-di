@@ -95,6 +95,8 @@ The module system is inspired by ESM semantics: imports must be explicit, export
 
 - **RPC Protocol**: The replaceable RPC semantics module used by a Topology Owner to carry Logical Sessions and calls over Physical Connections. Every conforming Protocol preserves the same public v1 guarantees while choosing its own wire contract and internal organization.
 - **Default RPC Protocol**: The single built-in RPC Protocol selected when no custom Protocol is injected into a Topology Owner.
+- **RPC Protocol Profile**: An atomic, exact-match contract that fixes an RPC Protocol's wire grammar, Codec, and mandatory semantic guarantees for one Logical Session. It is selected when the session is created and remains fixed through Session Recovery.
+- **Message Receipt ACK**: A cumulative per-direction confirmation that sequenced Protocol messages through a given point have been validated and admitted into retained Logical Session state. It does not by itself mean a handler finished or that call deduplication evidence can be discarded.
 - **RPC Peer / `RpcPeer`**: The remote counterpart participating in a bidirectional RPC relationship. It is the subject of exposure and remote resolution, distinct from the topology owner and the transport connection.
 - **RPC Topology Owner**: The owner of an active or passive connection topology and its lifecycle. `RpcConnector` owns an active one-to-one topology; `RpcAcceptor` owns a passive one-to-many topology.
 - **Logical Session**: The stable RPC relationship represented by an `RpcPeer`. It can span a sequence of transient Physical Connections while preserving the peer seen by callers.
