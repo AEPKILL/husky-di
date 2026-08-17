@@ -1,8 +1,7 @@
 /**
- * @overview @husky-di/remote throwaway prototype for the production caller Interface.
+ * @overview Historical @husky-di/remote throwaway prototype for the caller Interface.
  *
- * This file models the proposed public package surface. It intentionally leaves the
- * Protocol implementation seam opaque for the dedicated Protocol decision ticket.
+ * Design evidence only; not the current contract.
  *
  * @author AEPKILL
  * @created 2026-08-15 00:00:00
@@ -420,7 +419,7 @@ export interface IRpcConnector extends IRpcTopologyOwner {
 
 export interface IRpcAcceptor extends IRpcTopologyOwner {
 	/**
-	 * A fresh readonly snapshot of all retained Logical Peers. Membership changes before
+	 * A fresh readonly snapshot of all retained RpcPeers. Membership changes before
 	 * the matching event$ next notification, so subscribe-then-read plus stable identity
 	 * and deduplication provides a race-free bootstrap.
 	 */

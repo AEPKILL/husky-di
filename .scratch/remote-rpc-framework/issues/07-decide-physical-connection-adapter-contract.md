@@ -85,8 +85,9 @@ Direct Connection Close 不等待 RPC calls、Protocol ACK、remote close confir
 完成，也不承诺排空或丢弃已经 Local Admission 的 bytes。已 fulfill 的 send 不改判，相关 bytes
 最终可能送达也可能丢失；例如浏览器
 [WebSocket `close()`](https://websockets.spec.whatwg.org/#dom-websocket-close) 不丢弃此前
-`send()` 的 messages，而 Node stream destruction 可以停止未完成 I/O。Graceful RPC Shutdown
-因此属于 Topology Owner、Session 与 Protocol 的更高层 choreography，由 lifecycle ticket 决定，
+`send()` 的 messages，而 Node stream destruction 可以停止未完成 I/O。Topology Owner shutdown
+因此属于 Framework、Session 与 Protocol 的更高层 choreography，由
+[决定 Topology Owner 单向 shutdown 通知与本地收敛](18-decide-owner-shutdown-convergence.md)决定，
 不在 `IRpcConnection` 增加第二个关闭 member。
 
 ### Connector Adapter lifecycle

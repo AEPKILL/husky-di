@@ -5,25 +5,25 @@ Status: open
 
 ## Destination
 
-为 `@husky-di/remote` 产出一份决策完备、可直接实施的规范与实施路线：它定义协议可替换的双向 unary RPC 框架、一个内置默认 Protocol、精确的公开 TypeScript Interface、wire contract、行为保证和验证契约，使实施阶段不再需要补做产品或架构决策。
+清除 `@husky-di/remote` v1 在规范编写前仍需作出的全部产品与架构决策，并让每项决定及其依据在可达的 child ticket 中保持唯一权威。地图完成后，`/to-spec` 应能在不发明新行为、边界或权衡的前提下产出 normative specification、requirement-to-verification matrix 与 implementation route，随后由 `/to-tickets` 切分实施工作。
 
 ## Notes
 
 - 权威领域词汇以根目录的 [`CONTEXT.md`](../../CONTEXT.md) 为准。
 - 每个决策会话都应使用 `grilling`、`domain-modeling`、`codebase-design` 和 `ponytail`；prototype ticket 还应使用 `prototype`，research ticket 应使用 `research`。
 - 公开 Interface 与 Module seam 必须遵从 SOLID；同时以 deep-module 与 `ponytail` 约束避免为了形式上的 SOLID 暴露没有真实变体的浅抽象。
-- 当前 [`user-facing-rpc-interface`](../../packages/remote/examples/user-facing-rpc-interface/README.md) 是高保真设计输入，不是已接受的生产 Interface；已删除的旧 Wayfinder 地图和历史研究也不是现行决议。
+- [`user-facing-rpc-interface`](../../packages/remote/examples/user-facing-rpc-interface/README.md) 是历史 throwaway design input，不是生产 Interface。
 - 本地图只完成规划与规范路线，不实施生产代码。后续代码变更必须使用 `husky-di-code-standard`，并让 normative specification 与 `specification.test.ts` 在同一变更中更新。
 - v1 只支持双向 unary 调用；本地同步结果在远端变为 Promise，不支持 notification 或 streaming。
 - `RpcPeer` 是稳定的远端对等方；`RpcConnector` 与 `RpcAcceptor` 是 Topology Owner。Logical Session 可跨瞬时 Physical Connection 断线恢复，且对调用者保持透明，但远端进程重启可以终止 Session。
-- 瞬时断线期间的新调用与在途调用保持 pending；恢复后以原 call identity 继续。保留中的 Session 必须支持去重与 terminal result replay，不能宣称跨进程故障的 exactly-once。
 - RxJS 是公开依赖。公开事件流是 hot、multicast、无 replay 的只读 Observable；订阅只用于观察，不拥有资源，也不以 ref-count 控制底层生命周期。
 - 对外提供一个深的 Protocol seam；Handshake、Session、ACK、Codec 等可在 Implementation 内部分层。包内提供恰好一个默认 Protocol，并公开精确、可由其他语言实现的 wire specification；v1 只交付 TypeScript Implementation。
 - `@husky-di/remote` 只定义 Transport Adapter seam。WebSocket 等正式 Adapter 放入独立包，例如 `@husky-di/remote-websocket`；当前地图不实施这些包。
-- `resolveAll()` 返回稳定的 Remote Service Group；每次方法调用重新截取当前 Logical Peer 快照，并保持结果与稳定 `RpcPeer` 的关联。
+- `resolveAll()` 返回稳定的 Remote Service Group；每次方法调用重新截取一个 `RpcPeer` 快照，并保持结果与稳定 `RpcPeer` 的关联。
 - 复用 `@husky-di/core` 的基础类型，但 v1 不自动接入 Container。业务认证、授权和限流留给 application/Transport Adapter；Transport framing validation 与 admission limits 属于 Adapter，decoded wire input validation、Protocol state resource limits 和 Session Recovery 安全属于 RPC Protocol。
 - 正式运行时目标是 Node.js 与浏览器互通；公开 Interface 不泄漏 Node 或 WebSocket 类型。Deno、Bun 和 Worker 保持设计兼容，但不进入 v1 验证矩阵。
 - v1 只提供只读生命周期与调用事件用于日志、Tracing 和 Metrics，不提供可改写调用流程的 middleware/interceptor。
+- 地图只在 `Not yet specified` 为空、除最终审计票外没有 open/claimed child、每个 resolved child 恰好索引一次、所有依赖与 primary source 可达且无矛盾，并且最终一致性审计确认 `/to-spec` 不需补做产品或架构决策后完成。
 
 ## Decisions so far
 
@@ -43,14 +43,11 @@ Status: open
 - [调研默认 RPC Protocol 候选](issues/02-research-default-rpc-protocol-candidates.md)：没有开放
   Protocol 可直接复用；RSocket 最接近但仍需实质性的 call-state profile，AMQP 只提供过重的
   recoverable-delivery substrate，因此在没有通用 interoperability 目标的当前范围内，默认采用
-  专用 unary-recovery wire contract。Research context：
-  `research/default-rpc-protocol-candidates@0fbeb14e0882f14f2eba4613f075d6eb0ae4e102`。
+  专用 unary-recovery wire contract。
 - [调研可恢复 RPC 的交付保证](issues/03-research-resumable-rpc-delivery-guarantees.md)：只有同一
   retained Session 被接受恢复、transport 与 call ledger 连续且单一 owner 成立时，才能承诺
   原 call identity 的 Session-scoped at-most-once handler dispatch 与 terminal replay；证据
-  丢失必须暴露 outcome unknown，且 terminal ACK 不能单独释放全部去重证据。Research
-  context：
-  `research/resumable-rpc-delivery-guarantees-v2@d5b16c1a774deae1b506dda1d25382c835141d7b`。
+  丢失必须暴露 outcome unknown，且 terminal ACK 不能单独释放全部去重证据。
 - [决定公开 Protocol Module seam](issues/05-decide-public-protocol-module-seam.md)：Framework
   保持 caller semantics，以 structural、role-specific Protocol factory 创建隔离的 owner/session
   runtime；所有 Implementation 遵守固定 v1 profile、内部协商不得降级、故障按最小范围隔离，
@@ -69,9 +66,6 @@ Status: open
 
 ## Not yet specified
 
-- 默认 Protocol 各责任区的精确 private Interface、类/函数切分与文件落点；只有 wire、Session、call-state、resource 与 security 行为决策完成后才会清晰。
-- 最终规范的 requirement 编号、章节结构、ADR 候选和实施 ticket 切片；它们会随公开 Interface 与 wire contract 收敛。
-
 ## Out of scope
 
 - 本次 Wayfinder 地图中的生产实现。
@@ -81,3 +75,5 @@ Status: open
 - 任一对等端进程重启后的持久化 Session Recovery，以及跨进程故障的 exactly-once 保证。
 - 发布非 TypeScript SDK；默认 Protocol 的 wire specification 仍需允许独立实现。
 - 把 Deno、Bun 或 Worker 纳入 v1 的正式兼容性验证矩阵。
+- 默认 Protocol 不影响 normative contract 的 private Interface、类/函数切分与文件落点。
+- 在本地图内实际编写 `SPECIFICATION.md`、最终 requirement matrix 或 implementation tickets；这些分别属于 `/to-spec` 与 `/to-tickets`。

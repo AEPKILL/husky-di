@@ -4,6 +4,8 @@
 Descriptor 的 identity 与类型映射”的 throwaway prototype，不是 `@husky-di/remote` 的生产
 导出，也不包含运行时实现。
 
+本目录仅作为历史设计证据；当前 contract 请参阅 Wayfinder tickets 与后续 normative specification。
+
 ## 要回答的问题
 
 在不暴露 Handshake、Session、ACK、Codec、call ledger 等 Implementation 细节的前提下，
@@ -21,7 +23,7 @@ pnpm --filter @husky-di/core build
 pnpm --filter @husky-di/remote typecheck
 ```
 
-## 当前假设
+## 原型验证时的假设
 
 - `createRpcConnector({ protocol? })` 与 `createRpcAcceptor({ protocol? })` 创建尚未启动 I/O
   的 Topology Owner；省略 `protocol` 使用包内唯一默认 Protocol。
@@ -115,7 +117,7 @@ subscriber 负责脱敏。
 | --- | --- |
 | `createRemoteServiceDescriptor()` | 把原始本地 service identity、显式跨语言 wire identity 与 method allowlist 封装为一个 opaque runtime descriptor。 |
 | 两个 owner factory | Connector 与 Acceptor 的 topology、Adapter role 和返回类型不同；两个命名入口比 discriminated overload 更直接。 |
-| factory `protocol?` | 默认路径零配置，同时允许完整替换 wire semantics；Protocol 的内部 SPI 由后续票决定。 |
+| factory `protocol?` | 默认路径零配置，同时允许完整替换 wire semantics；精确 Protocol contract 不在本 prototype scope 内。 |
 | `connector.connect(adapter)` | 调用者选择每一次 Physical Connection attempt；Connector 只接管兑现的 Connection，Protocol 保持原 Session identity。 |
 | `acceptor.listen(adapter)` | passive topology 需要持续拥有并终止 listener，而不是逐 Connection 调用。 |
 | `close()` | 只等待 caller 发起的幂等网络 teardown；自然终止和 fatal failure 属于 `event$`。 |
@@ -126,7 +128,7 @@ subscriber 负责脱敏。
 | `acceptor.expose()` | 原子覆盖当前及未来 peers，避免 caller 重复注册与 handshake race。 |
 | `acceptor.resolveAll()` | 隐藏 fresh snapshot、并发、逐 peer failure 与 peer/result association。 |
 | `event$` | 一个只读 stream 覆盖 Topology terminal、peer lifecycle、Recovery 和 call telemetry，避免多个浅 Observable。 |
-| Adapter `connection$` / Connection members | 分别表达可多订阅的 connection observation、单一 Topology Owner、ordered inbound messages、local-admission send 与 resource termination。 |
+| Adapter `connection$` / Connection members | 这里只证明 package seam 与工作流必要性；精确 Transport contract 不在本 prototype scope 内。 |
 
 ## 主动删除的 Interface
 
@@ -141,6 +143,5 @@ subscriber 负责脱敏。
   它们能提供值得额外 Interface 的 caller leverage。
 - 内嵌 WebSocket Adapter Implementation：原型只验证 package seam，不实现另一个 package。
 
-Protocol 构造 SPI、Transport Adapter 的精确 ownership/terminal contract、event payload、错误
-race 仍只在这里保持可编译轮廓；它们分别由后续 Wayfinder 票收敛。Descriptor identity 与
-类型映射已由本原型具体化，但本文件依然不是生产实现或 normative specification。
+Protocol SPI、Transport Adapter、lifecycle event payload 与错误 race 的精确 contract 不在本
+prototype scope 内。Descriptor identity 与类型映射仅是原型结论；本文件不是生产实现或 normative specification。

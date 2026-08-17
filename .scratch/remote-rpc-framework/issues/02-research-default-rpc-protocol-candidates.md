@@ -15,11 +15,8 @@ Parent: [协议可替换的双向 RPC 框架](../map.md)
 Protocol 能直接满足本地图要求；当前 Destination 也没有通用 RSocket 或 AMQP
 interoperability 目标，因此为复用其 wire 而继承非目标语义没有足够收益。
 
-完整一手资料报告固化于
-`research/default-rpc-protocol-candidates@0fbeb14e0882f14f2eba4613f075d6eb0ae4e102`
-的
-`.scratch/remote-rpc-framework/research/default-rpc-protocol-candidates.md`。它是后续
-Protocol 与 wire-contract 决策的 research context，不是 normative specification。
+完整一手资料见
+[`default-rpc-protocol-candidates.md`](../research/default-rpc-protocol-candidates.md)。
 
 ### 候选边界
 

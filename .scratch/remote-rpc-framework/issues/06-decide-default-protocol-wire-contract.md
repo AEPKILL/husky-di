@@ -45,7 +45,9 @@ Message Receipt ACK。业内证据与取舍记录见
 - sender 在编码前拒绝 `undefined`、`bigint`、symbol、function、accessor、symbol key、array
   hole、cycle、`Date`、`Map`、`Set`、class instance、typed array、`NaN`、正负 Infinity 和
   `-0`。需要 binary、精确大整数或十进制定点数时，由 application 显式编码为 JSON
-  string/object，或使用自定义 Protocol。
+  string/object。所有 conforming Protocol 的 caller-visible application value model 由
+  [决定 Call value model、identity、重放与去重](10-decide-call-delivery-state-machine.md)决定，
+  注入 custom Protocol 不自动扩展它。
 - Application JSON number 的语义域是 finite IEEE-754 binary64；发送的十进制表示必须
   round-trip 到同一 binary64 value。Protocol 自己需要精确比较的整数另外受 safe-integer
   schema 约束。
@@ -143,12 +145,13 @@ handler 已完成、外部副作用已提交或 dedupe evidence 已可删除。
   再次 dispatch 所需的 dedupe tombstone/high-watermark；完整 GC proof 留给 Call State 与
   Session tickets。
 
-### Semantic messages 与 remote error
+### Call-related semantic messages 与 remote error
 
-v1 sequenced semantic union 只包含以下四个 families：
+本票只决定以下四个 call-related sequenced semantic families，不穷举完整的
+`husky-di-rpc/1` semantic message union：
 
 ```text
-SemanticMessage
+CallRelatedMessage
   = { kind: "call",   callId, service, method, args }
   | { kind: "cancel", callId }
   | { kind: "result", callId, value? }
@@ -181,8 +184,8 @@ contract 是封闭的；已识别 tagged record 的额外 members 是开放尾�
 - `args`、`result.value` 与 `error.details` 是 application data；其 object members 都是数据，
   不适用 Protocol unknown-field policy。后续 security ticket 可以把 proof 等安全关键子对象
   明确规定为 closed structure。
-- 同一 profile 只能增加旧 endpoint 可安全忽略的 optional fields。新增 message kind、required
-  transition、改变既有字段含义或改变 mandatory guarantee 必须使用新 profile。
+- Profile 发布后，同一 profile 只能增加旧 endpoint 可安全忽略的 optional fields。新增 message
+  kind、required transition、改变既有字段含义或改变 mandatory guarantee 必须使用新 profile。
 
 因此 JSON Schema 不能全局使用 `additionalProperties: false`。v1 不定义 ignorable extension
 message registry；unknown message kind 保持 Protocol fault。
@@ -210,7 +213,7 @@ contract 的权威来源。独立 conformance runner 的 export/CLI、package pl
   message/stream framing、send admission、关闭与 Transport conformance；
 - [`决定 Logical Session identity、Handshake 与 Recovery`](09-decide-logical-session-recovery.md)：
   fresh/resume/accept/reject 的完整字段、Session incarnation、resume cursor、fencing 与恢复状态；
-- [`决定 Call identity、ACK、重放与去重`](10-decide-call-delivery-state-machine.md)：call identity
+- [`决定 Call value model、identity、重放与去重`](10-decide-call-delivery-state-machine.md)：call identity
   组成、精确 admission point、ledger、terminal payload 与 dedupe evidence GC；
 - [`决定 unary 调用、取消、错误与终止竞态`](11-decide-unary-call-errors-cancellation.md)：error
   codes、handler mapping、cancel/result/error race 与唯一 terminal outcome；

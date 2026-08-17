@@ -15,12 +15,8 @@ v1 可以诚实承诺的上限是**有条件的、Session-scoped at-most-once ha
 dispatch，加上原 call identity 的请求延续与已记录 terminal outcome 的 replay**；它
 不是无条件的 exactly-once RPC。
 
-完整的一手资料核验固化于
-`research/resumable-rpc-delivery-guarantees-v2@d5b16c1a774deae1b506dda1d25382c835141d7b`
-的
-`.scratch/remote-rpc-framework/research/resumable-rpc-delivery-guarantees.md`。报告依据经典
-RPC 论文、正式协议规范和第一方实现资料重新得出结论，不继承历史 research branch
-的结论。
+完整一手资料核验见
+[`resumable-rpc-delivery-guarantees.md`](../research/resumable-rpc-delivery-guarantees.md)。
 
 ### 保证成立的条件
 

@@ -1,10 +1,10 @@
-# 决定 specification handoff 与 implementation route
+# 审计 Wayfinder 完成状态并交接 specification
 
-Type: grilling
+Type: task
 Status: open
 Blocked by: 15
 Parent: [协议可替换的双向 RPC 框架](../map.md)
 
 ## Question
 
-全部决策完成后，应如何把 resolution context 组装为 `packages/remote/docs/SPECIFICATION.md`、匹配的 requirement-to-test matrix 和没有隐含决策的实施路线？决定章节与 requirement identity、需要单独 ADR 的不可逆权衡、实施顺序、验收门槛，以及哪些后续工作应作为 `@husky-di/remote-websocket` 等独立 effort 重新 Wayfind，而不是继续扩大本地图。
+执行 map 定义的 completion predicate。若检查发现未解决或互相矛盾的产品/架构决策，本票失败并创建或重开对应 child；通过后交付只含 authoritative pointers 与 unresolved-check 结果的 `/to-spec` handoff。

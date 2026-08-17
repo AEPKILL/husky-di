@@ -524,7 +524,7 @@ Semantic message
 - per-direction delivery sequence 不兼任 call identity；
 - delivery ACK 不兼任 request-admission 或 terminal ACK；
 - call request/cancel/terminal 引用稳定 call identity，但 identity 的结构与 ledger 仍由
-  [决定 Call identity、ACK、重放与去重](../issues/10-decide-call-delivery-state-machine.md)
+  [决定 Call value model、identity、重放与去重](../issues/10-decide-call-delivery-state-machine.md)
   决定；
 - error outcome 与 protocol fault 分开，前者只终结一个 call，后者按 connection/session
   scope 隔离；具体 remote error vocabulary 与竞态由
@@ -589,7 +589,7 @@ DAP/LSP 的 schema/meta-model 证明 language binding 可以从 wire artifact �
 
 - [决定 Logical Session identity、Handshake 与 Recovery](../issues/09-decide-logical-session-recovery.md)：
   Session incarnation、resume proof、single owner/fencing、accept/reject evidence。
-- [决定 Call identity、ACK、重放与去重](../issues/10-decide-call-delivery-state-machine.md)：
+- [决定 Call value model、identity、重放与去重](../issues/10-decide-call-delivery-state-machine.md)：
   call id 结构、request-admission point、terminal ledger、ACK/GC、tombstone/high-watermark。
 - [决定 unary 调用、取消、错误与终止竞态](../issues/11-decide-unary-call-errors-cancellation.md)：
   cancel/result/error/deadline/close 的 terminal winner 与公开 `RpcError` 映射。

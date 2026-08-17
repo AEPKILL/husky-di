@@ -7,4 +7,4 @@ Parent: [协议可替换的双向 RPC 框架](../map.md)
 
 ## Question
 
-RPC framework 应对消息发送、接收 dispatch、同一/不同 service method、cancel/terminal 和批量调用提供哪些 ordering 与 concurrency guarantees？在 Transport Adapter 已被要求于最早入口执行 finite per-message、queued-message 与 queued-byte admission limits 的前提下，决定这些 Transport limits 的精确维度、默认值与配置位置，以及 Protocol 的 pending calls、并发 handlers、断线队列、Session 保留期、terminal outcome payload、轻量 dedupe tombstone/high-watermark 与 replay state 各自的边界；同时决定达到上限、慢 subscriber、慢 handler 或 Recovery 超时后的确定失败行为。
+RPC framework 应如何调度 message、handler 与 group work，并提供哪些 concurrency 与 backpressure guarantees？决定 Transport、Protocol record、pending call、并发 handler、断线队列、Session retention、terminal payload、dedupe evidence 与 replay state 的 finite limits、默认值、配置位置和作用域，以及 sequence exhaustion、overload、慢 handler 与 Recovery timeout 到既有 unary outcomes 的映射。group work 只调度[验证稳定 Remote Service Group](12-validate-stable-remote-service-group.md)定义的语义。
