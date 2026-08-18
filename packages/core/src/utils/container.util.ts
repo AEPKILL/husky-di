@@ -14,15 +14,17 @@ import { CoreErrorCodeEnum } from "@/enums/core-error-code.enum";
 import { ResolveContainerScopeEnum } from "@/enums/resolve-container-scope.enum";
 import { CoreException } from "@/exceptions/core.exception";
 import { ResolveException } from "@/exceptions/resolve.exception";
+import { InstanceDynamicRefImpl } from "@/impls/instance-dynamic-ref.impl";
+import { InstanceRefImpl } from "@/impls/instance-ref.impl";
 import {
 	IContainer,
 	type ResolveInstance,
 	type ResolveOptions,
 } from "@/interfaces/container.interface";
 import { resolveRecordRef } from "@/shared/instances";
-import type { Ref } from "@/types/ref.type";
 import type { ResolveHelperOptions } from "@/types/resolve-helper-options.type";
 import type { ServiceIdentifier } from "@/types/service-identifier.type";
+import { assertValidResolveOptions } from "@/utils/resolve-options.util";
 
 export function resolve<T>(serviceIdentifier: ServiceIdentifier<T>): T;
 export function resolve<T, Options extends ResolveHelperOptions<T>>(
@@ -88,18 +90,29 @@ export function resolve<T, Options extends ResolveHelperOptions<T>>(
 	// registries with an extra registration just to model that active-container
 	// lookup semantics.
 	if (serviceIdentifier === IContainer) {
-		const multiple = options?.multiple;
-		const useRef = options?.dynamic || options?.ref;
-		const containerResult = multiple ? [container] : container;
+		assertValidResolveOptions(
+			serviceIdentifier,
+			(options ?? {}) as ResolveOptions<T>,
+			resolveRecord,
+		);
 
-		if (useRef) {
-			return {
-				resolved: true,
-				current: containerResult as T,
-			} satisfies Ref<T> as ResolveInstance<T, Options>;
+		const multiple = options?.multiple;
+		const createContainerResult = () => (multiple ? [container] : container);
+
+		if (options?.dynamic) {
+			return new InstanceDynamicRefImpl(
+				createContainerResult,
+			) as ResolveInstance<T, Options>;
 		}
 
-		return containerResult as ResolveInstance<T, Options>;
+		if (options?.ref) {
+			return new InstanceRefImpl(createContainerResult) as ResolveInstance<
+				T,
+				Options
+			>;
+		}
+
+		return createContainerResult() as ResolveInstance<T, Options>;
 	}
 
 	return container.resolve(

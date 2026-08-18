@@ -17,7 +17,10 @@ import type {
 	IRegistration,
 } from "@/interfaces/registration.interface";
 import type { ServiceIdentifier } from "@/types/service-identifier.type";
-import { isValidServiceIdentifier } from "@/utils/registration.util";
+import {
+	isConstructor,
+	isValidServiceIdentifier,
+} from "@/utils/registration.util";
 import { createRegistrationId } from "@/utils/uuid.util";
 
 /**
@@ -70,7 +73,7 @@ export class RegistrationImpl<T>
 	/**
 	 * Optional container getter function (used for alias registrations)
 	 */
-	public readonly getContainer?: () => IContainer;
+	public readonly getContainer?: (() => IContainer) | undefined;
 
 	/**
 	 * Display name for debugging purposes
@@ -147,7 +150,7 @@ const REGISTRATION_PROVIDER_KEYS = [
 ] as const;
 
 type RegistrationProviderDefinition<T> = {
-	getContainer?: () => IContainer;
+	getContainer?: (() => IContainer) | undefined;
 	lifecycle: LifecycleEnum;
 	provider: IRegistration<T>["provider"];
 	type: RegistrationTypeEnum;
@@ -167,7 +170,7 @@ function resolveProviderDefinition<T>(
 	}
 
 	if ("useClass" in options) {
-		if (typeof options.useClass !== "function") {
+		if (!isConstructor(options.useClass)) {
 			throw new CoreException(
 				CoreErrorCodeEnum.E_INVALID_PROVIDER,
 				"useClass must be a constructor function.",

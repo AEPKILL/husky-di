@@ -4,8 +4,13 @@
  * @created 2025-08-05 22:21:10
  */
 
-import type { IContainer } from "../src/interfaces/container.interface";
-import type { IMiddlewareManager } from "../src/interfaces/middleware-chain.interface";
+import {
+	type IContainer,
+	middleware,
+	type ResolveMiddleware,
+} from "../src/index";
+
+const middlewareCleanups = new Set<() => void>();
 
 /**
  * Cleans up a container by unregistering all services
@@ -21,15 +26,21 @@ export function clearContainer(container: IContainer): void {
 }
 
 /**
- * Cleans up middleware by removing all middleware
- * @param middleware The middleware manager to clean up
+ * Registers global middleware and retains its public cleanup handle for tests.
  */
-export function clearMiddleware(
+export function useMiddleware(
 	// biome-ignore lint/suspicious/noExplicitAny: generic middleware helper for tests
-	middleware: IMiddlewareManager<any, any>,
-): void {
-	if (middleware && !middleware.disposed) {
-		const allMiddleware = middleware.all();
-		middleware.unused(...allMiddleware);
+	...middlewares: ResolveMiddleware<any, any>[]
+): () => void {
+	const cleanup = middleware.use(...middlewares);
+	middlewareCleanups.add(cleanup);
+	return cleanup;
+}
+
+/** Cleans up middleware through the handles returned by public use calls. */
+export function clearMiddleware(): void {
+	for (const cleanup of middlewareCleanups) {
+		cleanup();
 	}
+	middlewareCleanups.clear();
 }

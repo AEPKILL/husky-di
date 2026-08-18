@@ -25,6 +25,15 @@ import { resolveRecordRef } from "@/shared/instances";
 import { getServiceIdentifierName } from "./service-identifier.util";
 
 /**
+ * Gets the active resolution record without creating one.
+ *
+ * @returns The active resolution record, if one exists
+ */
+export function getResolveRecord(): IInternalResolveRecord | undefined {
+	return resolveRecordRef.current;
+}
+
+/**
  * Gets the current resolution record, creating one if it doesn't exist.
  *
  * @param container - The container to use for creating a new resolution record if needed
@@ -222,7 +231,7 @@ export interface GetResolveRecordMessageOptions {
 	/** The resolution path records */
 	paths: Array<ResolveRecordData<unknown>>;
 	/** Optional cycle node if a circular dependency was detected */
-	cycleNode?: ResolveRecordData<unknown>;
+	cycleNode?: ResolveRecordData<unknown> | undefined;
 }
 
 /**

@@ -30,5 +30,5 @@ export type Ref<T> = {
  */
 export type MutableRef<T> = {
 	/** The current service instance (optional). */
-	current?: T;
+	current?: T | undefined;
 };

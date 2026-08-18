@@ -36,6 +36,12 @@ export enum CoreErrorCodeEnum {
 	E_INVALID_OPTIONS = "E_INVALID_OPTIONS",
 
 	/**
+	 * A value outside the supported ServiceIdentifier types was provided.
+	 * @see SPECIFICATION.md Section 5.2 V5
+	 */
+	E_INVALID_SERVICE_IDENTIFIER = "E_INVALID_SERVICE_IDENTIFIER",
+
+	/**
 	 * Resolution failed while constructing or invoking a provider.
 	 */
 	E_RESOLUTION_FAILED = "E_RESOLUTION_FAILED",

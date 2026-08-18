@@ -8,11 +8,10 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
 	createContainer,
 	createServiceIdentifier,
-	globalMiddleware,
 	type IContainer,
 	rootContainer,
 } from "../src/index";
-import { clearContainer, clearMiddleware } from "./test.utils";
+import { clearContainer, clearMiddleware, useMiddleware } from "./test.utils";
 
 /**
  * Test service class
@@ -560,20 +559,19 @@ describe("Container", () => {
 		});
 
 		afterEach(() => {
-			// Clean up container and global middleware
+			// Clean up container and middleware
 			if (container) {
 				clearContainer(container);
 			}
-			// Clean up global middleware
-			clearMiddleware(globalMiddleware);
+			clearMiddleware();
 		});
 
-		it("should apply container-level middleware", () => {
+		it("should apply middleware", () => {
 			// Arrange
 			container.register("TestValue", {
 				useFactory: () => "TestValue",
 			});
-			container.use({
+			useMiddleware({
 				name: "TestMiddleware",
 				executor: (params, next) => {
 					return `${next(params) as string}TestMiddleware`;
@@ -587,23 +585,26 @@ describe("Container", () => {
 			expect(instance).toBe("TestValueTestMiddleware");
 		});
 
-		it("should apply global middleware", () => {
+		it("should apply middleware to every resolve", () => {
 			// Arrange
 			container.register("TestValue", {
 				useFactory: () => "TestValue",
 			});
-			globalMiddleware.use({
-				name: "GlobalTestMiddleware",
+			let calls = 0;
+			useMiddleware({
+				name: "TestMiddleware",
 				executor: (params, next) => {
-					return `${next(params) as string}GlobalMiddleware`;
+					calls++;
+					return next(params);
 				},
 			});
 
 			// Act
-			const instance = container.resolve("TestValue");
+			container.resolve("TestValue");
+			container.resolve("TestValue");
 
 			// Assert
-			expect(instance).toBe("TestValueGlobalMiddleware");
+			expect(calls).toBe(2);
 		});
 
 		it("should apply multiple middleware in sequence", () => {
@@ -611,13 +612,13 @@ describe("Container", () => {
 			container.register("TestValue", {
 				useFactory: () => "TestValue",
 			});
-			container.use({
+			useMiddleware({
 				name: "FirstMiddleware",
 				executor: (params, next) => {
 					return `${next(params) as string}First`;
 				},
 			});
-			container.use({
+			useMiddleware({
 				name: "SecondMiddleware",
 				executor: (params, next) => {
 					return `${next(params) as string}Second`;

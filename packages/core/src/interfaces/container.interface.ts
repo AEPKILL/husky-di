@@ -17,14 +17,14 @@ import type { Cleanup, IDisposable } from "@/interfaces/disposable.interface";
 import type {
 	Middleware,
 	MiddlewareExecutor,
-} from "@/interfaces/middleware-chain.interface";
+} from "@/interfaces/middleware.interface";
 import type {
 	CreateRegistrationOptions,
 	IRegistration,
 } from "@/interfaces/registration.interface";
 import type { IInternalResolveRecord } from "@/interfaces/resolve-record.interface";
 import type { IUnique } from "@/interfaces/unique.interface";
-import type { MutableRef, Ref } from "@/types/ref.type";
+import type { Ref } from "@/types/ref.type";
 import type { RegistrationPlan } from "@/types/registration-plan.type";
 import type { ResolveContext } from "@/types/resolve-context.type";
 import type { ServiceIdentifier } from "@/types/service-identifier.type";
@@ -76,25 +76,25 @@ export type ResolveOptions<T> = {
 		| {
 				multiple?: false;
 				optional?: false;
-				defaultValue?: never;
+				defaultValue?: undefined;
 		  }
 		// Single optional service with possible default value
 		| {
 				multiple?: false;
 				optional: true;
-				defaultValue?: T;
+				defaultValue?: T | undefined;
 		  }
 		// Multiple required services without default value
 		| {
 				multiple: true;
 				optional?: false;
-				defaultValue?: never;
+				defaultValue?: undefined;
 		  }
 		// Multiple optional services with possible default array
 		| {
 				multiple: true;
 				optional: true;
-				defaultValue?: T[];
+				defaultValue?: T[] | undefined;
 		  }
 	);
 
@@ -165,20 +165,6 @@ type ResolveReferenceOptions =
 	  };
 
 /**
- * Determines whether the resolved type should be an array based on resolve options.
- *
- * @typeParam T - The service instance type
- * @typeParam O - The resolve options type
- *
- * @internal
- */
-type ResolveArrayType<T, O extends ResolveOptions<T>> = O extends {
-	multiple: true;
-}
-	? T[]
-	: T;
-
-/**
  * Determines whether the resolved type should be optional (possibly undefined).
  *
  * @remarks
@@ -191,11 +177,29 @@ type ResolveArrayType<T, O extends ResolveOptions<T>> = O extends {
  * @internal
  */
 type ResolveOptionalType<T, O extends ResolveOptions<T>> = O extends {
-	optional: true;
-	defaultValue?: undefined;
+	multiple: true;
 }
-	? ResolveArrayType<T, O> | undefined
-	: ResolveArrayType<T, O>;
+	? T[]
+	: O extends {
+				optional: true;
+			}
+		? O extends { defaultValue: infer D }
+			? undefined extends D
+				? T | undefined
+				: T
+			: T | undefined
+		: T;
+
+/**
+ * Infers the single-registration result seen by resolve middleware.
+ *
+ * @internal
+ */
+type ResolveMiddlewareInstance<T, O extends ResolveOptions<T>> = O extends {
+	multiple: true;
+}
+	? T
+	: ResolveOptionalType<T, O>;
 
 /**
  * Determines whether the resolved type should be wrapped in a Ref.
@@ -291,7 +295,10 @@ export type ResolveMiddlewareParams<T, O extends ResolveOptions<T>> = {
 export type ResolveMiddlewareExecutor<
 	T,
 	O extends ResolveOptions<T>,
-> = MiddlewareExecutor<ResolveMiddlewareParams<T, O>, T>;
+> = MiddlewareExecutor<
+	ResolveMiddlewareParams<T, O>,
+	ResolveMiddlewareInstance<T, O>
+>;
 
 /**
  * Middleware function type for intercepting service resolution.
@@ -323,12 +330,12 @@ export type ResolveMiddlewareExecutor<
  *   }
  * };
  *
- * container.use(loggingMiddleware);
+ * middleware.use(loggingMiddleware);
  * ```
  */
 export type ResolveMiddleware<T, O extends ResolveOptions<T>> = Middleware<
 	ResolveMiddlewareParams<T, O>,
-	ResolveInstance<T, O>
+	ResolveMiddlewareInstance<T, O>
 >;
 
 /**
@@ -554,82 +561,6 @@ export interface IServiceRegistry {
 }
 
 /**
- * Middleware manager interface.
- *
- * @remarks
- * Responsible for managing resolve middleware that intercepts and
- * customizes the service resolution process. Middleware can be used
- * for cross-cutting concerns such as logging, caching, validation,
- * and performance monitoring.
- *
- * Middleware execution follows a LIFO (Last In, First Out) order,
- * where the last registered middleware executes first, creating an
- * onion-like execution model.
- *
- * @see {@link ResolveMiddleware} for middleware function type
- */
-export interface IMiddlewareManager {
-	/**
-	 * Registers a middleware to the container.
-	 *
-	 * @remarks
-	 * Adds a middleware function to the resolution pipeline. Middleware
-	 * will be executed in reverse registration order (LIFO - Last In, First Out).
-	 * This means the last registered middleware executes first in the chain,
-	 * creating an onion-like execution model where outer layers wrap inner layers.
-	 *
-	 * The same middleware instance can be registered multiple times.
-	 *
-	 * @param middleware - The middleware function to register
-	 * @returns A cleanup function that removes the middleware added by this call
-	 *
-	 * @example
-	 * ```typescript
-	 * // Add logging middleware
-	 * container.use({
-	 *   name: 'logging',
-	 *   executor: (params, next) => {
-	 *     console.log(`Resolving: ${params.serviceIdentifier}`);
-	 *     const result = next(params);
-	 *     console.log(`Resolved: ${params.serviceIdentifier}`);
-	 *     return result;
-	 *   }
-	 * });
-	 *
-	 * // If you register: [A, B, C], they execute in order: [C, B, A]
-	 * ```
-	 */
-	use(...middleware: ResolveMiddleware<any, any>[]): Cleanup;
-
-	/**
-	 * Unregisters a middleware from the container.
-	 *
-	 * @remarks
-	 * Removes a previously registered middleware function from the
-	 * resolution pipeline, preventing it from executing in subsequent
-	 * resolutions. If the middleware is not found, this method does nothing.
-	 *
-	 * @param middleware - The middleware function to unregister
-	 *
-	 * @example
-	 * ```typescript
-	 * const loggingMiddleware = {
-	 *   name: 'logging',
-	 *   executor: (params, next) => {
-	 *     console.log(`Resolving: ${params.serviceIdentifier}`);
-	 *     return next(params);
-	 *   }
-	 * };
-	 *
-	 * container.use(loggingMiddleware);
-	 * // Later...
-	 * container.unused(loggingMiddleware);
-	 * ```
-	 */
-	unused(...middleware: ResolveMiddleware<any, any>[]): void;
-}
-
-/**
  * Container hierarchy interface.
  *
  * @remarks
@@ -665,7 +596,7 @@ export interface IContainerHierarchy {
 	 * console.log(childContainer.parent === rootContainer); // true
 	 * ```
 	 */
-	readonly parent?: IContainer;
+	readonly parent?: IContainer | undefined;
 }
 
 /**
@@ -677,7 +608,6 @@ export interface IContainerHierarchy {
  * This interface provides:
  * - Service resolution ({@link IServiceResolver})
  * - Service registration management ({@link IServiceRegistry})
- * - Middleware management ({@link IMiddlewareManager}) with LIFO execution order
  * - Hierarchical container relationships ({@link IContainerHierarchy})
  * - Unique identification ({@link IUnique})
  * - Resource disposal ({@link IDisposable})
@@ -695,17 +625,6 @@ export interface IContainerHierarchy {
  * // Resolve services
  * const service = container.resolve(MyService);
  *
- * // Add middleware (executes in LIFO order)
- * container.use({
- *   name: 'logging',
- *   executor: (params, next) => {
- *     console.log('Before resolution');
- *     const result = next(params);
- *     console.log('After resolution');
- *     return result;
- *   }
- * });
- *
  * // Create child container
  * const childContainer = createContainer("child", container);
  *
@@ -719,31 +638,6 @@ export interface IContainer
 		IDisplayName,
 		IServiceResolver,
 		IServiceRegistry,
-		IMiddlewareManager,
 		IContainerHierarchy {}
-
-/**
- * Internal container interface with additional internal state.
- *
- * @remarks
- * This interface extends {@link IContainer} with internal implementation
- * details that should not be exposed to public API consumers.
- * Used internally by the framework for managing resolution context.
- *
- * @internal
- */
-export interface IInternalContainer extends IContainer {
-	/**
-	 * Mutable reference to the current resolution context.
-	 *
-	 * @remarks
-	 * This reference is used internally to track the current resolution
-	 * context during the resolution process. It should not be accessed
-	 * or modified by external code.
-	 *
-	 * @internal
-	 */
-	readonly _internalResolveContextRef: MutableRef<ResolveContext>;
-}
 
 export const IContainer = createServiceIdentifier<IContainer>("IContainer");

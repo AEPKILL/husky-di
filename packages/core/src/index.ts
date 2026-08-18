@@ -42,7 +42,7 @@ export type {
 	IDisposable,
 } from "@/interfaces/disposable.interface";
 export { IDisposableRegistry } from "@/interfaces/disposable-registry.interface";
-export type { IMiddlewareManager } from "@/interfaces/middleware-chain.interface";
+export type { IMiddlewareManager } from "@/interfaces/middleware.interface";
 export type {
 	CreateAliasRegistrationOptions,
 	CreateClassRegistrationOptions,
@@ -60,7 +60,7 @@ export type {
 	ServiceIdentifierResolveRecordData as ServiceIdentifierResolveRecordNode,
 } from "@/interfaces/resolve-record.interface";
 export type { IUnique } from "@/interfaces/unique.interface";
-export { globalMiddleware } from "@/shared/instances";
+export { middleware } from "@/shared/instances";
 export type { AbstractConstructor } from "@/types/abstract-constructor.type";
 export type { Constructor } from "@/types/constructor.type";
 export type { Ref } from "@/types/ref.type";
@@ -70,8 +70,10 @@ export type {
 	RegistrationPlanEntry,
 	RegistrationPlanRegister,
 } from "@/types/registration-plan.type";
+export type { ResolveContext } from "@/types/resolve-context.type";
 export type { ResolveHelperOptions } from "@/types/resolve-helper-options.type";
 export type {
+	CreatedServiceIdentifier,
 	ServiceIdentifier,
 	ServiceIdentifierInstance,
 } from "@/types/service-identifier.type";
@@ -83,6 +85,7 @@ export {
 	isResolveServiceIdentifierRecord,
 } from "@/utils/resolve-record.util";
 export {
+	type CreateServiceIdentifierOptions,
 	createServiceIdentifier,
 	getServiceIdentifierMetadata,
 	getServiceIdentifierName,

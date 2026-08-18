@@ -103,7 +103,7 @@ export type ResolveRecordData<T> =
  */
 export type ResolveRecordTreeNode<T> = {
 	/** The parent node in the resolution tree */
-	readonly parent?: ResolveRecordTreeNode<T>;
+	readonly parent?: ResolveRecordTreeNode<T> | undefined;
 	/** Child nodes representing dependent resolutions */
 	readonly children: Array<ResolveRecordTreeNode<T>>;
 	/** The resolution record data for this node */

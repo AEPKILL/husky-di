@@ -78,7 +78,7 @@ export type CreateAliasRegistrationOptions<T> = {
 	/** The service identifier to alias */
 	readonly useAlias: ServiceIdentifier<T>;
 	/** Optional function to get the container for resolving the alias */
-	readonly getContainer?: () => IContainer;
+	readonly getContainer?: (() => IContainer) | undefined;
 };
 
 /**
@@ -121,7 +121,7 @@ export interface IRegistration<T> extends IUnique {
 		| CreateAliasRegistrationOptions<T>["useAlias"];
 
 	/** Optional function to get the container for alias registrations */
-	readonly getContainer?: () => IContainer;
+	readonly getContainer?: (() => IContainer) | undefined;
 }
 
 /**

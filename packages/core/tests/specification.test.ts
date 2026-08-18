@@ -2,7 +2,7 @@
  * @overview Core container specification compliance tests.
  *
  * This test suite validates that the container implementation complies with
- * the behavioral contract defined in SPECIFICATION.md v1.2.1.
+ * the behavioral contract defined in SPECIFICATION.md v1.3.0.
  *
  * Each test is labeled with its corresponding specification requirement ID
  * (e.g., R1, S2, L1, etc.) for traceability.
@@ -11,24 +11,37 @@
  * @created 2025-11-28 17:39:24
  */
 
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import {
+	afterEach,
+	beforeEach,
+	describe,
+	expect,
+	expectTypeOf,
+	it,
+	vi,
+} from "vitest";
 import {
 	CoreErrorCodeEnum,
+	type CreatedServiceIdentifier,
+	type CreateServiceIdentifierOptions,
 	createContainer,
 	createRegistrationPlan,
 	createServiceIdentifier,
 	getServiceIdentifierMetadata,
 	getServiceIdentifierName,
-	globalMiddleware,
 	hasServiceIdentifierMetadata,
 	IContainer,
 	LifecycleEnum,
+	middleware,
 	ResolveContainerScopeEnum,
+	type ResolveContext,
 	ResolveException,
+	type ResolveMiddleware,
 	type ResolveOptions,
 	resolve,
+	type ServiceIdentifierInstance,
 } from "../src/index";
-import { clearContainer, clearMiddleware } from "./test.utils";
+import { clearContainer, clearMiddleware, useMiddleware } from "./test.utils";
 
 // ============================================================================
 // Test Service Classes and Identifiers
@@ -106,6 +119,12 @@ describe("SPEC 4.1: Service Registration", () => {
 	});
 
 	describe("R1: Provider Exclusivity", () => {
+		it("should expose ResolveContext from the package root", () => {
+			const context: ResolveContext = new Map();
+
+			expect(context).toBeInstanceOf(Map);
+		});
+
 		it("should throw E_INVALID_PROVIDER when no provider strategy is specified", () => {
 			expect(() => {
 				container.register(IServiceA, {
@@ -391,7 +410,7 @@ describe("SPEC 4.2: Service Resolution", () => {
 	afterEach(() => {
 		clearContainer(childContainer);
 		clearContainer(parentContainer);
-		clearMiddleware(globalMiddleware);
+		clearMiddleware();
 	});
 
 	describe("S1: Resolution Order", () => {
@@ -430,6 +449,46 @@ describe("SPEC 4.2: Service Resolution", () => {
 	});
 
 	describe("S1.1: Service Identifier Metadata", () => {
+		it("should infer the instance type from created identifiers", () => {
+			// Arrange
+			const stringIdentifier = createServiceIdentifier<ServiceA>(
+				"IInferredStringService",
+			);
+			const rawSymbol = Symbol("IInferredSymbolService");
+			const symbolIdentifier = createServiceIdentifier<ServiceA>(rawSymbol);
+
+			// Assert
+			expectTypeOf<
+				ServiceIdentifierInstance<typeof stringIdentifier>
+			>().toEqualTypeOf<ServiceA>();
+			expectTypeOf<
+				ServiceIdentifierInstance<typeof symbolIdentifier>
+			>().toEqualTypeOf<ServiceA>();
+			expectTypeOf(stringIdentifier).toMatchTypeOf<
+				CreatedServiceIdentifier<ServiceA>
+			>();
+			expect(stringIdentifier).toBe("IInferredStringService");
+			expect(symbolIdentifier).toBe(rawSymbol);
+		});
+
+		it("should expose metadata options from the package root", () => {
+			// Arrange
+			const options: CreateServiceIdentifierOptions<{ tag: string }> = {
+				metadata: { tag: "root-export" },
+			};
+
+			// Act
+			const identifier = createServiceIdentifier<ServiceA, { tag: string }>(
+				"IRootExportMetadata",
+				options,
+			);
+
+			// Assert
+			expect(getServiceIdentifierMetadata(identifier)).toEqual({
+				tag: "root-export",
+			});
+		});
+
 		it("should return associated metadata and preserve registration and resolution semantics", () => {
 			// Arrange
 			const metadata = {
@@ -518,11 +577,12 @@ describe("SPEC 4.2: Service Resolution", () => {
 
 		it("should report metadata association when metadata is explicitly undefined", () => {
 			// Arrange
+			const options: CreateServiceIdentifierOptions<string> = {
+				metadata: undefined,
+			};
 			const serviceIdentifier = createServiceIdentifier<ServiceA>(
 				"IUndefinedMetadataInSpec",
-				{
-					metadata: undefined,
-				},
+				options,
 			);
 
 			// Act
@@ -578,6 +638,20 @@ describe("SPEC 4.2: Service Resolution", () => {
 	});
 
 	describe("S4: Multiple Resolution", () => {
+		it("should wrap an auto-resolved class in a multiple result array", () => {
+			// Arrange
+			class AutoResolvedService {}
+
+			// Act
+			const instances = childContainer.resolve(AutoResolvedService, {
+				multiple: true,
+			});
+
+			// Assert
+			expect(instances).toHaveLength(1);
+			expect(instances[0]).toBeInstanceOf(AutoResolvedService);
+		});
+
 		it("should return array with all registered instances when multiple: true", () => {
 			// Arrange
 			childContainer.register(IMultiService, { useClass: ServiceA });
@@ -595,12 +669,13 @@ describe("SPEC 4.2: Service Resolution", () => {
 
 		it("should return empty array when no instances found and multiple: true, optional: true without defaultValue", () => {
 			// Act
-			const instances = childContainer.resolve(IUnregisteredService, {
+			const instances = childContainer.resolve(IMultiService, {
 				multiple: true,
 				optional: true,
 			});
 
 			// Assert
+			expectTypeOf(instances).toEqualTypeOf<ServiceA[]>();
 			expect(instances).toEqual([]);
 		});
 
@@ -628,6 +703,55 @@ describe("SPEC 4.2: Service Resolution", () => {
 	});
 
 	describe("S5: Reference Resolution", () => {
+		for (const referenceType of ["ref", "dynamic"] as const) {
+			it(`should restore an active resolution after reading ${referenceType}.current`, () => {
+				// Arrange
+				const IScoped = createServiceIdentifier<ServiceA>(
+					`I${referenceType}Scoped`,
+				);
+				const IDeferredValue = createServiceIdentifier<number>(
+					`I${referenceType}DeferredValue`,
+				);
+				const IResult = createServiceIdentifier<{
+					readonly sameInstance: boolean;
+					readonly value: number;
+				}>(`I${referenceType}Result`);
+				let scopedInstanceCount = 0;
+
+				childContainer.register(IScoped, {
+					useFactory: () => {
+						scopedInstanceCount++;
+						return new ServiceA();
+					},
+					lifecycle: LifecycleEnum.resolution,
+				});
+				childContainer.register(IDeferredValue, { useValue: 42 });
+				childContainer.register(IResult, {
+					useFactory: () => {
+						const firstInstance = resolve(IScoped);
+						const deferred =
+							referenceType === "ref"
+								? resolve(IDeferredValue, { ref: true })
+								: resolve(IDeferredValue, { dynamic: true });
+						const value = deferred.current;
+						const secondInstance = resolve(IScoped);
+
+						return {
+							sameInstance: firstInstance === secondInstance,
+							value,
+						};
+					},
+				});
+
+				// Act
+				const result = childContainer.resolve(IResult);
+
+				// Assert
+				expect(result).toEqual({ sameInstance: true, value: 42 });
+				expect(scopedInstanceCount).toBe(1);
+			});
+		}
+
 		it("should return Ref<T> object with current property when ref: true", () => {
 			// Arrange
 			childContainer.register(IServiceA, { useClass: ServiceA });
@@ -679,9 +803,215 @@ describe("SPEC 4.2: Service Resolution", () => {
 			expect(instance1).toBe(instance2);
 			expect(instanceCount).toBe(1);
 		});
+
+		it("should reject unresolved parent references after their originating child is disposed", () => {
+			for (const referenceType of ["ref", "dynamic"] as const) {
+				// Arrange
+				const parentContainer = createContainer(
+					`DisposedRefParent-${referenceType}`,
+				);
+				const childContainer = createContainer(
+					`DisposedRefChild-${referenceType}`,
+					parentContainer,
+				);
+				parentContainer.register(IServiceA, { useClass: ServiceA });
+				const instanceRef =
+					referenceType === "ref"
+						? childContainer.resolve(IServiceA, { ref: true })
+						: childContainer.resolve(IServiceA, { dynamic: true });
+
+				// Act
+				childContainer.dispose();
+
+				try {
+					// Assert
+					expect(() => instanceRef.current).toThrow(/E_CONTAINER_DISPOSED/);
+				} finally {
+					parentContainer.dispose();
+				}
+			}
+		});
+
+		it("should retain a resolved static parent ref after its originating child is disposed", () => {
+			// Arrange
+			const parentContainer = createContainer("ResolvedRefParent");
+			const childContainer = createContainer(
+				"ResolvedRefChild",
+				parentContainer,
+			);
+			parentContainer.register(IServiceA, { useClass: ServiceA });
+			const instanceRef = childContainer.resolve(IServiceA, { ref: true });
+			const instance = instanceRef.current;
+
+			// Act
+			childContainer.dispose();
+
+			try {
+				// Assert
+				expect(instanceRef.current).toBe(instance);
+			} finally {
+				parentContainer.dispose();
+			}
+		});
+
+		it("should bind a ref created inside an ancestor factory to that ancestor", () => {
+			// Arrange
+			const parentContainer = createContainer("NestedRefParent");
+			const firstChild = createContainer(
+				"NestedRefFirstChild",
+				parentContainer,
+			);
+			const secondChild = createContainer(
+				"NestedRefSecondChild",
+				parentContainer,
+			);
+			const IDeferred = createServiceIdentifier<ServiceA>("INestedDeferred");
+			const IRefFactory = createServiceIdentifier<{
+				readonly current: ServiceA;
+				readonly resolved: boolean;
+			}>("INestedRefFactory");
+			parentContainer.register(IDeferred, { useClass: ServiceA });
+			parentContainer.register(IRefFactory, {
+				useFactory: () => resolve(IDeferred, { ref: true }),
+				lifecycle: LifecycleEnum.singleton,
+			});
+			const instanceRef = firstChild.resolve(IRefFactory);
+
+			// Act
+			firstChild.dispose();
+
+			try {
+				// Assert
+				expect(secondChild.resolve(IRefFactory)).toBe(instanceRef);
+				expect(instanceRef.current).toBeInstanceOf(ServiceA);
+			} finally {
+				secondChild.dispose();
+				parentContainer.dispose();
+			}
+		});
+
+		it("should reject unresolved ancestor refs after their active ancestor is disposed", () => {
+			for (const referenceType of ["ref", "dynamic"] as const) {
+				// Arrange
+				const parentContainer = createContainer(
+					`DisposedAncestorRefParent-${referenceType}`,
+				);
+				const childContainer = createContainer(
+					`DisposedAncestorRefChild-${referenceType}`,
+					parentContainer,
+				);
+				const IDeferred = createServiceIdentifier<ServiceA>(
+					`IDisposedAncestorDeferred-${referenceType}`,
+				);
+				const IRefFactory = createServiceIdentifier<{
+					readonly current: ServiceA;
+					readonly resolved: boolean;
+				}>(`IDisposedAncestorRefFactory-${referenceType}`);
+				parentContainer.register(IDeferred, { useClass: ServiceA });
+				parentContainer.register(IRefFactory, {
+					useFactory: () =>
+						referenceType === "ref"
+							? resolve(IDeferred, { ref: true })
+							: resolve(IDeferred, { dynamic: true }),
+				});
+				const instanceRef = childContainer.resolve(IRefFactory);
+
+				// Act
+				parentContainer.dispose();
+
+				try {
+					// Assert
+					expect(() => instanceRef.current).toThrow(/E_CONTAINER_DISPOSED/);
+				} finally {
+					childContainer.dispose();
+				}
+			}
+		});
+
+		it("should resolve missing ancestor refs against their active ancestor", () => {
+			for (const referenceType of ["ref", "dynamic"] as const) {
+				for (const optional of [false, true]) {
+					// Arrange
+					const parentContainer = createContainer(
+						`MissingRefParent-${referenceType}-${optional}`,
+					);
+					const childContainer = createContainer(
+						`MissingRefChild-${referenceType}-${optional}`,
+						parentContainer,
+					);
+					const IMissing = createServiceIdentifier<ServiceA>(
+						`IMissingRef-${referenceType}-${optional}`,
+					);
+					const IRefFactory = createServiceIdentifier<{
+						readonly current: ServiceA | undefined;
+						readonly resolved: boolean;
+					}>(`IMissingRefFactory-${referenceType}-${optional}`);
+					parentContainer.register(IRefFactory, {
+						useFactory: () => {
+							if (referenceType === "ref") {
+								return optional
+									? resolve(IMissing, { optional: true, ref: true })
+									: resolve(IMissing, { ref: true });
+							}
+							return optional
+								? resolve(IMissing, { dynamic: true, optional: true })
+								: resolve(IMissing, { dynamic: true });
+						},
+					});
+					const instanceRef = childContainer.resolve(IRefFactory);
+
+					// Act
+					childContainer.dispose();
+
+					try {
+						// Assert
+						if (optional) {
+							expect(instanceRef.current).toBeUndefined();
+						} else {
+							expect(() => instanceRef.current).toThrow(/E_SERVICE_NOT_FOUND/);
+						}
+					} finally {
+						parentContainer.dispose();
+					}
+				}
+			}
+		});
 	});
 
 	describe("S6: Alias Resolution", () => {
+		it("should keep multiple alias results flat and registration-shaped", () => {
+			// Arrange
+			const ITarget = createServiceIdentifier<string>("IMultipleAliasTarget");
+			const IAlias = createServiceIdentifier<string>("IMultipleAlias");
+			childContainer.register(ITarget, { useValue: "first" });
+			childContainer.register(ITarget, { useValue: "last" });
+			childContainer.register(IAlias, { useAlias: ITarget });
+
+			// Act
+			const instances = childContainer.resolve(IAlias, { multiple: true });
+
+			// Assert
+			expect(instances).toEqual(["last"]);
+		});
+
+		it("should not forward outer multiple defaults to a missing alias target", () => {
+			// Arrange
+			const IMissingTarget = createServiceIdentifier<string>(
+				"IMissingMultipleAliasTarget",
+			);
+			const IAlias = createServiceIdentifier<string>("IMissingMultipleAlias");
+			childContainer.register(IAlias, { useAlias: IMissingTarget });
+
+			// Act & Assert
+			expect(() =>
+				childContainer.resolve(IAlias, {
+					multiple: true,
+					optional: true,
+					defaultValue: ["fallback"],
+				}),
+			).toThrow(/E_SERVICE_NOT_FOUND/);
+		});
+
 		it("should delegate resolution to target ServiceIdentifier", () => {
 			// Arrange
 			const sharedInstance = new ServiceA();
@@ -740,6 +1070,25 @@ describe("SPEC 4.2: Service Resolution", () => {
 	});
 
 	describe("S7: Provider Failure Reporting", () => {
+		it("should identify the ancestor container that owns a failing provider", () => {
+			// Arrange
+			parentContainer.register(IServiceA, {
+				useFactory: () => {
+					throw new Error("Parent factory failed");
+				},
+			});
+
+			// Act & Assert
+			try {
+				childContainer.resolve(IServiceA);
+				throw new Error("Expected resolve to throw.");
+			} catch (error) {
+				expect((error as Error).message).toContain(
+					`in "${parentContainer.displayName}"`,
+				);
+			}
+		});
+
 		it("should wrap provider failures in ResolveException with E_RESOLUTION_FAILED", () => {
 			childContainer.register(IServiceA, {
 				useFactory: () => {
@@ -898,6 +1247,67 @@ describe("SPEC 4.2: Service Resolution", () => {
 				childContainer,
 			]);
 		});
+
+		it("should recreate dynamic IContainer results on every access", () => {
+			// Arrange
+			const IContainerDynamicProbe = createServiceIdentifier<{
+				readonly current: IContainer[];
+				readonly resolved: boolean;
+			}>("IContainerDynamicProbe");
+			parentContainer.register(IContainerDynamicProbe, {
+				useFactory: () =>
+					resolve(IContainer, {
+						dynamic: true,
+						multiple: true,
+					}),
+			});
+
+			// Act
+			const dynamicContainerList = childContainer.resolve(
+				IContainerDynamicProbe,
+			);
+			const first = dynamicContainerList.current;
+			first.length = 0;
+			const second = dynamicContainerList.current;
+
+			// Assert
+			expect(second).toEqual([parentContainer]);
+			expect(second).not.toBe(first);
+		});
+
+		it("should keep synthetic IContainer refs readable after origin disposal", () => {
+			// Arrange
+			const parentContainer = createContainer("SyntheticRefParent");
+			const childContainer = createContainer(
+				"SyntheticRefChild",
+				parentContainer,
+			);
+			const IProbe = createServiceIdentifier<
+				readonly [
+					{ readonly current: IContainer },
+					{ readonly current: IContainer },
+				]
+			>("ISyntheticContainerRefProbe");
+			parentContainer.register(IProbe, {
+				useFactory: () =>
+					[
+						resolve(IContainer, { ref: true }),
+						resolve(IContainer, { dynamic: true }),
+					] as const,
+			});
+			const [staticRef, dynamicRef] = childContainer.resolve(IProbe);
+
+			// Act
+			childContainer.dispose();
+
+			try {
+				// Assert
+				expect(staticRef.current).toBe(parentContainer);
+				expect(dynamicRef.current).toBe(parentContainer);
+			} finally {
+				parentContainer.dispose();
+			}
+		});
 	});
 });
 
@@ -914,7 +1324,7 @@ describe("SPEC 4.3: Lifecycle Management", () => {
 
 	afterEach(() => {
 		clearContainer(container);
-		clearMiddleware(globalMiddleware);
+		clearMiddleware();
 	});
 
 	describe("L1: Transient Lifecycle", () => {
@@ -1318,6 +1728,119 @@ describe("SPEC 4.3: Lifecycle Management", () => {
 	});
 
 	describe("L3: Resolution Lifecycle", () => {
+		it("should cache resolution providers without caching middleware transforms", () => {
+			// Arrange
+			const IScoped = createServiceIdentifier<{ readonly value: number }>(
+				"IMiddlewareScoped",
+			);
+			const IPair = createServiceIdentifier<
+				readonly [{ readonly value: number }, { readonly value: number }]
+			>("IMiddlewareScopedPair");
+			let providerCalls = 0;
+			let middlewareCalls = 0;
+			useMiddleware({
+				name: "resolutionTransformMiddleware",
+				executor: (params, next) => {
+					const instance = next(params);
+					if (params.serviceIdentifier !== IScoped) {
+						return instance;
+					}
+					middlewareCalls++;
+					return { ...instance };
+				},
+			});
+			container.register(IScoped, {
+				useFactory: () => ({ value: ++providerCalls }),
+				lifecycle: LifecycleEnum.resolution,
+			});
+			container.register(IPair, {
+				useFactory: (currentContainer) =>
+					[
+						currentContainer.resolve(IScoped),
+						currentContainer.resolve(IScoped),
+					] as const,
+			});
+
+			// Act
+			const firstPair = container.resolve(IPair);
+			const secondPair = container.resolve(IPair);
+
+			// Assert
+			expect(firstPair[0]).not.toBe(firstPair[1]);
+			expect(firstPair[0].value).toBe(firstPair[1].value);
+			expect(secondPair[0]).not.toBe(secondPair[1]);
+			expect(secondPair[0].value).toBe(secondPair[1].value);
+			expect(firstPair[0]).not.toBe(secondPair[0]);
+			expect(providerCalls).toBe(2);
+			expect(middlewareCalls).toBe(4);
+		});
+
+		it("should share one ResolveContext across child and parent factories", () => {
+			// Arrange
+			const parentContainer = createContainer("SharedContextParent");
+			const childContainer = createContainer(
+				"SharedContextChild",
+				parentContainer,
+			);
+			const IParentContext = createServiceIdentifier<ResolveContext>(
+				"IParentResolveContext",
+			);
+			const IContextPair = createServiceIdentifier<
+				readonly [ResolveContext, ResolveContext]
+			>("IResolveContextPair");
+
+			parentContainer.register(IParentContext, {
+				useFactory: (_container, context) => context,
+			});
+			childContainer.register(IContextPair, {
+				useFactory: (_container, context) =>
+					[context, resolve(IParentContext)] as const,
+			});
+
+			try {
+				// Act
+				const [childContext, parentContext] =
+					childContainer.resolve(IContextPair);
+
+				// Assert
+				expect(parentContext).toBe(childContext);
+			} finally {
+				childContainer.dispose();
+				parentContainer.dispose();
+			}
+		});
+
+		it("should create a new ancestor instance for each child resolution chain", () => {
+			// Arrange
+			const parentContainer = createContainer("ResolutionLifecycleParent");
+			const childContainer = createContainer(
+				"ResolutionLifecycleChild",
+				parentContainer,
+			);
+			let instanceCount = 0;
+
+			parentContainer.register(IServiceA, {
+				useFactory: () => {
+					instanceCount++;
+					return new ServiceA();
+				},
+				lifecycle: LifecycleEnum.resolution,
+			});
+
+			try {
+				// Act
+				const firstInstance = childContainer.resolve(IServiceA);
+				const secondInstance = childContainer.resolve(IServiceA);
+
+				// Assert
+				expect(firstInstance).not.toBe(secondInstance);
+				expect(instanceCount).toBe(2);
+			} finally {
+				childContainer.dispose();
+				parentContainer.dispose();
+			}
+		});
+
 		describe("useClass with resolution lifecycle", () => {
 			it("should create new instance per resolution chain", () => {
 				// Arrange
@@ -1573,6 +2096,49 @@ describe("SPEC 4.4: Circular Dependency Detection", () => {
 				container.resolve(ICircularA);
 			}).toThrow(ResolveException);
 		});
+
+		it("should track the active container and cycles during multiple resolution", () => {
+			// Arrange
+			const parentContainer = createContainer("MultipleCycleParent");
+			const childContainer = createContainer(
+				"MultipleCycleChild",
+				parentContainer,
+			);
+			const IMultipleCycle = createServiceIdentifier<number>("IMultipleCycle");
+			let activeContainer: IContainer | undefined;
+			let attemptCount = 0;
+
+			parentContainer.register(IMultipleCycle, {
+				useFactory: () => {
+					attemptCount++;
+					activeContainer = resolve(IContainer);
+
+					if (attemptCount > 1) {
+						throw new Error("Multiple cycle was not detected");
+					}
+
+					return resolve(IMultipleCycle, { multiple: true })[0];
+				},
+			});
+
+			try {
+				// Act
+				let error: ResolveException | undefined;
+				try {
+					childContainer.resolve(IMultipleCycle, { multiple: true });
+				} catch (thrownError) {
+					error = thrownError as ResolveException;
+				}
+
+				// Assert
+				expect(error?.code).toBe(CoreErrorCodeEnum.E_CIRCULAR_DEPENDENCY);
+				expect(activeContainer).toBe(parentContainer);
+				expect(attemptCount).toBe(1);
+			} finally {
+				childContainer.dispose();
+				parentContainer.dispose();
+			}
+		});
 	});
 
 	describe("C2 & C3: Detection Criteria and Error Reporting", () => {
@@ -1611,6 +2177,42 @@ describe("SPEC 4.4: Circular Dependency Detection", () => {
 			const message = error?.message || "";
 			expect(message).toContain("ICircularA");
 			expect(message).toContain("ICircularB");
+		});
+	});
+
+	describe("C4: Failed Branch Recovery", () => {
+		it("should restore the resolution path after a handled nested failure", () => {
+			// Arrange
+			const IRetry = createServiceIdentifier<number>("IRetry");
+			const IConsumer = createServiceIdentifier<number>("IRetryConsumer");
+			let attemptCount = 0;
+
+			container.register(IRetry, {
+				useFactory: () => {
+					attemptCount++;
+					if (attemptCount === 1) {
+						throw new Error("Recoverable failure");
+					}
+					return 42;
+				},
+			});
+			container.register(IConsumer, {
+				useFactory: () => {
+					try {
+						resolve(IRetry);
+					} catch {
+						// The factory deliberately recovers and retries.
+					}
+					return resolve(IRetry);
+				},
+			});
+
+			// Act
+			const result = container.resolve(IConsumer);
+
+			// Assert
+			expect(result).toBe(42);
+			expect(attemptCount).toBe(2);
 		});
 	});
 });
@@ -1727,28 +2329,28 @@ describe("SPEC 4.6: Middleware System", () => {
 
 	afterEach(() => {
 		clearContainer(container);
-		clearMiddleware(globalMiddleware);
+		clearMiddleware();
 	});
 
 	describe("M1: Middleware Execution Order", () => {
-		it("should execute middlewares in registration order (last registered executes first in the chain)", () => {
+		it("should execute middleware in reverse registration order", () => {
 			// Arrange
 			const executionOrder: number[] = [];
-			container.use({
+			useMiddleware({
 				name: "middleware1",
 				executor: (params, next) => {
 					executionOrder.push(1);
 					return next(params);
 				},
 			});
-			container.use({
+			useMiddleware({
 				name: "middleware2",
 				executor: (params, next) => {
 					executionOrder.push(2);
 					return next(params);
 				},
 			});
-			container.use({
+			useMiddleware({
 				name: "middleware3",
 				executor: (params, next) => {
 					executionOrder.push(3);
@@ -1760,39 +2362,243 @@ describe("SPEC 4.6: Middleware System", () => {
 			// Act
 			container.resolve(IServiceA);
 
-			// Assert - Last registered middleware (3) executes first
+			// Assert
 			expect(executionOrder).toEqual([3, 2, 1]);
 		});
-	});
 
-	describe("M2: Middleware Chain", () => {
-		it("should provide params object to middleware", () => {
+		it("should preserve LIFO order for middleware supplied in one call", () => {
 			// Arrange
-			let receivedParams: unknown = null;
-			container.use({
-				name: "inspectMiddleware",
-				executor: (params, next) => {
-					receivedParams = params;
-					return next(params);
+			const executionOrder: string[] = [];
+			useMiddleware(
+				{
+					name: "firstVariadicMiddleware",
+					executor: (params, next) => {
+						executionOrder.push("first");
+						return next(params);
+					},
 				},
-			});
+				{
+					name: "secondVariadicMiddleware",
+					executor: (params, next) => {
+						executionOrder.push("second");
+						return next(params);
+					},
+				},
+			);
 			container.register(IServiceA, { useClass: ServiceA });
 
 			// Act
 			container.resolve(IServiceA);
 
 			// Assert
-			expect(receivedParams).toBeDefined();
-			expect(receivedParams).toHaveProperty("serviceIdentifier");
-			expect(receivedParams).toHaveProperty("container");
+			expect(executionOrder).toEqual(["second", "first"]);
+		});
+	});
+
+	describe("M2: Middleware Chain", () => {
+		it("should reuse a staged lifecycle instance when middleware calls next twice", () => {
+			for (const lifecycle of [
+				LifecycleEnum.singleton,
+				LifecycleEnum.resolution,
+			]) {
+				// Arrange
+				const currentContainer = createContainer(`DoubleNext-${lifecycle}`);
+				const IService = createServiceIdentifier<ServiceA>(
+					`IDoubleNext-${lifecycle}`,
+				);
+				let providerCalls = 0;
+				let sameNextInstance = false;
+				const cleanup = useMiddleware({
+					name: `doubleNextMiddleware-${lifecycle}`,
+					executor: (params, next) => {
+						const firstInstance = next(params);
+						const secondInstance = next(params);
+						sameNextInstance = firstInstance === secondInstance;
+						return firstInstance;
+					},
+				});
+				currentContainer.register(IService, {
+					useFactory: () => {
+						providerCalls++;
+						return new ServiceA();
+					},
+					lifecycle,
+				});
+
+				try {
+					// Act
+					currentContainer.resolve(IService);
+
+					// Assert
+					expect(sameNextInstance).toBe(true);
+					expect(providerCalls).toBe(1);
+				} finally {
+					cleanup();
+					currentContainer.dispose();
+				}
+			}
 		});
 
-		it("should provide next function to continue chain", () => {
+		it("should isolate staged resolution instances by middleware context", () => {
 			// Arrange
-			let nextCalled = false;
-			container.use({
-				name: "checkNextMiddleware",
+			const firstContext: ResolveContext = new Map();
+			const secondContext: ResolveContext = new Map();
+			let firstInstance: ServiceA | undefined;
+			let secondInstance: ServiceA | undefined;
+			let providerCalls = 0;
+			useMiddleware({
+				name: "replaceResolveContextMiddleware",
 				executor: (params, next) => {
+					firstInstance = next({
+						...params,
+						resolveContext: firstContext,
+					});
+					secondInstance = next({
+						...params,
+						resolveContext: secondContext,
+					});
+					return firstInstance;
+				},
+			});
+			container.register(IServiceA, {
+				useFactory: () => {
+					providerCalls++;
+					return new ServiceA();
+				},
+				lifecycle: LifecycleEnum.resolution,
+			});
+
+			// Act
+			container.resolve(IServiceA);
+
+			// Assert
+			expect(firstInstance).not.toBe(secondInstance);
+			expect(providerCalls).toBe(2);
+		});
+
+		it("should roll back staged lifecycle commits when a context rejects a value", () => {
+			// Arrange
+			const firstContext: ResolveContext = new Map();
+			const rejectingContext: ResolveContext = new Map();
+			const setRejectingContext = rejectingContext.set.bind(rejectingContext);
+			rejectingContext.set = (registration, instance) => {
+				setRejectingContext(registration, instance);
+				throw new Error("context rejected lifecycle value");
+			};
+			let providerCalls = 0;
+			useMiddleware({
+				name: "rejectLifecycleCommitMiddleware",
+				executor: (params, next) => {
+					next({ ...params, resolveContext: firstContext });
+					return next({ ...params, resolveContext: rejectingContext });
+				},
+			});
+			container.register(IServiceA, {
+				useFactory: () => {
+					providerCalls++;
+					return new ServiceA();
+				},
+				lifecycle: LifecycleEnum.resolution,
+			});
+
+			// Act & Assert
+			expect(() => container.resolve(IServiceA)).toThrow(
+				/context rejected lifecycle value/,
+			);
+			expect(firstContext.size).toBe(0);
+			expect(rejectingContext.size).toBe(0);
+			expect(() => container.resolve(IServiceA)).toThrow(
+				/context rejected lifecycle value/,
+			);
+			expect(providerCalls).toBe(4);
+		});
+
+		it("should preserve middleware context writes when a later commit fails", () => {
+			// Arrange
+			const firstContext: ResolveContext = new Map();
+			const rejectingContext: ResolveContext = new Map();
+			const setRejectingContext = rejectingContext.set.bind(rejectingContext);
+			rejectingContext.set = (registration, instance) => {
+				setRejectingContext(registration, instance);
+				throw new Error("context rejected lifecycle value");
+			};
+			const middlewareInstance = new ServiceA();
+			useMiddleware({
+				name: "writeBeforeLifecycleCommitMiddleware",
+				executor: (params, next) => {
+					next({ ...params, resolveContext: firstContext });
+					firstContext.set(params.registration, middlewareInstance);
+					return next({ ...params, resolveContext: rejectingContext });
+				},
+			});
+			container.register(IServiceA, {
+				useFactory: () => new ServiceA(),
+				lifecycle: LifecycleEnum.resolution,
+			});
+
+			// Act & Assert
+			expect(() => container.resolve(IServiceA)).toThrow(
+				/context rejected lifecycle value/,
+			);
+			expect([...firstContext.values()]).toEqual([middlewareInstance]);
+			expect(rejectingContext.size).toBe(0);
+		});
+
+		it("should type next as one registration during multiple resolution", () => {
+			// Arrange
+			const typedMiddleware: ResolveMiddleware<ServiceA, { multiple: true }> = {
+				name: "typedMultipleMiddleware",
+				executor: (params, next) => {
+					const instance = next(params);
+					expectTypeOf(instance).toEqualTypeOf<ServiceA>();
+					return instance;
+				},
+			};
+			useMiddleware(typedMiddleware);
+			container.register(IMultiService, { useClass: ServiceA });
+			container.register(IMultiService, { useClass: ServiceA });
+
+			// Act
+			const instances = container.resolve(IMultiService, { multiple: true });
+
+			// Assert
+			expect(instances).toHaveLength(2);
+		});
+
+		it("should preserve undefined returned by optional middleware next", () => {
+			// Arrange
+			const IOptionalService = createServiceIdentifier<ServiceA | undefined>(
+				"IOptionalMiddlewareService",
+			);
+			const typedMiddleware: ResolveMiddleware<
+				ServiceA | undefined,
+				{ optional: true }
+			> = {
+				name: "typedOptionalMiddleware",
+				executor: (params, next) => {
+					const instance = next(params);
+					expectTypeOf(instance).toEqualTypeOf<ServiceA | undefined>();
+					return instance;
+				},
+			};
+			useMiddleware(typedMiddleware);
+			container.register(IOptionalService, { useFactory: () => undefined });
+
+			// Act
+			const instance = container.resolve(IOptionalService, { optional: true });
+
+			// Assert
+			expect(instance).toBeUndefined();
+		});
+
+		it("should provide resolution params and next to middleware", () => {
+			// Arrange
+			let receivedParams: unknown;
+			let nextCalled = false;
+			useMiddleware({
+				name: "inspectMiddleware",
+				executor: (params, next) => {
+					receivedParams = params;
 					const result = next(params);
 					nextCalled = true;
 					return result;
@@ -1804,542 +2610,480 @@ describe("SPEC 4.6: Middleware System", () => {
 			container.resolve(IServiceA);
 
 			// Assert
+			expect(receivedParams).toHaveProperty("serviceIdentifier", IServiceA);
+			expect(receivedParams).toHaveProperty("container", container);
 			expect(nextCalled).toBe(true);
 		});
 	});
 
-	describe("M3: Global vs Local Middleware Strategy", () => {
-		it("should execute local middlewares before global middlewares (Local wraps Global)", () => {
+	describe("M3: Single Global Middleware Scope", () => {
+		it("should expose no container-level middleware API", () => {
+			type ContainerMiddlewareMembers = Extract<
+				keyof IContainer,
+				"use" | "unused"
+			>;
+
+			expectTypeOf<ContainerMiddlewareMembers>().toEqualTypeOf<never>();
+			expect(container).not.toHaveProperty("use");
+			expect(container).not.toHaveProperty("unused");
+		});
+
+		it("should expose use as the only public middleware management operation", () => {
+			type RemovedMiddlewareMembers = Extract<
+				keyof typeof middleware,
+				| "unused"
+				| "all"
+				| "has"
+				| "on"
+				| "dispose"
+				| "execute"
+				| "notifyContainerDispose"
+			>;
+
+			expectTypeOf<RemovedMiddlewareMembers>().toEqualTypeOf<never>();
+			expect(middleware).not.toHaveProperty("unused");
+			expect(middleware).not.toHaveProperty("all");
+			expect(middleware).not.toHaveProperty("has");
+			expect(middleware).not.toHaveProperty("on");
+			expect(middleware).not.toHaveProperty("dispose");
+			expect(middleware).not.toHaveProperty("execute");
+			expect(middleware).not.toHaveProperty("notifyContainerDispose");
+		});
+
+		it("should keep middleware state local to each package module instance", async () => {
 			// Arrange
-			const executionOrder: string[] = [];
-			globalMiddleware.use({
-				name: "globalMw",
+			vi.resetModules();
+			const otherCore = await import("../src/index");
+			const otherContainer = otherCore.createContainer(
+				"OtherModuleMiddlewareContainer",
+			);
+			let middlewareCalls = 0;
+			const cleanup = middleware.use({
+				name: "crossModuleMiddleware",
 				executor: (params, next) => {
-					executionOrder.push("global");
+					middlewareCalls++;
 					return next(params);
 				},
 			});
-			container.use({
-				name: "localMw",
+			otherContainer.register(IServiceA, { useClass: ServiceA });
+
+			try {
+				// Act
+				const instance = otherContainer.resolve(IServiceA);
+
+				// Assert
+				expect(otherCore.middleware).not.toBe(middleware);
+				expect(instance).toBeInstanceOf(ServiceA);
+				expect(middlewareCalls).toBe(0);
+			} finally {
+				cleanup();
+				otherContainer.dispose();
+				otherCore.rootContainer.dispose();
+			}
+		});
+
+		it("should apply the same middleware pipeline to every container", () => {
+			// Arrange
+			const secondContainer = createContainer("SecondMiddlewareContainer");
+			const observedContainers: IContainer[] = [];
+			useMiddleware({
+				name: "allContainersMiddleware",
 				executor: (params, next) => {
-					executionOrder.push("local");
+					observedContainers.push(params.container);
 					return next(params);
 				},
 			});
 			container.register(IServiceA, { useClass: ServiceA });
+			secondContainer.register(IServiceA, { useClass: ServiceA });
 
-			// Act
-			container.resolve(IServiceA);
+			try {
+				// Act
+				container.resolve(IServiceA);
+				secondContainer.resolve(IServiceA);
 
-			// Assert - Local middleware is outermost layer, executes first
-			// This follows LIFO: Local (later registered) wraps Global (earlier registered)
-			expect(executionOrder).toEqual(["local", "global"]);
-		});
-
-		it("should apply global middleware to all containers", () => {
-			// Arrange
-			const container2 = createContainer("SecondContainer");
-			let globalCallCount = 0;
-			globalMiddleware.use({
-				name: "globalCountMw",
-				executor: (params, next) => {
-					globalCallCount++;
-					return next(params);
-				},
-			});
-			container.register(IServiceA, { useClass: ServiceA });
-			container2.register(IServiceA, { useClass: ServiceA });
-
-			// Act
-			container.resolve(IServiceA);
-			container2.resolve(IServiceA);
-
-			// Assert
-			expect(globalCallCount).toBe(2);
-
-			// Cleanup
-			clearContainer(container2);
-		});
-
-		it("should apply local middleware only to specific container", () => {
-			// Arrange
-			const container2 = createContainer("SecondContainer");
-			let localCallCount = 0;
-			container.use({
-				name: "localCountMw",
-				executor: (params, next) => {
-					localCallCount++;
-					return next(params);
-				},
-			});
-			container.register(IServiceA, { useClass: ServiceA });
-			container2.register(IServiceA, { useClass: ServiceA });
-
-			// Act
-			container.resolve(IServiceA);
-			container2.resolve(IServiceA);
-
-			// Assert
-			expect(localCallCount).toBe(1);
-
-			// Cleanup
-			clearContainer(container2);
-		});
-
-		it("should allow local middleware to bypass global middleware (override capability)", () => {
-			// Arrange
-			const mockInstance = new ServiceA();
-			let globalExecuted = false;
-
-			globalMiddleware.use({
-				name: "globalAuthMw",
-				executor: (params, next) => {
-					globalExecuted = true;
-					// Simulate global authentication logic
-					return next(params);
-				},
-			});
-
-			container.use({
-				name: "localMockMw",
-				executor: (_params, _next) => {
-					// Local middleware bypasses global by not calling next()
-					// This is useful for testing/mocking scenarios
-					return mockInstance;
-				},
-			});
-
-			container.register(IServiceA, { useClass: ServiceA });
-
-			// Act
-			const instance = container.resolve(IServiceA);
-
-			// Assert - Local middleware short-circuited the chain
-			expect(instance).toBe(mockInstance);
-			expect(globalExecuted).toBe(false);
-		});
-
-		it("should allow local middleware to enrich context before passing to global", () => {
-			// Arrange
-			const contextModifications: string[] = [];
-
-			globalMiddleware.use({
-				name: "globalContextMw",
-				executor: (params, next) => {
-					// Global middleware sees the modified params
-					if (
-						params &&
-						typeof params === "object" &&
-						"enrichedByLocal" in params
-					) {
-						contextModifications.push("global-sees-enriched-context");
-					}
-					return next(params);
-				},
-			});
-
-			container.use({
-				name: "localEnrichMw",
-				executor: (params, next) => {
-					// Local middleware enriches context
-					contextModifications.push("local-enriches-context");
-					const enrichedParams = {
-						...params,
-						enrichedByLocal: true,
-					};
-					return next(enrichedParams);
-				},
-			});
-
-			container.register(IServiceA, { useClass: ServiceA });
-
-			// Act
-			container.resolve(IServiceA);
-
-			// Assert - Context flows from Local to Global
-			expect(contextModifications).toEqual([
-				"local-enriches-context",
-				"global-sees-enriched-context",
-			]);
-		});
-
-		it("should demonstrate isolation: child container does not inherit parent's local middlewares", () => {
-			// Arrange
-			const executionOrder: string[] = [];
-
-			const parentContainer = createContainer("ParentContainer");
-			const childContainer = createContainer("ChildContainer", parentContainer);
-
-			// Parent has its own local middleware
-			parentContainer.use({
-				name: "parentLocalMw",
-				executor: (params, next) => {
-					executionOrder.push("parent-local");
-					return next(params);
-				},
-			});
-
-			// Child has its own local middleware
-			childContainer.use({
-				name: "childLocalMw",
-				executor: (params, next) => {
-					executionOrder.push("child-local");
-					return next(params);
-				},
-			});
-
-			childContainer.register(IServiceA, { useClass: ServiceA });
-
-			// Act
-			childContainer.resolve(IServiceA);
-
-			// Assert - Only child's local middleware and global middleware execute
-			// Parent's local middleware is NOT inherited
-			expect(executionOrder).toEqual(["child-local"]);
-
-			// Cleanup
-			clearContainer(childContainer);
-			clearContainer(parentContainer);
+				// Assert
+				expect(observedContainers).toEqual([container, secondContainer]);
+			} finally {
+				secondContainer.dispose();
+			}
 		});
 	});
 
 	describe("M4: Middleware Interception", () => {
-		it("should allow middleware to inspect resolution parameters", () => {
+		it("should execute middleware for every resolve while reusing a singleton provider", () => {
 			// Arrange
-			let inspectedIdentifier: unknown = null;
-			container.use({
-				name: "inspectMiddleware",
+			let middlewareCalls = 0;
+			let providerCalls = 0;
+			useMiddleware({
+				name: "singletonMiddleware",
 				executor: (params, next) => {
-					inspectedIdentifier = params.serviceIdentifier;
+					middlewareCalls++;
 					return next(params);
 				},
 			});
-			container.register(IServiceA, { useClass: ServiceA });
+			container.register(IServiceA, {
+				useFactory: () => {
+					providerCalls++;
+					return new ServiceA();
+				},
+				lifecycle: LifecycleEnum.singleton,
+			});
 
 			// Act
-			container.resolve(IServiceA);
+			const firstInstance = container.resolve(IServiceA);
+			const secondInstance = container.resolve(IServiceA);
 
 			// Assert
-			expect(inspectedIdentifier).toBe(IServiceA);
+			expect(firstInstance).toBe(secondInstance);
+			expect(middlewareCalls).toBe(2);
+			expect(providerCalls).toBe(1);
 		});
 
-		it("should allow middleware to transform resolved instance", () => {
+		it("should not cache middleware-transformed singleton results", () => {
 			// Arrange
-			container.use({
-				name: "transformMiddleware",
+			const IWrappedSingleton = createServiceIdentifier<{
+				readonly service: ServiceA;
+			}>("IWrappedSingleton");
+			let middlewareCalls = 0;
+			let providerCalls = 0;
+			useMiddleware({
+				name: "singletonTransformMiddleware",
+				executor: (params, next) => {
+					middlewareCalls++;
+					return { ...next(params) };
+				},
+			});
+			container.register(IWrappedSingleton, {
+				useFactory: () => {
+					providerCalls++;
+					return { service: new ServiceA() };
+				},
+				lifecycle: LifecycleEnum.singleton,
+			});
+
+			// Act
+			const firstInstance = container.resolve(IWrappedSingleton);
+			const secondInstance = container.resolve(IWrappedSingleton);
+
+			// Assert
+			expect(firstInstance).not.toBe(secondInstance);
+			expect(firstInstance.service).toBe(secondInstance.service);
+			expect(middlewareCalls).toBe(2);
+			expect(providerCalls).toBe(1);
+		});
+
+		it("should not cache middleware short-circuit results", () => {
+			// Arrange
+			const IService = createServiceIdentifier<{ readonly value: number }>(
+				"IShortCircuitService",
+			);
+			let middlewareCalls = 0;
+			let providerCalls = 0;
+			useMiddleware({
+				name: "shortCircuitMiddleware",
+				executor: () => ({ value: ++middlewareCalls }),
+			});
+			container.register(IService, {
+				useFactory: () => {
+					providerCalls++;
+					return { value: 0 };
+				},
+				lifecycle: LifecycleEnum.singleton,
+			});
+
+			// Act
+			const firstInstance = container.resolve(IService);
+			const secondInstance = container.resolve(IService);
+
+			// Assert
+			expect(firstInstance).toEqual({ value: 1 });
+			expect(secondInstance).toEqual({ value: 2 });
+			expect(providerCalls).toBe(0);
+		});
+
+		it("should not commit a new singleton provider when middleware fails", () => {
+			// Arrange
+			let providerCalls = 0;
+			let shouldThrow = true;
+			useMiddleware({
+				name: "failingSingletonMiddleware",
 				executor: (params, next) => {
 					const instance = next(params);
-					if (instance && typeof instance === "object" && "name" in instance) {
-						// Add transformed property for testing
-						Object.assign(instance, { transformed: true });
+					if (shouldThrow) {
+						throw new Error("middleware failed");
 					}
 					return instance;
 				},
 			});
-			container.register(IServiceA, { useClass: ServiceA });
+			container.register(IServiceA, {
+				useFactory: () => {
+					providerCalls++;
+					return new ServiceA();
+				},
+				lifecycle: LifecycleEnum.singleton,
+			});
 
-			// Act
-			const instance = container.resolve(IServiceA);
-
-			// Assert
-			expect(
-				(instance as ServiceA & { transformed?: boolean }).transformed,
-			).toBe(true);
+			// Act & Assert
+			expect(() => container.resolve(IServiceA)).toThrow("middleware failed");
+			shouldThrow = false;
+			expect(container.resolve(IServiceA)).toBeInstanceOf(ServiceA);
+			expect(providerCalls).toBe(2);
 		});
 
-		it("should allow middleware to short-circuit resolution", () => {
+		it("should allow middleware to inspect, transform, and short-circuit", () => {
 			// Arrange
 			const mockInstance = new ServiceA();
-			container.use({
-				name: "shortCircuitMiddleware",
-				executor: (_params, _next) => {
-					// Don't call next(), return mock instead
-					return mockInstance;
+			const inspectedIdentifiers: unknown[] = [];
+			useMiddleware({
+				name: "inspectAndTransformMiddleware",
+				executor: (params, next) => {
+					inspectedIdentifiers.push(params.serviceIdentifier);
+					return Object.assign(next(params), { transformed: true });
 				},
 			});
+			useMiddleware({
+				name: "selectiveShortCircuitMiddleware",
+				executor: (params, next) =>
+					params.serviceIdentifier === IServiceB ? mockInstance : next(params),
+			});
 			container.register(IServiceA, { useClass: ServiceA });
+			container.register(IServiceB, { useClass: ServiceB });
 
 			// Act
-			const instance = container.resolve(IServiceA);
+			const transformed = container.resolve(IServiceA);
+			const shortCircuited = container.resolve(IServiceB);
 
 			// Assert
-			expect(instance).toBe(mockInstance);
+			expect(inspectedIdentifiers).toEqual([IServiceA]);
+			expect(
+				(transformed as ServiceA & { transformed?: boolean }).transformed,
+			).toBe(true);
+			expect(shortCircuited).toBe(mockInstance);
 		});
 	});
 
-	describe("M5: Middleware Removal", () => {
-		it("should return a disposer that removes a local middleware", () => {
+	describe("M5: Middleware Cleanup", () => {
+		it("should keep at most one active registration for the same object", () => {
 			// Arrange
-			let callCount = 0;
-			const middleware = {
-				name: "localDisposerMiddleware",
-				// biome-ignore lint/suspicious/noExplicitAny: Test middleware needs flexible typing
-				executor: (params: any, next: any) => {
-					callCount++;
+			let middlewareCalls = 0;
+			const layer: ResolveMiddleware<ServiceA, { optional?: false }> = {
+				name: "identityMiddleware",
+				executor: (params, next) => {
+					middlewareCalls++;
 					return next(params);
 				},
 			};
-			const disposeMiddleware = container.use(middleware);
+			const firstCleanup = useMiddleware(layer);
+			const duplicateCleanup = useMiddleware(layer);
+			container.register(IServiceA, { useClass: ServiceA });
+
+			// Act & Assert
+			container.resolve(IServiceA);
+			expect(middlewareCalls).toBe(1);
+
+			duplicateCleanup();
+			container.resolve(IServiceA);
+			expect(middlewareCalls).toBe(2);
+
+			firstCleanup();
+			container.resolve(IServiceA);
+			expect(middlewareCalls).toBe(2);
+		});
+
+		it("should execute distinct middleware objects that share a name", () => {
+			// Arrange
+			const executionOrder: string[] = [];
+			useMiddleware(
+				{
+					name: "sharedDiagnosticName",
+					executor: (params, next) => {
+						executionOrder.push("first");
+						return next(params);
+					},
+				},
+				{
+					name: "sharedDiagnosticName",
+					executor: (params, next) => {
+						executionOrder.push("second");
+						return next(params);
+					},
+				},
+			);
 			container.register(IServiceA, { useClass: ServiceA });
 
 			// Act
 			container.resolve(IServiceA);
-			disposeMiddleware();
-			container.resolve(IServiceA);
 
 			// Assert
-			expect(callCount).toBe(1);
-			expect(() => disposeMiddleware()).not.toThrow();
+			expect(executionOrder).toEqual(["second", "first"]);
 		});
 
-		it("should return a disposer that removes a global middleware", () => {
+		it("should remove only middleware registered by the returned cleanup", () => {
 			// Arrange
-			let callCount = 0;
-			const middleware = {
-				name: "globalDisposerMiddleware",
-				// biome-ignore lint/suspicious/noExplicitAny: Test middleware needs flexible typing
-				executor: (params: any, next: any) => {
-					callCount++;
+			const executionOrder: string[] = [];
+			const firstCleanup = useMiddleware({
+				name: "firstCleanupMiddleware",
+				executor: (params, next) => {
+					executionOrder.push("first");
 					return next(params);
 				},
-			};
-			const disposeMiddleware = globalMiddleware.use(middleware);
-			container.register(IServiceA, { useClass: ServiceA });
-
-			// Act
-			container.resolve(IServiceA);
-			disposeMiddleware();
-			container.resolve(IServiceA);
-
-			// Assert
-			expect(callCount).toBe(1);
-			expect(() => disposeMiddleware()).not.toThrow();
-		});
-
-		it("should return a cleanup function that removes an event listener", () => {
-			// Arrange
-			let callCount = 0;
-			const cleanup = globalMiddleware.on("change", () => {
-				callCount++;
 			});
-			const middleware = {
-				name: "eventCleanupMiddleware",
-				// biome-ignore lint/suspicious/noExplicitAny: Test middleware needs flexible typing
-				executor: (params: any, next: any) => next(params),
-			};
+			const secondCleanup = useMiddleware({
+				name: "secondCleanupMiddleware",
+				executor: (params, next) => {
+					executionOrder.push("second");
+					return next(params);
+				},
+			});
+			container.register(IServiceA, { useClass: ServiceA });
+
+			// Act & Assert
+			firstCleanup();
+			container.resolve(IServiceA);
+			expect(executionOrder).toEqual(["second"]);
+
+			executionOrder.length = 0;
+			secondCleanup();
+			container.resolve(IServiceA);
+			expect(executionOrder).toEqual([]);
+		});
+
+		it("should make cleanup idempotent", () => {
+			// Arrange
+			let middlewareCalls = 0;
+			const cleanup = useMiddleware({
+				name: "idempotentCleanupMiddleware",
+				executor: (params, next) => {
+					middlewareCalls++;
+					return next(params);
+				},
+			});
+			container.register(IServiceA, { useClass: ServiceA });
 
 			// Act
-			globalMiddleware.use(middleware);
 			cleanup();
-			globalMiddleware.unused(middleware);
+			cleanup();
+			container.resolve(IServiceA);
 
 			// Assert
-			expect(callCount).toBe(1);
-			expect(typeof cleanup).toBe("function");
+			expect(middlewareCalls).toBe(0);
 			expect(() => cleanup()).not.toThrow();
 		});
 
-		it("should remove middleware when unused is called", () => {
+		it("should not let an old cleanup remove a later registration", () => {
 			// Arrange
-			let callCount = 0;
-			const middleware = {
-				name: "countMiddleware",
-				// biome-ignore lint/suspicious/noExplicitAny: Test middleware needs flexible typing
-				executor: (params: any, next: any) => {
-					callCount++;
+			let middlewareCalls = 0;
+			const layer: ResolveMiddleware<ServiceA, { optional?: false }> = {
+				name: "reRegisteredMiddleware",
+				executor: (params, next) => {
+					middlewareCalls++;
 					return next(params);
 				},
 			};
-
-			container.use(middleware);
+			const oldCleanup = useMiddleware(layer);
+			oldCleanup();
+			const currentCleanup = useMiddleware(layer);
 			container.register(IServiceA, { useClass: ServiceA });
 
-			// Act - First resolve, middleware should execute
-			container.resolve(IServiceA);
-			expect(callCount).toBe(1);
+			try {
+				// Act
+				oldCleanup();
+				container.resolve(IServiceA);
 
-			// Remove middleware
-			container.unused(middleware);
-			callCount = 0;
-
-			// Act - Second resolve, middleware should not execute
-			container.resolve(IServiceA);
-
-			// Assert
-			expect(callCount).toBe(0);
+				// Assert
+				expect(middlewareCalls).toBe(1);
+			} finally {
+				currentCleanup();
+			}
 		});
 	});
 
 	describe("M6: Middleware Disposal Hook", () => {
-		it("should call onContainerDispose when container is disposed", () => {
+		it("should call active middleware for every disposed container", () => {
 			// Arrange
-			let disposeCalled = false;
-			let disposedContainer: IContainer | null = null;
-			const middleware = {
+			const secondContainer = createContainer("SecondDisposalContainer");
+			const disposedContainers: IContainer[] = [];
+			useMiddleware({
 				name: "disposeMiddleware",
-				// biome-ignore lint/suspicious/noExplicitAny: Test middleware needs flexible typing
-				executor: (params: any, next: any) => next(params),
-				onContainerDispose: (container: IContainer) => {
-					disposeCalled = true;
-					disposedContainer = container;
+				executor: (params, next) => next(params),
+				onContainerDispose: (disposedContainer) => {
+					disposedContainers.push(disposedContainer);
 				},
-			};
+			});
 
-			container.use(middleware);
+			// Act
+			container.dispose();
+			secondContainer.dispose();
+
+			// Assert
+			expect(disposedContainers).toEqual([container, secondContainer]);
+		});
+
+		it("should not notify middleware removed before disposal", () => {
+			// Arrange
+			const onContainerDispose = vi.fn();
+			const cleanup = useMiddleware({
+				name: "removedDisposeMiddleware",
+				executor: (params, next) => next(params),
+				onContainerDispose,
+			});
+
+			// Act
+			cleanup();
+			container.dispose();
+
+			// Assert
+			expect(onContainerDispose).not.toHaveBeenCalled();
+		});
+
+		it("should ignore hook errors and continue notifying active middleware", () => {
+			// Arrange
+			const successfulHook = vi.fn();
+			useMiddleware(
+				{
+					name: "errorDisposeMiddleware",
+					executor: (params, next) => next(params),
+					onContainerDispose: () => {
+						throw new Error("Disposal error");
+					},
+				},
+				{
+					name: "successfulDisposeMiddleware",
+					executor: (params, next) => next(params),
+					onContainerDispose: successfulHook,
+				},
+			);
+
+			// Act & Assert
+			expect(() => container.dispose()).not.toThrow();
+			expect(successfulHook).toHaveBeenCalledWith(container);
+		});
+
+		it("should finish the disposal snapshot when a hook calls its cleanup", () => {
+			// Arrange
+			const laterHook = vi.fn();
+			let selfCleanup = () => {};
+			selfCleanup = useMiddleware({
+				name: "selfCleaningDisposeMiddleware",
+				executor: (params, next) => next(params),
+				onContainerDispose: () => {
+					selfCleanup();
+				},
+			});
+			useMiddleware({
+				name: "laterDisposeMiddleware",
+				executor: (params, next) => next(params),
+				onContainerDispose: laterHook,
+			});
 
 			// Act
 			container.dispose();
 
 			// Assert
-			expect(disposeCalled).toBe(true);
-			expect(disposedContainer).toBe(container);
-		});
-
-		it("should call onContainerDispose for both local and global middlewares", () => {
-			// Arrange
-			let localDisposeCalled = false;
-			let globalDisposeCalled = false;
-
-			const localMiddleware = {
-				name: "localDisposeMiddleware",
-				// biome-ignore lint/suspicious/noExplicitAny: Test middleware needs flexible typing
-				executor: (params: any, next: any) => next(params),
-				onContainerDispose: () => {
-					localDisposeCalled = true;
-				},
-			};
-
-			const globalMiddlewareObj = {
-				name: "globalDisposeMiddleware",
-				// biome-ignore lint/suspicious/noExplicitAny: Test middleware needs flexible typing
-				executor: (params: any, next: any) => next(params),
-				onContainerDispose: () => {
-					globalDisposeCalled = true;
-				},
-			};
-
-			container.use(localMiddleware);
-			globalMiddleware.use(globalMiddlewareObj);
-
-			// Act
-			container.dispose();
-
-			// Assert
-			expect(localDisposeCalled).toBe(true);
-			expect(globalDisposeCalled).toBe(true);
-		});
-
-		it("should ignore errors thrown in onContainerDispose", () => {
-			// Arrange
-			const errorMiddleware = {
-				name: "errorDisposeMiddleware",
-				// biome-ignore lint/suspicious/noExplicitAny: Test middleware needs flexible typing
-				executor: (params: any, next: any) => next(params),
-				onContainerDispose: () => {
-					throw new Error("Disposal error");
-				},
-			};
-
-			const successMiddleware = {
-				name: "successDisposeMiddleware",
-				// biome-ignore lint/suspicious/noExplicitAny: Test middleware needs flexible typing
-				executor: (params: any, next: any) => next(params),
-				onContainerDispose: () => {
-					// This should still be called even if previous middleware throws
-				},
-			};
-
-			container.use(errorMiddleware);
-			container.use(successMiddleware);
-
-			// Act & Assert - Should not throw
-			expect(() => {
-				container.dispose();
-			}).not.toThrow();
-			expect(container.disposed).toBe(true);
-		});
-
-		it("should use onContainerDispose for cleanup operations", () => {
-			// Arrange
-			const cache = new Map<string, unknown>();
-			cache.set("key1", "value1");
-			cache.set("key2", "value2");
-
-			const cacheMiddleware = {
-				name: "cacheMiddleware",
-				// biome-ignore lint/suspicious/noExplicitAny: Test middleware needs flexible typing
-				executor: (params: any, next: any) => {
-					const result = next(params);
-					cache.set("cached", result);
-					return result;
-				},
-				onContainerDispose: () => {
-					// Cleanup cache
-					cache.clear();
-				},
-			};
-
-			container.use(cacheMiddleware);
-			container.register(IServiceA, { useClass: ServiceA });
-
-			// Populate cache
-			container.resolve(IServiceA);
-			expect(cache.size).toBeGreaterThan(0);
-
-			// Act
-			container.dispose();
-
-			// Assert - Cache should be cleared
-			expect(cache.size).toBe(0);
-		});
-
-		it("should not call onContainerDispose on parent when child is disposed", () => {
-			// Arrange
-			const parentContainer = createContainer("ParentContainer");
-			const childContainer = createContainer("ChildContainer", parentContainer);
-
-			let parentDisposeCalled = false;
-			let childDisposeCalled = false;
-
-			const parentMiddleware = {
-				name: "parentDisposeMiddleware",
-				// biome-ignore lint/suspicious/noExplicitAny: Test middleware needs flexible typing
-				executor: (params: any, next: any) => next(params),
-				onContainerDispose: () => {
-					parentDisposeCalled = true;
-				},
-			};
-
-			const childMiddleware = {
-				name: "childDisposeMiddleware",
-				// biome-ignore lint/suspicious/noExplicitAny: Test middleware needs flexible typing
-				executor: (params: any, next: any) => next(params),
-				onContainerDispose: () => {
-					childDisposeCalled = true;
-				},
-			};
-
-			parentContainer.use(parentMiddleware);
-			childContainer.use(childMiddleware);
-
-			// Act - Dispose only child
-			childContainer.dispose();
-
-			// Assert
-			expect(childDisposeCalled).toBe(true);
-			expect(parentDisposeCalled).toBe(false);
-			expect(childContainer.disposed).toBe(true);
-			expect(parentContainer.disposed).toBe(false);
-
-			// Cleanup
-			clearContainer(parentContainer);
+			expect(laterHook).toHaveBeenCalledWith(container);
 		});
 	});
 });
-
-// ============================================================================
-// 4.7 Resource Disposal
-// ============================================================================
 
 describe("SPEC 4.7: Resource Disposal", () => {
 	describe("D1: Disposal State", () => {
@@ -2372,6 +3116,9 @@ describe("SPEC 4.7: Resource Disposal", () => {
 				container.register(IServiceA, { useClass: ServiceA }),
 			).toThrow();
 			expect(() => container.unregisterAll(IServiceA)).toThrow();
+			expect(() => container.getServiceIdentifiers()).toThrow(
+				/E_CONTAINER_DISPOSED/,
+			);
 		});
 	});
 
@@ -2475,6 +3222,14 @@ describe("SPEC 5: Validation Rules", () => {
 				});
 			}).toThrow(/E_INVALID_PROVIDER/);
 		});
+
+		it("should reject functions that cannot be constructed", () => {
+			expect(() => {
+				container.register(IServiceA, {
+					useClass: (() => new ServiceA()) as unknown as typeof ServiceA,
+				});
+			}).toThrow(/E_INVALID_PROVIDER/);
+		});
 	});
 
 	describe("V3: Factory Provider Validation", () => {
@@ -2525,11 +3280,22 @@ describe("SPEC 5: Validation Rules", () => {
 			clearContainer(targetContainer);
 		});
 
+		it("should accept an empty string alias target", () => {
+			// Arrange
+			const target = createServiceIdentifier<ServiceA>("");
+			const value = new ServiceA();
+			container.register(target, { useValue: value });
+			container.register(IAliasTarget, { useAlias: target });
+
+			// Act & Assert
+			expect(container.resolve(IAliasTarget)).toBe(value);
+		});
+
 		it("should reject invalid useAlias service identifiers", () => {
 			expect(() => {
 				container.register(IAliasTarget, {
 					// biome-ignore lint/suspicious/noExplicitAny: testing invalid service identifier
-					useAlias: "" as any,
+					useAlias: 42 as any,
 				});
 			}).toThrow(/E_INVALID_PROVIDER/);
 		});
@@ -2546,6 +3312,34 @@ describe("SPEC 5: Validation Rules", () => {
 	});
 
 	describe("V5: ServiceIdentifier Validation", () => {
+		it("should reject invalid createServiceIdentifier inputs", () => {
+			expect(() => {
+				// biome-ignore lint/suspicious/noExplicitAny: testing invalid public input
+				createServiceIdentifier(42 as any);
+			}).toThrow(/E_INVALID_SERVICE_IDENTIFIER/);
+		});
+
+		it("should reject invalid getServiceIdentifierName inputs", () => {
+			expect(() => {
+				// biome-ignore lint/suspicious/noExplicitAny: testing invalid public input
+				getServiceIdentifierName(42 as any);
+			}).toThrow(/E_INVALID_SERVICE_IDENTIFIER/);
+		});
+
+		it("should reject invalid identifiers at register and resolve boundaries", () => {
+			// Arrange
+			// biome-ignore lint/suspicious/noExplicitAny: testing invalid public input
+			const invalidIdentifier = 42 as any;
+
+			// Act & Assert
+			expect(() => {
+				container.register(invalidIdentifier, { useValue: new ServiceA() });
+			}).toThrow(/E_INVALID_SERVICE_IDENTIFIER/);
+			expect(() => container.resolve(invalidIdentifier)).toThrow(
+				/E_INVALID_SERVICE_IDENTIFIER/,
+			);
+		});
+
 		it("should accept class constructor as ServiceIdentifier", () => {
 			// Act & Assert
 			expect(() => {
@@ -2582,6 +3376,79 @@ describe("SPEC 5: Validation Rules", () => {
 	});
 
 	describe("V6: Resolve Options Validation", () => {
+		it("should treat an undefined defaultValue as omitted", () => {
+			// Arrange
+			const value = new ServiceA();
+			container.register(IServiceA, { useValue: value });
+
+			// Act
+			const resolved = container.resolve(IServiceA, {
+				defaultValue: undefined,
+			});
+			const multiple = container.resolve(IUnregisteredService, {
+				multiple: true,
+				optional: true,
+				defaultValue: undefined,
+			});
+
+			// Assert
+			expect(resolved).toBe(value);
+			expect(multiple).toEqual([]);
+		});
+
+		it("should keep reusable optional options type-safe without a default", () => {
+			// Arrange
+			type ReusableOptionalOptions = {
+				optional: true;
+				defaultValue?: ServiceA | undefined;
+			};
+			const serviceIdentifier = createServiceIdentifier<ServiceA>(
+				"IReusableOptionalService",
+			);
+			const options: ReusableOptionalOptions = { optional: true };
+
+			// Act
+			const instance = container.resolve(serviceIdentifier, options);
+
+			// Assert
+			expectTypeOf(instance).toEqualTypeOf<ServiceA | undefined>();
+			expect(instance).toBeUndefined();
+		});
+
+		it("should validate options when the resolve helper exposes IContainer", () => {
+			// Arrange
+			const IOptionsProbe = createServiceIdentifier<string[]>(
+				"IContainerOptionsProbe",
+			);
+			const invalidOptions = [
+				{ dynamic: true, ref: true },
+				{ defaultValue: container },
+				{ multiple: true, optional: true, defaultValue: container },
+			] as unknown as ResolveOptions<IContainer>[];
+
+			container.register(IOptionsProbe, {
+				useFactory: () =>
+					invalidOptions.map((options) => {
+						try {
+							resolve(IContainer, options);
+							return "accepted";
+						} catch (error) {
+							return (error as ResolveException).code;
+						}
+					}),
+			});
+
+			// Act
+			const codes = container.resolve(IOptionsProbe);
+
+			// Assert
+			expect(codes).toEqual([
+				CoreErrorCodeEnum.E_INVALID_OPTIONS,
+				CoreErrorCodeEnum.E_INVALID_OPTIONS,
+				CoreErrorCodeEnum.E_INVALID_OPTIONS,
+			]);
+		});
+
 		it("should require optional: true when defaultValue is specified for single value", () => {
 			// Arrange
 			const defaultValue = new ServiceA();
@@ -2638,6 +3505,24 @@ describe("SPEC 5: Validation Rules", () => {
 					ref: true,
 				} as unknown as ResolveOptions<ServiceA>);
 			}).toThrow(/E_INVALID_OPTIONS/);
+		});
+
+		it("should clear resolution state after rejecting invalid options", () => {
+			// Arrange
+			container.register(IServiceA, { useClass: ServiceA });
+
+			// Act
+			try {
+				container.resolve(IServiceA, {
+					dynamic: true,
+					ref: true,
+				} as unknown as ResolveOptions<ServiceA>);
+			} catch {
+				// The invalid options are expected; the assertion covers cleanup.
+			}
+
+			// Assert
+			expect(() => resolve(IServiceA)).toThrow(/E_RESOLVE_CONTEXT_UNAVAILABLE/);
 		});
 	});
 });

@@ -10,6 +10,7 @@
  * @created 2021-10-02 09:17:41
  */
 
+import { CREATED_SERVICE_IDENTIFIER_TYPE } from "@/constants/service-identifier.const";
 import type { Constructor } from "@/types/constructor.type";
 import type { AbstractConstructor } from "./abstract-constructor.type";
 
@@ -39,6 +40,14 @@ export type ServiceIdentifier<T> =
 	| symbol;
 
 /**
+ * Primitive service identifier carrying its instance type at compile time.
+ */
+export type CreatedServiceIdentifier<T> = ServiceIdentifier<T> &
+	(string | symbol) & {
+		readonly [CREATED_SERVICE_IDENTIFIER_TYPE]: T;
+	};
+
+/**
  * Extracts the instance type from a service identifier.
  *
  * @typeParam R - The service identifier type
@@ -50,4 +59,8 @@ export type ServiceIdentifier<T> =
  * ```
  */
 export type ServiceIdentifierInstance<R extends ServiceIdentifier<unknown>> =
-	R extends ServiceIdentifier<infer T> ? T : unknown;
+	R extends CreatedServiceIdentifier<infer T>
+		? T
+		: R extends AbstractConstructor<infer T>
+			? T
+			: unknown;

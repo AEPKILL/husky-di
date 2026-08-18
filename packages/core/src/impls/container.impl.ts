@@ -15,15 +15,12 @@ import { ResolveException } from "@/exceptions/resolve.exception";
 import { DisposableRegistryImpl } from "@/impls/disposable-registry.impl";
 import { InstanceDynamicRefImpl } from "@/impls/instance-dynamic-ref.impl";
 import { InstanceRefImpl } from "@/impls/instance-ref.impl";
-import { MiddlewareChainImpl } from "@/impls/middleware-chain.impl";
 import { RegistrationImpl } from "@/impls/registration.impl";
 import { RegistryImpl } from "@/impls/registry.impl";
 import type {
 	IContainer,
-	IInternalContainer,
 	IsRegisteredOptions,
 	ResolveInstance,
-	ResolveMiddleware,
 	ResolveMiddlewareParams,
 	ResolveOptions,
 } from "@/interfaces/container.interface";
@@ -36,17 +33,27 @@ import type {
 	CreateRegistrationOptions,
 	CreateValueRegistrationOptions,
 	IInternalRegistration,
+	IRegistration,
 } from "@/interfaces/registration.interface";
 import type { IInternalResolveRecord } from "@/interfaces/resolve-record.interface";
-import { globalMiddleware } from "@/shared/instances";
+import { middlewareManager } from "@/shared/instances";
 import type { Constructor } from "@/types/constructor.type";
-import type { MutableRef, Ref } from "@/types/ref.type";
+import type { Ref } from "@/types/ref.type";
 import type { RegistrationPlan } from "@/types/registration-plan.type";
 import type { ResolveContext } from "@/types/resolve-context.type";
 import type { ServiceIdentifier } from "@/types/service-identifier.type";
 import { createAssertNotDisposed } from "@/utils/disposable.util";
+import { assertValidServiceIdentifier } from "@/utils/registration.util";
+import {
+	getEnsureResolveContext,
+	getResolveContext,
+	resetResolveContext,
+	setResolveContext,
+} from "@/utils/resolve-context.util";
+import { assertValidResolveOptions } from "@/utils/resolve-options.util";
 import {
 	getEnsureResolveRecord,
+	getResolveRecord,
 	resetResolveRecord,
 	setResolveRecord,
 } from "@/utils/resolve-record.util";
@@ -54,6 +61,11 @@ import { getServiceIdentifierName } from "@/utils/service-identifier.util";
 import { createContainerId } from "@/utils/uuid.util";
 
 const assertNotDisposed = createAssertNotDisposed("Container");
+type StagedLifecycleInstance = {
+	readonly commit: () => void;
+	readonly rollback: () => void;
+	readonly value: unknown;
+};
 
 /**
  * Dependency Injection Container Implementation
@@ -63,9 +75,9 @@ const assertNotDisposed = createAssertNotDisposed("Container");
  * middleware chains for custom resolution logic, and hierarchical container relationships.
  *
  * @extends DisposableRegistryImpl - Provides automatic cleanup of resources
- * @implements IInternalContainer - Internal container interface with enhanced capabilities
+ * @implements IContainer - Public container contract
  */
-export class ContainerImpl implements IInternalContainer {
+export class ContainerImpl implements IContainer {
 	private _disposableRegistry: IDisposableRegistry =
 		new DisposableRegistryImpl();
 
@@ -95,14 +107,6 @@ export class ContainerImpl implements IInternalContainer {
 		return this._parent;
 	}
 
-	/**
-	 * Internal reference to the current resolve context
-	 * @internal
-	 */
-	public get _internalResolveContextRef(): MutableRef<ResolveContext> {
-		return this._resolveContextRef;
-	}
-
 	public get disposed() {
 		return this._disposableRegistry.disposed;
 	}
@@ -115,25 +119,12 @@ export class ContainerImpl implements IInternalContainer {
 	/**
 	 * Parent container for cascading service resolution
 	 */
-	private readonly _parent?: IContainer;
+	private readonly _parent?: IContainer | undefined;
 
 	/**
 	 * Container name for identification and debugging
 	 */
 	private readonly _name: string;
-
-	/**
-	 * Mutable reference to the current resolution context
-	 */
-	private readonly _resolveContextRef: MutableRef<ResolveContext>;
-
-	/**
-	 * Middleware chain for intercepting and customizing service resolution
-	 */
-	private readonly _resolveMiddlewareChain: MiddlewareChainImpl<
-		ResolveMiddlewareParams<unknown, ResolveOptions<unknown>>,
-		any
-	>;
 
 	/**
 	 * Creates a new dependency injection container
@@ -147,32 +138,10 @@ export class ContainerImpl implements IInternalContainer {
 		this._registry = new RegistryImpl();
 		this._parent = parent;
 
-		// Initialize middleware chain with global middleware and resolution handler
-		this._resolveMiddlewareChain = new MiddlewareChainImpl(
-			(params) => {
-				return this._resolveRegistration(params);
-			},
-			globalMiddleware,
-			[],
-		);
-
-		this._resolveContextRef = { current: undefined };
-
 		this._disposableRegistry.addCleanup(() => {
-			for (const middleware of [
-				...globalMiddleware.middlewares,
-				...this._resolveMiddlewareChain.middlewares,
-			]) {
-				try {
-					middleware.onContainerDispose?.(this);
-				} catch {
-					// Ignore errors during cleanup
-				}
-			}
+			middlewareManager.notifyContainerDispose(this);
 		});
 
-		// Register cleanup handlers for proper disposal
-		this._disposableRegistry.addDisposable(this._resolveMiddlewareChain);
 		this._disposableRegistry.addCleanup(() => {
 			this._registry.clear();
 		});
@@ -201,59 +170,39 @@ export class ContainerImpl implements IInternalContainer {
 		serviceIdentifier: ServiceIdentifier<T>,
 		options?: O,
 	): ResolveInstance<T, O> {
+		return this._resolve(serviceIdentifier, options);
+	}
+
+	private _resolve<T, O extends ResolveOptions<T>>(
+		serviceIdentifier: ServiceIdentifier<T>,
+		options: O | undefined,
+	): ResolveInstance<T, O> {
 		assertNotDisposed(this);
+		assertValidServiceIdentifier(serviceIdentifier);
 
 		const resolveOptions = options || ({} as ResolveOptions<T>);
-		const { defaultValue, dynamic, ref, multiple, optional } = resolveOptions;
+		const { dynamic, ref, multiple } = resolveOptions;
+		const ownsResolveRecord = !getResolveRecord();
 		const resolveRecord = getEnsureResolveRecord(this);
 
-		if (dynamic && ref) {
-			throw new ResolveException(
-				CoreErrorCodeEnum.E_INVALID_OPTIONS,
-				`Cannot use both "dynamic" and "ref" options simultaneously for service identifier "${getServiceIdentifierName(serviceIdentifier)}". These options are mutually exclusive. Please choose either "dynamic" or "ref", but not both.`,
-				resolveRecord,
-			);
-		}
-		if ("defaultValue" in resolveOptions && optional !== true) {
-			throw new ResolveException(
-				CoreErrorCodeEnum.E_INVALID_OPTIONS,
-				`Cannot specify "defaultValue" without setting "optional" to true for service identifier "${getServiceIdentifierName(serviceIdentifier)}".`,
-				resolveRecord,
-			);
-		}
-		if (
-			"defaultValue" in resolveOptions &&
-			multiple &&
-			!Array.isArray(defaultValue)
-		) {
-			throw new ResolveException(
-				CoreErrorCodeEnum.E_INVALID_OPTIONS,
-				`When "multiple" is true, "defaultValue" must be an array for service identifier "${getServiceIdentifierName(serviceIdentifier)}".`,
-				resolveRecord,
-			);
-		}
-
-		const resolveContext = this._getResolveContext();
-		const registrations = this._registry.getAll(serviceIdentifier);
-		const isRootResolveRecord =
-			resolveRecord.current.value.type === ResolveRecordTypeEnum.root;
-
 		try {
+			assertValidResolveOptions(
+				serviceIdentifier,
+				resolveOptions,
+				resolveRecord,
+			);
+
+			const resolveContext = getEnsureResolveContext(resolveRecord);
+			const registrations = this._registry.getAll(serviceIdentifier);
+
 			return this._withResolveRecord(serviceIdentifier, resolveRecord, () => {
 				// Record the resolution attempt for debugging and error reporting
-				if (multiple) {
-					resolveRecord.addRecordNode({
-						type: ResolveRecordTypeEnum.message,
-						message: `Service identifier "${getServiceIdentifierName(serviceIdentifier)}" is resolved as a multiple instance`,
-					});
-				} else {
-					resolveRecord.addRecordNode({
-						type: ResolveRecordTypeEnum.serviceIdentifier,
-						resolveOptions,
-						serviceIdentifier,
-						container: this,
-					});
-				}
+				resolveRecord.addRecordNode({
+					type: ResolveRecordTypeEnum.serviceIdentifier,
+					resolveOptions,
+					serviceIdentifier,
+					container: this,
+				});
 
 				if (ref) {
 					resolveRecord.addRecordNode({
@@ -333,9 +282,9 @@ export class ContainerImpl implements IInternalContainer {
 				}
 			}) as ResolveInstance<T, O>;
 		} finally {
-			if (isRootResolveRecord) {
+			if (ownsResolveRecord) {
+				resetResolveContext(resolveRecord);
 				resetResolveRecord();
-				this._resolveContextRef.current = undefined;
 			}
 		}
 	}
@@ -358,6 +307,7 @@ export class ContainerImpl implements IInternalContainer {
 		registration: CreateRegistrationOptions<T>,
 	): Cleanup {
 		assertNotDisposed(this);
+		assertValidServiceIdentifier(serviceIdentifier);
 
 		const registrationInstance = new RegistrationImpl<T>(
 			serviceIdentifier,
@@ -420,6 +370,7 @@ export class ContainerImpl implements IInternalContainer {
 		options?: IsRegisteredOptions,
 	): boolean {
 		assertNotDisposed(this);
+		assertValidServiceIdentifier(serviceIdentifier);
 
 		const { recursive = false } = options || {};
 
@@ -445,33 +396,9 @@ export class ContainerImpl implements IInternalContainer {
 	 */
 	public unregisterAll<T>(serviceIdentifier: ServiceIdentifier<T>): void {
 		assertNotDisposed(this);
+		assertValidServiceIdentifier(serviceIdentifier);
 
 		this._registry.remove(serviceIdentifier);
-	}
-
-	/**
-	 * Adds a middleware to the resolution chain
-	 *
-	 * Middleware can intercept and modify service resolution, enabling features like
-	 * logging, validation, caching, and custom instantiation logic.
-	 *
-	 * @param middleware - The middleware function to add to the resolution chain
-	 */
-	public use(middleware: ResolveMiddleware<any, any>): Cleanup {
-		assertNotDisposed(this);
-
-		return this._resolveMiddlewareChain.use(middleware);
-	}
-
-	/**
-	 * Removes a middleware from the resolution chain
-	 *
-	 * @param middleware - The middleware function to remove
-	 */
-	public unused(middleware: ResolveMiddleware<any, any>): void {
-		assertNotDisposed(this);
-
-		this._resolveMiddlewareChain.unused(middleware);
 	}
 
 	/**
@@ -480,6 +407,8 @@ export class ContainerImpl implements IInternalContainer {
 	 * @returns An array of all service identifiers currently registered in this container
 	 */
 	public getServiceIdentifiers(): ServiceIdentifier<unknown>[] {
+		assertNotDisposed(this);
+
 		return this._registry.keys();
 	}
 
@@ -503,6 +432,81 @@ export class ContainerImpl implements IInternalContainer {
 	private _resolveInternal<T, O extends ResolveOptions<T>>(
 		params: ResolveMiddlewareParams<T, O>,
 	): T | Ref<T> {
+		const singletonStageKey = Symbol();
+		type StagedLifecycleKey = ResolveContext | typeof singletonStageKey;
+		const stagedLifecycleInstances = new Map<
+			IRegistration<unknown>,
+			Map<StagedLifecycleKey, StagedLifecycleInstance>
+		>();
+		const instance = middlewareManager.execute(params, (lifecycleParams) => {
+			const lifecycleRegistration =
+				lifecycleParams.registration as IRegistration<unknown>;
+			const lifecycleKey =
+				lifecycleRegistration.lifecycle === LifecycleEnum.singleton
+					? singletonStageKey
+					: lifecycleRegistration.lifecycle === LifecycleEnum.resolution
+						? lifecycleParams.resolveContext
+						: undefined;
+			const stagedInstance = lifecycleKey
+				? stagedLifecycleInstances.get(lifecycleRegistration)?.get(lifecycleKey)
+				: undefined;
+			if (stagedInstance) {
+				return stagedInstance.value;
+			}
+
+			let stagedLifecycleInstance: StagedLifecycleInstance | undefined;
+			const lifecycleInstance = this._resolveLifecycleInstance(
+				lifecycleParams,
+				(stagedInstance) => {
+					stagedLifecycleInstance = stagedInstance;
+				},
+			);
+			if (stagedLifecycleInstance && lifecycleKey) {
+				let instancesByLifecycle = stagedLifecycleInstances.get(
+					lifecycleRegistration,
+				);
+				if (!instancesByLifecycle) {
+					instancesByLifecycle = new Map();
+					stagedLifecycleInstances.set(
+						lifecycleRegistration,
+						instancesByLifecycle,
+					);
+				}
+				instancesByLifecycle.set(lifecycleKey, stagedLifecycleInstance);
+			}
+
+			return lifecycleInstance;
+		});
+		const committedLifecycleInstances: StagedLifecycleInstance[] = [];
+		try {
+			for (const instancesByLifecycle of stagedLifecycleInstances.values()) {
+				for (const stagedInstance of instancesByLifecycle.values()) {
+					committedLifecycleInstances.push(stagedInstance);
+					stagedInstance.commit();
+				}
+			}
+		} catch (error: unknown) {
+			for (
+				let index = committedLifecycleInstances.length - 1;
+				index >= 0;
+				index--
+			) {
+				try {
+					committedLifecycleInstances[index].rollback();
+				} catch {
+					// Preserve the commit error when a custom ResolveContext also rejects rollback.
+				}
+			}
+			throw error;
+		}
+
+		return instance as T | Ref<T>;
+	}
+
+	private _resolveLifecycleInstance<T, O extends ResolveOptions<T>>(
+		params: ResolveMiddlewareParams<T, O>,
+		onCreated: (instance: StagedLifecycleInstance) => void,
+	): T | Ref<T> {
 		const { registration, resolveContext } = params;
 
 		// Check singleton cache first
@@ -522,15 +526,53 @@ export class ContainerImpl implements IInternalContainer {
 			}
 		}
 
-		// Execute middleware chain to create the instance
-		const instance = this._resolveMiddlewareChain.execute(params);
+		const instance = this._resolveRegistration(params);
 
-		// Cache the instance according to its lifecycle
 		if (isSingleton) {
-			(registration as IInternalRegistration<T>)._internalSetInstance(instance);
-			(registration as IInternalRegistration<T>)._internalSetResolved(true);
+			const internalRegistration = registration as IInternalRegistration<T>;
+			let previousInstance: T | undefined;
+			let previousResolved = false;
+			let canRollback = false;
+			onCreated({
+				commit: () => {
+					previousInstance = registration.instance;
+					previousResolved = registration.resolved;
+					canRollback = true;
+					internalRegistration._internalSetInstance(instance);
+					internalRegistration._internalSetResolved(true);
+				},
+				rollback: () => {
+					if (!canRollback) {
+						return;
+					}
+					internalRegistration._internalSetInstance(previousInstance as T);
+					internalRegistration._internalSetResolved(previousResolved);
+				},
+				value: instance,
+			});
 		} else if (isResolution) {
-			resolveContext.set(registration, instance);
+			let hadPreviousInstance = false;
+			let previousInstance: unknown;
+			let canRollback = false;
+			onCreated({
+				commit: () => {
+					hadPreviousInstance = resolveContext.has(registration);
+					previousInstance = resolveContext.get(registration);
+					canRollback = true;
+					resolveContext.set(registration, instance);
+				},
+				rollback: () => {
+					if (!canRollback) {
+						return;
+					}
+					if (hadPreviousInstance) {
+						resolveContext.set(registration, previousInstance);
+					} else {
+						resolveContext.delete(registration);
+					}
+				},
+				value: instance,
+			});
 		}
 
 		return instance;
@@ -602,10 +644,18 @@ export class ContainerImpl implements IInternalContainer {
 					const containerRef = registration.getContainer
 						? registration.getContainer()
 						: container;
+					const aliasResolveOptions = resolveOptions.multiple
+						? {
+								...resolveOptions,
+								defaultValue: undefined,
+								multiple: false,
+								optional: false,
+							}
+						: { ...resolveOptions, multiple: false };
 
 					return containerRef.resolve(
 						aliasServiceIdentifier,
-						resolveOptions,
+						aliasResolveOptions as ResolveOptions<T>,
 					) as T;
 				}
 				default:
@@ -637,11 +687,9 @@ export class ContainerImpl implements IInternalContainer {
 		resolveRecord: IInternalResolveRecord,
 		operation: () => T,
 	): T {
+		resolveRecord._internalStashCurrent();
 		try {
-			resolveRecord._internalStashCurrent();
-			const instance = operation();
-			resolveRecord._internalRestoreCurrent();
-			return instance;
+			return operation();
 		} catch (error: unknown) {
 			// Re-throw if already a ResolveException to preserve the original context
 			if (ResolveException.isResolveException(error)) {
@@ -658,12 +706,15 @@ export class ContainerImpl implements IInternalContainer {
 			}
 
 			// Wrap other errors with resolution context for better debugging
+			const currentContainer = resolveRecord.getCurrentContainer() ?? this;
 			throw new ResolveException(
 				CoreErrorCodeEnum.E_RESOLUTION_FAILED,
-				`Failed to resolve service identifier "${getServiceIdentifierName(serviceIdentifier)}" in "${this.displayName}": ${error instanceof Error ? error.message : String(error)}`,
+				`Failed to resolve service identifier "${getServiceIdentifierName(serviceIdentifier)}" in "${currentContainer.displayName}": ${error instanceof Error ? error.message : String(error)}`,
 				resolveRecord,
 				error,
 			);
+		} finally {
+			resolveRecord._internalRestoreCurrent();
 		}
 	}
 
@@ -691,22 +742,36 @@ export class ContainerImpl implements IInternalContainer {
 		refType: "ref" | "dynamic",
 	): ResolveInstance<T, O> {
 		const current = resolveRecord.current;
-		const resolveContext = this._resolveContextRef.current;
+		const resolveContext = getEnsureResolveContext(resolveRecord);
 
 		const instance = new RefClass(() => {
+			const previousResolveRecord = getResolveRecord();
+			const previousCurrent = resolveRecord.current;
+			const previousResolveContext = getResolveContext(resolveRecord);
+
 			try {
 				// Lazy refs must resume the original resolve tree so lifecycle caches stay consistent.
-				this._resolveContextRef.current = resolveContext;
+				setResolveContext(resolveRecord, resolveContext);
 				setResolveRecord(resolveRecord);
 				resolveRecord._internalSetCurrent(current);
-				return this.resolve(serviceIdentifier, {
+				return this._resolve(serviceIdentifier, {
 					...resolveOptions,
 					[refType]: false, // Prevent infinite recursion
 				} as ResolveOptions<T>) as T;
 			} finally {
-				// Clean up resolution context
-				resetResolveRecord();
-				this._resolveContextRef.current = undefined;
+				resolveRecord._internalSetCurrent(previousCurrent);
+
+				if (previousResolveContext) {
+					setResolveContext(resolveRecord, previousResolveContext);
+				} else {
+					resetResolveContext(resolveRecord);
+				}
+
+				if (previousResolveRecord) {
+					setResolveRecord(previousResolveRecord);
+				} else {
+					resetResolveRecord();
+				}
 			}
 		}) as ResolveInstance<T, O>;
 
@@ -771,7 +836,7 @@ export class ContainerImpl implements IInternalContainer {
 				message: `Service identifier "${getServiceIdentifierName(serviceIdentifier)}" is not registered in "${this.displayName}", but it is a class constructor, try to resolve as transient service.`,
 			});
 
-			return this._resolveInternal({
+			const instance = this._resolveInternal({
 				container: this,
 				serviceIdentifier,
 				resolveOptions,
@@ -781,12 +846,14 @@ export class ContainerImpl implements IInternalContainer {
 				}),
 				resolveContext,
 				resolveRecord,
-			}) as ResolveInstance<T, O>;
+			}) as T;
+
+			return (multiple ? [instance] : instance) as ResolveInstance<T, O>;
 		}
 
 		// Strategy 3: Return default value if service is optional
 		if (optional) {
-			if (multiple && !("defaultValue" in resolveOptions)) {
+			if (multiple && defaultValue === undefined) {
 				return [] as ResolveInstance<T, O>;
 			}
 
@@ -799,22 +866,6 @@ export class ContainerImpl implements IInternalContainer {
 			`Service identifier "${getServiceIdentifierName(serviceIdentifier)}" is not registered in this container. Please register it first or set the "optional" option to true if this service is optional.`,
 			resolveRecord,
 		);
-	}
-
-	/**
-	 * Gets or creates the current resolve context
-	 *
-	 * The resolve context stores resolution-scoped instances, ensuring that services
-	 * with resolution lifecycle are created once per resolution tree.
-	 *
-	 * @returns The current resolve context
-	 */
-	private _getResolveContext(): ResolveContext {
-		if (!this._resolveContextRef.current) {
-			// The context is created lazily so containers do not carry per-resolve state when idle.
-			this._resolveContextRef.current = new Map();
-		}
-		return this._resolveContextRef.current;
 	}
 
 	/**
