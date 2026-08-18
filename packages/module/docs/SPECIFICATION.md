@@ -1,6 +1,6 @@
 # Dependency Injection Module Specification
 
-**Version:** 1.0.0
+**Version:** 1.1.0
 **Status:** Proposal
 **Context:** ES Module-style Dependency Injection System
 
@@ -156,7 +156,14 @@ To ensure data integrity, the validation logic should be executed in the followi
 
 ### 6.2 Container Composition
 
-`createModule()` returns an `IModule`, which is itself the container — it exposes `resolve()`, `isRegistered()`, `use()`, and other container methods directly. There is no separate build step. Access the underlying `IContainer` via the `container` property.
+`createModule()` returns an `IModule`, which is a focused container facade. It exposes `resolve()`, `isRegistered()`, `getServiceIdentifiers()`, and `withAliases()` directly. There is no separate build step. Its `container` property exposes an export-guarded `IContainer` facade.
+
+Neither `IModule` nor `IContainer` provides module-local middleware registration. Resolution middleware is shared by containers created through the current loaded `@husky-di/core` module instance and is registered through its exported `middleware` object.
+
+Every module in one import graph **MUST** be backed by the same loaded
+`@husky-di/core` module instance. Applications **MUST NOT** combine modules
+whose containers come from independently evaluated package copies or module
+formats.
 
 ```typescript
 function createModule(options: CreateModuleOptions): IModule;
@@ -169,7 +176,28 @@ The container is assembled internally during `createModule()`:
    - Normalize all imports into a standard format.
    - For un-aliased imports: Bridge the parent container or merge definitions.
    - For aliased imports: Register a `useAlias` provider pointing to the source container's service.
-3. **Apply Export Guard**: Wrap the container with a middleware/proxy that **BLOCKS** resolution of any service identifier NOT present in the `exports` list when accessed from an external scope.
+3. **Create Public Facade**: Wrap the internal container with the module's export check. Internal providers retain the internal container; callers and imported aliases receive the guarded facade.
+
+### 6.3 Export Boundary
+
+The module export check **MUST** be enforced by the module's public resolution facade before control enters the core middleware pipeline. It **MUST NOT** be implemented as container-local middleware or as an ordinary application middleware that a short-circuit can bypass.
+
+The public facade **MUST** apply these rules on every resolution:
+
+1. A service registered directly in a module container **MUST NOT** be resolved from outside that module unless its identifier is listed in the module's `exports`.
+2. Internal providers **MUST** resolve through the internal container and **MUST** be allowed to access that module's declarations and imports.
+3. A service that is not registered directly in the module container **MUST** continue through normal core resolution, including parent or root-container fallback.
+4. An imported alias **MUST** resolve through the source module's guarded facade, so the source service must be exported by that source module.
+5. `module.resolve()` and `module.container.resolve()` **MUST** enforce the same boundary before application middleware runs.
+
+Rejecting a non-exported service **MUST** throw `ModuleException` with error code `E_EXPORT_NOT_FOUND`.
+
+This boundary provides API encapsulation, not a security sandbox. The guarantee
+applies to ordinary calls through `module.resolve()` and
+`module.container.resolve()`. Module implementation code and middleware
+registered on the active core module instance are trusted; deliberately
+leaking or reflectively extracting the internal container is outside this
+contract.
 
 ---
 
@@ -195,5 +223,5 @@ The following features are explicitly **excluded** from this version of the spec
 | `E_IMPORT_CONFLICT_LOCAL`     | `E_IMPORT_CONFLICT_LOCAL: Imported service identifier "{0}" conflicts with local declaration in module "{1}".`               |
 | `E_ALIAS_SOURCE_NOT_EXPORTED` | `E_ALIAS_SOURCE_NOT_EXPORTED: Cannot alias service identifier "{0}" from module "{1}": it is not exported from that module.`                                         |
 | `E_DUPLICATE_ALIAS_MAP`       | `E_DUPLICATE_ALIAS_MAP: Duplicate alias mapping for service identifier "{0}" in module "{1}".`                                     |
-| `E_EXPORT_NOT_FOUND`          | `E_EXPORT_NOT_FOUND: Cannot export service identifier "{0}" from "{1}": it is not declared in this module or imported from any imported module.`                                         |
+| `E_EXPORT_NOT_FOUND`          | The requested export is unavailable during validation, or a caller resolves a declaration outside the module's public exports. |
 | `E_DUPLICATE_EXPORT`          | `E_DUPLICATE_EXPORT: Duplicate export of service identifier "{0}" in module "{1}".`                                         |

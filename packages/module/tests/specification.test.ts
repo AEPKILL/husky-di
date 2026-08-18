@@ -4,7 +4,15 @@
  * @created 2025-08-06 21:39:35
  */
 
-import { createServiceIdentifier, resolve } from "@husky-di/core";
+import {
+	createServiceIdentifier,
+	LifecycleEnum,
+	middleware,
+	type ResolveMiddleware,
+	type ResolveOptions,
+	resolve,
+	rootContainer,
+} from "@husky-di/core";
 import { describe, expect, it } from "vitest";
 import { createImportScope } from "../src/factories/import-scope.factory";
 import {
@@ -99,9 +107,9 @@ function expectModuleException(
 
 /**
  * Comprehensive test suite for the Module System
- * Based on SPECIFICATION.md v1.0.0
+ * Based on SPECIFICATION.md v1.1.0
  */
-describe("Module System - SPECIFICATION.md v1.0.0", () => {
+describe("Module System - SPECIFICATION.md v1.1.0", () => {
 	describe("Import Scope", () => {
 		it("should treat aliases as renames while preserving unaliased exports", () => {
 			const SharedModule = createModule({
@@ -1018,7 +1026,7 @@ describe("Module System - SPECIFICATION.md v1.0.0", () => {
 
 			const app = AppModule.resolve(IApp);
 
-			// Verify export guards work correctly
+			// Verify export boundaries work correctly
 			expect(() => DatabaseModule.resolve(IDatabaseConfig)).toThrow(
 				/Service identifier "IDatabaseConfig" is not exported from DatabaseModule\/CONTAINER-\d+/,
 			);
@@ -1111,30 +1119,102 @@ describe("Module System - SPECIFICATION.md v1.0.0", () => {
 			expect(SharedModule.resolve("config")).toEqual({ env: "production" });
 		});
 
-		it("should return a cleanup function that unregisters module middleware", () => {
+		it("should expose container capabilities without local middleware management", () => {
 			const TestModule = createModule({
 				name: "TestModule",
 				declarations: [{ serviceIdentifier: "value", useValue: "ok" }],
 				exports: ["value"],
 			});
-			let middlewareHits = 0;
 
-			const cleanup = TestModule.use({
-				name: "count-module-middleware",
-				executor: (params, next) => {
-					middlewareHits++;
-					return next(params);
-				},
+			expect(TestModule.resolve("value")).toBe("ok");
+			expect(TestModule.container).toBeDefined();
+			expect(TestModule).not.toHaveProperty("use");
+			expect(TestModule).not.toHaveProperty("unused");
+			expect(TestModule.container).not.toHaveProperty("use");
+			expect(TestModule.container).not.toHaveProperty("unused");
+		});
+
+		it("should keep a private singleton hidden after resolving it internally", () => {
+			const PrivateService = createServiceIdentifier<object>("PrivateService");
+			const PublicService = createServiceIdentifier<object>("PublicService");
+			const privateService = {};
+			const TestModule = createModule({
+				name: "TestModule",
+				declarations: [
+					{
+						serviceIdentifier: PrivateService,
+						useValue: privateService,
+						lifecycle: LifecycleEnum.singleton,
+					},
+					{
+						serviceIdentifier: PublicService,
+						useFactory: (container) => container.resolve(PrivateService),
+					},
+				],
+				exports: [PublicService],
 			});
 
-			expect(TestModule.resolve("value")).toBe("ok");
-			expect(middlewareHits).toBe(1);
+			expect(TestModule.resolve(PublicService)).toBe(privateService);
+			expect(() => TestModule.resolve(PrivateService)).toThrow(
+				/Service identifier "PrivateService" is not exported from TestModule\/CONTAINER-\d+\./,
+			);
+			expect(() => TestModule.container.resolve(PrivateService)).toThrow(
+				/Service identifier "PrivateService" is not exported from TestModule\/CONTAINER-\d+\./,
+			);
+		});
 
-			cleanup();
+		it("should enforce exports before a global middleware can short-circuit resolution", () => {
+			const PrivateService = createServiceIdentifier<object>("GuardedPrivate");
+			const TestModule = createModule({
+				name: "TestModule",
+				declarations: [{ serviceIdentifier: PrivateService, useValue: {} }],
+			});
+			const bypassMiddlewares: ResolveMiddleware<
+				unknown,
+				ResolveOptions<unknown>
+			>[] = [
+				{
+					name: "shortCircuitPrivateService",
+					executor: () => ({}),
+				},
+				{
+					name: "redirectPrivateService",
+					executor: (params, next) =>
+						next({ ...params, container: rootContainer }),
+				},
+			];
 
-			expect(TestModule.resolve("value")).toBe("ok");
-			expect(middlewareHits).toBe(1);
-			expect(() => cleanup()).not.toThrow();
+			for (const bypassMiddleware of bypassMiddlewares) {
+				const cleanup = middleware.use(bypassMiddleware);
+				try {
+					expectModuleException(
+						() => TestModule.resolve(PrivateService),
+						ModuleErrorCodeEnum.E_EXPORT_NOT_FOUND,
+						/Service identifier "GuardedPrivate" is not exported/,
+					);
+					expectModuleException(
+						() => TestModule.container.resolve(PrivateService),
+						ModuleErrorCodeEnum.E_EXPORT_NOT_FOUND,
+						/Service identifier "GuardedPrivate" is not exported/,
+					);
+				} finally {
+					cleanup();
+				}
+			}
+		});
+
+		it("should allow a module container to fall back to the root container", () => {
+			const RootService = createServiceIdentifier<string>("RootService");
+			const cleanup = rootContainer.register(RootService, {
+				useValue: "from-root",
+			});
+			const TestModule = createModule({ name: "TestModule" });
+
+			try {
+				expect(TestModule.resolve(RootService)).toBe("from-root");
+			} finally {
+				cleanup();
+			}
 		});
 	});
 });

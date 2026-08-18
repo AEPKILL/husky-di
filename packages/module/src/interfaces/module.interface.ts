@@ -35,10 +35,7 @@ export type ModuleWithAliases = {
 export interface IModule
 	extends IUnique,
 		IDisplayName,
-		Pick<
-			IContainer,
-			"resolve" | "isRegistered" | "getServiceIdentifiers" | "use" | "unused"
-		> {
+		Pick<IContainer, "resolve" | "isRegistered" | "getServiceIdentifiers"> {
 	readonly name: string;
 	readonly declarations?: ReadonlyArray<Declaration<unknown>>;
 	readonly imports?: ReadonlyArray<IModule | ModuleWithAliases>;
