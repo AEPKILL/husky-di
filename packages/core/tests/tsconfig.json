@@ -1,6 +1,7 @@
 {
 	"extends": "../tsconfig.json",
 	"compilerOptions": {
+		"exactOptionalPropertyTypes": true,
 		"rootDir": ".."
 	},
 	"include": [".", "../vitest.setup.ts"]
