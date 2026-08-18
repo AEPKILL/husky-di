@@ -27,12 +27,12 @@ observation stream，形成最小而完整的 caller Interface。可编译 throw
 - `IRpcPeer` 保留 session-scoped `expose()` / `resolve()`；Acceptor 保留集合级 `expose()` /
   `resolveAll()`。Exposure 返回 core `Cleanup`；重复 Wire Service Name 原子失败，Cleanup 只影响
   后续 dispatch，已经捕获 implementation 的在途调用继续完成。v1 不提供原子热替换。
-- Topology Owner 的通用 lifecycle surface 只有 `close(): Promise<void>` teardown command
-  和一个 `event$`。不提供
-  `closed` Promise、`closed$`、`peer$`、同步 `dispose()`、状态布尔值或 middleware。
-  `event$` 是 hot、multicast、无 replay 的只读 Observable，发出唯一 typed
-  `topology-closed` terminal 后 complete，永不 error。Acceptor 以先订阅、再读取 `peers` 并按
-  稳定 identity 去重的方式无竞态 bootstrap；membership mutation 先于对应事件。
+- Prototype 证明 Topology Owner 需要 `close(): Promise<void>` teardown command 和一个统一
+  `event$`，并排除 `closed` Promise、`closed$`、`peer$`、同步 `dispose()`、状态布尔值和
+  middleware。`event$` 是 hot、multicast、无 replay 的只读 Observable，发出唯一 typed
+  `topology-closed` terminal 后 complete，永不 error。Current/sticky state、replay-latest state
+  streams 与精确 membership bootstrap 当时明确留给后续 lifecycle 决策；最终 surface 以
+  [决定 Topology Owner 启动、资源所有权与可发现状态](08-decide-topology-owner-lifecycle.md)为准。
 - Call observation 用本地 `observationId` 关联 started/finished，携带 direction、peer、wire
   service/method、参数以及 fulfilled result 或 `RpcError`。参数排除本地 cancellation signal；
   参数和结果是与业务活值断开的未脱敏 observation snapshot，不能用来改写调用，subscriber

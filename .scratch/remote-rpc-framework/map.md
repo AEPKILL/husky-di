@@ -16,7 +16,7 @@ Status: open
 - 本地图只完成规划与规范路线，不实施生产代码。后续代码变更必须使用 `husky-di-code-standard`，并让 normative specification 与 `specification.test.ts` 在同一变更中更新。
 - v1 只支持双向 unary 调用；本地同步结果在远端变为 Promise，不支持 notification 或 streaming。
 - `RpcPeer` 是稳定的远端对等方；`RpcConnector` 与 `RpcAcceptor` 是 Topology Owner。Logical Session 可跨瞬时 Physical Connection 断线恢复，且对调用者保持透明，但远端进程重启可以终止 Session。
-- RxJS 是公开依赖。公开事件流是 hot、multicast、无 replay 的只读 Observable；订阅只用于观察，不拥有资源，也不以 ref-count 控制底层生命周期。
+- RxJS 是公开依赖。公开事件流是 hot、multicast、无 replay 的只读 Observable；state 与 membership streams 则 multicast、replay latest，并发出完整 immutable snapshot。所有订阅只用于观察，不拥有资源，也不以 ref-count 控制底层生命周期。
 - 对外提供一个深的 Protocol seam；Handshake、Session、ACK、Codec 等可在 Implementation 内部分层。包内提供恰好一个默认 Protocol，并公开精确、可由其他语言实现的 wire specification；v1 只交付 TypeScript Implementation。
 - `@husky-di/remote` 只定义 Transport Adapter seam。WebSocket 等正式 Adapter 放入独立包，例如 `@husky-di/remote-websocket`；当前地图不实施这些包。
 - `resolveAll()` 返回稳定的 Remote Service Group；每次方法调用重新截取一个 `RpcPeer` 快照，并保持结果与稳定 `RpcPeer` 的关联。
@@ -63,6 +63,11 @@ Status: open
   完整有序 message、串行 Local Admission send 与 Direct Connection Close；Adapter 在最早入口
   强制 finite limits，并以共享黑盒 conformance 证明 message/stream、ownership、terminal、
   backpressure 与 failure isolation，不公开平台类型、`IDisposable`、capacity surface 或 error Code。
+- [决定 Topology Owner 启动、资源所有权与可发现状态](issues/08-decide-topology-owner-lifecycle.md)：
+  Owner 采用单飞且可重试的 role-specific startup、handoff 后 ownership、最小故障范围和幂等
+  cleanup barrier；Owner、Peer 与 membership 以 replay-latest immutable snapshot pairs 暴露当前
+  状态，owner-level hot/no-replay `event$` 记录可关联过程，且所有 mutation 先原子提交状态再按批
+  通知，subscriber failure 不影响 RPC。
 
 ## Not yet specified
 
