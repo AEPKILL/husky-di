@@ -30,7 +30,7 @@ This project uses a monorepo structure. The main workspaces that currently exist
 
 - **Dependency Injection / DI**: Objects receive dependencies from the outside instead of creating them on their own.
 - **IoC**: Inversion of Control. DI is the IoC mechanism adopted by this project.
-- **Container**: A dependency injection container. It registers services, resolves services, manages lifecycles, executes middleware, and disposes resources.
+- **Container**: A dependency injection container. It registers services, resolves services, manages lifecycles, participates in its loaded core module instance's middleware pipeline, and disposes resources.
 - **Root Container**: The root container exposed through the `rootContainer` constant. `createContainer()` attaches to it when `parent` is not passed explicitly; the `resolve` helper uses the current resolution context or the root container to perform resolution.
 - **Parent Container / Child Container**: The parent-child container relationship. Resolution checks the current container first and then falls back to the parent; registrations in a child do not affect the parent.
 
@@ -61,10 +61,9 @@ This project uses a monorepo structure. The main workspaces that currently exist
 
 ### Middleware
 
-- **Middleware**: A function object that intercepts resolution. It can inspect arguments, transform results, perform side effects, or short-circuit resolution by not calling `next()`.
-- **Global Middleware**: Registered through `globalMiddleware` and applies to all containers.
-- **Local Middleware**: Registered through `container.use()` or `module.use()` and only applies to the current container or module container.
-- **Middleware Order**: Middleware runs in LIFO order. Local middleware wraps the outside, then global middleware runs, and finally the provider executes.
+- **Middleware**: A function object registered through the current core module instance's `middleware` export. It can inspect arguments, transform results, perform side effects, or short-circuit resolution by not calling `next()`.
+- **Middleware Cleanup**: `middleware.use()` returns the sole idempotent cleanup for the middleware added by that call.
+- **Middleware Order**: Middleware runs in LIFO order before the provider executes.
 - **onContainerDispose**: An optional disposal hook on middleware. It is called when a container is disposed; exceptions should be swallowed and must not interrupt disposal.
 
 ### Decorator package
@@ -74,7 +73,7 @@ This project uses a monorepo structure. The main workspaces that currently exist
 - **`@injectable()`**: A class decorator that merges constructor parameter metadata and marks the class as injectable.
 - **`@inject()`**: A parameter decorator that declares the service identifier and resolution options for a constructor parameter.
 - **`@tagged()`**: The lower-level parameter metadata decorator. `@inject()` can be treated as its convenience wrapper.
-- **`decoratorMiddleware`**: Middleware that reads injection metadata and participates in constructor injection. When using decorator-based injection, register it in `globalMiddleware` or on the container.
+- **`decoratorMiddleware`**: Middleware that reads injection metadata and participates in constructor injection. Register it through `middleware` when using decorator-based injection.
 - **Reflection Metadata**: TypeScript compile-time parameter type information read through the Reflect API. This package depends on `reflect-metadata` or a compatible implementation.
 
 The decorator package supports only TypeScript experimental decorators, not ES decorators. The reason is that the current ES decorators specification does not include parameter decorators, so it cannot express the constructor parameter injection model required by this project.
@@ -87,7 +86,7 @@ The decorator package supports only TypeScript experimental decorators, not ES d
 - **Export**: A service exposed from the current module, either from a local declaration or by forwarding an import.
 - **Alias**: Renaming a service identifier on import, similar to `import { foo as bar }`.
 - **Import Scope**: The visible set of services a module receives from its imports. `alias` only renames mapped imports; imported exports that are not aliased still enter the import scope under their original service identifiers.
-- **Export Guard**: A protective middleware on the module container that prevents external resolution of non-exported services.
+- **Export Guard**: A module's public container facade rejects direct resolution of non-exported declarations before entering the global middleware pipeline.
 
 The module system is inspired by ESM semantics: imports must be explicit, export boundaries must be explicit, and naming conflicts should surface when a module is created instead of turning into ambiguity at runtime.
 
@@ -138,7 +137,7 @@ The module system is inspired by ESM semantics: imports must be explicit, export
 - `ref` and `dynamic` are mutually exclusive and cannot both be `true`.
 - Circular dependencies are detected through `ResolveRecord`. Error messages should include a readable resolution path and suggest `ref` or `dynamic` when appropriate.
 - Service lookup follows current-container-first order and falls back to the parent container hierarchy unless `recursive: false` disables that fallback for the current resolution.
-- Local middleware does not inherit through parent-child container relationships; service registration lookup can walk up to the parent container, but middleware chains do not inherit through the container hierarchy.
+- Resolution middleware applies across parent-child relationships for containers created by the same loaded core module instance and runs on every resolution.
 - Module declarations, imports, and exports must each be unique.
 - The module import graph must not contain circular dependencies.
 - When multiple imported modules export the same service name, the conflict must be resolved with aliases.

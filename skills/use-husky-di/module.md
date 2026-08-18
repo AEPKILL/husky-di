@@ -191,19 +191,19 @@ const consumer = createModule({
 
 ## Using the Module Container
 
-`IModule` extends the container interface directly — it serves as the DI container:
+`IModule` exposes the focused container operations used by module callers:
 
 ```typescript
 const module = createModule({ ... });
-// module.resolve(), module.isRegistered(), module.use() are all available
-// module.container gives access to the raw IContainer if needed
+// module.resolve(), module.isRegistered(), and module.getServiceIdentifiers() are available
+// module.container is an export-guarded IContainer facade
 ```
 
 Internally, on construction the module:
 
 1. **Registers declarations** — all local services go into the container.
 2. **Processes imports** — for unaliased imports, bridges to parent containers; for aliased, registers `useAlias` pointing to the source.
-3. **Applies export guard** — middleware that blocks resolution of non-exported identifiers when accessed from outside.
+3. **Builds the public facade** — public resolution checks `exports` before entering the current core module instance's middleware pipeline; internal providers keep the internal container.
 
 ```typescript
 const userModule = createModule({
@@ -216,7 +216,7 @@ const userModule = createModule({
 });
 
 userModule.resolve(UserRepo);         // ✓ exported
-userModule.resolve(InternalHelper);   // ✗ blocked by export guard
+userModule.resolve(InternalHelper);   // ✗ blocked by the export boundary
 ```
 
 ## Validation Order

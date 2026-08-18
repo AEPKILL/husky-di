@@ -32,7 +32,7 @@ If what you really want is:
 - three lifecycles: `transient`, `singleton`, `resolution`
 - resolution options: `optional`, `defaultValue`, `multiple`, `recursive`, `ref`, `dynamic`
 - parent/child container lookup
-- global and local resolution middleware
+- one resolution middleware pipeline per loaded core module instance
 - reusable `RegistrationPlan`
 - readable resolution paths and error messages
 
@@ -120,7 +120,7 @@ A container is responsible for:
 - registering services
 - resolving services
 - maintaining lifecycle caches
-- composing middleware chains
+- participating in the current core module instance's middleware pipeline
 - falling back across parent/child container boundaries
 
 ```typescript
@@ -131,6 +131,8 @@ const feature = createContainer("Feature", rootContainer);
 ```
 
 `app.parent === rootContainer` because `createContainer()` attaches to `rootContainer` by default when you do not pass a parent explicitly.
+
+Keep one loaded `@husky-di/core` instance within a resolution graph. Containers and the package-level `resolve()` helper from duplicate package copies or mixed ESM/CJS entry points do not share active resolution state and should not be combined in one chain.
 
 ## Registering Services
 
@@ -437,7 +439,7 @@ Key points:
 - registrations in a child container do not affect the parent
 - a child registration overrides the parent result for the same identifier
 - `recursive: false` disables parent-container fallback for that specific resolution
-- registrations fall back across the hierarchy, but local middleware does not inherit across container boundaries
+- every container created by the same loaded core module instance uses the same middleware pipeline
 
 ## Registration Plans
 
@@ -473,41 +475,29 @@ Why this is useful:
 
 ## Middleware
 
-Middleware can intercept the resolution flow for logging, monitoring, caching, fallback behavior, or custom instantiation strategies.
-
-### Local Middleware
+Middleware can intercept the resolution flow for logging, monitoring, fallback behavior, or custom instantiation strategies. Each loaded core module instance owns one middleware pipeline shared by the containers it creates; duplicate package copies and ESM/CJS entry points do not share that state.
 
 ```typescript
-container.use({
-  name: "timing",
-  executor(params, next) {
-    const start = performance.now();
-    const result = next();
-    console.log(params.container.name, performance.now() - start);
-    return result;
-  },
-});
-```
+import { middleware } from "@husky-di/core";
 
-### Global Middleware
-
-```typescript
-import { globalMiddleware } from "@husky-di/core";
-
-globalMiddleware.use({
+const cleanup = middleware.use({
   name: "logging",
   executor(params, next) {
     console.log(`resolving: ${String(params.serviceIdentifier)}`);
-    return next();
+    return next(params);
   },
 });
+
+cleanup();
 ```
 
 Middleware runs in LIFO order:
 
 - the last registered middleware runs first
-- local middleware wraps around global middleware
 - if `next()` is not called, resolution can be short-circuited
+- middleware runs on every resolution, while provider singleton and resolution lifecycles still apply behind `next()`
+- transformed and short-circuit results are not cached by core
+- the cleanup returned by `use()` is the only way to remove that registration and is safe to call repeatedly
 
 ## Disposal And Cleanup
 
@@ -522,7 +512,7 @@ container.dispose();
 After disposal:
 
 - the container rejects future operations
-- registered middleware receives `onContainerDispose`
+- active middleware receives `onContainerDispose` for that container
 - repeated `dispose()` calls remain idempotent
 
 ## When To Add `@husky-di/decorator`

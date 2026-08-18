@@ -33,10 +33,10 @@ c.resolve(IUserService);              // .logger is ConsoleLogger
 
 ```typescript
 import { injectable, inject, decoratorMiddleware } from "@husky-di/decorator";
-import { createContainer, globalMiddleware } from "@husky-di/core";
+import { createContainer, middleware } from "@husky-di/core";
 @injectable()
 class Svc { constructor(@inject(ILogger) private l: ILogger) {} run() { this.l.log("ok"); } }
-globalMiddleware.use(decoratorMiddleware);
+middleware.use(decoratorMiddleware);
 const c = createContainer(); c.register(ILogger, { useClass: ConsoleLogger });
 c.resolve(Svc).run();
 ```
@@ -76,7 +76,9 @@ app.resolve(Svc).run();
 
 **Resolution flags:** `optional: true` → `undefined` on miss · `multiple: true` → `T[]` · `ref: true` → deferred/cached `Ref<T>` · `dynamic: true` → re-resolves each `.current` access
 
-**Middleware:** Global (`globalMiddleware.use(mw)`) or local (`container.use(mw)`). Runs LIFO: local wraps global wraps provider. Local middlewares do **not** inherit through parent-child relationships.
+**Module-instance scope:** Keep one loaded `@husky-di/core` instance in a resolution graph. Duplicate package copies and mixed ESM/CJS entry points have independent active resolution state.
+
+**Middleware:** Register middleware for the current loaded core module instance with `middleware.use(mw)`. See [core.md](core.md#middleware) for cleanup, execution, and disposal semantics.
 
 **Registration plans:** `createRegistrationPlan(register => { register(ID, opts); })` → `container.applyRegistrationPlan(plan)` — all-or-nothing with rollback.
 
