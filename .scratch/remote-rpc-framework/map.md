@@ -68,6 +68,11 @@ Status: open
   cleanup barrier；Owner、Peer 与 membership 以 replay-latest immutable snapshot pairs 暴露当前
   状态，owner-level hot/no-replay `event$` 记录可关联过程，且所有 mutation 先原子提交状态再按批
   通知，subscriber failure 不影响 RPC。
+- [决定 Logical Session identity、incarnation、fencing 与 Recovery](issues/09-decide-logical-session-recovery.md)：
+  responder-created `sessionId` 标识一个进程内 retained incarnation；单调 `bindingEpoch` 与
+  last-valid-resume-wins fencing 安全替换 Connection，双向累计 cursor 和 attempt-bound proof
+  恢复 retained sequence，而 attempt/Session-scoped reject、五态 peer projection 与稳定
+  object/exposure lifetime 明确了 retry、terminal 和 caller observation 边界。
 
 ## Not yet specified
 
