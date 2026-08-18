@@ -65,7 +65,7 @@ import "reflect-metadata";
 import {
   createContainer,
   createServiceIdentifier,
-  globalMiddleware,
+  middleware,
 } from "@husky-di/core";
 import {
   decoratorMiddleware,
@@ -96,7 +96,7 @@ class UserService {
   }
 }
 
-globalMiddleware.use(decoratorMiddleware);
+middleware.use(decoratorMiddleware);
 
 const container = createContainer("AppContainer");
 container.register(ILogger, { useClass: ConsoleLogger });
@@ -127,27 +127,18 @@ class UserService {
 
 ## Adding It To An Existing Project
 
-### Register Middleware Globally
+### Register Middleware
 
-This is the recommended option for most applications:
+Resolution middleware is shared by the containers created through one loaded core module instance. Register the decorator middleware once on that instance:
 
 ```typescript
-import { globalMiddleware } from "@husky-di/core";
+import { middleware } from "@husky-di/core";
 import { decoratorMiddleware } from "@husky-di/decorator";
 
-globalMiddleware.use(decoratorMiddleware);
+const cleanup = middleware.use(decoratorMiddleware);
 ```
 
-That enables decorator-based constructor injection for all containers.
-
-### Register Middleware Locally
-
-If you only want decorator support in one container, register it locally instead:
-
-```typescript
-const container = createContainer("FeatureContainer");
-container.use(decoratorMiddleware);
-```
+That enables decorator-based constructor injection for every container created by that core module instance. Call `cleanup()` to remove only this registration; repeated calls are safe.
 
 ## Main APIs
 
@@ -362,7 +353,7 @@ You still keep using:
 - `createContainer()`
 - `createServiceIdentifier()`
 - `LifecycleEnum`
-- `globalMiddleware`
+- `middleware`
 - `resolve()` / `ref` / `dynamic`
 
 The decorator middleware only participates in the class-instantiation phase.
@@ -397,7 +388,7 @@ import "reflect-metadata";
 import {
   createContainer,
   createServiceIdentifier,
-  globalMiddleware,
+  middleware,
   type Ref,
 } from "@husky-di/core";
 import {
@@ -437,7 +428,7 @@ class ApiClient {
   }
 }
 
-globalMiddleware.use(decoratorMiddleware);
+middleware.use(decoratorMiddleware);
 
 const container = createContainer("AppContainer");
 container.register(IConfig, {

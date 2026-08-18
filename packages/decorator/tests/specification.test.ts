@@ -11,8 +11,8 @@ import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 import "reflect-metadata";
 import {
 	createContainer,
-	globalMiddleware,
 	type IContainer,
+	middleware,
 	type Ref,
 	ResolveContainerScopeEnum,
 	ResolveException,
@@ -45,7 +45,7 @@ function expectDecoratorException(
 
 describe("Decorator Module - Specification Compliance", () => {
 	beforeAll(() => {
-		globalMiddleware.use(decoratorMiddleware);
+		middleware.use(decoratorMiddleware);
 	});
 
 	let container: IContainer;
