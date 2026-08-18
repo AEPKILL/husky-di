@@ -142,8 +142,9 @@ membership、event 与 operation settlement 继续遵守 Topology Owner 票已�
 state。Session terminal 后：
 
 - peer identity 继续可读，`state$` 发出 final closed snapshot 后 complete；
-- 已取得及之后取得的 stable proxy 仍属于该 peer，后续 method invocation 异步 reject 并复用
-  sticky final Session reason，绝不自动迁移到一个 fresh Session；
+- 已取得及之后取得的 stable proxy 仍属于该 peer，后续 method invocation 以 Definite
+  Non-Execution 的 `unavailable` 异步 reject，并把 sticky final Session reason 保留为本地
+  `cause`，绝不自动迁移到一个 fresh Session；
 - terminal 后新的 peer-scoped `expose()` 同步拒绝；peer-scoped registry 释放对 borrowed
   implementations 的引用，既有 cleanup 保持幂等；
 - in-flight call 的精确 settlement 留给 call-state/error 票。

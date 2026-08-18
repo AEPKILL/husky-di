@@ -73,6 +73,18 @@ Status: open
   last-valid-resume-wins fencing 安全替换 Connection，双向累计 cursor 和 attempt-bound proof
   恢复 retained sequence，而 attempt/Session-scoped reject、五态 peer projection 与稳定
   object/exposure lifetime 明确了 retry、terminal 和 caller observation 边界。
+- [决定 Call value model、identity、重放与去重](issues/10-decide-call-delivery-state-machine.md)：
+  所有 Protocol 共享 normalized JSON data-tree value model；默认以 direction-local Call Ordinal
+  区分 Logical Call、以独立 `seq` 精确重放 message，在原子 Remote Request Admission 后提供
+  Session-scoped at-most-once dispatch。Recovering 可继续排队，业务幂等留给 application，
+  Message Receipt ACK 配合 `receivedThrough`/call-ordinal high-watermark 回收 replay 与 terminal
+  state，而不永久保留 payload fingerprint 或 per-call tombstone。
+- [决定 unary 调用、取消、错误与终止竞态](issues/11-decide-unary-call-errors-cancellation.md)：
+  validated invocation 先成为无 wire identity 的可撤回 Pending Invocation，只在首次 Adapter
+  `send()` 前原子分配 `callId`/`seq` 并成为 Logical Call；发送前取消本地拦截，发送后采用
+  cooperative cancel。Promise、handler、Session 与 shutdown races 统一 first-terminal-wins，
+  `RpcError` 以 `unavailable`/`outcome-unknown` 等 execution guarantee 分类，late terminal 仅完成
+  ACK/GC，不改写 caller outcome。
 
 ## Not yet specified
 
