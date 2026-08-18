@@ -1,0 +1,6 @@
+interface:
+  display_name: "Ask Clearly"
+  short_description: "Ask in plain language, then example, then precise terms"
+  default_prompt: "Use $ask-clearly whenever you need to ask me a question."
+policy:
+  allow_implicit_invocation: false
