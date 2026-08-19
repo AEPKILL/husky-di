@@ -1,269 +1,205 @@
 ---
 name: husky-di-code-standard
-description: Use when modifying code in the husky-di repository and the change must follow the repository's established naming, placement, structure, header comment, and testing conventions
+description: Apply husky-di repository conventions when adding, editing, moving, renaming, exporting, or testing code; governs semantic placement, file suffixes, symbol names, imports, headers, API boundaries, and verification
 ---
 
 # husky-di Code Standard
 
-## Overview
-
-This skill defines the repository-local code standard for `husky-di`.
-
-Use it alongside other applicable workflow skills. This skill governs repository style and structure, not feature planning, debugging, or test process by itself.
-
-**Core principle:** Prefer existing `husky-di` patterns over generic AI defaults.
-
-## When to Use
-
-Use this skill for any code modification in this repository, including:
-
-- adding files
-- editing files
-- refactoring
-- moving files
-- changing exports
-- changing naming
-- adding or changing tests
-- adding or changing supported scripts and config files
-
-Do not apply it to:
-
-- generated artifacts
-- lock files
-- vendored output
-- files that cannot meaningfully carry these rules
+Prefer established `husky-di` patterns over generic defaults. Treat placement,
+naming, exports, tests, and requirement evidence as one change.
 
 ## Workflow
 
-1. Read neighboring files and the nearest equivalent implementation before writing.
-2. Match the existing directory semantics and file suffix patterns.
-3. Match symbol naming, imports, exports, and file shape.
-4. Update public exports and tests when the change affects them.
-5. Ask before introducing a new repository pattern.
+1. Read the nearest neighboring files and the closest equivalent implementation.
+   Use `packages/core` as the naming reference when the local package has no
+   precedent.
+2. Classify every changed file by role and, when useful, by domain. Confirm that
+   its directory and suffix agree before editing implementation details.
+3. Match local symbol names, imports, exports, headers, and file shape.
+4. Propagate moves and renames through source imports, tests, package entrypoints,
+   documentation evidence pointers, and build references. Search for stale names
+   and paths before validation.
+5. Run the repository code-standard checker immediately after structural changes;
+   then run formatting, type checks, and the affected package tests.
 
-## Quick Reference
+Completion requires every changed file to be accounted for, no stale reference to
+a moved path, and all applicable checks to pass.
 
-| Area | Rule |
-| --- | --- |
-| Placement | Reuse existing semantic directories before inventing a new one |
-| File naming | Prefer existing suffixes such as `*.interface.ts`, `*.type.ts`, `*.enum.ts`, `*.factory.ts`, `*.utils.ts`, `*.const.ts`, `*.decorator.ts`, `*.middleware.ts`, `*.exception.ts` |
-| Symbol naming | Classes `PascalCase`, interfaces `I...`, enums `PascalCaseEnum`, factories `createXxx`, private fields `_name` |
-| Imports | Use `import type` for type-only imports; use `@/` inside package source; use package imports across packages |
-| Exports | Prefer named exports; place exported declarations before file-local helpers; update `src/index.ts` for public API changes |
-| Headers | Files that support comments should carry a header with `@overview`, `@author`, and `@created` |
-| Style | Prefer direct, explicit, readable code over speculative abstraction |
-| Exceptions | Keep `biome-ignore` narrow and always explain why |
+## Placement
 
-## Placement Rules
+Organize source by file role first:
 
-Match the existing package structure.
+| Directory | Responsibility | Required suffix or shape |
+| --- | --- | --- |
+| `interfaces` | Structural and behavioral contracts | `*.interface.ts`; interface names start with `I` |
+| `types` | Options, aliases, unions, mapped and conditional types | `*.type.ts` |
+| `impls` | Concrete behavior and stateful implementations | `*.impl.ts` |
+| `factories` | Creation and dependency assembly | `*.factory.ts`; exported functions use `createXxx` |
+| `utils` | Mostly stateless helpers | `*.util.ts` |
+| `constants` or existing `consts` | Shared constants | `*.const.ts` |
+| `enums` | Repository concepts already modeled as enums | `*.enum.ts` |
+| `exceptions` | Custom error classes | `*.exception.ts` |
+| `decorators` | Decorator functions | `*.decorator.ts` |
+| `middlewares` | Middleware implementations | `*.middleware.ts` |
+| `shared` | Intentionally shared references, instances, or state | Match the contained role |
+| `typings` | Declaration shims | `*.d.ts` |
+| `plugins` | Package-local plugins and adapters | `*.plugin.ts` |
 
-- `interfaces`: structural contracts and public-facing interfaces (files must be `*.interface.ts`, interfaces must start with `I` prefix)
-- `types`: type aliases, unions, mapped types, conditional types, and type helpers (files must be `*.type.ts`)
-- `impls`: concrete implementations
-- `utils`: mostly stateless helper functions
-- `factories`: creation-oriented functions that assemble and return values or objects
-- `constants` or `consts`: shared constants
-- `enums`: named closed sets already modeled as enums in this repository
-- `exceptions`: custom error classes
-- `decorators`: decorator functions
-- `middlewares`: middleware implementations
-- `shared`: intentionally shared refs, instances, and shared state
-- `typings`: declaration files and typing shims
-- `plugins`: package-local plugins and integration adapters
-- `tests`: package-local tests and test helpers
+Use a domain subdirectory when a cohesive subsystem spans several roles. Mirror
+the domain name across the applicable role directories:
 
-If a package already has a directory with clear semantics, reuse it instead of creating a sibling alternative.
+```text
+src/
+├── constants/protocol/
+├── impls/protocol/
+├── interfaces/protocol/
+└── types/protocol/
+```
+
+The role directory remains authoritative: an `impls/**` directory contains only
+`*.impl.ts`; move constants, interfaces, and types to their matching role
+directories even when they belong to the same domain.
 
 Additional placement rules:
 
-- keep package tests under that package's `tests/`
-- keep shared test helpers near the tests they support, such as `tests/test.utils.ts`
-- keep repository-level scripts under `scripts/` unless a skill or package already owns a more local `scripts/` directory
-- keep config files at the nearest package or repository root that already owns the tool configuration
-- `shared` is not a dumping ground; only place intentionally shared state or shared instances there
-- type aliases must be placed in `types/` directory or in `*.type.ts` files
+- Reuse an existing semantic directory before creating a sibling alternative.
+- Keep package tests under that package's `tests/` and shared helpers near their
+  consumers, usually as `test.utils.ts`.
+- Keep repository scripts under `scripts/` unless a package already owns a local
+  scripts directory.
+- Keep configuration at the nearest root that already owns the tool.
+- Use `shared` only for deliberately shared state or instances.
+- Ask before introducing a new directory meaning, suffix, export pattern, or
+  abstraction style that has no repository precedent.
 
-## File Naming
+## Naming And Modeling
 
-Prefer the repository's existing suffixes and shapes.
+- Classes use `PascalCase`; concrete replaceable implementations use `XxxImpl`.
+- Interfaces use the `I` prefix, such as `IRpcCodec`.
+- Construction parameter bags use `CreateXxxOptions`, not an `I...Assembly`
+  interface. Model them as `type` unless they are behavioral contracts.
+- Type aliases use `PascalCase` without an interface prefix.
+- Enums use `PascalCaseEnum`.
+- Factories use `createXxx`; utilities use clear verb-led names such as `getXxx`,
+  `setXxx`, or `resetXxx`.
+- Exported constants in `*.const.ts` use `SCREAMING_SNAKE_CASE`.
+- Private fields use a leading underscore.
+- Generic parameters stay short and conventional unless a longer name improves
+  clarity.
+- Prefer repository vocabulary over generic placeholders.
+- Omit qualifiers such as `Default` when only one canonical implementation exists;
+  retain a qualifier only when it distinguishes real alternatives.
 
-- interfaces: `*.interface.ts`
-- types: `*.type.ts`
-- enums: `*.enum.ts`
-- factories: `*.factory.ts`
-- utilities: `*.util.ts`
-- constants: `*.const.ts`
-- decorators: `*.decorator.ts`
-- middlewares: `*.middleware.ts`
-- exceptions: `*.exception.ts`
-- plugins: `*.plugin.ts`
-- tests: `*.test.ts`
-- shared test helpers: `test.utils.ts`
-- tool configs: preserve tool-native names such as `vitest.config.ts`, `rslib.config.ts`, and `lint-staged.config.js`
-- declaration shims: `*.d.ts`
-- implementation classes in `impls`: `*.impl.ts`
-- package entrypoints: `src/index.ts`
+Use `interface` for behavioral or structural contracts, `type` for data
+composition and type-level modeling, and `class` for concrete behavior or state.
 
-Do not invent new suffixes when an existing suffix already fits.
+## Assembly Boundaries
 
-## Symbol Naming
+When a component is intentionally replaceable at construction time:
 
-- classes: `PascalCase`
-- interfaces in `interfaces/`: must use `I` prefix (e.g., `IContainer`, `IServiceResolver`)
-- type aliases: `PascalCase` without prefix
-- enums: `PascalCaseEnum` (e.g., `LifecycleEnum`, `CodeStandardRuleIdEnum`)
-- factory functions: `createXxx`
-- utility functions: clear verb-led names such as `getXxx`, `setXxx`, `resetXxx`, or `createXxx`
-- service identifiers: repository-style interface names such as `IServiceA`
-- exported constants in `*.const.ts` files: `SCREAMING_SNAKE_CASE` (e.g., `MODULE_ERROR_CODES`)
-- private fields: leading underscore, such as `_name`
-- internal escape hatches: existing `_internalXxx` pattern only when truly internal
-- generic parameters: keep them short and conventional unless a longer name materially improves clarity
-- local names: prefer repository vocabulary over abstract placeholder names
+- put its contract in `interfaces/<domain>/`;
+- put construction inputs in `types/<domain>/` as `CreateXxxOptions`;
+- put the concrete class in `impls/<domain>/` as `XxxImpl`;
+- assemble dependencies in a `*.factory.ts` file;
+- use `readonly` references and snapshot or freeze assembly options when runtime
+  replacement is unsupported;
+- avoid adding setters or exposing internal seams through a package entrypoint.
 
-## Import And Export Rules
+Introduce this structure only for a real assembly, testing, or implementation
+boundary—not for speculative flexibility.
 
-- Use `import type` whenever an import is type-only.
-- Inside package source, prefer the existing `@/` alias conventions.
-- Across packages, prefer package-name imports such as `@husky-di/core`.
-- In tests and tooling, follow the nearest existing local pattern before changing import style.
-- Prefer named exports.
-- Export React component `Props` types so the component contract remains reusable and discoverable from outside the file.
-- In implementation files, place exported declarations near the top of the file, before file-local helper types, constants, and functions when practical.
-- Do not add default exports unless a user explicitly asks for them.
-- Public package APIs should flow through `src/index.ts`.
-- Keep `index.ts` files focused on exports rather than implementation-heavy logic.
-- Do not expose internal implementation files as public API by accident.
+## Imports And Exports
 
-## File Shape And Headers
+- Use `import type` for type-only imports.
+- Use the package's `@/` alias inside package source.
+- Use package imports such as `@husky-di/core` across packages.
+- In tests and tools, follow the nearest stable import style.
+- Prefer named exports and keep exported declarations near the top of the file.
+- Keep `index.ts` focused on exports; route public APIs through the package
+  entrypoint.
+- Keep implementation classes and assembly seams private unless the public API
+  explicitly requires them.
+- When an internal boundary must stay private, preserve or add compile-time
+  negative surface tests.
 
-For files that safely support comments, include a file header that preserves the repository's metadata style.
+## File Shape
 
-Default metadata:
+Files that support comments carry the repository header:
 
-- `@overview`
-- `@author`
-- `@created`
+```ts
+/**
+ * @overview Describe the file's actual responsibility.
+ * @author AEPKILL
+ * @created YYYY-MM-DD HH:mm:ss
+ */
+```
 
-Rules:
-
-- keep the header aligned with the file's real responsibility
-- keep the created timestamp format consistent with the repository's current convention
-- short aggregator files may use shorter headers, but should still preserve the metadata style
-- files that do not support comments, such as `json`, are naturally excluded
-
-Prefer predictable file shape:
-
-- header comment
-- imports
-- exported declarations
-- file-local supporting types, constants, and helpers
-
-Prefer predictable class shape:
-
-- public API first
-- private state next
-- constructor after state
-- public methods before internal helpers
-
-Follow the nearest stable local example when a file already has its own internal ordering pattern.
+Keep the local timestamp format. Use the predictable order: header, imports,
+exported declarations, then file-local support. Within classes, follow the nearest
+stable class ordering; otherwise prefer public API, state, constructor, public
+methods, and internal helpers.
 
 ## Implementation Style
 
-- prefer direct and readable implementation over speculative abstraction
-- favor explicit types
-- use `readonly` and immutability-oriented design where appropriate
-- keep helpers, factories, and implementations in their intended roles
-- comment for intent, constraints, and edge cases
-- do not add AI-style commentary for obvious lines
-- keep comments and error messages linguistically consistent within the local file or package
-- in package source, default to English unless the local file or package clearly establishes a different language pattern
+- Prefer direct, explicit code over speculative abstraction.
+- Use explicit types and immutability where they clarify ownership.
+- Keep factories, implementations, constants, types, and helpers in their own
+  roles.
+- Comment intent, constraints, and edge cases—not obvious operations.
+- Keep source comments and errors in the package's established language, normally
+  English.
+- State what failed and include the relevant object or context in errors.
+- Keep every `biome-ignore` narrow and explain the repository-specific reason.
 
-## Frontend Styling
+For frontend code, prefer existing Tailwind utilities and theme tokens. Add CSS
+only for shared global styling or a case existing utilities cannot express.
 
-- in frontend code, prefer Tailwind utility classes over adding route-local or component-local `.css` files
-- do not introduce extra `.css` stylesheets when Tailwind classes, theme tokens, or existing utilities can express the same design
-- keep `.css` usage narrow and intentional, such as shared global theme tokens, base resets, or cases that Tailwind cannot represent cleanly
-- before adding new stylesheet files or new stylesheet imports, check whether the change can stay inline with the existing Tailwind-based component structure
+## Tests, Specs, And Moves
 
-## Type Modeling
+- Use behavioral `describe` and `it` names; use Arrange/Act/Assert only when it
+  improves readability.
+- Update tests in the same package as the behavior.
+- When public behavior is introduced or expanded, update the normative
+  specification and matching `specification.test.ts` coverage in the same change.
+- When a test file moves without a behavior change, update requirement evidence
+  paths such as `docs/REQUIREMENTS.md`.
+- When public API changes, update package entrypoints and consumer/type-surface
+  tests.
+- After a rename, search the affected package for the old symbol, directory, and
+  filename forms; intentional prose uses must be reviewed rather than blindly
+  replaced.
 
-- use `interface` for structural contracts and public-facing shapes
-- use `type` for unions, utilities, mapped types, conditional types, and composed aliases
-- use `class` for behavior, state, or concrete implementations
-- use `enum` when the repository already models the concept as a named closed set
-- keep public APIs strongly typed and explicit
+## Validation
 
-## Errors And Exceptions
+Run structural checks before broad tests so placement errors fail early:
 
-- say what failed
-- include the object or context that failed
-- avoid vague wording
-- keep error wording aligned with existing repository usage
+```bash
+pnpm --filter @husky-di/scripts check:code-standard
+pnpm exec biome check <changed-paths>
+```
 
-## biome-ignore
-
-- prefer the narrowest possible ignore scope
-- only ignore a rule for a real repository-specific reason
-- always explain why the ignore exists
-- do not leave placeholder explanations
-
-## Tests And Public API
-
-- treat tests as part of the repository style
-- use behavioral `describe` and `it` names
-- use `Arrange / Act / Assert` when it improves clarity
-- keep test helpers near the package they support
-- if behavior changes, update or add tests in the same package
-- if public API changes, update `src/index.ts`
-
-## New Patterns
-
-Reuse existing repository patterns by default.
-
-If the current repository patterns do not naturally fit the new problem, or reusing them would damage the existing structure, stop and ask before introducing:
-
-- a new directory meaning
-- a new file suffix
-- a new export pattern
-- a new abstraction style
-
-Do not bend an old pattern into a bad fit just to avoid asking.
+Then run the affected package's typecheck, build when declarations or package
+surfaces changed, and its complete test script. Finish with `git diff --check` and
+confirm generated artifacts were not added.
 
 ## Final Check
 
-Before finishing, confirm:
+- Every file sits in the correct role and optional domain directory.
+- Every filename suffix agrees with its role directory.
+- Symbols and construction options follow local naming.
+- Imports, entrypoints, and private/public boundaries are correct.
+- Headers describe current responsibilities.
+- Tests, specs, and requirement evidence match the change.
+- Searches find no stale moved names or paths.
+- Code-standard, formatting, type, and behavior checks pass.
 
-- I checked neighboring files first
-- the file is in the right directory
-- the file name matches an existing repository pattern
-- symbol names match local conventions
-- imports and exports match local conventions
-- the file header is present when comments are supported
-- I did not add unnecessary abstraction
-- tests and public exports were updated when needed
-
-## Common Mistakes
-
-- inventing a new suffix when an existing one already fits
-- adding a default export
-- putting implementation-heavy logic into `index.ts`
-- placing implementation-heavy logic in `utils`
-- skipping the file header on a file that supports comments
-- writing obvious AI commentary
-- using `biome-ignore` without a real reason
-- forgetting to update `src/index.ts` after a public API change
-- mixing language styles in the same source file without local precedent
-
-## Local Examples
-
-Good local examples to follow:
+## Local References
 
 - `packages/core/src/interfaces/container.interface.ts`
 - `packages/core/src/factories/container.factory.ts`
+- `packages/core/src/impls/container.impl.ts`
+- `packages/core/src/types/resolve-helper-options.type.ts`
 - `packages/core/src/enums/lifecycle.enum.ts`
 - `packages/core/src/exceptions/resolve.exception.ts`
-- `packages/core/src/impls/container.impl.ts`
 - `packages/core/src/utils/container.util.ts`
 - `packages/decorator/src/middlewares/decorator.middleware.ts`
