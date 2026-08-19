@@ -4,7 +4,7 @@
  * @created 2026-08-11 21:07:13
  */
 
-export { RpcError, type RpcErrorCode } from "@/exceptions/rpc-error.exception";
+export { RpcException } from "@/exceptions/rpc.exception";
 export { createRemoteServiceDescriptor } from "@/factories/remote-service-descriptor.factory";
 export { createRpcAcceptor } from "@/factories/rpc-acceptor.factory";
 export { createRpcConnector } from "@/factories/rpc-connector.factory";
@@ -42,3 +42,4 @@ export type {
 	RpcPeerState,
 	RpcTopologyCloseReason,
 } from "@/types/rpc-caller.type";
+export type { RpcExceptionCode } from "@/types/rpc-exception.type";

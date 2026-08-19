@@ -209,8 +209,8 @@ export interface IRpcRemoteError {
 	readonly message: string;
 }
 
-export declare class RpcError extends Error {
-	private constructor();
+export declare class RpcException extends Error {
+	constructor(code: RpcErrorCodeEnum);
 
 	readonly code: RpcErrorCodeEnum;
 	readonly remote?: IRpcRemoteError;
@@ -225,7 +225,7 @@ export type RpcPeerResult<T> =
 	| {
 			readonly peer: IRpcPeer;
 			readonly status: "rejected";
-			readonly reason: RpcError;
+			readonly reason: RpcException;
 	  };
 
 type RemoteGroupMethod<F, Definition> = F extends (
@@ -262,7 +262,7 @@ export type RpcEvent =
 	| {
 			readonly type: "topology-closed";
 			readonly outcome: "failed";
-			readonly error: RpcError;
+			readonly error: RpcException;
 	  }
 	| {
 			readonly type: "peer-opened";
@@ -285,7 +285,7 @@ export type RpcEvent =
 			readonly type: "peer-closed";
 			readonly peer: IRpcPeer;
 			readonly outcome: "failed";
-			readonly error: RpcError;
+			readonly error: RpcException;
 	  }
 	| {
 			readonly type: "call-started";
@@ -324,7 +324,7 @@ export type RpcEvent =
 			/** See call-started args; repeated so this hot event is self-contained. */
 			readonly args: readonly unknown[];
 			readonly outcome: "rejected";
-			readonly error: RpcError;
+			readonly error: RpcException;
 	  };
 
 // ── Transport Adapter seam ──────────────────────────────────────────────

@@ -7,7 +7,7 @@
 import type { Cleanup } from "@husky-di/core";
 import type { Observable } from "rxjs";
 
-import type { RpcError } from "@/exceptions/rpc-error.exception";
+import type { RpcException } from "@/exceptions/rpc.exception";
 import type { RpcCallFailure } from "@/interfaces/protocol/rpc-protocol.interface";
 import type { IRemoteServiceDescriptor } from "@/interfaces/remote-service-descriptor.interface";
 import type {
@@ -41,7 +41,7 @@ export type RpcPeerResult<T> =
 	| {
 			readonly peer: IRpcPeer;
 			readonly status: "rejected";
-			readonly reason: RpcError;
+			readonly reason: RpcException;
 	  };
 
 type RemoteGroupMethod<F, Definition> = F extends (

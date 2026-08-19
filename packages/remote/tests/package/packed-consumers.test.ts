@@ -214,7 +214,8 @@ import * as protocol from "@husky-di/remote/protocol";
 import * as transport from "@husky-di/remote/transport";
 import * as conformance from "@husky-di/remote/conformance";
 
-assert.deepEqual(Object.keys(root).sort(), ["RpcError", "createRemoteServiceDescriptor", "createRpcAcceptor", "createRpcConnector"]);
+assert.deepEqual(Object.keys(root).sort(), ["RpcException", "createRemoteServiceDescriptor", "createRpcAcceptor", "createRpcConnector"]);
+assert.equal(new root.RpcException("unavailable").code, "unavailable");
 assert.deepEqual(Object.keys(protocol), []);
 assert.deepEqual(Object.keys(transport), []);
 assert.deepEqual(Object.keys(conformance).sort(), ["runRpcAcceptorAdapterConformance", "runRpcConnectorAdapterConformance", "runRpcProtocolConformance"]);
@@ -242,7 +243,8 @@ const protocol = require("@husky-di/remote/protocol");
 const transport = require("@husky-di/remote/transport");
 const conformance = require("@husky-di/remote/conformance");
 
-assert.deepEqual(Object.keys(root).sort(), ["RpcError", "createRemoteServiceDescriptor", "createRpcAcceptor", "createRpcConnector"]);
+assert.deepEqual(Object.keys(root).sort(), ["RpcException", "createRemoteServiceDescriptor", "createRpcAcceptor", "createRpcConnector"]);
+assert.equal(new root.RpcException("unavailable").code, "unavailable");
 assert.deepEqual(Object.keys(protocol), []);
 assert.deepEqual(Object.keys(transport), []);
 assert.deepEqual(Object.keys(conformance).sort(), ["runRpcAcceptorAdapterConformance", "runRpcConnectorAdapterConformance", "runRpcProtocolConformance"]);
@@ -277,11 +279,11 @@ assert.throws(
 		);
 		writeFileSync(
 			resolve(consumerRoot, "index.ts"),
-			`import { RpcError, createRemoteServiceDescriptor, createRpcAcceptor, createRpcConnector } from "@husky-di/remote";
+			`import { RpcException, createRemoteServiceDescriptor, createRpcAcceptor, createRpcConnector } from "@husky-di/remote";
 import type {
   IRemoteServiceDescriptor, IRpcPeer, IRpcConnector, IRpcAcceptor, RpcPeerResult,
   RpcPeerState, RpcConnectorState, RpcAcceptorListenerState, RpcAcceptorState,
-  RpcTopologyCloseReason, RpcCallDirection, RpcEvent, RpcErrorCode,
+  RpcTopologyCloseReason, RpcCallDirection, RpcEvent, RpcExceptionCode,
   RpcConnectorOptions, RpcAcceptorOptions, RpcConnectorRuntimePolicyOptions,
   RpcAcceptorRuntimePolicyOptions, IRpcConnection as RootConnection,
   IRpcConnectorAdapter, IRpcAcceptorAdapter, IRpcProtocol as RootProtocol,
@@ -334,16 +336,17 @@ const protocolSharedIdentity: Equal<
   IRpcApplicationRecord & IRpcProtocolRuntimePolicy & RpcApplicationValue,
   ProtocolApplicationRecord & ProtocolRuntimePolicy & ProtocolApplicationValue
 > = true;
+const callerException = new RpcException("unavailable");
 void [
-  RpcError, createRemoteServiceDescriptor, createRpcAcceptor, createRpcConnector,
-  runRpcAcceptorAdapterConformance, runRpcConnectorAdapterConformance,
-  runRpcProtocolConformance, rootProtocolIdentity, connectionIdentity,
-  adapterIdentity, protocolSharedIdentity,
+	RpcException, createRemoteServiceDescriptor, createRpcAcceptor, createRpcConnector,
+	runRpcAcceptorAdapterConformance, runRpcConnectorAdapterConformance,
+	runRpcProtocolConformance, rootProtocolIdentity, connectionIdentity,
+	adapterIdentity, protocolSharedIdentity, callerException,
 ];
 type Inventory = [
   IRemoteServiceDescriptor<unknown, never>, IRpcPeer, IRpcConnector, IRpcAcceptor,
   RpcPeerResult<unknown>, RpcPeerState, RpcConnectorState, RpcAcceptorListenerState,
-  RpcAcceptorState, RpcTopologyCloseReason, RpcCallDirection, RpcEvent, RpcErrorCode,
+  RpcAcceptorState, RpcTopologyCloseReason, RpcCallDirection, RpcEvent, RpcExceptionCode,
   RpcConnectorOptions, RpcAcceptorOptions, RpcConnectorRuntimePolicyOptions,
   RpcAcceptorRuntimePolicyOptions, IRpcConnectorAdapter, IRpcAcceptorAdapter,
   IRpcProtocolRuntimePolicy, IRpcApplicationRecord, RpcApplicationValue,

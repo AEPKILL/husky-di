@@ -11,7 +11,7 @@ import {
 	type Subscription,
 } from "rxjs";
 
-import { createRpcError } from "@/exceptions/rpc-error.exception";
+import { createRpcException } from "@/factories/rpc-exception.factory";
 import { RpcPeerImpl } from "@/impls/rpc-peer.impl";
 import type {
 	IRpcProtocolConnectorRuntime,
@@ -136,7 +136,7 @@ export class RpcConnectorImpl implements IRpcConnector {
 			this.#attempt !== undefined ||
 			this.#ownedConnections.length >= this.#connectionLimit
 		) {
-			return Promise.reject(createRpcError("unavailable"));
+			return Promise.reject(createRpcException("unavailable"));
 		}
 		if (typeof adapter !== "object" || adapter === null) {
 			return Promise.reject(new TypeError("adapter must be an object."));
@@ -299,7 +299,7 @@ export class RpcConnectorImpl implements IRpcConnector {
 				if (attempt.ownerAborted) {
 					throw error;
 				}
-				throw createRpcError(
+				throw createRpcException(
 					"unavailable",
 					error instanceof Error ? error : undefined,
 				);
@@ -508,7 +508,7 @@ export class RpcConnectorImpl implements IRpcConnector {
 				this.#finishFailedAttempt(
 					attempt,
 					true,
-					createRpcError("protocol", error),
+					createRpcException("protocol", error),
 				);
 				return;
 			}
@@ -639,7 +639,7 @@ export class RpcConnectorImpl implements IRpcConnector {
 			reason === "recovery-expired" ||
 			reason === "counter-exhaustion"
 		) {
-			const error = createRpcError("unavailable", cause);
+			const error = createRpcException("unavailable", cause);
 			finalState = Object.freeze({
 				status: "closed",
 				outcome: "failed",
@@ -653,7 +653,7 @@ export class RpcConnectorImpl implements IRpcConnector {
 				reason,
 			};
 		} else {
-			const error = createRpcError("protocol", cause);
+			const error = createRpcException("protocol", cause);
 			finalState = Object.freeze({
 				status: "closed",
 				outcome: "failed",
@@ -863,7 +863,7 @@ export class RpcConnectorImpl implements IRpcConnector {
 				status: "closed",
 				outcome: "failed",
 				reason: "counter-exhaustion",
-				error: createRpcError("unavailable"),
+				error: createRpcException("unavailable"),
 			});
 			event = {
 				type: "peer-closed",

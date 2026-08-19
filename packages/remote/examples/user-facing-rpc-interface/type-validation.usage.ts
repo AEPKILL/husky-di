@@ -25,8 +25,9 @@ import {
 	type IRpcConnector,
 	type IRpcConnectorAdapter,
 	type IRpcPeer,
-	RpcError,
+	RpcErrorCodeEnum,
 	type RpcEvent,
+	RpcException,
 	type RpcPeerResult,
 } from "./rpc-interface";
 
@@ -269,7 +270,7 @@ export function typeValidationUsage(): void {
 		typeValidationEvent.type === "topology-closed" &&
 		typeValidationEvent.outcome === "failed"
 	) {
-		const terminalError: RpcError = typeValidationEvent.error;
+		const terminalError: RpcException = typeValidationEvent.error;
 		void terminalError;
 	}
 	if (
@@ -305,8 +306,7 @@ export function typeValidationUsage(): void {
 	typeValidationConnection.message$.next(Uint8Array.of(0));
 	// @ts-expect-error Protocol is an opaque value supplied by a conforming package.
 	createRpcConnector({ protocol: {} });
-	// @ts-expect-error RpcError instances are created by the RPC Implementation.
-	new RpcError();
+	new RpcException(RpcErrorCodeEnum.unavailable);
 	// Factories create cold Topology Owners without starting I/O.
 	createRpcConnector({});
 	createRpcAcceptor({ protocol: customProtocol });

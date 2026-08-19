@@ -6,9 +6,8 @@
 
 import type { Cleanup } from "@husky-di/core";
 import { Observable, Subject, type Subscription } from "rxjs";
-
-import { createRpcError } from "@/exceptions/rpc-error.exception";
 import { getRemoteServiceDescriptorData } from "@/factories/remote-service-descriptor.factory";
+import { createRpcException } from "@/factories/rpc-exception.factory";
 import {
 	type RpcPeerCommittedInvocation,
 	RpcPeerImpl,
@@ -163,7 +162,7 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 		implementation: NoInfer<RemoteServiceImplementation<T, Definitions>>,
 	): Cleanup {
 		if (this.state.status !== "active") {
-			throw createRpcError("unavailable");
+			throw createRpcException("unavailable");
 		}
 		return installRpcExposure(
 			descriptor,
@@ -192,7 +191,7 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 			this.#listenerCleanupBarrier !== undefined ||
 			this.#overflowConnection !== undefined
 		) {
-			return Promise.reject(createRpcError("unavailable"));
+			return Promise.reject(createRpcException("unavailable"));
 		}
 		if (typeof adapter !== "object" || adapter === null) {
 			return Promise.reject(new TypeError("adapter must be an object."));
@@ -337,7 +336,7 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 			});
 			if (!attempt.ready) {
 				attempt.abortController.abort();
-				attempt.reject(createRpcError("unavailable"));
+				attempt.reject(createRpcException("unavailable"));
 			}
 		} else {
 			const error =
@@ -345,7 +344,7 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 			this.#commitListener({ status: "stopped", outcome: "failed", error });
 			if (!attempt.ready) {
 				attempt.abortController.abort();
-				attempt.reject(createRpcError("unavailable", error));
+				attempt.reject(createRpcException("unavailable", error));
 			}
 		}
 	}
@@ -569,7 +568,7 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 	): Promise<readonly RpcPeerResult<unknown>[]> {
 		const prepared = prepareRpcInvocationArguments(cancelable, actualArguments);
 		if (this.state.status !== "active") {
-			return Promise.reject(createRpcError("unavailable"));
+			return Promise.reject(createRpcException("unavailable"));
 		}
 		const args = normalizeRpcApplicationArguments(
 			prepared.applicationArguments,
@@ -596,7 +595,7 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 					for (const retained of reservations) {
 						retained.release();
 					}
-					return Promise.reject(createRpcError("unavailable"));
+					return Promise.reject(createRpcException("unavailable"));
 				}
 				reservations.push(reservation);
 			}
@@ -843,7 +842,7 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 					status: "closed",
 					outcome: "failed",
 					reason: "counter-exhaustion",
-					error: createRpcError("unavailable"),
+					error: createRpcException("unavailable"),
 				});
 				closeEvents.push({
 					type: "peer-closed",
@@ -1195,7 +1194,7 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 				status: "closed",
 				outcome: "failed",
 				reason,
-				error: createRpcError("unavailable", cause),
+				error: createRpcException("unavailable", cause),
 			});
 			closeEvent = {
 				type: "peer-closed",
@@ -1212,7 +1211,7 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 				status: "closed",
 				outcome: "failed",
 				reason,
-				error: createRpcError("protocol", cause),
+				error: createRpcException("protocol", cause),
 			});
 			closeEvent = {
 				type: "peer-closed",
@@ -1258,7 +1257,7 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 			// The original shared Protocol fault remains authoritative.
 		}
 
-		const faultError = createRpcError("protocol", error);
+		const faultError = createRpcException("protocol", error);
 		const terminalPeers = [...this.#sessions.values()];
 		const membershipChanged = this.#peers.length > 0;
 		this.#sessions.clear();

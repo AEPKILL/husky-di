@@ -7,7 +7,7 @@
  * @created 2026-08-19 00:00:00
  */
 
-import { createServiceIdentifier } from "@husky-di/core";
+import { CodedException, createServiceIdentifier } from "@husky-di/core";
 import { Observable, Subject } from "rxjs";
 import { describe, expect, it, vi } from "vitest";
 
@@ -23,8 +23,8 @@ import {
 	type IRpcConnector,
 	type IRpcProtocol,
 	type RpcConnectorRuntimePolicyOptions,
-	RpcError,
 	type RpcEvent,
+	RpcException,
 } from "../src/index";
 import type {
 	IRpcConnection,
@@ -1285,10 +1285,17 @@ describe("Adapter startup and Protocol handoff", () => {
 });
 
 describe("custom Protocol outgoing invocations", () => {
-	it("RPC-CALL-009 keeps RpcError construction Framework-private at runtime", () => {
-		expect(() => Reflect.construct(RpcError, ["unavailable"])).toThrow(
-			TypeError,
-		);
+	it("RPC-CALL-009 exposes a caller-constructible coded RpcException", () => {
+		const cause = new Error("trusted local failure");
+		const exception = new RpcException("unavailable", cause);
+
+		expect(exception).toBeInstanceOf(CodedException);
+		expect(exception).toMatchObject({
+			name: "RpcException",
+			code: "unavailable",
+			detail: "RPC failed.",
+			cause,
+		});
 	});
 
 	it("RPC-BASE-001 RPC-CALL-007 does not retry an admitted identity after its evidence is lost", async () => {
@@ -1329,9 +1336,11 @@ describe("custom Protocol outgoing invocations", () => {
 		});
 
 		const admittedError = await admitted.catch((error: unknown) => error);
-		expect(admittedError).toBeInstanceOf(RpcError);
+		expect(admittedError).toBeInstanceOf(RpcException);
+		expect(admittedError).toBeInstanceOf(CodedException);
 		expect(admittedError).toMatchObject({
 			code: "outcome-unknown",
+			detail: "RPC failed.",
 			cause: undefined,
 		});
 		expect(admittedError).not.toHaveProperty("details");
@@ -1682,7 +1691,7 @@ describe("stable remote service groups", () => {
 		if (results[1]?.status !== "rejected") {
 			throw new Error("Expected the second group child to reject.");
 		}
-		expect(results[1].reason).toBeInstanceOf(RpcError);
+		expect(results[1].reason).toBeInstanceOf(RpcException);
 	});
 
 	it("RPC-GROUP-002 rolls back every reservation when one child lacks capacity", async () => {

@@ -4,7 +4,7 @@
  * @created 2026-08-19 00:00:00
  */
 
-import type { RpcError } from "@/exceptions/rpc-error.exception";
+import type { RpcException } from "@/exceptions/rpc.exception";
 import type {
 	IRpcProtocol,
 	IRpcProtocolRuntimePolicy,
@@ -48,13 +48,13 @@ export type RpcPeerState =
 			readonly status: "closed";
 			readonly outcome: "failed";
 			readonly reason: RpcUnavailableSessionFailureReason;
-			readonly error: RpcError & { readonly code: "unavailable" };
+			readonly error: RpcException & { readonly code: "unavailable" };
 	  }
 	| {
 			readonly status: "closed";
 			readonly outcome: "failed";
 			readonly reason: RpcProtocolSessionFailureReason;
-			readonly error: RpcError & { readonly code: "protocol" };
+			readonly error: RpcException & { readonly code: "protocol" };
 	  };
 
 export type RpcTopologyCloseReason = RpcSessionCloseReason | "cleanup-failed";
@@ -69,13 +69,13 @@ type RpcConnectorClosedState =
 			readonly status: "closed";
 			readonly outcome: "failed";
 			readonly reason: RpcUnavailableSessionFailureReason;
-			readonly error: RpcError & { readonly code: "unavailable" };
+			readonly error: RpcException & { readonly code: "unavailable" };
 	  }
 	| {
 			readonly status: "closed";
 			readonly outcome: "failed";
 			readonly reason: RpcProtocolSessionFailureReason;
-			readonly error: RpcError & { readonly code: "protocol" };
+			readonly error: RpcException & { readonly code: "protocol" };
 	  }
 	| {
 			readonly status: "closed";
@@ -118,7 +118,7 @@ type RpcAcceptorClosedState =
 			readonly status: "closed";
 			readonly outcome: "failed";
 			readonly reason: RpcProtocolFaultReason;
-			readonly error: RpcError & { readonly code: "protocol" };
+			readonly error: RpcException & { readonly code: "protocol" };
 	  }
 	| {
 			readonly status: "closed";

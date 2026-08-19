@@ -254,7 +254,7 @@ describe("Framework requirement evidence", () => {
 
 	it("RPC-BASE-003 RPC-EVENT-005 RPC-POLICY-004 keeps private machinery out of public runtime surfaces", () => {
 		expect(Object.keys(rootEntry).sort()).toEqual([
-			"RpcError",
+			"RpcException",
 			"createRemoteServiceDescriptor",
 			"createRpcAcceptor",
 			"createRpcConnector",

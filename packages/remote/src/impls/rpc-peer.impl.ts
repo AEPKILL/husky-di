@@ -6,9 +6,8 @@
 
 import type { Cleanup } from "@husky-di/core";
 import { Observable, Subject } from "rxjs";
-
-import { createRpcError } from "@/exceptions/rpc-error.exception";
 import { getRemoteServiceDescriptorData } from "@/factories/remote-service-descriptor.factory";
+import { createRpcException } from "@/factories/rpc-exception.factory";
 import type {
 	IRpcApplicationArgumentsSnapshot,
 	IRpcApplicationSnapshot,
@@ -297,7 +296,7 @@ export class RpcPeerImpl implements IRpcPeer {
 			this.state.status === "draining" ||
 			this.state.status === "closed"
 		) {
-			throw createRpcError("unavailable");
+			throw createRpcException("unavailable");
 		}
 		return installRpcExposure(
 			descriptor,
@@ -329,7 +328,7 @@ export class RpcPeerImpl implements IRpcPeer {
 				this.state.status !== "recovering") ||
 			this.#session === undefined
 		) {
-			return Promise.reject(createRpcError("unavailable"));
+			return Promise.reject(createRpcException("unavailable"));
 		}
 		const args = normalizeRpcApplicationArguments(
 			prepared.applicationArguments,
@@ -345,7 +344,7 @@ export class RpcPeerImpl implements IRpcPeer {
 			return Promise.reject(error);
 		}
 		if (reservation === undefined) {
-			return Promise.reject(createRpcError("unavailable"));
+			return Promise.reject(createRpcException("unavailable"));
 		}
 
 		let invocation: RpcPeerCommittedInvocation;
@@ -510,7 +509,7 @@ export class RpcPeerImpl implements IRpcPeer {
 				code: outcome.code,
 				durationMs,
 			});
-			rejectResult(createRpcError(outcome.code));
+			rejectResult(createRpcException(outcome.code));
 		};
 
 		let protocolInvocation: ReturnType<typeof reservation.commit>;
@@ -887,7 +886,7 @@ export class RpcPeerImpl implements IRpcPeer {
 		const cause =
 			error instanceof Error ? error : new Error("Protocol invocation failed.");
 		this.#onProtocolFault(cause);
-		return createRpcError("protocol", cause);
+		return createRpcException("protocol", cause);
 	}
 
 	/** Package-private Session attachment retained across bindings. */

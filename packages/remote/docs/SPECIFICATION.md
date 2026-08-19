@@ -97,10 +97,10 @@ assets, `docs/SPECIFICATION.md`, README, CHANGELOG, LICENSE, and package metadat
 **MUST** resolve from the installed tarball without workspace source or examples.
 
 **RPC-PKG-007 — Root inventory.** The root **MUST** export runtime values
-`createRemoteServiceDescriptor`, `createRpcConnector`, `createRpcAcceptor`, and `RpcError`; caller types
+`createRemoteServiceDescriptor`, `createRpcConnector`, `createRpcAcceptor`, and `RpcException`; caller types
 `IRemoteServiceDescriptor`, `IRpcPeer`, `IRpcConnector`, `IRpcAcceptor`, `RpcPeerResult`, `RpcPeerState`,
 `RpcConnectorState`, `RpcAcceptorListenerState`, `RpcAcceptorState`, `RpcTopologyCloseReason`,
-`RpcCallDirection`, `RpcEvent`, `RpcErrorCode`, `RpcConnectorOptions`, `RpcAcceptorOptions`,
+`RpcCallDirection`, `RpcEvent`, `RpcExceptionCode`, `RpcConnectorOptions`, `RpcAcceptorOptions`,
 `RpcConnectorRuntimePolicyOptions`, and `RpcAcceptorRuntimePolicyOptions`; Transport types `IRpcConnection`,
 `IRpcConnectorAdapter`, and `IRpcAcceptorAdapter`; and shared SPI types `IRpcProtocol`,
 `IRpcProtocolRuntimePolicy`, `IRpcApplicationRecord`, `RpcApplicationValue`, `RpcCallFailure`,
@@ -390,17 +390,16 @@ export type RpcCallFailure =
   | "unknown-service"
   | "unknown-method";
 
-export type RpcErrorCode = RpcCallFailure | "protocol";
+export type RpcExceptionCode = RpcCallFailure | "protocol";
 
-export class RpcError extends Error {
-  private constructor();
-  readonly code: RpcErrorCode;
+export class RpcException extends CodedException<RpcExceptionCode> {
+  constructor(code: RpcExceptionCode, cause?: unknown);
   readonly cause?: unknown;
 }
 
 export type RpcPeerResult<T> =
   | { readonly peer: IRpcPeer; readonly status: "fulfilled"; readonly value: T }
-  | { readonly peer: IRpcPeer; readonly status: "rejected"; readonly reason: RpcError };
+  | { readonly peer: IRpcPeer; readonly status: "rejected"; readonly reason: RpcException };
 
 export interface IRpcPeer {
   readonly state: RpcPeerState;
@@ -477,7 +476,7 @@ export function createRpcAcceptor(options?: RpcAcceptorOptions): IRpcAcceptor;
 **RPC-API-001 — Factories.** Owner factories **MUST** synchronously snapshot and validate a closed options and
 policy schema. Invalid values, unknown keys, non-positive/non-finite/non-safe-integer limits, or invalid
 cross-field combinations **MUST** throw `TypeError` before an Owner exists. A custom Protocol construction throw
-or invalid runtime **MUST** synchronously throw Framework `RpcError` with code `protocol` and may preserve only
+or invalid runtime **MUST** synchronously throw Framework `RpcException` with code `protocol` and may preserve only
 the trusted local cause.
 
 **RPC-API-002 — Stable peer.** A Connector **MUST** expose one stable `peer` before its first connection. An
@@ -498,7 +497,7 @@ membership, and durable observation data atomically before flushing notification
 emit call terminal observations before peer terminal observations, peer terminal observations before topology
 terminal observation, and settle public Promises last.
 
-**RPC-API-006 — Exposure gate.** `expose()` **MUST** synchronously throw `RpcError(unavailable)` when its peer is
+**RPC-API-006 — Exposure gate.** `expose()` **MUST** synchronously throw `RpcException(unavailable)` when its peer is
 draining/closed or its Owner is draining/closing/closed. A peer in `unbound`, `connecting`, `connected`, or
 `recovering` **MAY** accept Session-scoped exposure. Owner-scoped Acceptor exposure applies to future and current
 peers.
@@ -517,10 +516,10 @@ export type RpcPeerState =
   | { readonly status: "closed"; readonly outcome: "normal"; readonly reason:
       "graceful-shutdown" | "forced-close" | "shutdown-deadline" | "remote-terminated" }
   | { readonly status: "closed"; readonly outcome: "failed"; readonly reason:
-      "recovery-expired" | "counter-exhaustion"; readonly error: RpcError & { readonly code: "unavailable" } }
+      "recovery-expired" | "counter-exhaustion"; readonly error: RpcException & { readonly code: "unavailable" } }
   | { readonly status: "closed"; readonly outcome: "failed"; readonly reason:
       "continuity-failure" | "protocol-fault" | "resource-fault";
-      readonly error: RpcError & { readonly code: "protocol" } };
+      readonly error: RpcException & { readonly code: "protocol" } };
 
 type RpcNormalSessionCloseReason =
   | "graceful-shutdown"
@@ -542,10 +541,10 @@ type RpcConnectorClosedState =
       readonly reason: RpcNormalSessionCloseReason }
   | { readonly status: "closed"; readonly outcome: "failed";
       readonly reason: RpcUnavailableSessionFailureReason;
-      readonly error: RpcError & { readonly code: "unavailable" } }
+      readonly error: RpcException & { readonly code: "unavailable" } }
   | { readonly status: "closed"; readonly outcome: "failed";
       readonly reason: RpcProtocolSessionFailureReason;
-      readonly error: RpcError & { readonly code: "protocol" } }
+      readonly error: RpcException & { readonly code: "protocol" } }
   | { readonly status: "closed"; readonly outcome: "failed";
       readonly reason: "cleanup-failed"; readonly error: Error };
 
@@ -568,7 +567,7 @@ type RpcAcceptorClosedState =
       readonly reason: "graceful-shutdown" | "forced-close" | "shutdown-deadline" }
   | { readonly status: "closed"; readonly outcome: "failed";
       readonly reason: "protocol-fault" | "resource-fault";
-      readonly error: RpcError & { readonly code: "protocol" } }
+      readonly error: RpcException & { readonly code: "protocol" } }
   | { readonly status: "closed"; readonly outcome: "failed";
       readonly reason: "cleanup-failed"; readonly error: Error };
 
@@ -586,8 +585,8 @@ Fresh bootstrap failure **MUST** permit `connecting -> unbound` without replacin
 but **MUST NOT** be eligible for a new group call.
 
 **RPC-STATE-002 — Error identity.** `recovery-expired` and `counter-exhaustion` **MUST** use
-`RpcError(unavailable)`; `continuity-failure`, `protocol-fault`, and `resource-fault` **MUST** use
-`RpcError(protocol)`. Connector topology state **MUST** reuse its unique peer's Error object. Acceptor peer
+`RpcException(unavailable)`; `continuity-failure`, `protocol-fault`, and `resource-fault` **MUST** use
+`RpcException(protocol)`. Connector topology state **MUST** reuse its unique peer's Error object. Acceptor peer
 failure **MUST NOT** fail healthy siblings or the Owner.
 
 **RPC-STATE-003 — Cleanup precedence.** Owner cleanup rejection or timeout **MUST** set only the Owner's final
@@ -617,8 +616,8 @@ external listener and fan cancellation out to its children.
 **RPC-CALL-004 — Preflight order.** Invocation preflight **MUST** be: control shape, initially aborted, owner/peer
 availability, Application Value snapshot, then capacity. Failure before capacity **MUST** create no Pending
 Invocation, wire identity, child, or call event. Invalid signal/value **MUST** reject `TypeError`; initially
-aborted **MUST** reject `RpcError(canceled)`; unavailable state/capacity **MUST** reject
-`RpcError(unavailable)`.
+aborted **MUST** reject `RpcException(canceled)`; unavailable state/capacity **MUST** reject
+`RpcException(unavailable)`.
 
 **RPC-CALL-005 — Pending and admission.** A valid invocation **MUST** first become a retractable Pending
 Invocation without `callId` or `seq`. Outgoing Admission **MUST** atomically allocate identity, retain the
@@ -633,7 +632,7 @@ Owner force **MUST** compete through one first-terminal-wins slot. Late messages
 **RPC-CALL-007 — Error guarantees.** `unavailable` **MUST** mean Definite Non-Execution. `outcome-unknown`
 **MUST** be used only for an outgoing call that crossed Admission and then lost authoritative outcome evidence.
 `canceled` **MUST NOT** imply rollback. Unknown service/method and handler failure **MUST** remain call-scoped.
-Remote messages, details, stack, cause, and thrown objects **MUST NOT** enter public `RpcError`.
+Remote messages, details, stack, cause, and thrown objects **MUST NOT** enter public `RpcException`.
 
 **RPC-CALL-008 — Handler scheduling.** Remote Request Admission **MUST** durably capture the exposure and queue a
 handler job without dispatching inline. The Framework **MUST** acquire both Session and Owner permits before
@@ -641,10 +640,12 @@ calling the captured handler. Cancellation/force that wins while queued **MUST**
 handler that ignores cancellation **MUST** continue occupying its finite permit until its real settlement, with
 late result consumed but unable to change the selected terminal.
 
-**RPC-CALL-009 — Public error object.** Caller **MUST NOT** be able to construct `RpcError`; `code` **MUST** be
-its only stable branch field and message text **MUST NOT** be normative. A trusted local Adapter/Protocol Error
-**MAY** be retained as standard `cause`. A rejected group entry **MUST** preserve the same child `RpcError`
-identity selected by that invocation; call events **MUST** copy only the safe code, never the Error object.
+**RPC-CALL-009 — Public error object.** `RpcException` **MUST** extend `CodedException<RpcExceptionCode>` and
+**MUST** expose a constructor accepting a code and optional cause. The package **MUST NOT** export its internal
+construction factory. `code` **MUST** be its only stable branch field; inherited `detail` **MUST NOT** contain
+remote data, and message text **MUST NOT** be normative. A trusted local Adapter/Protocol Error **MAY** be
+retained as standard `cause`. A rejected group entry **MUST** preserve the same child `RpcException` identity
+selected by that invocation; call events **MUST** copy only the safe code, never the Error object.
 
 **RPC-GROUP-001 — Snapshot.** Each group method invocation **MUST** run common preflight and normalization once,
 then take one immutable, membership-order snapshot of peers whose state is `connected` or `recovering`. An empty
@@ -657,7 +658,7 @@ children **MUST** start in snapshot order.
 
 **RPC-GROUP-003 — Results.** The group Promise **MUST** fulfill only after every child settles, with a frozen
 snapshot-order array of `{ peer, status: "fulfilled", value }` or
-`{ peer, status: "rejected", reason: RpcError }`. A child failure **MUST NOT** fail-fast the outer Promise.
+`{ peer, status: "rejected", reason: RpcException }`. A child failure **MUST NOT** fail-fast the outer Promise.
 
 ### 6.4 Events and telemetry
 
@@ -795,7 +796,7 @@ Identity, or treated as authority.
 
 **RPC-START-001 — Promise-only startup errors.** `connect()` and `listen()` **MUST** report every preflight or
 startup failure by Promise rejection and **MUST NOT** throw synchronously. State/single-flight/overflow gates
-**MUST** run before reading `adapter.connection$`. Invalid state **MUST** reject `RpcError(unavailable)`; a
+**MUST** run before reading `adapter.connection$`. Invalid state **MUST** reject `RpcException(unavailable)`; a
 structurally invalid Adapter after the gate **MUST** reject `TypeError` without starting it.
 
 **RPC-START-002 — Connector eligibility.** Connector startup **MUST** be single-flight and accepted only while
@@ -817,15 +818,15 @@ or the Acceptor.
 
 **RPC-START-004 — Startup mapping.** Owner termination that interrupts an accepted startup **MUST** reject
 `AbortError`. Ordinary Adapter, timeout, profile, or admission failure **MUST** reject
-`RpcError(unavailable)` with an optional trusted local cause. Protocol invariant failure **MUST** reject
-`RpcError(protocol)` and apply the specified fault scope. Structural Adapter rejection before acceptance
+`RpcException(unavailable)` with an optional trusted local cause. Protocol invariant failure **MUST** reject
+`RpcException(protocol)` and apply the specified fault scope. Structural Adapter rejection before acceptance
 **MUST** leave the prior listener snapshot unchanged. Resource pressure before ready **MUST** reject `listen()`
 with `AbortError` after recording `stopped(normal, resource-pressure)`; after ready it **MUST NOT** retroactively
-change the fulfilled startup Promise. A source error before ready **MUST** reject with `RpcError(unavailable)`
+change the fulfilled startup Promise. A source error before ready **MUST** reject with `RpcException(unavailable)`
 whose cause is the same Error retained by `stopped(failed)`; after ready it **MUST** only update listener state.
 If a source completes normally before readiness while the Owner remains active and neither Owner abort nor
 resource pressure has won, Framework **MUST** record `stopped(normal, completed)` and reject the unsettled
-`listen()` Promise with `RpcError(unavailable)` without a cause; it **MUST NOT** fulfill a readiness operation
+`listen()` Promise with `RpcException(unavailable)` without a cause; it **MUST NOT** fulfill a readiness operation
 that never reached ready.
 
 ## 7. Physical Connection and Adapter seam

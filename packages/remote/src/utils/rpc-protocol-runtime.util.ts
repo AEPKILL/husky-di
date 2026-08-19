@@ -4,7 +4,7 @@
  * @created 2026-08-19 00:00:00
  */
 
-import { createRpcError } from "@/exceptions/rpc-error.exception";
+import { createRpcException } from "@/factories/rpc-exception.factory";
 import { getRpcProtocol } from "@/factories/rpc-protocol.factory";
 import type {
 	IRpcApplicationArgumentsSnapshot,
@@ -153,7 +153,7 @@ function wrapProtocolConstruction<T>(operation: () => T): T {
 	try {
 		return operation();
 	} catch (error) {
-		throw createRpcError(
+		throw createRpcException(
 			"protocol",
 			error instanceof Error
 				? error

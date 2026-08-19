@@ -4,12 +4,6 @@
  * @created 2026-08-19 00:00:00
  */
 
-import { RpcError } from "../../src/index";
-
-// @ts-expect-error RPC-CALL-009 keeps RpcError construction Framework-private.
-const callerCreatedError = new RpcError("unavailable");
-void callerCreatedError;
-
 // @ts-expect-error RPC-BASE-003 keeps the Codec interface private.
 type MissingRpcCodec = import("../../src/protocol").IRpcCodec;
 void (null as unknown as MissingRpcCodec);

@@ -14,7 +14,7 @@ import {
 	type IRpcAcceptorAdapter,
 	type IRpcConnection,
 	type IRpcConnectorAdapter,
-	RpcError,
+	RpcException,
 } from "../../src/index";
 import knownAnswerVectors from "../../wire/husky-di-rpc-1/known-answer-vectors.json";
 
@@ -270,7 +270,7 @@ export async function runRpcBrowserRoundtrip(): Promise<IBrowserRoundtripResult>
 	try {
 		await canceledCall;
 	} catch (error) {
-		if (!(error instanceof RpcError)) {
+		if (!(error instanceof RpcException)) {
 			throw error;
 		}
 		canceledCode = error.code;

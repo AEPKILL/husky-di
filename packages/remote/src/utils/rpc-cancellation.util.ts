@@ -4,7 +4,7 @@
  * @created 2026-08-19 00:00:00
  */
 
-import { createRpcError } from "@/exceptions/rpc-error.exception";
+import { createRpcException } from "@/factories/rpc-exception.factory";
 
 const abortedGetter = Object.getOwnPropertyDescriptor(
 	AbortSignal.prototype,
@@ -52,7 +52,7 @@ export function prepareRpcInvocationArguments(
 		return { applicationArguments, signal: undefined };
 	}
 	if (readAborted(control)) {
-		throw createRpcError("canceled");
+		throw createRpcException("canceled");
 	}
 	return { applicationArguments, signal: control as AbortSignal };
 }
