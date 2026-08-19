@@ -70,8 +70,8 @@ The first stable release is `@husky-di/remote@1.0.0`.
 
 | Entry point | Contract |
 | --- | --- |
-| `@husky-di/remote` | Caller API and caller-required structural Protocol/Transport types |
-| `@husky-di/remote/protocol` | Complete third-party Protocol implementor SPI |
+| `@husky-di/remote` | Caller API, built-in Protocol factory, and caller-required structural Protocol/Transport types |
+| `@husky-di/remote/protocol` | Built-in Protocol factory and complete third-party Protocol implementor SPI |
 | `@husky-di/remote/transport` | Physical Connection and role-specific Adapter seams |
 | `@husky-di/remote/conformance` | Framework-neutral Protocol and Adapter conformance runners |
 
@@ -79,8 +79,10 @@ The first stable release is `@husky-di/remote@1.0.0`.
 to the same declaration and runtime value. The package **MUST NOT** create parallel nominal identities.
 
 **RPC-PKG-003 — Private default.** Omitting `options.protocol` **MUST** select the package's built-in Protocol.
-The package **MUST NOT** export a `defaultRpcProtocol` value or public default Codec, Handshake, proof, ledger,
-or scheduler type.
+The root and implementor entries **MAY** expose the same `createRpcProtocol()` runtime identity so an independent
+provider package can delegate to the same immutable implementation. The package **MUST NOT** export a
+`defaultRpcProtocol` value, concrete
+Protocol implementation class, or public default Codec, Handshake, proof, ledger, or scheduler type.
 
 **RPC-PKG-004 — Wire assets.** The package **MUST** publish readable `husky-di-rpc/1` schema, raw vectors,
 stateful transcripts, and security vectors through the closed exports

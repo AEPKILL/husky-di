@@ -10,6 +10,12 @@ The seam is deliberately semantic. A custom Protocol owns its encoding,
 handshake, continuity proof, ordering, replay, ACK, and wire scheduler; none of
 the built-in `husky-di-rpc/1` internals are public extension points.
 
+An independent provider package that wants the built-in semantics without
+copying its state machines can delegate to `createRpcProtocol()`, exported with
+the same identity from `@husky-di/remote` and `@husky-di/remote/protocol`. The
+returned Protocol is frozen and reusable; each role factory still creates an
+isolated runtime.
+
 ## Required lifecycle
 
 Each role runtime implements:

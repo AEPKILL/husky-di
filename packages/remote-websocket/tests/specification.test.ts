@@ -9,22 +9,76 @@ import type { IRpcConnection } from "@husky-di/remote";
 import { describe, expect, it } from "vitest";
 import { WebSocket as RawNodeWebSocket } from "ws";
 import { NodeWebSocketAcceptorAdapterImpl } from "../src/impls/node-web-socket-acceptor-adapter.impl";
-import { createWebSocketConnectorAdapter } from "../src/index";
+import {
+	createWebSocketConnectorAdapter,
+	createWebSocketRpcProtocol,
+	type IRpcProtocol,
+} from "../src/index";
 import {
 	createNodeWebSocketAcceptorAdapter,
 	createNodeWebSocketConnectorAdapter,
 } from "../src/node";
 
-describe("Shared Adapter conformance", () => {
-	it("RPC-TRANSPORT-001 RPC-TRANSPORT-002 RPC-TRANSPORT-003 RPC-TRANSPORT-004 RPC-TRANSPORT-005 RPC-TRANSPORT-006 RPC-TRANSPORT-007 RPC-TRANSPORT-010 RPC-RELEASE-005 passes the shared Connector and Acceptor Adapter runners", async () => {
+type RpcProtocolConnectorHost = Parameters<IRpcProtocol["createConnector"]>[0];
+type RpcProtocolAcceptorHost = Parameters<IRpcProtocol["createAcceptor"]>[0];
+type RpcProtocolSession = Parameters<
+	RpcProtocolConnectorHost["attachSession"]
+>[0];
+type RpcProtocolSessionHost = ReturnType<
+	RpcProtocolConnectorHost["attachSession"]
+>;
+
+function createCounterExhaustionProtocol(protocol: IRpcProtocol): IRpcProtocol {
+	return Object.freeze({
+		createConnector(host: RpcProtocolConnectorHost) {
+			return protocol.createConnector(
+				Object.freeze({
+					...host,
+					attachSession(session: RpcProtocolSession) {
+						let sessionHost: RpcProtocolSessionHost;
+						const exposedSession: RpcProtocolSession = {
+							reserveInvocation() {
+								sessionHost?.transition({
+									type: "draining",
+									reason: "counter-exhaustion",
+								});
+								return undefined;
+							},
+							forceClose: () => session.forceClose(),
+						};
+						sessionHost = host.attachSession(exposedSession);
+						return sessionHost;
+					},
+				}),
+			);
+		},
+		createAcceptor: (host: RpcProtocolAcceptorHost) =>
+			protocol.createAcceptor(host),
+	});
+}
+
+describe("Shared Protocol and Adapter conformance", () => {
+	it("WS-API-001 WS-PROTOCOL-001 RPC-TRANSPORT-001 RPC-TRANSPORT-002 RPC-TRANSPORT-003 RPC-TRANSPORT-004 RPC-TRANSPORT-005 RPC-TRANSPORT-006 RPC-TRANSPORT-007 RPC-TRANSPORT-010 RPC-RELEASE-005 passes the shared Protocol, Connector, and Acceptor runners", async () => {
 		const {
 			runRpcAcceptorAdapterConformance,
 			runRpcConnectorAdapterConformance,
+			runRpcProtocolConformance,
 		} = await import("@husky-di/remote/conformance");
 		const reports: Array<{ readonly status: string }> = [];
 		const options = {
 			report: (result: { readonly status: string }) => reports.push(result),
 		};
+		const protocol: IRpcProtocol = createWebSocketRpcProtocol();
+		expect(Object.isFrozen(protocol)).toBe(true);
+		await runRpcProtocolConformance(
+			{
+				protocol,
+				counterExhaustionProtocol: createCounterExhaustionProtocol(protocol),
+				createActiveProtocolFaultMessage: () =>
+					new TextEncoder().encode(JSON.stringify({ kind: "bogus" })),
+			},
+			options,
+		);
 		await runRpcConnectorAdapterConformance(
 			createWebSocketConnectorConformanceFixture(),
 			options,
@@ -34,7 +88,7 @@ describe("Shared Adapter conformance", () => {
 			options,
 		);
 
-		expect(reports).toHaveLength(24);
+		expect(reports).toHaveLength(39);
 		expect(reports.every((result) => result.status === "passed")).toBe(true);
 	});
 });

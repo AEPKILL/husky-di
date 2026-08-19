@@ -1,8 +1,8 @@
 # @husky-di/remote-websocket
 
-WebSocket Transport Adapters for `@husky-di/remote`. The browser-safe root
-provides a Connector Adapter; the `/node` entry point adds Node `ws` Connector
-and Acceptor Adapters.
+An `IRpcProtocol` implementation and WebSocket Transport Adapters for
+`@husky-di/remote`. The browser-safe root provides the Protocol and a Connector
+Adapter; the `/node` entry point adds Node `ws` Connector and Acceptor Adapters.
 
 ## Install
 
@@ -14,9 +14,12 @@ pnpm add @husky-di/remote @husky-di/remote-websocket rxjs ws
 
 ```ts
 import { createRpcConnector } from "@husky-di/remote";
-import { createWebSocketConnectorAdapter } from "@husky-di/remote-websocket";
+import {
+  createWebSocketConnectorAdapter,
+  createWebSocketRpcProtocol,
+} from "@husky-di/remote-websocket";
 
-const connector = createRpcConnector();
+const connector = createRpcConnector({ protocol: createWebSocketRpcProtocol() });
 await connector.connect(
   createWebSocketConnectorAdapter({ url: "wss://rpc.example.test" }),
 );

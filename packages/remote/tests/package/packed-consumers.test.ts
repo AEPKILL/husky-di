@@ -214,9 +214,10 @@ import * as protocol from "@husky-di/remote/protocol";
 import * as transport from "@husky-di/remote/transport";
 import * as conformance from "@husky-di/remote/conformance";
 
-assert.deepEqual(Object.keys(root).sort(), ["RpcException", "createRemoteServiceDescriptor", "createRpcAcceptor", "createRpcConnector"]);
+assert.deepEqual(Object.keys(root).sort(), ["RpcException", "createRemoteServiceDescriptor", "createRpcAcceptor", "createRpcConnector", "createRpcProtocol"]);
 assert.equal(new root.RpcException("unavailable").code, "unavailable");
-assert.deepEqual(Object.keys(protocol), []);
+assert.deepEqual(Object.keys(protocol), ["createRpcProtocol"]);
+assert.equal(Object.isFrozen(protocol.createRpcProtocol()), true);
 assert.deepEqual(Object.keys(transport), []);
 assert.deepEqual(Object.keys(conformance).sort(), ["runRpcAcceptorAdapterConformance", "runRpcConnectorAdapterConformance", "runRpcProtocolConformance"]);
 for (const subpath of ["schema", "vectors", "transcripts", "security-vectors"]) {
@@ -243,9 +244,10 @@ const protocol = require("@husky-di/remote/protocol");
 const transport = require("@husky-di/remote/transport");
 const conformance = require("@husky-di/remote/conformance");
 
-assert.deepEqual(Object.keys(root).sort(), ["RpcException", "createRemoteServiceDescriptor", "createRpcAcceptor", "createRpcConnector"]);
+assert.deepEqual(Object.keys(root).sort(), ["RpcException", "createRemoteServiceDescriptor", "createRpcAcceptor", "createRpcConnector", "createRpcProtocol"]);
 assert.equal(new root.RpcException("unavailable").code, "unavailable");
-assert.deepEqual(Object.keys(protocol), []);
+assert.deepEqual(Object.keys(protocol), ["createRpcProtocol"]);
+assert.equal(Object.isFrozen(protocol.createRpcProtocol()), true);
 assert.deepEqual(Object.keys(transport), []);
 assert.deepEqual(Object.keys(conformance).sort(), ["runRpcAcceptorAdapterConformance", "runRpcConnectorAdapterConformance", "runRpcProtocolConformance"]);
 for (const subpath of ["schema", "vectors", "transcripts", "security-vectors"]) {

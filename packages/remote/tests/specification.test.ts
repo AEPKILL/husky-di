@@ -34,6 +34,7 @@ import type {
 	IRpcProtocolSession,
 	IRpcProtocolSessionHost,
 } from "../src/protocol";
+import { createRpcProtocol } from "../src/protocol";
 import { createMemoryConnectorFixture } from "./conformance/test.utils";
 
 interface CalculatorService {
@@ -256,6 +257,15 @@ describe("Remote Service Descriptor", () => {
 });
 
 describe("cold Topology Owner factories", () => {
+	it("RPC-PKG-003 exposes the immutable built-in Protocol factory through the implementor entry", () => {
+		const protocol = createRpcProtocol();
+		const connector = createRpcConnector({ protocol });
+
+		expect(Object.isFrozen(protocol)).toBe(true);
+		expect(createRpcProtocol()).toBe(protocol);
+		expect(connector.state).toEqual({ status: "active" });
+	});
+
 	it("RPC-PKG-005 exposes portable package metadata", () => {
 		expect(packageManifest).toMatchObject({
 			type: "module",

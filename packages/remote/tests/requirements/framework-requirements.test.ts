@@ -258,8 +258,9 @@ describe("Framework requirement evidence", () => {
 			"createRemoteServiceDescriptor",
 			"createRpcAcceptor",
 			"createRpcConnector",
+			"createRpcProtocol",
 		]);
-		expect(Object.keys(protocolEntry)).toEqual([]);
+		expect(Object.keys(protocolEntry)).toEqual(["createRpcProtocol"]);
 		expect(Object.keys(transportEntry)).toEqual([]);
 
 		const connector = createRpcConnector();

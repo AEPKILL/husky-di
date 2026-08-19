@@ -8,6 +8,7 @@ export { RpcException } from "@/exceptions/rpc.exception";
 export { createRemoteServiceDescriptor } from "@/factories/remote-service-descriptor.factory";
 export { createRpcAcceptor } from "@/factories/rpc-acceptor.factory";
 export { createRpcConnector } from "@/factories/rpc-connector.factory";
+export { createRpcProtocol } from "@/factories/rpc-protocol.factory";
 export type {
 	IRpcApplicationRecord,
 	IRpcProtocol,

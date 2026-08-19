@@ -124,7 +124,7 @@ afterAll(() => {
 });
 
 describe("installed @husky-di/remote-websocket package", () => {
-	it("RPC-RELEASE-005 publishes the stable bounded Adapter artifact", () => {
+	it("RPC-RELEASE-005 publishes the stable Protocol and bounded Adapter artifact", () => {
 		const manifestText = readFileSync(
 			resolve(installedRoot, "package.json"),
 			"utf8",
@@ -194,8 +194,9 @@ describe("installed @husky-di/remote-websocket package", () => {
 			`import assert from "node:assert/strict";
 import * as browser from "@husky-di/remote-websocket";
 import * as node from "@husky-di/remote-websocket/node";
-assert.deepEqual(Object.keys(browser), ["createWebSocketConnectorAdapter"]);
-assert.deepEqual(Object.keys(node).sort(), ["createNodeWebSocketAcceptorAdapter", "createNodeWebSocketConnectorAdapter", "createWebSocketConnectorAdapter"]);
+assert.deepEqual(Object.keys(browser), ["createWebSocketConnectorAdapter", "createWebSocketRpcProtocol"]);
+assert.deepEqual(Object.keys(node).sort(), ["createNodeWebSocketAcceptorAdapter", "createNodeWebSocketConnectorAdapter", "createWebSocketConnectorAdapter", "createWebSocketRpcProtocol"]);
+assert.equal(Object.isFrozen(browser.createWebSocketRpcProtocol()), true);
 await assert.rejects(
   import("@husky-di/remote-websocket/dist/impls/web-socket-connection.impl.js"),
   (error) => error?.code === "ERR_PACKAGE_PATH_NOT_EXPORTED",
@@ -210,8 +211,9 @@ await assert.rejects(
 			`const assert = require("node:assert/strict");
 const browser = require("@husky-di/remote-websocket");
 const node = require("@husky-di/remote-websocket/node");
-assert.deepEqual(Object.keys(browser), ["createWebSocketConnectorAdapter"]);
-assert.deepEqual(Object.keys(node).sort(), ["createNodeWebSocketAcceptorAdapter", "createNodeWebSocketConnectorAdapter", "createWebSocketConnectorAdapter"]);
+assert.deepEqual(Object.keys(browser), ["createWebSocketConnectorAdapter", "createWebSocketRpcProtocol"]);
+assert.deepEqual(Object.keys(node).sort(), ["createNodeWebSocketAcceptorAdapter", "createNodeWebSocketConnectorAdapter", "createWebSocketConnectorAdapter", "createWebSocketRpcProtocol"]);
+assert.equal(Object.isFrozen(browser.createWebSocketRpcProtocol()), true);
 assert.throws(
   () => require("@husky-di/remote-websocket/dist/impls/web-socket-connection.impl.cjs"),
   (error) => error?.code === "ERR_PACKAGE_PATH_NOT_EXPORTED",

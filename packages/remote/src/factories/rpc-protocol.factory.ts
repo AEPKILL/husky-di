@@ -15,7 +15,7 @@ import type { CreateRpcProtocolOptions } from "@/types/protocol/rpc-protocol.typ
 const codec = Object.freeze(new RpcCodecImpl());
 const cryptography = Object.freeze(new RpcCryptographyImpl());
 
-export function createRpcProtocol<TKey>(
+function createConfiguredRpcProtocol<TKey>(
 	options: CreateRpcProtocolOptions<TKey>,
 ): IRpcProtocol {
 	const snapshot = Object.freeze({ ...options });
@@ -23,7 +23,7 @@ export function createRpcProtocol<TKey>(
 }
 
 function createBuiltInRpcProtocol(counterExhausted: boolean): IRpcProtocol {
-	return createRpcProtocol({
+	return createConfiguredRpcProtocol({
 		codec,
 		cryptography,
 		createEndpoint: (options) => new RpcEndpointImpl(options),
@@ -34,9 +34,14 @@ function createBuiltInRpcProtocol(counterExhausted: boolean): IRpcProtocol {
 
 const protocol = createBuiltInRpcProtocol(false);
 
+/** Returns the immutable built-in Protocol for independent providers. */
+export function createRpcProtocol(): IRpcProtocol {
+	return protocol;
+}
+
 /** Returns the private reusable built-in Protocol value for owner factories. */
 export function getRpcProtocol(): IRpcProtocol {
-	return protocol;
+	return createRpcProtocol();
 }
 
 /** Returns a package-private real-ledger counter exhaustion fixture. */
