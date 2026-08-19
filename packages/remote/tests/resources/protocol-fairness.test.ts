@@ -12,7 +12,7 @@ import {
 	createRpcAcceptor,
 	createRpcConnector,
 } from "../../src/index";
-import { createDefaultRpcTestNetwork } from "../default-protocol/test.utils";
+import { createRpcTestNetwork } from "../protocol/test.utils";
 
 interface IFairnessService {
 	run(value: number): number;
@@ -38,7 +38,7 @@ function createDeferred(): {
 
 describe("Default RPC Protocol outbound fairness", () => {
 	it("RPC-SCHEDULE-002 alternates retained control and Pending Invocation lanes starting with control RPC-CORPUS-004", async () => {
-		const network = createDefaultRpcTestNetwork();
+		const network = createRpcTestNetwork();
 		const connectorDescriptor = createRemoteServiceDescriptor(
 			IConnectorFairnessService,
 			{
@@ -117,7 +117,7 @@ describe("Default RPC Protocol outbound fairness", () => {
 	});
 
 	it("RPC-SCHEDULE-003 bounded-alternates a coalesced Pong with continuous sequenced work RPC-CORPUS-004", async () => {
-		const network = createDefaultRpcTestNetwork();
+		const network = createRpcTestNetwork();
 		const descriptor = createRemoteServiceDescriptor(IAcceptorFairnessService, {
 			wireName: "example.probe-fairness.v1",
 			methods: { run: true },
@@ -185,7 +185,7 @@ describe("Default RPC Protocol outbound fairness", () => {
 	});
 
 	it("RPC-SCHEDULE-003 RPC-SCHEDULE-004 advances one coalesced ACK through continuous Ping input", async () => {
-		const network = createDefaultRpcTestNetwork();
+		const network = createRpcTestNetwork();
 		const descriptor = createRemoteServiceDescriptor(
 			IConnectorFairnessService,
 			{

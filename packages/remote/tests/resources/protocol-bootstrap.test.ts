@@ -6,41 +6,36 @@
 
 import { Observable, Subject } from "rxjs";
 import { afterEach, describe, expect, it, vi } from "vitest";
-
-import type { IRpcConnection } from "../../src/interfaces/rpc-connection.interface";
+import { getRpcProtocol } from "../../src/factories/rpc-protocol.factory";
+import { RpcCodecImpl } from "../../src/impls/protocol/rpc-codec.impl";
+import { RpcCryptographyImpl } from "../../src/impls/protocol/rpc-cryptography.impl";
 import type {
 	IRpcProtocolAcceptorHost,
 	IRpcProtocolAcceptorRuntime,
 	IRpcProtocolConnectorHost,
 	IRpcProtocolConnectorRuntime,
 	IRpcProtocolRuntimePolicy,
-} from "../../src/interfaces/rpc-protocol.interface";
-import {
-	encodeDefaultRpcRecord,
-	validateDefaultRpcFreshRequest,
-} from "../../src/protocols/default/default-rpc-codec.util";
-import {
-	createDefaultRpcRandomCarrier,
-	deriveDefaultRpcProofKey,
-	signDefaultRpcFreshAccept,
-} from "../../src/protocols/default/default-rpc-crypto.util";
-import { getDefaultRpcProtocol } from "../../src/protocols/default/default-rpc-protocol.impl";
+} from "../../src/interfaces/protocol/rpc-protocol.interface";
+import type { IRpcConnection } from "../../src/interfaces/rpc-connection.interface";
 import type {
-	DefaultRpcFreshAccept,
-	DefaultRpcJsonRecord,
-} from "../../src/protocols/default/default-rpc-record.type";
+	RpcFreshAccept,
+	RpcJsonRecord,
+} from "../../src/types/protocol/rpc-wire-record.type";
 import {
 	normalizeRpcApplicationArguments,
 	normalizeRpcApplicationValue,
 	rpcApplicationValuesEqual,
 } from "../../src/utils/rpc-application-value.util";
 
+const codec = new RpcCodecImpl();
+const cryptography = new RpcCryptographyImpl();
+
 interface IBootstrapConnectionHarness {
 	readonly connection: IRpcConnection;
 	readonly responses: Readonly<Record<string, unknown>>[];
 	readonly subscriptionCount: number;
 	readonly closeCount: number;
-	emit(record: DefaultRpcJsonRecord): void;
+	emit(record: RpcJsonRecord): void;
 }
 
 function createPolicy(
@@ -88,7 +83,7 @@ function createAcceptorRuntime(policy: IRpcProtocolRuntimePolicy): {
 		},
 	};
 	return {
-		runtime: getDefaultRpcProtocol().createAcceptor(host),
+		runtime: getRpcProtocol().createAcceptor(host),
 		ownerFaults,
 		admittedSessions,
 	};
@@ -117,7 +112,7 @@ function createConnectorRuntime(policy: IRpcProtocolRuntimePolicy): {
 		},
 	};
 	return {
-		runtime: getDefaultRpcProtocol().createConnector(host),
+		runtime: getRpcProtocol().createConnector(host),
 		ownerFaults,
 		attachedSessions,
 	};
@@ -154,13 +149,13 @@ function createBootstrapConnection(): IBootstrapConnectionHarness {
 			return closeCount;
 		},
 		emit(record) {
-			source.next(encodeDefaultRpcRecord(record));
+			source.next(codec.encode(record));
 		},
 	};
 }
 
-function createFreshRequest(): DefaultRpcJsonRecord {
-	const nonce = createDefaultRpcRandomCarrier();
+function createFreshRequest(): RpcJsonRecord {
+	const nonce = cryptography.createRandomCarrier();
 	nonce.bytes.fill(0);
 	return {
 		kind: "fresh",
@@ -169,8 +164,8 @@ function createFreshRequest(): DefaultRpcJsonRecord {
 	};
 }
 
-function createResumeRequest(): DefaultRpcJsonRecord {
-	const carrier = createDefaultRpcRandomCarrier().value;
+function createResumeRequest(): RpcJsonRecord {
+	const carrier = cryptography.createRandomCarrier().value;
 	return {
 		kind: "resume",
 		profile: "husky-di-rpc/1",
@@ -184,14 +179,18 @@ function createResumeRequest(): DefaultRpcJsonRecord {
 
 async function createFreshAccept(
 	requestRecord: Readonly<Record<string, unknown>>,
-): Promise<DefaultRpcFreshAccept> {
-	const request = validateDefaultRpcFreshRequest(
-		requestRecord as DefaultRpcJsonRecord,
+): Promise<RpcFreshAccept> {
+	const request = codec.decode(
+		codec.encode(requestRecord as RpcJsonRecord),
+		"bootstrap-request",
 	);
-	const sessionId = createDefaultRpcRandomCarrier();
-	const secret = createDefaultRpcRandomCarrier();
-	const responderNonce = createDefaultRpcRandomCarrier();
-	const proofKey = await deriveDefaultRpcProofKey(
+	if (request.kind !== "fresh") {
+		throw new Error("Expected a fresh bootstrap request.");
+	}
+	const sessionId = cryptography.createRandomCarrier();
+	const secret = cryptography.createRandomCarrier();
+	const responderNonce = cryptography.createRandomCarrier();
+	const proofKey = await cryptography.deriveProofKey(
 		secret.bytes,
 		sessionId.value,
 	);
@@ -205,11 +204,12 @@ async function createFreshAccept(
 	} as const;
 	return {
 		...acceptWithoutProof,
-		proof: await signDefaultRpcFreshAccept(
+		proof: await cryptography.signProof({
+			kind: "fresh-accept",
 			proofKey,
 			request,
-			acceptWithoutProof,
-		),
+			record: acceptWithoutProof,
+		}),
 	};
 }
 
@@ -231,9 +231,9 @@ describe("Default RPC Protocol bootstrap resources", () => {
 	it("RPC-SEC-008 overwrites controlled secret bytes and retains only a non-extractable key", async () => {
 		const secret = new Uint8Array(32);
 		secret.fill(7);
-		const sessionId = createDefaultRpcRandomCarrier().value;
+		const sessionId = cryptography.createRandomCarrier().value;
 
-		const proofKey = await deriveDefaultRpcProofKey(secret, sessionId);
+		const proofKey = await cryptography.deriveProofKey(secret, sessionId);
 
 		expect(secret).toEqual(new Uint8Array(32));
 		expect(proofKey.extractable).toBe(false);

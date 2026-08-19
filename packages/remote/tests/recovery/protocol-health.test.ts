@@ -6,10 +6,9 @@
 
 import { NEVER } from "rxjs";
 import { afterEach, describe, expect, it, vi } from "vitest";
-
+import { RpcEndpointImpl } from "../../src/impls/protocol/rpc-endpoint.impl";
 import { createRpcAcceptor, createRpcConnector } from "../../src/index";
-import { DefaultRpcEndpoint } from "../../src/protocols/default/default-rpc-endpoint.impl";
-import { createDefaultRpcTestNetwork } from "../default-protocol/test.utils";
+import { createRpcTestNetwork } from "../protocol/test.utils";
 
 const healthPolicy = {
 	ackDelayMs: 1,
@@ -23,7 +22,7 @@ describe("Default RPC Protocol health", () => {
 
 	it("RPC-WIRE-014 RPC-TIME-001 schedules an unsequenced Ping and a coalesced Pong after idle activity", async () => {
 		vi.useFakeTimers();
-		const network = createDefaultRpcTestNetwork();
+		const network = createRpcTestNetwork();
 		const acceptor = createRpcAcceptor({ runtimePolicy: healthPolicy });
 		const connector = createRpcConnector({ runtimePolicy: healthPolicy });
 
@@ -49,7 +48,7 @@ describe("Default RPC Protocol health", () => {
 
 	it("RPC-RECOVERY-001 RPC-TIME-002 fences a silent current binding before entering Recovery", async () => {
 		vi.useFakeTimers();
-		const network = createDefaultRpcTestNetwork();
+		const network = createRpcTestNetwork();
 		const acceptor = createRpcAcceptor({ runtimePolicy: healthPolicy });
 		const connector = createRpcConnector({ runtimePolicy: healthPolicy });
 
@@ -67,7 +66,7 @@ describe("Default RPC Protocol health", () => {
 
 	it("RPC-TIME-003 grants one fresh probe-confirmation window after a late health callback", async () => {
 		vi.useFakeTimers();
-		const network = createDefaultRpcTestNetwork();
+		const network = createRpcTestNetwork();
 		const acceptor = createRpcAcceptor({ runtimePolicy: healthPolicy });
 		const connector = createRpcConnector({ runtimePolicy: healthPolicy });
 
@@ -96,15 +95,15 @@ describe("Default RPC Protocol health", () => {
 	it("RPC-SCHEDULE-001 RPC-TIME-003 grants an unsettled send one fresh progress window after a late callback", async () => {
 		vi.useFakeTimers();
 		const failures: string[] = [];
-		const endpoint = new DefaultRpcEndpoint(
-			{
+		const endpoint = new RpcEndpointImpl({
+			connection: {
 				message$: NEVER,
 				send: () => new Promise<void>(() => {}),
 				async close() {},
 			},
-			() => {},
-			(reason) => failures.push(reason),
-		);
+			onMessage: () => {},
+			onFailure: (reason) => failures.push(reason),
+		});
 		endpoint.configureSendProgressTimeout(10);
 		void endpoint.sendNow(new Uint8Array([1]));
 		vi.setSystemTime(Date.now() + 100);
@@ -122,7 +121,7 @@ describe("Default RPC Protocol health", () => {
 
 	it("RPC-SCHEDULE-001 RPC-TIME-002 fences an unsettled send without reusing its slot RPC-CORPUS-004", async () => {
 		vi.useFakeTimers();
-		const network = createDefaultRpcTestNetwork();
+		const network = createRpcTestNetwork();
 		const acceptor = createRpcAcceptor({ runtimePolicy: healthPolicy });
 		const connector = createRpcConnector({ runtimePolicy: healthPolicy });
 		const neverSettles = new Promise<void>(() => {});

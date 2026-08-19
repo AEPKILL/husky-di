@@ -13,7 +13,6 @@ import {
 	type IRpcConformanceCase,
 	runRpcConformanceCases,
 } from "@/conformance/rpc-conformance.util";
-import type { IRpcConnection } from "@/interfaces/rpc-connection.interface";
 import type {
 	IRpcApplicationArgumentsSnapshot,
 	IRpcApplicationSnapshot,
@@ -35,7 +34,8 @@ import type {
 	RpcProtocolFaultReason,
 	RpcProtocolSessionTransition,
 	RpcUnknownCallFailure,
-} from "@/interfaces/rpc-protocol.interface";
+} from "@/interfaces/protocol/rpc-protocol.interface";
+import type { IRpcConnection } from "@/interfaces/rpc-connection.interface";
 
 const CASE_TIMEOUT_MS = 2_000;
 

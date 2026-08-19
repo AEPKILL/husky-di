@@ -8,12 +8,12 @@ import type { Cleanup } from "@husky-di/core";
 import type { Observable } from "rxjs";
 
 import type { RpcError } from "@/exceptions/rpc-error.exception";
+import type { RpcCallFailure } from "@/interfaces/protocol/rpc-protocol.interface";
 import type { IRemoteServiceDescriptor } from "@/interfaces/remote-service-descriptor.interface";
 import type {
 	IRpcAcceptorAdapter,
 	IRpcConnectorAdapter,
 } from "@/interfaces/rpc-adapter.interface";
-import type { RpcCallFailure } from "@/interfaces/rpc-protocol.interface";
 import type {
 	AnyMethod,
 	IsCancelableMethod,

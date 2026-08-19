@@ -8,6 +8,15 @@ export { RpcError, type RpcErrorCode } from "@/exceptions/rpc-error.exception";
 export { createRemoteServiceDescriptor } from "@/factories/remote-service-descriptor.factory";
 export { createRpcAcceptor } from "@/factories/rpc-acceptor.factory";
 export { createRpcConnector } from "@/factories/rpc-connector.factory";
+export type {
+	IRpcApplicationRecord,
+	IRpcProtocol,
+	IRpcProtocolRuntimePolicy,
+	RpcApplicationValue,
+	RpcCallFailure,
+	RpcProtocolFaultReason,
+	RpcSessionCloseReason,
+} from "@/interfaces/protocol/rpc-protocol.interface";
 export type { IRemoteServiceDescriptor } from "@/interfaces/remote-service-descriptor.interface";
 export type {
 	IRpcAcceptorAdapter,
@@ -22,15 +31,6 @@ export type {
 	RpcPeerResult,
 } from "@/interfaces/rpc-caller.interface";
 export type { IRpcConnection } from "@/interfaces/rpc-connection.interface";
-export type {
-	IRpcApplicationRecord,
-	IRpcProtocol,
-	IRpcProtocolRuntimePolicy,
-	RpcApplicationValue,
-	RpcCallFailure,
-	RpcProtocolFaultReason,
-	RpcSessionCloseReason,
-} from "@/interfaces/rpc-protocol.interface";
 export type {
 	RpcAcceptorListenerState,
 	RpcAcceptorOptions,

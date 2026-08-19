@@ -9,8 +9,6 @@ import { Observable, Subject } from "rxjs";
 
 import { createRpcError } from "@/exceptions/rpc-error.exception";
 import { getRemoteServiceDescriptorData } from "@/factories/remote-service-descriptor.factory";
-import type { IRemoteServiceDescriptor } from "@/interfaces/remote-service-descriptor.interface";
-import type { IRpcPeer, RpcEvent } from "@/interfaces/rpc-caller.interface";
 import type {
 	IRpcApplicationArgumentsSnapshot,
 	IRpcApplicationSnapshot,
@@ -23,7 +21,9 @@ import type {
 	RpcIncomingTerminal,
 	RpcProtocolIncomingCallReservation,
 	RpcUnknownCallFailure,
-} from "@/interfaces/rpc-protocol.interface";
+} from "@/interfaces/protocol/rpc-protocol.interface";
+import type { IRemoteServiceDescriptor } from "@/interfaces/remote-service-descriptor.interface";
+import type { IRpcPeer, RpcEvent } from "@/interfaces/rpc-caller.interface";
 import type {
 	RemoteService,
 	RemoteServiceImplementation,

@@ -14,6 +14,15 @@ import {
 	RpcPeerImpl,
 	type RpcPeerInvocationReservation,
 } from "@/impls/rpc-peer.impl";
+import type {
+	IRpcProtocolAcceptorRuntime,
+	IRpcProtocolRuntimePolicy,
+	IRpcProtocolSession,
+	IRpcProtocolSessionHost,
+	RpcProtocolFaultReason,
+	RpcProtocolSessionTransition,
+	RpcSessionCloseReason,
+} from "@/interfaces/protocol/rpc-protocol.interface";
 import type { IRemoteServiceDescriptor } from "@/interfaces/remote-service-descriptor.interface";
 import type { IRpcAcceptorAdapter } from "@/interfaces/rpc-adapter.interface";
 import type {
@@ -24,15 +33,6 @@ import type {
 	RpcPeerResult,
 } from "@/interfaces/rpc-caller.interface";
 import type { IRpcConnection } from "@/interfaces/rpc-connection.interface";
-import type {
-	IRpcProtocolAcceptorRuntime,
-	IRpcProtocolRuntimePolicy,
-	IRpcProtocolSession,
-	IRpcProtocolSessionHost,
-	RpcProtocolFaultReason,
-	RpcProtocolSessionTransition,
-	RpcSessionCloseReason,
-} from "@/interfaces/rpc-protocol.interface";
 import type {
 	RemoteServiceImplementation,
 	RpcMethodDefinitions,

@@ -5,54 +5,56 @@
  */
 
 import { Subject } from "rxjs";
-
+import { RpcCodecImpl } from "../../src/impls/protocol/rpc-codec.impl";
+import { RpcEndpointImpl } from "../../src/impls/protocol/rpc-endpoint.impl";
+import { RpcSessionImpl } from "../../src/impls/protocol/rpc-session.impl";
+import type {
+	IRpcProtocolHost,
+	RpcProtocolFaultReason,
+	RpcProtocolSessionTransition,
+} from "../../src/interfaces/protocol/rpc-protocol.interface";
 import type {
 	IRpcAcceptorAdapter,
 	IRpcConnectorAdapter,
 } from "../../src/interfaces/rpc-adapter.interface";
 import type { IRpcConnection } from "../../src/interfaces/rpc-connection.interface";
-import type {
-	IRpcProtocolHost,
-	RpcProtocolFaultReason,
-	RpcProtocolSessionTransition,
-} from "../../src/interfaces/rpc-protocol.interface";
-import { DefaultRpcEndpoint } from "../../src/protocols/default/default-rpc-endpoint.impl";
-import { DefaultRpcSession } from "../../src/protocols/default/default-rpc-session.impl";
 import {
 	normalizeRpcApplicationArguments,
 	normalizeRpcApplicationValue,
 	rpcApplicationValuesEqual,
 } from "../../src/utils/rpc-application-value.util";
 
-export interface IDefaultRpcCapturedRecord {
+const codec = new RpcCodecImpl();
+
+export interface IRpcCapturedRecord {
 	readonly connectionId: number;
 	readonly direction: "connector" | "acceptor";
 	readonly value: Readonly<Record<string, unknown>>;
 }
 
-export interface IDefaultRpcSendDirective {
+export interface IRpcSendDirective {
 	readonly drop?: boolean;
 	readonly message?: Uint8Array;
 	readonly settlement?: Promise<void>;
 }
 
-interface IDefaultRpcTestLink {
+interface IRpcTestLink {
 	readonly connectorIngress: Subject<Uint8Array>;
 	readonly acceptorIngress: Subject<Uint8Array>;
 }
 
-export interface IDefaultRpcTestNetwork {
+export interface IRpcTestNetwork {
 	readonly acceptorAdapter: IRpcAcceptorAdapter;
-	readonly records: IDefaultRpcCapturedRecord[];
+	readonly records: IRpcCapturedRecord[];
 	createConnectorAdapter(
 		closeBehavior?: "propagate" | "silent",
 	): IRpcConnectorAdapter;
 	setInterceptor(
 		interceptor:
 			| ((
-					record: IDefaultRpcCapturedRecord,
+					record: IRpcCapturedRecord,
 					message: Uint8Array,
-			  ) => IDefaultRpcSendDirective | undefined)
+			  ) => IRpcSendDirective | undefined)
 			| undefined,
 	): void;
 	emit(
@@ -62,22 +64,22 @@ export interface IDefaultRpcTestNetwork {
 	): void;
 }
 
-export interface IDefaultRpcDirectSessionHarness {
-	readonly session: DefaultRpcSession;
+export interface IRpcDirectSessionHarness {
+	readonly session: RpcSessionImpl;
 	readonly sent: Readonly<Record<string, unknown>>[];
 	readonly transitions: RpcProtocolSessionTransition[];
 	readonly faults: RpcProtocolFaultReason[];
 	setSendSettlement(settlement: Promise<void> | undefined): void;
-	installReplacement(peerReceivedThrough?: number): DefaultRpcEndpoint;
+	installReplacement(peerReceivedThrough?: number): RpcEndpointImpl;
 }
 
-export function createDefaultRpcDirectSessionHarness(): IDefaultRpcDirectSessionHarness {
+export function createRpcDirectSessionHarness(): IRpcDirectSessionHarness {
 	const sent: Readonly<Record<string, unknown>>[] = [];
 	const transitions: RpcProtocolSessionTransition[] = [];
 	const faults: RpcProtocolFaultReason[] = [];
 	const decoder = new TextDecoder();
 	let sendSettlement: Promise<void> | undefined;
-	let session: DefaultRpcSession | undefined;
+	let session: RpcSessionImpl | undefined;
 	const host: IRpcProtocolHost = {
 		policy: {
 			maxSessions: 1,
@@ -100,10 +102,10 @@ export function createDefaultRpcDirectSessionHarness(): IDefaultRpcDirectSession
 		applicationValuesEqual: rpcApplicationValuesEqual,
 		fault: (reason) => faults.push(reason),
 	};
-	const createEndpoint = (): DefaultRpcEndpoint => {
-		let endpoint: DefaultRpcEndpoint;
-		endpoint = new DefaultRpcEndpoint(
-			{
+	const createEndpoint = (): RpcEndpointImpl => {
+		let endpoint: RpcEndpointImpl;
+		endpoint = new RpcEndpointImpl({
+			connection: {
 				message$: new Subject<Uint8Array>().asObservable(),
 				async send(bytes) {
 					sent.push(
@@ -115,18 +117,20 @@ export function createDefaultRpcDirectSessionHarness(): IDefaultRpcDirectSession
 				},
 				async close() {},
 			},
-			(bytes) => session?.receive(endpoint, bytes),
-			(reason, error) => session?.endpointFailed(endpoint, reason, error),
-		);
+			onMessage: (bytes) => session?.receive(endpoint, bytes),
+			onFailure: (reason, error) =>
+				session?.endpointFailed(endpoint, reason, error),
+		});
 		return endpoint;
 	};
-	const created = new DefaultRpcSession(
-		"connector",
+	const created = new RpcSessionImpl({
+		role: "connector",
 		host,
-		"direct-session",
-		{} as CryptoKey,
-		() => {},
-	);
+		sessionId: "direct-session",
+		proofKey: {} as CryptoKey,
+		codec,
+		onTerminal: () => {},
+	});
 	session = created;
 	created.installHost({
 		reserveIncomingCall: () => undefined,
@@ -156,17 +160,17 @@ export function createDefaultRpcDirectSessionHarness(): IDefaultRpcDirectSession
 	};
 }
 
-export function createDefaultRpcTestNetwork(): IDefaultRpcTestNetwork {
+export function createRpcTestNetwork(): IRpcTestNetwork {
 	const acceptorConnections = new Subject<IRpcConnection>();
-	const links = new Map<number, IDefaultRpcTestLink>();
-	const records: IDefaultRpcCapturedRecord[] = [];
+	const links = new Map<number, IRpcTestLink>();
+	const records: IRpcCapturedRecord[] = [];
 	const decoder = new TextDecoder();
 	let nextConnectionId = 0;
 	let interceptor:
 		| ((
-				record: IDefaultRpcCapturedRecord,
+				record: IRpcCapturedRecord,
 				message: Uint8Array,
-		  ) => IDefaultRpcSendDirective | undefined)
+		  ) => IRpcSendDirective | undefined)
 		| undefined;
 
 	return {
@@ -204,7 +208,7 @@ export function createDefaultRpcTestNetwork(): IDefaultRpcTestNetwork {
 						message$: messageSource.asObservable(),
 						async send(message) {
 							const snapshot = message.slice();
-							const record: IDefaultRpcCapturedRecord = {
+							const record: IRpcCapturedRecord = {
 								connectionId,
 								direction,
 								value: JSON.parse(decoder.decode(snapshot)) as Readonly<

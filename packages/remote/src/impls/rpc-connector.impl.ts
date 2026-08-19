@@ -13,12 +13,6 @@ import {
 
 import { createRpcError } from "@/exceptions/rpc-error.exception";
 import { RpcPeerImpl } from "@/impls/rpc-peer.impl";
-import type { IRpcConnectorAdapter } from "@/interfaces/rpc-adapter.interface";
-import type {
-	IRpcConnector,
-	RpcEvent,
-} from "@/interfaces/rpc-caller.interface";
-import type { IRpcConnection } from "@/interfaces/rpc-connection.interface";
 import type {
 	IRpcProtocolConnectorRuntime,
 	IRpcProtocolRuntimePolicy,
@@ -27,7 +21,13 @@ import type {
 	RpcProtocolFaultReason,
 	RpcProtocolSessionTransition,
 	RpcSessionCloseReason,
-} from "@/interfaces/rpc-protocol.interface";
+} from "@/interfaces/protocol/rpc-protocol.interface";
+import type { IRpcConnectorAdapter } from "@/interfaces/rpc-adapter.interface";
+import type {
+	IRpcConnector,
+	RpcEvent,
+} from "@/interfaces/rpc-caller.interface";
+import type { IRpcConnection } from "@/interfaces/rpc-connection.interface";
 import type { RpcConnectorState } from "@/types/rpc-caller.type";
 import { RpcHandlerScheduler } from "@/utils/rpc-handler-scheduler.util";
 

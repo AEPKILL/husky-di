@@ -4,54 +4,50 @@
  * @created 2026-08-19 00:00:00
  */
 
-import type { IRpcConnection } from "@/interfaces/rpc-connection.interface";
+import { RPC_PROFILE_ID } from "@/constants/protocol/rpc-profile.const";
+import type { IRpcEndpoint } from "@/interfaces/protocol/rpc-endpoint.interface";
 import type {
 	IRpcProtocol,
 	IRpcProtocolAcceptorHost,
 	IRpcProtocolAcceptorRuntime,
 	IRpcProtocolConnectorHost,
 	IRpcProtocolConnectorRuntime,
-} from "@/interfaces/rpc-protocol.interface";
-import {
-	decodeDefaultRpcRecord,
-	encodeDefaultRpcRecord,
-	readDefaultRpcRecordKind,
-	validateDefaultRpcFreshAccept,
-	validateDefaultRpcFreshRequest,
-	validateDefaultRpcResumeOutcome,
-	validateDefaultRpcResumeRequest,
-} from "@/protocols/default/default-rpc-codec.util";
-import {
-	createDefaultRpcGenericRejectProof,
-	createDefaultRpcRandomCarrier,
-	decodeDefaultRpcBase64Url32,
-	deriveDefaultRpcProofKey,
-	signDefaultRpcAuthenticatedReject,
-	signDefaultRpcFreshAccept,
-	signDefaultRpcResumeAccept,
-	signDefaultRpcResumeRequest,
-	verifyDefaultRpcAuthenticatedReject,
-	verifyDefaultRpcFreshAccept,
-	verifyDefaultRpcResumeAccept,
-	verifyDefaultRpcResumeRequest,
-} from "@/protocols/default/default-rpc-crypto.util";
-import {
-	DefaultRpcEndpoint,
-	type DefaultRpcEndpointFailure,
-} from "@/protocols/default/default-rpc-endpoint.impl";
-import { DEFAULT_RPC_PROFILE_ID } from "@/protocols/default/default-rpc-profile.const";
+} from "@/interfaces/protocol/rpc-protocol.interface";
+import type { IRpcSession } from "@/interfaces/protocol/rpc-session.interface";
+import type { IRpcConnection } from "@/interfaces/rpc-connection.interface";
+import type { RpcEndpointFailure } from "@/types/protocol/rpc-endpoint.type";
+import type { CreateRpcProtocolOptions } from "@/types/protocol/rpc-protocol.type";
 import type {
-	DefaultRpcFreshAccept,
-	DefaultRpcFreshRequest,
-	DefaultRpcJsonRecord,
-	DefaultRpcResumeAccept,
-	DefaultRpcResumeReject,
-	DefaultRpcResumeRequest,
-} from "@/protocols/default/default-rpc-record.type";
-import { DefaultRpcSession } from "@/protocols/default/default-rpc-session.impl";
+	RpcFreshAccept,
+	RpcFreshRequest,
+	RpcJsonRecord,
+	RpcResumeAccept,
+	RpcResumeReject,
+	RpcResumeRequest,
+} from "@/types/protocol/rpc-wire-record.type";
 
-interface IDefaultRpcAttempt {
-	readonly endpoint: DefaultRpcEndpoint;
+export class RpcProtocolImpl<TKey> implements IRpcProtocol {
+	readonly _options: Readonly<CreateRpcProtocolOptions<TKey>>;
+
+	public constructor(options: Readonly<CreateRpcProtocolOptions<TKey>>) {
+		this._options = options;
+	}
+
+	public createConnector(
+		host: IRpcProtocolConnectorHost,
+	): IRpcProtocolConnectorRuntime {
+		return new RpcConnectorRuntime(host, this._options);
+	}
+
+	public createAcceptor(
+		host: IRpcProtocolAcceptorHost,
+	): IRpcProtocolAcceptorRuntime {
+		return new RpcAcceptorRuntime(host, this._options);
+	}
+}
+
+interface IRpcAttempt<TKey> {
+	readonly endpoint: IRpcEndpoint;
 	readonly signal: AbortSignal;
 	readonly task: Promise<void>;
 	readonly resolve: () => void;
@@ -64,46 +60,47 @@ interface IDefaultRpcAttempt {
 	timer?: ReturnType<typeof setTimeout>;
 	removeAbortListener?: () => void;
 	settled: boolean;
-	session?: DefaultRpcSession;
+	session?: IRpcSession<TKey>;
 }
 
-interface IDefaultRpcConnectorAttempt extends IDefaultRpcAttempt {
+interface IRpcConnectorAttempt<TKey> extends IRpcAttempt<TKey> {
 	readonly mode: "fresh" | "resume";
-	request?: DefaultRpcFreshRequest | DefaultRpcResumeRequest;
+	request?: RpcFreshRequest | RpcResumeRequest;
 	requestAdmission?: Promise<void>;
 }
 
-function createEndpoint(
+function createEndpoint<TKey>(
+	factory: CreateRpcProtocolOptions<TKey>["createEndpoint"],
 	connection: IRpcConnection,
 	onMessage: (
-		endpoint: DefaultRpcEndpoint,
+		endpoint: IRpcEndpoint,
 		message: Uint8Array,
 	) => Promise<void> | void,
 	onFailure: (
-		endpoint: DefaultRpcEndpoint,
-		reason: DefaultRpcEndpointFailure,
+		endpoint: IRpcEndpoint,
+		reason: RpcEndpointFailure,
 		error?: Error,
 	) => void,
-): DefaultRpcEndpoint {
-	let endpoint: DefaultRpcEndpoint | undefined;
+): IRpcEndpoint {
+	let endpoint: IRpcEndpoint | undefined;
 	let earlyFailure:
-		| { readonly reason: DefaultRpcEndpointFailure; readonly error?: Error }
+		| { readonly reason: RpcEndpointFailure; readonly error?: Error }
 		| undefined;
-	endpoint = new DefaultRpcEndpoint(
+	endpoint = factory({
 		connection,
-		(message) => onMessage(endpoint as DefaultRpcEndpoint, message),
-		(reason, error) => {
+		onMessage: (message) => onMessage(endpoint as IRpcEndpoint, message),
+		onFailure: (reason, error) => {
 			if (endpoint === undefined) {
 				earlyFailure = error === undefined ? { reason } : { reason, error };
 				return;
 			}
 			onFailure(endpoint, reason, error);
 		},
-	);
+	});
 	if (earlyFailure !== undefined) {
 		const failure = earlyFailure;
 		queueMicrotask(() =>
-			onFailure(endpoint as DefaultRpcEndpoint, failure.reason, failure.error),
+			onFailure(endpoint as IRpcEndpoint, failure.reason, failure.error),
 		);
 	}
 	return endpoint;
@@ -119,8 +116,8 @@ function closeUnboundConnection(connection: IRpcConnection): void {
 	});
 }
 
-function installAttemptAbort(
-	attempt: IDefaultRpcAttempt,
+function installAttemptAbort<TKey>(
+	attempt: IRpcAttempt<TKey>,
 	onAbort: () => void,
 ): void {
 	if (attempt.signal.aborted) {
@@ -132,7 +129,7 @@ function installAttemptAbort(
 		attempt.signal.removeEventListener("abort", onAbort);
 }
 
-function clearAttempt(attempt: IDefaultRpcAttempt): void {
+function clearAttempt<TKey>(attempt: IRpcAttempt<TKey>): void {
 	if (attempt.timer !== undefined) {
 		clearTimeout(attempt.timer);
 		attempt.timer = undefined;
@@ -141,7 +138,7 @@ function clearAttempt(attempt: IDefaultRpcAttempt): void {
 	attempt.removeAbortListener = undefined;
 }
 
-function releaseAttemptResources(attempt: IDefaultRpcAttempt): void {
+function releaseAttemptResources<TKey>(attempt: IRpcAttempt<TKey>): void {
 	if (!attempt.resourcesFinished || attempt.cryptoJobCount !== 0) {
 		return;
 	}
@@ -150,13 +147,13 @@ function releaseAttemptResources(attempt: IDefaultRpcAttempt): void {
 	releaseHandshakeSlot?.();
 }
 
-function finishAttemptResources(attempt: IDefaultRpcAttempt): void {
+function finishAttemptResources<TKey>(attempt: IRpcAttempt<TKey>): void {
 	attempt.resourcesFinished = true;
 	releaseAttemptResources(attempt);
 }
 
-async function runAttemptCrypto<T>(
-	attempt: IDefaultRpcAttempt,
+async function runAttemptCrypto<TKey, T>(
+	attempt: IRpcAttempt<TKey>,
 	operation: () => Promise<T>,
 ): Promise<T> {
 	attempt.cryptoJobCount += 1;
@@ -169,18 +166,21 @@ async function runAttemptCrypto<T>(
 }
 
 /** Active one-to-one Default Protocol runtime. */
-class DefaultRpcConnectorRuntime implements IRpcProtocolConnectorRuntime {
+class RpcConnectorRuntime<TKey> implements IRpcProtocolConnectorRuntime {
 	readonly _host: IRpcProtocolConnectorHost;
-	readonly _counterExhausted: boolean;
-	_attempt: IDefaultRpcConnectorAttempt | undefined;
-	_session: DefaultRpcSession | undefined;
+	readonly _options: Readonly<CreateRpcProtocolOptions<TKey>>;
+	_attempt: IRpcConnectorAttempt<TKey> | undefined;
+	_session: IRpcSession<TKey> | undefined;
 	_handshakeSlotsInUse = 0;
 	_closing = false;
 	_cleanupTask: Promise<void> | undefined;
 
-	constructor(host: IRpcProtocolConnectorHost, counterExhausted: boolean) {
+	constructor(
+		host: IRpcProtocolConnectorHost,
+		options: Readonly<CreateRpcProtocolOptions<TKey>>,
+	) {
 		this._host = host;
-		this._counterExhausted = counterExhausted;
+		this._options = options;
 	}
 
 	bind(connection: IRpcConnection, signal: AbortSignal): Promise<void> {
@@ -208,10 +208,11 @@ class DefaultRpcConnectorRuntime implements IRpcProtocolConnectorRuntime {
 			reject = taskReject;
 		});
 		this._handshakeSlotsInUse += 1;
-		let attempt: IDefaultRpcConnectorAttempt;
-		let endpoint: DefaultRpcEndpoint;
+		let attempt: IRpcConnectorAttempt<TKey>;
+		let endpoint: IRpcEndpoint;
 		try {
 			endpoint = createEndpoint(
+				this._options.createEndpoint,
 				connection,
 				(_endpoint, message) => this._receiveConnectorRecord(attempt, message),
 				(_endpoint, reason, error) =>
@@ -288,21 +289,21 @@ class DefaultRpcConnectorRuntime implements IRpcProtocolConnectorRuntime {
 		return this._cleanupTask;
 	}
 
-	_startFresh(attempt: IDefaultRpcConnectorAttempt): void {
+	_startFresh(attempt: IRpcConnectorAttempt<TKey>): void {
 		if (!this._isCurrent(attempt)) {
 			return;
 		}
-		let request: DefaultRpcFreshRequest;
+		let request: RpcFreshRequest;
 		let encoded: Uint8Array;
 		try {
-			const initiatorNonce = createDefaultRpcRandomCarrier();
+			const initiatorNonce = this._options.cryptography.createRandomCarrier();
 			initiatorNonce.bytes.fill(0);
 			request = Object.freeze({
 				kind: "fresh",
-				profiles: Object.freeze([DEFAULT_RPC_PROFILE_ID]),
+				profiles: Object.freeze([RPC_PROFILE_ID]),
 				initiatorNonce: initiatorNonce.value,
-			}) as DefaultRpcFreshRequest;
-			encoded = encodeDefaultRpcRecord(request);
+			}) as RpcFreshRequest;
+			encoded = this._options.codec.encode(request);
 		} catch (error) {
 			this._failAttempt(attempt, error);
 			return;
@@ -314,7 +315,7 @@ class DefaultRpcConnectorRuntime implements IRpcProtocolConnectorRuntime {
 		);
 	}
 
-	async _startResume(attempt: IDefaultRpcConnectorAttempt): Promise<void> {
+	async _startResume(attempt: IRpcConnectorAttempt<TKey>): Promise<void> {
 		if (!this._isCurrent(attempt)) {
 			return;
 		}
@@ -326,18 +327,22 @@ class DefaultRpcConnectorRuntime implements IRpcProtocolConnectorRuntime {
 		}
 		try {
 			const resumeAttempt = session.consumeResumeAttempt();
-			const initiatorNonce = createDefaultRpcRandomCarrier();
+			const initiatorNonce = this._options.cryptography.createRandomCarrier();
 			initiatorNonce.bytes.fill(0);
 			const requestWithoutProof = Object.freeze({
 				kind: "resume",
-				profile: DEFAULT_RPC_PROFILE_ID,
+				profile: RPC_PROFILE_ID,
 				sessionId: session.sessionId,
 				receivedThrough: session.receivedThrough,
 				resumeAttempt,
 				initiatorNonce: initiatorNonce.value,
-			}) as DefaultRpcJsonRecord;
+			}) as RpcJsonRecord;
 			const proof = await runAttemptCrypto(attempt, () =>
-				signDefaultRpcResumeRequest(proofKey, requestWithoutProof),
+				this._options.cryptography.signProof({
+					kind: "resume-request",
+					proofKey,
+					record: requestWithoutProof,
+				}),
 			);
 			if (
 				!this._isCurrent(attempt) ||
@@ -350,10 +355,10 @@ class DefaultRpcConnectorRuntime implements IRpcProtocolConnectorRuntime {
 			const request = Object.freeze({
 				...requestWithoutProof,
 				proof,
-			}) as DefaultRpcResumeRequest;
+			}) as RpcResumeRequest;
 			attempt.request = request;
 			attempt.requestAdmission = attempt.endpoint.sendNow(
-				encodeDefaultRpcRecord(request),
+				this._options.codec.encode(request),
 			);
 			void attempt.requestAdmission.catch((error) =>
 				this._failAttempt(attempt, error),
@@ -364,7 +369,7 @@ class DefaultRpcConnectorRuntime implements IRpcProtocolConnectorRuntime {
 	}
 
 	_receiveConnectorRecord(
-		attempt: IDefaultRpcConnectorAttempt,
+		attempt: IRpcConnectorAttempt<TKey>,
 		bytes: Uint8Array,
 	): Promise<void> | void {
 		if (attempt.settled) {
@@ -377,7 +382,7 @@ class DefaultRpcConnectorRuntime implements IRpcProtocolConnectorRuntime {
 	}
 
 	async _receiveFreshAccept(
-		attempt: IDefaultRpcConnectorAttempt,
+		attempt: IRpcConnectorAttempt<TKey>,
 		bytes: Uint8Array,
 	): Promise<void> {
 		if (!this._isCurrent(attempt)) {
@@ -398,12 +403,10 @@ class DefaultRpcConnectorRuntime implements IRpcProtocolConnectorRuntime {
 		}
 		try {
 			await requestAdmission;
-			const accept = validateDefaultRpcFreshAccept(
-				decodeDefaultRpcRecord(bytes),
-			);
+			const accept = this._options.codec.decode(bytes, "fresh-accept");
 			const proofKey = await runAttemptCrypto(attempt, () =>
-				deriveDefaultRpcProofKey(
-					decodeDefaultRpcBase64Url32(accept.sessionSecret),
+				this._options.cryptography.deriveProofKey(
+					this._options.cryptography.decodeBase64Url32(accept.sessionSecret),
 					accept.sessionId,
 				),
 			);
@@ -411,24 +414,30 @@ class DefaultRpcConnectorRuntime implements IRpcProtocolConnectorRuntime {
 				return;
 			}
 			const valid = await runAttemptCrypto(attempt, () =>
-				verifyDefaultRpcFreshAccept(proofKey, request, accept),
+				this._options.cryptography.verifyProof({
+					kind: "fresh-accept",
+					proofKey,
+					request,
+					record: accept,
+				}),
 			);
 			if (!valid || !this._isCurrent(attempt)) {
 				throw new Error("Default RPC fresh accept proof is invalid or stale.");
 			}
 
-			const session = new DefaultRpcSession(
-				"connector",
-				this._host,
-				accept.sessionId,
+			const session = this._options.createSession({
+				role: "connector",
+				host: this._host,
+				sessionId: accept.sessionId,
 				proofKey,
-				(terminal) => {
+				codec: this._options.codec,
+				onTerminal: (terminal) => {
 					if (this._session === terminal) {
 						this._session = undefined;
 					}
 				},
-				this._counterExhausted,
-			);
+				counterExhausted: this._options.counterExhausted,
+			});
 			session.installBinding(attempt.endpoint, accept.bindingEpoch, 0);
 			const sessionHost = this._host.attachSession(session);
 			if (sessionHost === undefined || !this._isCurrent(attempt)) {
@@ -448,7 +457,7 @@ class DefaultRpcConnectorRuntime implements IRpcProtocolConnectorRuntime {
 	}
 
 	async _receiveResumeOutcome(
-		attempt: IDefaultRpcConnectorAttempt,
+		attempt: IRpcConnectorAttempt<TKey>,
 		bytes: Uint8Array,
 	): Promise<void> {
 		if (!this._isCurrent(attempt)) {
@@ -474,15 +483,18 @@ class DefaultRpcConnectorRuntime implements IRpcProtocolConnectorRuntime {
 
 		try {
 			await requestAdmission;
-			const outcome = validateDefaultRpcResumeOutcome(
-				decodeDefaultRpcRecord(bytes),
-			);
+			const outcome = this._options.codec.decode(bytes, "resume-outcome");
 			if (outcome.kind === "reject") {
 				if (outcome.code === "resume-rejected") {
 					throw new Error("Default RPC resume was generically rejected.");
 				}
 				const valid = await runAttemptCrypto(attempt, () =>
-					verifyDefaultRpcAuthenticatedReject(proofKey, request, outcome),
+					this._options.cryptography.verifyProof({
+						kind: "resume-reject",
+						proofKey,
+						request,
+						record: outcome,
+					}),
 				);
 				if (!valid || !this._isCurrent(attempt)) {
 					throw new Error(
@@ -498,13 +510,18 @@ class DefaultRpcConnectorRuntime implements IRpcProtocolConnectorRuntime {
 			}
 
 			const valid = await runAttemptCrypto(attempt, () =>
-				verifyDefaultRpcResumeAccept(proofKey, request, outcome),
+				this._options.cryptography.verifyProof({
+					kind: "resume-accept",
+					proofKey,
+					request,
+					record: outcome,
+				}),
 			);
 			if (!valid || !this._isCurrent(attempt)) {
 				throw new Error("Default RPC resume accept proof is invalid or stale.");
 			}
 			const contradictory =
-				outcome.profile !== DEFAULT_RPC_PROFILE_ID ||
+				outcome.profile !== RPC_PROFILE_ID ||
 				outcome.sessionId !== session.sessionId ||
 				outcome.bindingEpoch <= session.bindingEpoch ||
 				session.classifyPeerCursor(outcome.receivedThrough) !== "valid" ||
@@ -529,8 +546,8 @@ class DefaultRpcConnectorRuntime implements IRpcProtocolConnectorRuntime {
 	}
 
 	_connectorEndpointFailed(
-		attempt: IDefaultRpcConnectorAttempt,
-		reason: DefaultRpcEndpointFailure,
+		attempt: IRpcConnectorAttempt<TKey>,
+		reason: RpcEndpointFailure,
 		error?: Error,
 	): void {
 		const session = attempt.session;
@@ -547,11 +564,11 @@ class DefaultRpcConnectorRuntime implements IRpcProtocolConnectorRuntime {
 		);
 	}
 
-	_isCurrent(attempt: IDefaultRpcConnectorAttempt): boolean {
+	_isCurrent(attempt: IRpcConnectorAttempt<TKey>): boolean {
 		return !attempt.settled && this._attempt === attempt && !this._closing;
 	}
 
-	_succeedAttempt(attempt: IDefaultRpcConnectorAttempt): void {
+	_succeedAttempt(attempt: IRpcConnectorAttempt<TKey>): void {
 		if (!this._isCurrent(attempt)) {
 			return;
 		}
@@ -562,7 +579,7 @@ class DefaultRpcConnectorRuntime implements IRpcProtocolConnectorRuntime {
 		attempt.resolve();
 	}
 
-	_failAttempt(attempt: IDefaultRpcConnectorAttempt, error: unknown): void {
+	_failAttempt(attempt: IRpcConnectorAttempt<TKey>, error: unknown): void {
 		if (attempt.settled) {
 			return;
 		}
@@ -582,20 +599,23 @@ class DefaultRpcConnectorRuntime implements IRpcProtocolConnectorRuntime {
 }
 
 /** Passive one-to-many Default Protocol runtime. */
-class DefaultRpcAcceptorRuntime implements IRpcProtocolAcceptorRuntime {
+class RpcAcceptorRuntime<TKey> implements IRpcProtocolAcceptorRuntime {
 	readonly _host: IRpcProtocolAcceptorHost;
-	readonly _counterExhausted: boolean;
-	readonly _attempts = new Set<IDefaultRpcAttempt>();
-	readonly _sessions = new Map<string, DefaultRpcSession>();
+	readonly _options: Readonly<CreateRpcProtocolOptions<TKey>>;
+	readonly _attempts = new Set<IRpcAttempt<TKey>>();
+	readonly _sessions = new Map<string, IRpcSession<TKey>>();
 	readonly _provisionalSessionIds = new Set<string>();
 	_handshakeSlotsInUse = 0;
 	_freshSessionReservations = 0;
 	_closing = false;
 	_cleanupTask: Promise<void> | undefined;
 
-	constructor(host: IRpcProtocolAcceptorHost, counterExhausted: boolean) {
+	constructor(
+		host: IRpcProtocolAcceptorHost,
+		options: Readonly<CreateRpcProtocolOptions<TKey>>,
+	) {
 		this._host = host;
-		this._counterExhausted = counterExhausted;
+		this._options = options;
 	}
 
 	accept(connection: IRpcConnection, signal: AbortSignal): Promise<void> {
@@ -616,10 +636,11 @@ class DefaultRpcAcceptorRuntime implements IRpcProtocolAcceptorRuntime {
 			resolve = taskResolve;
 			reject = taskReject;
 		});
-		let attempt: IDefaultRpcAttempt;
-		let endpoint: DefaultRpcEndpoint;
+		let attempt: IRpcAttempt<TKey>;
+		let endpoint: IRpcEndpoint;
 		try {
 			endpoint = createEndpoint(
+				this._options.createEndpoint,
 				connection,
 				(_endpoint, message) => this._receiveBootstrap(attempt, message),
 				(_endpoint, reason, error) =>
@@ -693,7 +714,7 @@ class DefaultRpcAcceptorRuntime implements IRpcProtocolAcceptorRuntime {
 	}
 
 	_receiveBootstrap(
-		attempt: IDefaultRpcAttempt,
+		attempt: IRpcAttempt<TKey>,
 		bytes: Uint8Array,
 	): Promise<void> | void {
 		if (attempt.settled) {
@@ -703,42 +724,28 @@ class DefaultRpcAcceptorRuntime implements IRpcProtocolAcceptorRuntime {
 		if (!this._isCurrent(attempt)) {
 			return;
 		}
-		let record: DefaultRpcJsonRecord;
+		let record: RpcFreshRequest | RpcResumeRequest;
 		try {
-			record = decodeDefaultRpcRecord(bytes);
+			record = this._options.codec.decode(bytes, "bootstrap-request");
 		} catch (error) {
 			this._failAttempt(attempt, error);
 			return;
 		}
-		let kind: string;
-		try {
-			kind = readDefaultRpcRecordKind(record);
-		} catch (error) {
-			this._failAttempt(attempt, error);
-			return;
-		}
-		if (kind === "fresh") {
+		if (record.kind === "fresh") {
 			return this._receiveFreshRequest(attempt, record);
 		}
-		if (kind === "resume") {
-			return this._receiveResumeRequest(attempt, record);
-		}
-		this._failAttempt(
-			attempt,
-			new Error("Default RPC bootstrap record kind is invalid."),
-		);
+		return this._receiveResumeRequest(attempt, record);
 	}
 
 	async _receiveFreshRequest(
-		attempt: IDefaultRpcAttempt,
-		record: DefaultRpcJsonRecord,
+		attempt: IRpcAttempt<TKey>,
+		request: RpcFreshRequest,
 	): Promise<void> {
 		if (!this._isCurrent(attempt)) {
 			return;
 		}
 		try {
-			const request = validateDefaultRpcFreshRequest(record);
-			if (!request.profiles.includes(DEFAULT_RPC_PROFILE_ID)) {
+			if (!request.profiles.includes(RPC_PROFILE_ID)) {
 				await this._rejectFresh(attempt, "unsupported-profile");
 				return;
 			}
@@ -756,11 +763,11 @@ class DefaultRpcAcceptorRuntime implements IRpcProtocolAcceptorRuntime {
 				this._failAttempt(attempt, new Error("Default RPC Session ID failed."));
 				return;
 			}
-			const secret = createDefaultRpcRandomCarrier();
-			const responderNonce = createDefaultRpcRandomCarrier();
+			const secret = this._options.cryptography.createRandomCarrier();
+			const responderNonce = this._options.cryptography.createRandomCarrier();
 			responderNonce.bytes.fill(0);
 			const proofKey = await runAttemptCrypto(attempt, () =>
-				deriveDefaultRpcProofKey(secret.bytes, sessionId),
+				this._options.cryptography.deriveProofKey(secret.bytes, sessionId),
 			);
 			if (
 				!this._isCurrent(attempt) ||
@@ -770,14 +777,19 @@ class DefaultRpcAcceptorRuntime implements IRpcProtocolAcceptorRuntime {
 			}
 			const acceptWithoutProof = Object.freeze({
 				kind: "accept",
-				profile: DEFAULT_RPC_PROFILE_ID,
+				profile: RPC_PROFILE_ID,
 				sessionId,
 				bindingEpoch: 1,
 				responderNonce: responderNonce.value,
 				sessionSecret: secret.value,
-			}) as DefaultRpcJsonRecord;
+			}) as RpcJsonRecord;
 			const proof = await runAttemptCrypto(attempt, () =>
-				signDefaultRpcFreshAccept(proofKey, request, acceptWithoutProof),
+				this._options.cryptography.signProof({
+					kind: "fresh-accept",
+					proofKey,
+					request,
+					record: acceptWithoutProof,
+				}),
 			);
 			if (
 				!this._isCurrent(attempt) ||
@@ -788,19 +800,20 @@ class DefaultRpcAcceptorRuntime implements IRpcProtocolAcceptorRuntime {
 			const accept = Object.freeze({
 				...acceptWithoutProof,
 				proof,
-			}) as DefaultRpcFreshAccept;
-			const session = new DefaultRpcSession(
-				"acceptor",
-				this._host,
+			}) as RpcFreshAccept;
+			const session = this._options.createSession({
+				role: "acceptor",
+				host: this._host,
 				sessionId,
 				proofKey,
-				(terminal) => {
+				codec: this._options.codec,
+				onTerminal: (terminal) => {
 					if (this._sessions.get(terminal.sessionId) === terminal) {
 						this._sessions.delete(terminal.sessionId);
 					}
 				},
-				this._counterExhausted,
-			);
+				counterExhausted: this._options.counterExhausted,
+			});
 			const sessionHost = this._host.admitSession(session);
 			if (sessionHost === undefined || !this._isCurrent(attempt)) {
 				session.forceClose();
@@ -814,7 +827,7 @@ class DefaultRpcAcceptorRuntime implements IRpcProtocolAcceptorRuntime {
 			this._releaseProvisionalSessionId(attempt);
 			this._releaseFreshSession(attempt);
 			try {
-				await attempt.endpoint.sendNow(encodeDefaultRpcRecord(accept));
+				await attempt.endpoint.sendNow(this._options.codec.encode(accept));
 			} catch (error) {
 				session.endpointFailed(
 					attempt.endpoint,
@@ -835,22 +848,15 @@ class DefaultRpcAcceptorRuntime implements IRpcProtocolAcceptorRuntime {
 	}
 
 	async _receiveResumeRequest(
-		attempt: IDefaultRpcAttempt,
-		record: DefaultRpcJsonRecord,
+		attempt: IRpcAttempt<TKey>,
+		request: RpcResumeRequest,
 	): Promise<void> {
-		let request: DefaultRpcResumeRequest;
-		try {
-			request = validateDefaultRpcResumeRequest(record);
-		} catch (error) {
-			this._failAttempt(attempt, error);
-			return;
-		}
 		const session = this._sessions.get(request.sessionId);
 		const proofKey = session?.proofKey;
 		if (
 			session === undefined ||
 			proofKey === undefined ||
-			request.profile !== DEFAULT_RPC_PROFILE_ID
+			request.profile !== RPC_PROFILE_ID
 		) {
 			await this._rejectResumeGeneric(attempt, request);
 			return;
@@ -859,7 +865,11 @@ class DefaultRpcAcceptorRuntime implements IRpcProtocolAcceptorRuntime {
 		let proofValid = false;
 		try {
 			proofValid = await runAttemptCrypto(attempt, () =>
-				verifyDefaultRpcResumeRequest(proofKey, request),
+				this._options.cryptography.verifyProof({
+					kind: "resume-request",
+					proofKey,
+					request,
+				}),
 			);
 		} catch {
 			// A syntactically valid but unverifiable proof is a generic rejection.
@@ -886,10 +896,10 @@ class DefaultRpcAcceptorRuntime implements IRpcProtocolAcceptorRuntime {
 	}
 
 	async _acceptResume(
-		attempt: IDefaultRpcAttempt,
-		request: DefaultRpcResumeRequest,
-		session: DefaultRpcSession,
-		proofKey: CryptoKey,
+		attempt: IRpcAttempt<TKey>,
+		request: RpcResumeRequest,
+		session: IRpcSession<TKey>,
+		proofKey: TKey,
 	): Promise<void> {
 		for (;;) {
 			if (
@@ -909,18 +919,23 @@ class DefaultRpcAcceptorRuntime implements IRpcProtocolAcceptorRuntime {
 			}
 			const bindingEpoch = session.bindingEpoch + 1;
 			const receivedThrough = session.receivedThrough;
-			const responderNonce = createDefaultRpcRandomCarrier();
+			const responderNonce = this._options.cryptography.createRandomCarrier();
 			responderNonce.bytes.fill(0);
 			const acceptWithoutProof = Object.freeze({
 				kind: "accept",
-				profile: DEFAULT_RPC_PROFILE_ID,
+				profile: RPC_PROFILE_ID,
 				sessionId: session.sessionId,
 				bindingEpoch,
 				receivedThrough,
 				responderNonce: responderNonce.value,
-			}) as DefaultRpcJsonRecord;
+			}) as RpcJsonRecord;
 			const proof = await runAttemptCrypto(attempt, () =>
-				signDefaultRpcResumeAccept(proofKey, request, acceptWithoutProof),
+				this._options.cryptography.signProof({
+					kind: "resume-accept",
+					proofKey,
+					request,
+					record: acceptWithoutProof,
+				}),
 			);
 			if (
 				!this._isCurrent(attempt) ||
@@ -946,7 +961,7 @@ class DefaultRpcAcceptorRuntime implements IRpcProtocolAcceptorRuntime {
 			const accept = Object.freeze({
 				...acceptWithoutProof,
 				proof,
-			}) as DefaultRpcResumeAccept;
+			}) as RpcResumeAccept;
 			try {
 				const installedEpoch = session.acceptResumeBinding(
 					attempt.endpoint,
@@ -959,7 +974,7 @@ class DefaultRpcAcceptorRuntime implements IRpcProtocolAcceptorRuntime {
 					);
 				}
 				attempt.session = session;
-				await attempt.endpoint.sendNow(encodeDefaultRpcRecord(accept));
+				await attempt.endpoint.sendNow(this._options.codec.encode(accept));
 			} catch (error) {
 				if (session.ownsEndpoint(attempt.endpoint)) {
 					session.endpointFailed(
@@ -984,19 +999,23 @@ class DefaultRpcAcceptorRuntime implements IRpcProtocolAcceptorRuntime {
 	}
 
 	async _rejectResumeGeneric(
-		attempt: IDefaultRpcAttempt,
-		request: DefaultRpcResumeRequest,
+		attempt: IRpcAttempt<TKey>,
+		request: RpcResumeRequest,
 	): Promise<void> {
 		try {
-			const responderNonce = createDefaultRpcRandomCarrier();
+			const responderNonce = this._options.cryptography.createRandomCarrier();
 			responderNonce.bytes.fill(0);
 			const rejectWithoutProof = Object.freeze({
 				kind: "reject",
 				code: "resume-rejected",
 				responderNonce: responderNonce.value,
-			}) as DefaultRpcJsonRecord;
+			}) as RpcJsonRecord;
 			const proof = await runAttemptCrypto(attempt, () =>
-				createDefaultRpcGenericRejectProof(request, rejectWithoutProof),
+				this._options.cryptography.signProof({
+					kind: "generic-reject",
+					request,
+					record: rejectWithoutProof,
+				}),
 			);
 			if (!this._isCurrent(attempt)) {
 				return;
@@ -1004,8 +1023,8 @@ class DefaultRpcAcceptorRuntime implements IRpcProtocolAcceptorRuntime {
 			const reject = Object.freeze({
 				...rejectWithoutProof,
 				proof,
-			}) as DefaultRpcResumeReject;
-			await attempt.endpoint.sendNow(encodeDefaultRpcRecord(reject));
+			}) as RpcResumeReject;
+			await attempt.endpoint.sendNow(this._options.codec.encode(reject));
 		} catch {
 			// Generic rejection remains attempt-scoped even if its Connection fails.
 		} finally {
@@ -1017,25 +1036,26 @@ class DefaultRpcAcceptorRuntime implements IRpcProtocolAcceptorRuntime {
 	}
 
 	async _rejectResumeContinuity(
-		attempt: IDefaultRpcAttempt,
-		request: DefaultRpcResumeRequest,
-		session: DefaultRpcSession,
-		proofKey: CryptoKey,
+		attempt: IRpcAttempt<TKey>,
+		request: RpcResumeRequest,
+		session: IRpcSession<TKey>,
+		proofKey: TKey,
 	): Promise<void> {
 		try {
-			const responderNonce = createDefaultRpcRandomCarrier();
+			const responderNonce = this._options.cryptography.createRandomCarrier();
 			responderNonce.bytes.fill(0);
 			const rejectWithoutProof = Object.freeze({
 				kind: "reject",
 				code: "continuity-failure",
 				responderNonce: responderNonce.value,
-			}) as DefaultRpcJsonRecord;
+			}) as RpcJsonRecord;
 			const proof = await runAttemptCrypto(attempt, () =>
-				signDefaultRpcAuthenticatedReject(
+				this._options.cryptography.signProof({
+					kind: "resume-reject",
 					proofKey,
 					request,
-					rejectWithoutProof,
-				),
+					record: rejectWithoutProof,
+				}),
 			);
 			if (
 				!this._isCurrent(attempt) ||
@@ -1049,9 +1069,9 @@ class DefaultRpcAcceptorRuntime implements IRpcProtocolAcceptorRuntime {
 			const reject = Object.freeze({
 				...rejectWithoutProof,
 				proof,
-			}) as DefaultRpcResumeReject;
+			}) as RpcResumeReject;
 			session.terminateContinuityFailure();
-			await attempt.endpoint.sendNow(encodeDefaultRpcRecord(reject));
+			await attempt.endpoint.sendNow(this._options.codec.encode(reject));
 		} catch {
 			// The authoritative Session terminal remains selected.
 		} finally {
@@ -1063,19 +1083,19 @@ class DefaultRpcAcceptorRuntime implements IRpcProtocolAcceptorRuntime {
 	}
 
 	async _rejectFresh(
-		attempt: IDefaultRpcAttempt,
+		attempt: IRpcAttempt<TKey>,
 		code: "unsupported-profile" | "admission-rejected",
 	): Promise<void> {
 		try {
 			await attempt.endpoint.sendNow(
-				encodeDefaultRpcRecord({ kind: "reject", code }),
+				this._options.codec.encode({ kind: "reject", code }),
 			);
 		} finally {
 			this._failAttempt(attempt, new Error(`Default RPC fresh ${code}.`));
 		}
 	}
 
-	_reserveFreshSession(attempt: IDefaultRpcAttempt): boolean {
+	_reserveFreshSession(attempt: IRpcAttempt<TKey>): boolean {
 		if (
 			this._sessions.size + this._freshSessionReservations >=
 			this._host.policy.maxSessions
@@ -1087,7 +1107,7 @@ class DefaultRpcAcceptorRuntime implements IRpcProtocolAcceptorRuntime {
 		return true;
 	}
 
-	_releaseFreshSession(attempt: IDefaultRpcAttempt): void {
+	_releaseFreshSession(attempt: IRpcAttempt<TKey>): void {
 		if (attempt.freshSessionReserved !== true) {
 			return;
 		}
@@ -1095,9 +1115,9 @@ class DefaultRpcAcceptorRuntime implements IRpcProtocolAcceptorRuntime {
 		this._freshSessionReservations -= 1;
 	}
 
-	_reserveSessionId(attempt: IDefaultRpcAttempt): string | undefined {
+	_reserveSessionId(attempt: IRpcAttempt<TKey>): string | undefined {
 		for (let candidateIndex = 0; candidateIndex < 8; candidateIndex += 1) {
-			const candidate = createDefaultRpcRandomCarrier();
+			const candidate = this._options.cryptography.createRandomCarrier();
 			candidate.bytes.fill(0);
 			if (
 				!this._sessions.has(candidate.value) &&
@@ -1111,7 +1131,7 @@ class DefaultRpcAcceptorRuntime implements IRpcProtocolAcceptorRuntime {
 		return undefined;
 	}
 
-	_releaseProvisionalSessionId(attempt: IDefaultRpcAttempt): void {
+	_releaseProvisionalSessionId(attempt: IRpcAttempt<TKey>): void {
 		const sessionId = attempt.provisionalSessionId;
 		attempt.provisionalSessionId = undefined;
 		if (sessionId !== undefined) {
@@ -1120,8 +1140,8 @@ class DefaultRpcAcceptorRuntime implements IRpcProtocolAcceptorRuntime {
 	}
 
 	_acceptorEndpointFailed(
-		attempt: IDefaultRpcAttempt,
-		reason: DefaultRpcEndpointFailure,
+		attempt: IRpcAttempt<TKey>,
+		reason: RpcEndpointFailure,
 		error?: Error,
 	): void {
 		const session = attempt.session;
@@ -1138,11 +1158,11 @@ class DefaultRpcAcceptorRuntime implements IRpcProtocolAcceptorRuntime {
 		);
 	}
 
-	_isCurrent(attempt: IDefaultRpcAttempt): boolean {
+	_isCurrent(attempt: IRpcAttempt<TKey>): boolean {
 		return !attempt.settled && this._attempts.has(attempt) && !this._closing;
 	}
 
-	_succeedAttempt(attempt: IDefaultRpcAttempt): void {
+	_succeedAttempt(attempt: IRpcAttempt<TKey>): void {
 		if (!this._isCurrent(attempt)) {
 			return;
 		}
@@ -1156,7 +1176,7 @@ class DefaultRpcAcceptorRuntime implements IRpcProtocolAcceptorRuntime {
 	}
 
 	_failAttempt(
-		attempt: IDefaultRpcAttempt,
+		attempt: IRpcAttempt<TKey>,
 		error: unknown,
 		retainSession = false,
 	): void {
@@ -1178,25 +1198,4 @@ class DefaultRpcAcceptorRuntime implements IRpcProtocolAcceptorRuntime {
 				: new Error("Default RPC fresh acceptance failed."),
 		);
 	}
-}
-
-function createDefaultRpcProtocol(counterExhausted: boolean): IRpcProtocol {
-	return Object.freeze({
-		createConnector: (host: IRpcProtocolConnectorHost) =>
-			new DefaultRpcConnectorRuntime(host, counterExhausted),
-		createAcceptor: (host: IRpcProtocolAcceptorHost) =>
-			new DefaultRpcAcceptorRuntime(host, counterExhausted),
-	});
-}
-
-const protocol = createDefaultRpcProtocol(false);
-
-/** Returns the private reusable built-in Protocol value for owner factories. */
-export function getDefaultRpcProtocol(): IRpcProtocol {
-	return protocol;
-}
-
-/** Returns a package-private real-ledger counter exhaustion fixture. */
-export function createDefaultRpcCounterExhaustionProtocolForTest(): IRpcProtocol {
-	return createDefaultRpcProtocol(true);
 }

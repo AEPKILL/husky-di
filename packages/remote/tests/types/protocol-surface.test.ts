@@ -89,5 +89,5 @@ void sameProtocolConnection;
 void sameTransportConnection;
 
 // @ts-expect-error RPC-PKG-003 keeps the built-in Protocol private.
-type MissingDefaultProtocol = import("../../src/index").DefaultRpcProtocol;
-void (null as unknown as MissingDefaultProtocol);
+type MissingRpcProtocolImpl = import("../../src/index").RpcProtocolImpl;
+void (null as unknown as MissingRpcProtocolImpl);

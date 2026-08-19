@@ -7,7 +7,7 @@
 import type {
 	IRpcProtocol,
 	IRpcProtocolRuntimePolicy,
-} from "@/interfaces/rpc-protocol.interface";
+} from "@/interfaces/protocol/rpc-protocol.interface";
 import type {
 	RpcAcceptorOptions,
 	RpcAcceptorRuntimePolicyOptions,

@@ -10,9 +10,9 @@ import { RpcError } from "../../src/index";
 const callerCreatedError = new RpcError("unavailable");
 void callerCreatedError;
 
-// @ts-expect-error RPC-BASE-003 keeps the default Codec private.
-type MissingDefaultCodec = import("../../src/protocol").DefaultRpcCodec;
-void (null as unknown as MissingDefaultCodec);
+// @ts-expect-error RPC-BASE-003 keeps the Codec interface private.
+type MissingRpcCodec = import("../../src/protocol").IRpcCodec;
+void (null as unknown as MissingRpcCodec);
 
 // @ts-expect-error RPC-POLICY-004 keeps the internal scheduler private.
 type MissingRpcScheduler = import("../../src/index").RpcHandlerScheduler;

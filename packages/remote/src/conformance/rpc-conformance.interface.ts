@@ -4,11 +4,11 @@
  * @created 2026-08-19 00:00:00
  */
 
+import type { IRpcProtocol } from "@/interfaces/protocol/rpc-protocol.interface";
 import type {
 	IRpcAcceptorAdapter,
 	IRpcConnectorAdapter,
 } from "@/interfaces/rpc-adapter.interface";
-import type { IRpcProtocol } from "@/interfaces/rpc-protocol.interface";
 
 export interface IRpcProtocolConformanceFixture {
 	readonly protocol: IRpcProtocol;

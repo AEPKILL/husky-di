@@ -4,16 +4,99 @@
  * @created 2026-08-19 00:00:00
  */
 
-import { DEFAULT_RPC_PROFILE_ID } from "@/protocols/default/default-rpc-profile.const";
+import { RPC_PROFILE_ID } from "@/constants/protocol/rpc-profile.const";
+import type { IRpcCryptography } from "@/interfaces/protocol/rpc-cryptography.interface";
 import type {
-	DefaultRpcFreshAccept,
-	DefaultRpcFreshRequest,
-	DefaultRpcJsonRecord,
-	DefaultRpcJsonValue,
-	DefaultRpcResumeAccept,
-	DefaultRpcResumeReject,
-	DefaultRpcResumeRequest,
-} from "@/protocols/default/default-rpc-record.type";
+	SignRpcProofOptions,
+	VerifyRpcProofOptions,
+} from "@/types/protocol/rpc-cryptography.type";
+import type {
+	RpcFreshAccept,
+	RpcFreshRequest,
+	RpcJsonRecord,
+	RpcJsonValue,
+	RpcResumeAccept,
+	RpcResumeReject,
+	RpcResumeRequest,
+} from "@/types/protocol/rpc-wire-record.type";
+
+export class RpcCryptographyImpl implements IRpcCryptography<CryptoKey> {
+	public createRandomCarrier(): {
+		readonly bytes: Uint8Array;
+		readonly value: string;
+	} {
+		return createRpcRandomCarrier();
+	}
+
+	public decodeBase64Url32(value: string): Uint8Array {
+		return decodeRpcBase64Url32(value);
+	}
+
+	public deriveProofKey(
+		sessionSecret: Uint8Array,
+		sessionId: string,
+	): Promise<CryptoKey> {
+		return deriveRpcProofKey(sessionSecret, sessionId);
+	}
+
+	public signProof(options: SignRpcProofOptions<CryptoKey>): Promise<string> {
+		switch (options.kind) {
+			case "fresh-accept":
+				return signRpcFreshAccept(
+					options.proofKey,
+					options.request,
+					options.record,
+				);
+			case "resume-request":
+				return signRpcResumeRequest(options.proofKey, options.record);
+			case "resume-accept":
+				return signRpcResumeAccept(
+					options.proofKey,
+					options.request,
+					options.record,
+				);
+			case "resume-reject":
+				return signRpcAuthenticatedReject(
+					options.proofKey,
+					options.request,
+					options.record,
+				);
+			default:
+				return createRpcGenericRejectProof(options.request, options.record);
+		}
+	}
+
+	public verifyProof(
+		options: VerifyRpcProofOptions<CryptoKey>,
+	): Promise<boolean> {
+		switch (options.kind) {
+			case "fresh-accept":
+				return verifyRpcFreshAccept(
+					options.proofKey,
+					options.request,
+					options.record,
+				);
+			case "resume-request":
+				return verifyRpcResumeRequest(options.proofKey, options.request);
+			case "resume-accept":
+				return verifyRpcResumeAccept(
+					options.proofKey,
+					options.request,
+					options.record,
+				);
+			default:
+				return verifyRpcAuthenticatedReject(
+					options.proofKey,
+					options.request,
+					options.record,
+				);
+		}
+	}
+
+	public canonicalize(record: RpcJsonRecord): string {
+		return canonicalize(record);
+	}
+}
 
 const textEncoder = new TextEncoder();
 const base64Url32Pattern = /^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$/;
@@ -54,7 +137,7 @@ function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
 	return copy.buffer;
 }
 
-function canonicalize(value: DefaultRpcJsonValue): string {
+function canonicalize(value: RpcJsonValue): string {
 	if (value === null || typeof value === "boolean") {
 		return JSON.stringify(value);
 	}
@@ -64,23 +147,21 @@ function canonicalize(value: DefaultRpcJsonValue): string {
 	if (Array.isArray(value)) {
 		return `[${value.map((item) => canonicalize(item)).join(",")}]`;
 	}
-	const record = value as DefaultRpcJsonRecord;
+	const record = value as RpcJsonRecord;
 	return `{${Object.keys(record)
 		.sort()
 		.map(
 			(key) =>
-				`${JSON.stringify(key)}:${canonicalize(record[key] as DefaultRpcJsonValue)}`,
+				`${JSON.stringify(key)}:${canonicalize(record[key] as RpcJsonValue)}`,
 		)
 		.join(",")}}`;
 }
 
-function withoutTopLevelProof(
-	record: DefaultRpcJsonRecord,
-): DefaultRpcJsonRecord {
-	const result = Object.create(null) as Record<string, DefaultRpcJsonValue>;
+function withoutTopLevelProof(record: RpcJsonRecord): RpcJsonRecord {
+	const result = Object.create(null) as Record<string, RpcJsonValue>;
 	for (const key of Object.keys(record)) {
 		if (key !== "proof") {
-			result[key] = record[key] as DefaultRpcJsonValue;
+			result[key] = record[key] as RpcJsonValue;
 		}
 	}
 	return result;
@@ -92,17 +173,17 @@ async function digest(value: Uint8Array): Promise<Uint8Array> {
 	);
 }
 
-async function hashRecord(record: DefaultRpcJsonRecord): Promise<Uint8Array> {
+async function hashRecord(record: RpcJsonRecord): Promise<Uint8Array> {
 	return digest(textEncoder.encode(canonicalize(record)));
 }
 
 function domain(label: string): Uint8Array {
-	return textEncoder.encode(`${DEFAULT_RPC_PROFILE_ID}\0${label}\0`);
+	return textEncoder.encode(`${RPC_PROFILE_ID}\0${label}\0`);
 }
 
 async function createFreshAcceptTranscript(
-	request: DefaultRpcFreshRequest,
-	accept: DefaultRpcFreshAccept | DefaultRpcJsonRecord,
+	request: RpcFreshRequest,
+	accept: RpcFreshAccept | RpcJsonRecord,
 ): Promise<Uint8Array> {
 	const requestHash = await hashRecord(request);
 	const acceptHash = await hashRecord(withoutTopLevelProof(accept));
@@ -110,7 +191,7 @@ async function createFreshAcceptTranscript(
 }
 
 async function createResumeRequestTranscript(
-	request: DefaultRpcJsonRecord,
+	request: RpcJsonRecord,
 ): Promise<Uint8Array> {
 	return concatenate(
 		domain("resume-request"),
@@ -120,8 +201,8 @@ async function createResumeRequestTranscript(
 
 async function createResumeOutcomeTranscript(
 	label: "resume-accept" | "resume-reject",
-	request: DefaultRpcResumeRequest,
-	outcome: DefaultRpcJsonRecord,
+	request: RpcResumeRequest,
+	outcome: RpcJsonRecord,
 ): Promise<Uint8Array> {
 	const requestHash = await hashRecord(withoutTopLevelProof(request));
 	const outcomeHash = await hashRecord(withoutTopLevelProof(outcome));
@@ -162,12 +243,12 @@ async function verifyHmac(
 	return getWebCrypto().subtle.verify(
 		"HMAC",
 		proofKey,
-		toArrayBuffer(decodeDefaultRpcBase64Url32(proof)),
+		toArrayBuffer(decodeRpcBase64Url32(proof)),
 		toArrayBuffer(input),
 	);
 }
 
-export function createDefaultRpcRandomCarrier(): {
+function createRpcRandomCarrier(): {
 	readonly bytes: Uint8Array;
 	readonly value: string;
 } {
@@ -175,7 +256,7 @@ export function createDefaultRpcRandomCarrier(): {
 	return { bytes, value: encodeBase64Url(bytes) };
 }
 
-export function decodeDefaultRpcBase64Url32(value: string): Uint8Array {
+function decodeRpcBase64Url32(value: string): Uint8Array {
 	if (!base64Url32Pattern.test(value)) {
 		throw new Error("RPC security carrier is not canonical Base64Url32.");
 	}
@@ -193,7 +274,7 @@ export function decodeDefaultRpcBase64Url32(value: string): Uint8Array {
 	return bytes;
 }
 
-export async function deriveDefaultRpcProofKey(
+async function deriveRpcProofKey(
 	sessionSecret: Uint8Array,
 	sessionId: string,
 ): Promise<CryptoKey> {
@@ -211,7 +292,7 @@ export async function deriveDefaultRpcProofKey(
 		sessionSecret.fill(0);
 	}
 	const context = await hashRecord({
-		profile: DEFAULT_RPC_PROFILE_ID,
+		profile: RPC_PROFILE_ID,
 		sessionId,
 	});
 	return crypto.subtle.deriveKey(
@@ -228,18 +309,18 @@ export async function deriveDefaultRpcProofKey(
 	);
 }
 
-export async function signDefaultRpcFreshAccept(
+async function signRpcFreshAccept(
 	proofKey: CryptoKey,
-	request: DefaultRpcFreshRequest,
-	accept: DefaultRpcJsonRecord,
+	request: RpcFreshRequest,
+	accept: RpcJsonRecord,
 ): Promise<string> {
 	return signHmac(proofKey, await createFreshAcceptTranscript(request, accept));
 }
 
-export async function verifyDefaultRpcFreshAccept(
+async function verifyRpcFreshAccept(
 	proofKey: CryptoKey,
-	request: DefaultRpcFreshRequest,
-	accept: DefaultRpcFreshAccept,
+	request: RpcFreshRequest,
+	accept: RpcFreshAccept,
 ): Promise<boolean> {
 	return verifyHmac(
 		proofKey,
@@ -248,16 +329,16 @@ export async function verifyDefaultRpcFreshAccept(
 	);
 }
 
-export async function signDefaultRpcResumeRequest(
+async function signRpcResumeRequest(
 	proofKey: CryptoKey,
-	request: DefaultRpcJsonRecord,
+	request: RpcJsonRecord,
 ): Promise<string> {
 	return signHmac(proofKey, await createResumeRequestTranscript(request));
 }
 
-export async function verifyDefaultRpcResumeRequest(
+async function verifyRpcResumeRequest(
 	proofKey: CryptoKey,
-	request: DefaultRpcResumeRequest,
+	request: RpcResumeRequest,
 ): Promise<boolean> {
 	return verifyHmac(
 		proofKey,
@@ -266,10 +347,10 @@ export async function verifyDefaultRpcResumeRequest(
 	);
 }
 
-export async function signDefaultRpcResumeAccept(
+async function signRpcResumeAccept(
 	proofKey: CryptoKey,
-	request: DefaultRpcResumeRequest,
-	accept: DefaultRpcJsonRecord,
+	request: RpcResumeRequest,
+	accept: RpcJsonRecord,
 ): Promise<string> {
 	return signHmac(
 		proofKey,
@@ -277,10 +358,10 @@ export async function signDefaultRpcResumeAccept(
 	);
 }
 
-export async function verifyDefaultRpcResumeAccept(
+async function verifyRpcResumeAccept(
 	proofKey: CryptoKey,
-	request: DefaultRpcResumeRequest,
-	accept: DefaultRpcResumeAccept,
+	request: RpcResumeRequest,
+	accept: RpcResumeAccept,
 ): Promise<boolean> {
 	return verifyHmac(
 		proofKey,
@@ -289,10 +370,10 @@ export async function verifyDefaultRpcResumeAccept(
 	);
 }
 
-export async function signDefaultRpcAuthenticatedReject(
+async function signRpcAuthenticatedReject(
 	proofKey: CryptoKey,
-	request: DefaultRpcResumeRequest,
-	reject: DefaultRpcJsonRecord,
+	request: RpcResumeRequest,
+	reject: RpcJsonRecord,
 ): Promise<string> {
 	return signHmac(
 		proofKey,
@@ -300,10 +381,10 @@ export async function signDefaultRpcAuthenticatedReject(
 	);
 }
 
-export async function verifyDefaultRpcAuthenticatedReject(
+async function verifyRpcAuthenticatedReject(
 	proofKey: CryptoKey,
-	request: DefaultRpcResumeRequest,
-	reject: DefaultRpcResumeReject,
+	request: RpcResumeRequest,
+	reject: RpcResumeReject,
 ): Promise<boolean> {
 	return verifyHmac(
 		proofKey,
@@ -312,19 +393,13 @@ export async function verifyDefaultRpcAuthenticatedReject(
 	);
 }
 
-export async function createDefaultRpcGenericRejectProof(
-	request: DefaultRpcResumeRequest,
-	reject: DefaultRpcJsonRecord,
+async function createRpcGenericRejectProof(
+	request: RpcResumeRequest,
+	reject: RpcJsonRecord,
 ): Promise<string> {
-	const dummyKey = await importHmacKey(createDefaultRpcRandomCarrier().bytes);
+	const dummyKey = await importHmacKey(createRpcRandomCarrier().bytes);
 	return signHmac(
 		dummyKey,
 		await createResumeOutcomeTranscript("resume-reject", request, reject),
 	);
-}
-
-export function canonicalizeDefaultRpcRecord(
-	record: DefaultRpcJsonRecord,
-): string {
-	return canonicalize(record);
 }

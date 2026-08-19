@@ -7,7 +7,8 @@
 import { createServiceIdentifier } from "@husky-di/core";
 import { Subject } from "rxjs";
 import { afterEach, describe, expect, it, vi } from "vitest";
-
+import { createRpcCounterExhaustionProtocolForTest } from "../src/factories/rpc-protocol.factory";
+import { RpcCryptographyImpl } from "../src/impls/protocol/rpc-cryptography.impl";
 import {
 	createRemoteServiceDescriptor,
 	createRpcAcceptor,
@@ -16,22 +17,16 @@ import {
 	type IRpcConnection,
 	type IRpcConnectorAdapter,
 } from "../src/index";
-import {
-	createDefaultRpcRandomCarrier,
-	decodeDefaultRpcBase64Url32,
-	deriveDefaultRpcProofKey,
-	signDefaultRpcResumeRequest,
-	verifyDefaultRpcAuthenticatedReject,
-} from "../src/protocols/default/default-rpc-crypto.util";
-import { createDefaultRpcCounterExhaustionProtocolForTest } from "../src/protocols/default/default-rpc-protocol.impl";
 import type {
-	DefaultRpcResumeReject,
-	DefaultRpcResumeRequest,
-} from "../src/protocols/default/default-rpc-record.type";
+	RpcResumeReject,
+	RpcResumeRequest,
+} from "../src/types/protocol/rpc-wire-record.type";
 
 interface CalculatorService {
 	add(left: number, right: number): number;
 }
+
+const cryptography = new RpcCryptographyImpl();
 
 afterEach(() => vi.useRealTimers());
 
@@ -772,7 +767,7 @@ describe("Default RPC Protocol", () => {
 	});
 
 	it("ORDER-003 exposes a package-private real-ledger counter exhaustion seam", async () => {
-		const protocol = createDefaultRpcCounterExhaustionProtocolForTest();
+		const protocol = createRpcCounterExhaustionProtocolForTest();
 		const descriptor = createRemoteServiceDescriptor(ICalculatorService, {
 			wireName: "example.calculator.v1",
 			methods: { add: true },
@@ -1106,11 +1101,11 @@ describe("Default RPC Protocol", () => {
 		if (freshAccept === undefined) {
 			throw new Error("Expected a captured fresh accept.");
 		}
-		const proofKey = await deriveDefaultRpcProofKey(
-			decodeDefaultRpcBase64Url32(freshAccept.sessionSecret as string),
+		const proofKey = await cryptography.deriveProofKey(
+			cryptography.decodeBase64Url32(freshAccept.sessionSecret as string),
 			freshAccept.sessionId as string,
 		);
-		const nonce = createDefaultRpcRandomCarrier();
+		const nonce = cryptography.createRandomCarrier();
 		nonce.bytes.fill(0);
 		const requestWithoutProof = {
 			kind: "resume",
@@ -1120,10 +1115,11 @@ describe("Default RPC Protocol", () => {
 			resumeAttempt: 1,
 			initiatorNonce: nonce.value,
 		};
-		const proof = await signDefaultRpcResumeRequest(
+		const proof = await cryptography.signProof({
+			kind: "resume-request",
 			proofKey,
-			requestWithoutProof,
-		);
+			record: requestWithoutProof,
+		});
 		const raw = network.openRawConnection();
 
 		raw.send({ ...requestWithoutProof, proof });
@@ -1137,17 +1133,23 @@ describe("Default RPC Protocol", () => {
 		const request = {
 			...requestWithoutProof,
 			proof,
-		} as DefaultRpcResumeRequest;
-		const reject = raw.responses[0] as DefaultRpcResumeReject;
+		} as RpcResumeRequest;
+		const reject = raw.responses[0] as RpcResumeReject;
 		expect(
-			await verifyDefaultRpcAuthenticatedReject(proofKey, request, reject),
+			await cryptography.verifyProof({
+				kind: "resume-reject",
+				proofKey,
+				request,
+				record: reject,
+			}),
 		).toBe(true);
 		expect(
-			await verifyDefaultRpcAuthenticatedReject(
+			await cryptography.verifyProof({
+				kind: "resume-reject",
 				proofKey,
-				{ ...request, receivedThrough: receivedThrough + 1 },
-				reject,
-			),
+				request: { ...request, receivedThrough: receivedThrough + 1 },
+				record: reject,
+			}),
 		).toBe(false);
 		await vi.waitFor(() => {
 			expect(acceptorPeer?.state).toMatchObject({
@@ -1338,8 +1340,8 @@ describe("Default RPC Protocol", () => {
 		if (freshAccept === undefined) {
 			throw new Error("Expected a captured fresh accept.");
 		}
-		const proofKey = await deriveDefaultRpcProofKey(
-			decodeDefaultRpcBase64Url32(freshAccept.sessionSecret as string),
+		const proofKey = await cryptography.deriveProofKey(
+			cryptography.decodeBase64Url32(freshAccept.sessionSecret as string),
 			freshAccept.sessionId as string,
 		);
 		network.disconnect(1);
@@ -1358,7 +1360,7 @@ describe("Default RPC Protocol", () => {
 						: undefined,
 			})),
 		);
-		const nonce = createDefaultRpcRandomCarrier();
+		const nonce = cryptography.createRandomCarrier();
 		nonce.bytes.fill(0);
 		const higherWithoutProof = {
 			kind: "resume",
@@ -1368,10 +1370,11 @@ describe("Default RPC Protocol", () => {
 			resumeAttempt: 2,
 			initiatorNonce: nonce.value,
 		};
-		const higherProof = await signDefaultRpcResumeRequest(
+		const higherProof = await cryptography.signProof({
+			kind: "resume-request",
 			proofKey,
-			higherWithoutProof,
-		);
+			record: higherWithoutProof,
+		});
 		const raw = network.openRawConnection();
 
 		raw.send({ ...higherWithoutProof, proof: higherProof });
@@ -1438,11 +1441,11 @@ describe("Default RPC Protocol", () => {
 		if (freshAccept === undefined) {
 			throw new Error("Expected a captured fresh accept.");
 		}
-		const proofKey = await deriveDefaultRpcProofKey(
-			decodeDefaultRpcBase64Url32(freshAccept.sessionSecret as string),
+		const proofKey = await cryptography.deriveProofKey(
+			cryptography.decodeBase64Url32(freshAccept.sessionSecret as string),
 			freshAccept.sessionId as string,
 		);
-		const nonce = createDefaultRpcRandomCarrier();
+		const nonce = cryptography.createRandomCarrier();
 		nonce.bytes.fill(0);
 		const rawRequestWithoutProof = {
 			kind: "resume",
@@ -1452,10 +1455,11 @@ describe("Default RPC Protocol", () => {
 			resumeAttempt: 1,
 			initiatorNonce: nonce.value,
 		};
-		const rawProof = await signDefaultRpcResumeRequest(
+		const rawProof = await cryptography.signProof({
+			kind: "resume-request",
 			proofKey,
-			rawRequestWithoutProof,
-		);
+			record: rawRequestWithoutProof,
+		});
 		const raw = network.openRawConnection();
 
 		raw.send({ ...rawRequestWithoutProof, proof: rawProof });
@@ -1540,7 +1544,7 @@ describe("Default RPC Protocol", () => {
 			expect(connector.peer.state.status).toBe("recovering");
 			expect(acceptorPeer?.state.status).toBe("recovering");
 		});
-		const replacementSessionId = createDefaultRpcRandomCarrier();
+		const replacementSessionId = cryptography.createRandomCarrier();
 		replacementSessionId.bytes.fill(0);
 		const decoder = new TextDecoder();
 		const encoder = new TextEncoder();

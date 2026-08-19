@@ -6,18 +6,17 @@
 
 import { createServiceIdentifier } from "@husky-di/core";
 import { describe, expect, it, vi } from "vitest";
-
+import { createRpcCounterExhaustionProtocolForTest } from "../../src/factories/rpc-protocol.factory";
 import {
 	createRemoteServiceDescriptor,
 	createRpcAcceptor,
 	createRpcConnector,
 } from "../../src/index";
-import { createDefaultRpcCounterExhaustionProtocolForTest } from "../../src/protocols/default/default-rpc-protocol.impl";
 import { normalizeRpcApplicationArguments } from "../../src/utils/rpc-application-value.util";
 import {
-	createDefaultRpcDirectSessionHarness,
-	createDefaultRpcTestNetwork,
-} from "../default-protocol/test.utils";
+	createRpcDirectSessionHarness,
+	createRpcTestNetwork,
+} from "../protocol/test.utils";
 
 interface ICounterService {
 	run(): number;
@@ -28,7 +27,7 @@ const ICounterService =
 
 describe("Default RPC Protocol counter drain", () => {
 	it("RPC-SHUTDOWN-010 ignores due Ping/Pong flags when evaluating the complete drain predicate", async () => {
-		const { session, sent } = createDefaultRpcDirectSessionHarness();
+		const { session, sent } = createRpcDirectSessionHarness();
 		session._pingDue = true;
 		session._pongDue = true;
 
@@ -40,7 +39,7 @@ describe("Default RPC Protocol counter drain", () => {
 
 	it("RPC-COUNTER-001 RPC-COUNTER-002 consumes the final 512 protected sequences without leaving the safe-integer domain RPC-CORPUS-004", async () => {
 		const { session, sent, transitions, faults } =
-			createDefaultRpcDirectSessionHarness();
+			createRpcDirectSessionHarness();
 		session._nextOutgoingSequence = Number.MAX_SAFE_INTEGER - 511;
 		for (let ordinal = 1; ordinal <= 256; ordinal += 1) {
 			session._queueSemantic({ kind: "cancel", callId: String(ordinal) });
@@ -77,8 +76,7 @@ describe("Default RPC Protocol counter drain", () => {
 	});
 
 	it("RPC-COUNTER-001 RPC-COUNTER-003 drains after allocating the last safe Call Ordinal RPC-CORPUS-004", async () => {
-		const { session, sent, transitions } =
-			createDefaultRpcDirectSessionHarness();
+		const { session, sent, transitions } = createRpcDirectSessionHarness();
 		session._nextOutgoingCallOrdinal = Number.MAX_SAFE_INTEGER;
 		const reservation = session.reserveInvocation({
 			service: "example.counter.v1",
@@ -103,8 +101,8 @@ describe("Default RPC Protocol counter drain", () => {
 	});
 
 	it("RPC-COUNTER-002 RPC-COUNTER-004 reserves the final 512 sequences and settles the triggering Pending Invocation", async () => {
-		const protocol = createDefaultRpcCounterExhaustionProtocolForTest();
-		const network = createDefaultRpcTestNetwork();
+		const protocol = createRpcCounterExhaustionProtocolForTest();
+		const network = createRpcTestNetwork();
 		const descriptor = createRemoteServiceDescriptor(ICounterService, {
 			wireName: "example.counter.v1",
 			methods: { run: true },
@@ -139,8 +137,8 @@ describe("Default RPC Protocol counter drain", () => {
 	});
 
 	it("RPC-COUNTER-004 completes an empty counter drain with one unsequenced Close", async () => {
-		const protocol = createDefaultRpcCounterExhaustionProtocolForTest();
-		const network = createDefaultRpcTestNetwork();
+		const protocol = createRpcCounterExhaustionProtocolForTest();
+		const network = createRpcTestNetwork();
 		const descriptor = createRemoteServiceDescriptor(ICounterService, {
 			wireName: "example.counter.v1",
 			methods: { run: true },

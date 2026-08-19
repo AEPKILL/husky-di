@@ -4,7 +4,6 @@
  * @created 2026-08-19 00:00:00
  */
 
-export type { IRpcConnection } from "@/interfaces/rpc-connection.interface";
 export type {
 	IRpcApplicationArgumentsSnapshot,
 	IRpcApplicationRecord,
@@ -39,4 +38,5 @@ export type {
 	RpcProtocolSessionTransitionCloseReason,
 	RpcSessionCloseReason,
 	RpcUnknownCallFailure,
-} from "@/interfaces/rpc-protocol.interface";
+} from "@/interfaces/protocol/rpc-protocol.interface";
+export type { IRpcConnection } from "@/interfaces/rpc-connection.interface";

@@ -4,27 +4,27 @@
  * @created 2026-08-19 00:00:00
  */
 
-import type { RpcApplicationValue } from "@/interfaces/rpc-protocol.interface";
+import type { RpcApplicationValue } from "@/interfaces/protocol/rpc-protocol.interface";
 
-export type DefaultRpcJsonRecord = {
-	readonly [key: string]: DefaultRpcJsonValue;
+export type RpcJsonRecord = {
+	readonly [key: string]: RpcJsonValue;
 };
 
-export type DefaultRpcJsonValue =
+export type RpcJsonValue =
 	| null
 	| boolean
 	| string
 	| number
-	| readonly DefaultRpcJsonValue[]
-	| DefaultRpcJsonRecord;
+	| readonly RpcJsonValue[]
+	| RpcJsonRecord;
 
-export type DefaultRpcFreshRequest = DefaultRpcJsonRecord & {
+export type RpcFreshRequest = RpcJsonRecord & {
 	readonly kind: "fresh";
 	readonly profiles: readonly string[];
 	readonly initiatorNonce: string;
 };
 
-export type DefaultRpcFreshAccept = DefaultRpcJsonRecord & {
+export type RpcFreshAccept = RpcJsonRecord & {
 	readonly kind: "accept";
 	readonly profile: string;
 	readonly sessionId: string;
@@ -34,7 +34,7 @@ export type DefaultRpcFreshAccept = DefaultRpcJsonRecord & {
 	readonly proof: string;
 };
 
-export type DefaultRpcResumeRequest = DefaultRpcJsonRecord & {
+export type RpcResumeRequest = RpcJsonRecord & {
 	readonly kind: "resume";
 	readonly profile: string;
 	readonly sessionId: string;
@@ -44,7 +44,9 @@ export type DefaultRpcResumeRequest = DefaultRpcJsonRecord & {
 	readonly proof: string;
 };
 
-export type DefaultRpcResumeAccept = DefaultRpcJsonRecord & {
+export type RpcBootstrapRequest = RpcFreshRequest | RpcResumeRequest;
+
+export type RpcResumeAccept = RpcJsonRecord & {
 	readonly kind: "accept";
 	readonly profile: string;
 	readonly sessionId: string;
@@ -54,23 +56,21 @@ export type DefaultRpcResumeAccept = DefaultRpcJsonRecord & {
 	readonly proof: string;
 };
 
-export type DefaultRpcResumeRejectCode =
+export type RpcResumeRejectCode =
 	| "resume-rejected"
 	| "continuity-failure"
 	| "session-terminated";
 
-export type DefaultRpcResumeReject = DefaultRpcJsonRecord & {
+export type RpcResumeReject = RpcJsonRecord & {
 	readonly kind: "reject";
-	readonly code: DefaultRpcResumeRejectCode;
+	readonly code: RpcResumeRejectCode;
 	readonly responderNonce: string;
 	readonly proof: string;
 };
 
-export type DefaultRpcResumeOutcome =
-	| DefaultRpcResumeAccept
-	| DefaultRpcResumeReject;
+export type RpcResumeOutcome = RpcResumeAccept | RpcResumeReject;
 
-export type DefaultRpcCallMessage = DefaultRpcJsonRecord & {
+export type RpcCallMessage = RpcJsonRecord & {
 	readonly kind: "call";
 	readonly callId: string;
 	readonly service: string;
@@ -78,57 +78,57 @@ export type DefaultRpcCallMessage = DefaultRpcJsonRecord & {
 	readonly args: readonly RpcApplicationValue[];
 };
 
-export type DefaultRpcCancelMessage = DefaultRpcJsonRecord & {
+export type RpcCancelMessage = RpcJsonRecord & {
 	readonly kind: "cancel";
 	readonly callId: string;
 };
 
-export type DefaultRpcResultMessage = DefaultRpcJsonRecord & {
+export type RpcResultMessage = RpcJsonRecord & {
 	readonly kind: "result";
 	readonly callId: string;
 	readonly value?: RpcApplicationValue;
 };
 
-export type DefaultRpcWireErrorCode =
+export type RpcWireErrorCode =
 	| "canceled"
 	| "unavailable"
 	| "handler-failed"
 	| "unknown-service"
 	| "unknown-method";
 
-export type DefaultRpcErrorMessage = DefaultRpcJsonRecord & {
+export type RpcErrorMessage = RpcJsonRecord & {
 	readonly kind: "error";
 	readonly callId: string;
 	readonly error: {
-		readonly code: DefaultRpcWireErrorCode;
+		readonly code: RpcWireErrorCode;
 		readonly message: string;
 		readonly details?: RpcApplicationValue;
 	};
 };
 
-export type DefaultRpcSemanticMessage =
-	| DefaultRpcCallMessage
-	| DefaultRpcCancelMessage
-	| DefaultRpcResultMessage
-	| DefaultRpcErrorMessage;
+export type RpcSemanticMessage =
+	| RpcCallMessage
+	| RpcCancelMessage
+	| RpcResultMessage
+	| RpcErrorMessage;
 
-export type DefaultRpcMessageEnvelope = DefaultRpcJsonRecord & {
+export type RpcMessageEnvelope = RpcJsonRecord & {
 	readonly kind: "message";
 	readonly seq: number;
 	readonly ackThrough?: number;
-	readonly message: DefaultRpcSemanticMessage;
+	readonly message: RpcSemanticMessage;
 };
 
-export type DefaultRpcAckRecord = DefaultRpcJsonRecord & {
+export type RpcAckRecord = RpcJsonRecord & {
 	readonly kind: "ack";
 	readonly ackThrough: number;
 };
 
-export type DefaultRpcControlRecord = DefaultRpcJsonRecord & {
+export type RpcControlRecord = RpcJsonRecord & {
 	readonly kind: "ping" | "pong" | "close";
 };
 
-export type DefaultRpcActiveRecord =
-	| DefaultRpcMessageEnvelope
-	| DefaultRpcAckRecord
-	| DefaultRpcControlRecord;
+export type RpcActiveRecord =
+	| RpcMessageEnvelope
+	| RpcAckRecord
+	| RpcControlRecord;

@@ -13,11 +13,6 @@ import type {
 	IRpcProtocolConformanceFixture,
 } from "../../src/conformance";
 import type {
-	IRpcAcceptorAdapter,
-	IRpcConnectorAdapter,
-} from "../../src/interfaces/rpc-adapter.interface";
-import type { IRpcConnection } from "../../src/interfaces/rpc-connection.interface";
-import type {
 	IRpcProtocol,
 	IRpcProtocolAcceptorHost,
 	IRpcProtocolAcceptorRuntime,
@@ -31,7 +26,12 @@ import type {
 	RpcApplicationValue,
 	RpcCallFailure,
 	RpcHandlerOutcome,
-} from "../../src/interfaces/rpc-protocol.interface";
+} from "../../src/interfaces/protocol/rpc-protocol.interface";
+import type {
+	IRpcAcceptorAdapter,
+	IRpcConnectorAdapter,
+} from "../../src/interfaces/rpc-adapter.interface";
+import type { IRpcConnection } from "../../src/interfaces/rpc-connection.interface";
 
 interface Deferred<T> {
 	readonly promise: Promise<T>;

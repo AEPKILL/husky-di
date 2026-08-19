@@ -4,6 +4,8 @@
  * @created 2026-08-19 00:00:00
  */
 
+import type { IRpcCodec } from "@/interfaces/protocol/rpc-codec.interface";
+import type { IRpcEndpoint } from "@/interfaces/protocol/rpc-endpoint.interface";
 import type {
 	IRpcProtocolHost,
 	IRpcProtocolIncomingCall,
@@ -12,43 +14,36 @@ import type {
 	IRpcProtocolInvocationRequest,
 	IRpcProtocolInvocationReservation,
 	IRpcProtocolInvocationSink,
-	IRpcProtocolSession,
 	IRpcProtocolSessionHost,
 	RpcCallOutcome,
 	RpcHandlerOutcome,
 	RpcIncomingTerminal,
-} from "@/interfaces/rpc-protocol.interface";
-import {
-	decodeDefaultRpcRecord,
-	encodeDefaultRpcRecord,
-	hasDefaultRpcRecordMember,
-	validateDefaultRpcActiveRecord,
-} from "@/protocols/default/default-rpc-codec.util";
+} from "@/interfaces/protocol/rpc-protocol.interface";
+import type { IRpcSession } from "@/interfaces/protocol/rpc-session.interface";
+import type { RpcEndpointFailure } from "@/types/protocol/rpc-endpoint.type";
+import type { CreateRpcSessionOptions } from "@/types/protocol/rpc-session.type";
 import type {
-	DefaultRpcEndpoint,
-	DefaultRpcEndpointFailure,
-} from "@/protocols/default/default-rpc-endpoint.impl";
-import type {
-	DefaultRpcCallMessage,
-	DefaultRpcErrorMessage,
-	DefaultRpcJsonRecord,
-	DefaultRpcMessageEnvelope,
-	DefaultRpcResultMessage,
-	DefaultRpcSemanticMessage,
-	DefaultRpcWireErrorCode,
-} from "@/protocols/default/default-rpc-record.type";
+	RpcActiveRecord,
+	RpcCallMessage,
+	RpcErrorMessage,
+	RpcJsonRecord,
+	RpcMessageEnvelope,
+	RpcResultMessage,
+	RpcSemanticMessage,
+	RpcWireErrorCode,
+} from "@/types/protocol/rpc-wire-record.type";
 
-const DEFAULT_RPC_SEQUENCE_RESERVE = 512;
-const DEFAULT_RPC_LAST_ORDINARY_SEQUENCE =
-	Number.MAX_SAFE_INTEGER - DEFAULT_RPC_SEQUENCE_RESERVE;
+const RPC_SEQUENCE_RESERVE = 512;
+const RPC_LAST_ORDINARY_SEQUENCE =
+	Number.MAX_SAFE_INTEGER - RPC_SEQUENCE_RESERVE;
 
-interface IDefaultRpcBinding {
-	readonly endpoint: DefaultRpcEndpoint;
+interface IRpcBinding {
+	readonly endpoint: IRpcEndpoint;
 	readonly epoch: number;
 	active: boolean;
 }
 
-interface IDefaultRpcInvocationEntry {
+interface IRpcInvocationEntry {
 	readonly request: IRpcProtocolInvocationRequest;
 	readonly sink: IRpcProtocolInvocationSink;
 	readonly pendingCharge: number;
@@ -61,7 +56,7 @@ interface IDefaultRpcInvocationEntry {
 	seq?: number;
 }
 
-interface IDefaultRpcIncomingEntry {
+interface IRpcIncomingEntry {
 	readonly callId: string;
 	call?: IRpcProtocolIncomingCall;
 	handlerCall?: IRpcProtocolIncomingHandlerCall;
@@ -69,27 +64,32 @@ interface IDefaultRpcIncomingEntry {
 	terminalSelected: boolean;
 }
 
-interface IDefaultRpcReplayEntry {
-	readonly message: DefaultRpcSemanticMessage;
+interface IRpcReplayEntry {
+	readonly message: RpcSemanticMessage;
 	readonly charge: number;
 	readonly resourceClass: "ordinary" | "terminal" | "cancel";
 	released: boolean;
 }
 
-interface IDefaultRpcQueuedSemantic {
-	readonly message: DefaultRpcSemanticMessage;
-	readonly replay: IDefaultRpcReplayEntry;
+interface IRpcQueuedSemantic {
+	readonly message: RpcSemanticMessage;
+	readonly replay: IRpcReplayEntry;
+}
+
+function hasOwn(record: RpcJsonRecord, key: string): boolean {
+	return Object.getOwnPropertyDescriptor(record, key) !== undefined;
 }
 
 /** Retains one Session Incarnation independently from its current Connection. */
-export class DefaultRpcSession implements IRpcProtocolSession {
+export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 	readonly _role: "connector" | "acceptor";
 	readonly _host: IRpcProtocolHost;
 	readonly _sessionId: string;
-	readonly _onTerminal: (session: DefaultRpcSession) => void;
-	_proofKey: CryptoKey | undefined;
+	readonly _codec: IRpcCodec;
+	readonly _onTerminal: (session: IRpcSession<TKey>) => void;
+	_proofKey: TKey | undefined;
 	_sessionHost: IRpcProtocolSessionHost | undefined;
-	_binding: IDefaultRpcBinding | undefined;
+	_binding: IRpcBinding | undefined;
 	_bindingEpoch = 0;
 	_resumeAttempt = 0;
 	_highestAcceptedResumeAttempt = 0;
@@ -104,11 +104,11 @@ export class DefaultRpcSession implements IRpcProtocolSession {
 	_highestIncomingCallOrdinal = 0;
 	_invocationCount = 0;
 	_pendingInvocationBytes = 0;
-	readonly _invocations = new Set<IDefaultRpcInvocationEntry>();
-	readonly _pendingInvocations: IDefaultRpcInvocationEntry[] = [];
-	readonly _outgoingCalls = new Map<string, IDefaultRpcInvocationEntry>();
-	readonly _incomingCalls = new Map<string, IDefaultRpcIncomingEntry>();
-	readonly _replay = new Map<number, IDefaultRpcReplayEntry>();
+	readonly _invocations = new Set<IRpcInvocationEntry>();
+	readonly _pendingInvocations: IRpcInvocationEntry[] = [];
+	readonly _outgoingCalls = new Map<string, IRpcInvocationEntry>();
+	readonly _incomingCalls = new Map<string, IRpcIncomingEntry>();
+	readonly _replay = new Map<number, IRpcReplayEntry>();
 	_replayBytes = 0;
 	_ordinaryReplayCount = 0;
 	_terminalReplayCount = 0;
@@ -116,7 +116,7 @@ export class DefaultRpcSession implements IRpcProtocolSession {
 	_terminalReplayBytes = 0;
 	_cancelReplayCount = 0;
 	_replayBarrier: number[] = [];
-	readonly _controlQueue: IDefaultRpcQueuedSemantic[] = [];
+	readonly _controlQueue: IRpcQueuedSemantic[] = [];
 	_nextSequencedLane: "control" | "data" = "control";
 	_ackDirty = false;
 	_ackDue = false;
@@ -139,21 +139,24 @@ export class DefaultRpcSession implements IRpcProtocolSession {
 	_gracefulCloseStarted = false;
 	_closed = false;
 
-	constructor(
-		role: "connector" | "acceptor",
-		host: IRpcProtocolHost,
-		sessionId: string,
-		proofKey: CryptoKey,
-		onTerminal: (session: DefaultRpcSession) => void,
-		counterExhausted = false,
-	) {
+	public constructor(options: CreateRpcSessionOptions<TKey>) {
+		const {
+			codec,
+			counterExhausted = false,
+			host,
+			onTerminal,
+			proofKey,
+			role,
+			sessionId,
+		} = options;
 		this._role = role;
 		this._host = host;
 		this._sessionId = sessionId;
+		this._codec = codec;
 		this._proofKey = proofKey;
 		this._onTerminal = onTerminal;
 		if (counterExhausted) {
-			this._nextOutgoingSequence = DEFAULT_RPC_LAST_ORDINARY_SEQUENCE + 1;
+			this._nextOutgoingSequence = RPC_LAST_ORDINARY_SEQUENCE + 1;
 		}
 	}
 
@@ -177,7 +180,7 @@ export class DefaultRpcSession implements IRpcProtocolSession {
 		return this._bindingEpoch;
 	}
 
-	get proofKey(): CryptoKey | undefined {
+	get proofKey(): TKey | undefined {
 		return this._proofKey;
 	}
 
@@ -193,7 +196,7 @@ export class DefaultRpcSession implements IRpcProtocolSession {
 		return this._highestAcceptedResumeAttempt;
 	}
 
-	ownsEndpoint(endpoint: DefaultRpcEndpoint): boolean {
+	ownsEndpoint(endpoint: IRpcEndpoint): boolean {
 		return this._binding?.endpoint === endpoint;
 	}
 
@@ -232,7 +235,7 @@ export class DefaultRpcSession implements IRpcProtocolSession {
 	}
 
 	acceptResumeBinding(
-		endpoint: DefaultRpcEndpoint,
+		endpoint: IRpcEndpoint,
 		resumeAttempt: number,
 		peerReceivedThrough: number,
 	): number {
@@ -265,7 +268,7 @@ export class DefaultRpcSession implements IRpcProtocolSession {
 	}
 
 	installBinding(
-		endpoint: DefaultRpcEndpoint,
+		endpoint: IRpcEndpoint,
 		epoch: number,
 		peerReceivedThrough: number,
 	): void {
@@ -317,7 +320,7 @@ export class DefaultRpcSession implements IRpcProtocolSession {
 		this._pump();
 	}
 
-	receive(endpoint: DefaultRpcEndpoint, bytes: Uint8Array): void {
+	receive(endpoint: IRpcEndpoint, bytes: Uint8Array): void {
 		const binding = this._binding;
 		if (
 			this._closed ||
@@ -329,9 +332,9 @@ export class DefaultRpcSession implements IRpcProtocolSession {
 			return;
 		}
 
-		let record: ReturnType<typeof validateDefaultRpcActiveRecord>;
+		let record: RpcActiveRecord;
 		try {
-			record = validateDefaultRpcActiveRecord(decodeDefaultRpcRecord(bytes));
+			record = this._codec.decode(bytes, "active");
 		} catch (error) {
 			this._fault(
 				"protocol-fault",
@@ -375,8 +378,8 @@ export class DefaultRpcSession implements IRpcProtocolSession {
 	}
 
 	endpointFailed(
-		endpoint: DefaultRpcEndpoint,
-		reason: DefaultRpcEndpointFailure,
+		endpoint: IRpcEndpoint,
+		reason: RpcEndpointFailure,
 		error?: Error,
 	): void {
 		if (this._binding?.endpoint !== endpoint || this._closed) {
@@ -412,7 +415,7 @@ export class DefaultRpcSession implements IRpcProtocolSession {
 		this._invocationCount += 1;
 		this._pendingInvocationBytes += pendingCharge;
 		let reservationState: "reserved" | "committed" | "released" = "reserved";
-		let entry: IDefaultRpcInvocationEntry | undefined;
+		let entry: IRpcInvocationEntry | undefined;
 		return Object.freeze({
 			commit: (sink: IRpcProtocolInvocationSink): IRpcProtocolInvocation => {
 				if (reservationState !== "reserved") {
@@ -437,10 +440,8 @@ export class DefaultRpcSession implements IRpcProtocolSession {
 				};
 				this._invocations.add(entry);
 				return Object.freeze({
-					start: () =>
-						this._startInvocation(entry as IDefaultRpcInvocationEntry),
-					cancel: () =>
-						this._cancelInvocation(entry as IDefaultRpcInvocationEntry),
+					start: () => this._startInvocation(entry as IRpcInvocationEntry),
+					cancel: () => this._cancelInvocation(entry as IRpcInvocationEntry),
 				});
 			},
 			release: (): void => {
@@ -504,7 +505,7 @@ export class DefaultRpcSession implements IRpcProtocolSession {
 		this._resolveShutdown = undefined;
 	}
 
-	_receiveEnvelope(envelope: DefaultRpcMessageEnvelope): boolean {
+	_receiveEnvelope(envelope: RpcMessageEnvelope): boolean {
 		if (
 			envelope.ackThrough !== undefined &&
 			!this._applyAck(envelope.ackThrough)
@@ -543,7 +544,7 @@ export class DefaultRpcSession implements IRpcProtocolSession {
 		return true;
 	}
 
-	_dispatchSemantic(message: DefaultRpcSemanticMessage): void {
+	_dispatchSemantic(message: RpcSemanticMessage): void {
 		if (message.kind === "call") {
 			this._receiveCall(message);
 			return;
@@ -559,7 +560,7 @@ export class DefaultRpcSession implements IRpcProtocolSession {
 		this._receiveError(message);
 	}
 
-	_receiveCall(message: DefaultRpcCallMessage): void {
+	_receiveCall(message: RpcCallMessage): void {
 		const ordinal = Number(message.callId);
 		if (ordinal !== this._highestIncomingCallOrdinal + 1) {
 			throw new Error("Default RPC Call Ordinal is not contiguous.");
@@ -591,7 +592,7 @@ export class DefaultRpcSession implements IRpcProtocolSession {
 
 		if (reservation.kind === "unknown") {
 			const incoming = reservation.reservation.commit();
-			const entry: IDefaultRpcIncomingEntry = {
+			const entry: IRpcIncomingEntry = {
 				callId: message.callId,
 				call: incoming,
 				terminalSelected: true,
@@ -603,7 +604,7 @@ export class DefaultRpcSession implements IRpcProtocolSession {
 		}
 
 		const incoming = reservation.reservation.commit();
-		const entry: IDefaultRpcIncomingEntry = {
+		const entry: IRpcIncomingEntry = {
 			callId: message.callId,
 			call: incoming,
 			handlerCall: incoming,
@@ -636,13 +637,13 @@ export class DefaultRpcSession implements IRpcProtocolSession {
 		this._queueError(callId, "canceled");
 	}
 
-	_receiveResult(message: DefaultRpcResultMessage): void {
+	_receiveResult(message: RpcResultMessage): void {
 		const invocation = this._outgoingCalls.get(message.callId);
 		if (invocation === undefined) {
 			throw new Error("Default RPC result has no matching Logical Call.");
 		}
 		let outcome: RpcCallOutcome;
-		if (hasDefaultRpcRecordMember(message, "value")) {
+		if (hasOwn(message, "value")) {
 			outcome = {
 				type: "returned",
 				value: this._host.normalizeApplicationValue(message.value),
@@ -654,17 +655,12 @@ export class DefaultRpcSession implements IRpcProtocolSession {
 		this._retireInvocation(invocation);
 	}
 
-	_receiveError(message: DefaultRpcErrorMessage): void {
+	_receiveError(message: RpcErrorMessage): void {
 		const invocation = this._outgoingCalls.get(message.callId);
 		if (invocation === undefined) {
 			throw new Error("Default RPC error has no matching Logical Call.");
 		}
-		if (
-			hasDefaultRpcRecordMember(
-				message.error as DefaultRpcJsonRecord,
-				"details",
-			)
-		) {
+		if (hasOwn(message.error as RpcJsonRecord, "details")) {
 			this._host.normalizeApplicationValue(message.error.details);
 		}
 		this._finishInvocation(invocation, {
@@ -675,7 +671,7 @@ export class DefaultRpcSession implements IRpcProtocolSession {
 	}
 
 	_finishIncomingHandler(
-		entry: IDefaultRpcIncomingEntry,
+		entry: IRpcIncomingEntry,
 		outcome: RpcHandlerOutcome,
 	): void {
 		if (this._closed || entry.terminalSelected || entry.call === undefined) {
@@ -689,7 +685,7 @@ export class DefaultRpcSession implements IRpcProtocolSession {
 					kind: "result",
 					callId: entry.callId,
 					value: outcome.value.value,
-				}) as DefaultRpcResultMessage,
+				}) as RpcResultMessage,
 			);
 			terminal = queued
 				? { type: "returned", value: outcome.value }
@@ -702,7 +698,7 @@ export class DefaultRpcSession implements IRpcProtocolSession {
 				Object.freeze({
 					kind: "result",
 					callId: entry.callId,
-				}) as DefaultRpcResultMessage,
+				}) as RpcResultMessage,
 			);
 			terminal = queued
 				? { type: "returned-void" }
@@ -717,7 +713,7 @@ export class DefaultRpcSession implements IRpcProtocolSession {
 		entry.call.finish(terminal);
 	}
 
-	_queueError(callId: string, code: DefaultRpcWireErrorCode): boolean {
+	_queueError(callId: string, code: RpcWireErrorCode): boolean {
 		const queued = this._queueSemantic(
 			Object.freeze({
 				kind: "error",
@@ -726,7 +722,7 @@ export class DefaultRpcSession implements IRpcProtocolSession {
 					code,
 					message: `Remote call failed with code ${code}.`,
 				}),
-			}) as DefaultRpcErrorMessage,
+			}) as RpcErrorMessage,
 		);
 		if (!queued) {
 			this._fault(
@@ -737,7 +733,7 @@ export class DefaultRpcSession implements IRpcProtocolSession {
 		return queued;
 	}
 
-	_queueSemantic(message: DefaultRpcSemanticMessage): boolean {
+	_queueSemantic(message: RpcSemanticMessage): boolean {
 		if (this._closed) {
 			return false;
 		}
@@ -750,7 +746,7 @@ export class DefaultRpcSession implements IRpcProtocolSession {
 		return true;
 	}
 
-	_startInvocation(entry: IDefaultRpcInvocationEntry): void {
+	_startInvocation(entry: IRpcInvocationEntry): void {
 		if (entry.started || entry.retired) {
 			this._fault(
 				"protocol-fault",
@@ -768,7 +764,7 @@ export class DefaultRpcSession implements IRpcProtocolSession {
 		this._pump();
 	}
 
-	_cancelInvocation(entry: IDefaultRpcInvocationEntry): void {
+	_cancelInvocation(entry: IRpcInvocationEntry): void {
 		if (entry.retired || entry.publicFinished) {
 			return;
 		}
@@ -781,7 +777,7 @@ export class DefaultRpcSession implements IRpcProtocolSession {
 			Object.freeze({
 				kind: "cancel",
 				callId: entry.callId as string,
-			}) as DefaultRpcSemanticMessage,
+			}) as RpcSemanticMessage,
 		);
 	}
 
@@ -865,14 +861,11 @@ export class DefaultRpcSession implements IRpcProtocolSession {
 		this._checkGracefulShutdown();
 	}
 
-	_admitInvocation(
-		binding: IDefaultRpcBinding,
-		entry: IDefaultRpcInvocationEntry,
-	): void {
+	_admitInvocation(binding: IRpcBinding, entry: IRpcInvocationEntry): void {
 		if (
 			this._outgoingCallOrdinalExhausted ||
 			!Number.isSafeInteger(this._nextOutgoingCallOrdinal) ||
-			this._nextOutgoingSequence > DEFAULT_RPC_LAST_ORDINARY_SEQUENCE
+			this._nextOutgoingSequence > RPC_LAST_ORDINARY_SEQUENCE
 		) {
 			this._beginCounterDrain();
 			return;
@@ -884,7 +877,7 @@ export class DefaultRpcSession implements IRpcProtocolSession {
 			service: entry.request.service,
 			method: entry.request.method,
 			args: entry.request.args.value,
-		}) as DefaultRpcCallMessage;
+		}) as RpcCallMessage;
 		const sequence = this._nextOutgoingSequence;
 		const replay = this._reserveReplayEntry(message);
 		if (replay === undefined) {
@@ -896,7 +889,7 @@ export class DefaultRpcSession implements IRpcProtocolSession {
 		}
 		let encoded: Uint8Array;
 		try {
-			encoded = encodeDefaultRpcRecord(this._createEnvelope(sequence, message));
+			encoded = this._codec.encode(this._createEnvelope(sequence, message));
 		} catch {
 			this._releaseReplayEntry(replay);
 			this._pendingInvocations.shift();
@@ -927,10 +920,7 @@ export class DefaultRpcSession implements IRpcProtocolSession {
 		}
 	}
 
-	_admitSemantic(
-		binding: IDefaultRpcBinding,
-		queued: IDefaultRpcQueuedSemantic,
-	): void {
+	_admitSemantic(binding: IRpcBinding, queued: IRpcQueuedSemantic): void {
 		const { message, replay } = queued;
 		if (
 			this._outgoingSequenceExhausted ||
@@ -946,7 +936,7 @@ export class DefaultRpcSession implements IRpcProtocolSession {
 		const sequence = this._nextOutgoingSequence;
 		let encoded: Uint8Array;
 		try {
-			encoded = encodeDefaultRpcRecord(this._createEnvelope(sequence, message));
+			encoded = this._codec.encode(this._createEnvelope(sequence, message));
 		} catch (error) {
 			this._releaseReplayEntry(replay);
 			this._fault(
@@ -975,13 +965,13 @@ export class DefaultRpcSession implements IRpcProtocolSession {
 	}
 
 	_sendEnvelope(
-		binding: IDefaultRpcBinding,
+		binding: IRpcBinding,
 		sequence: number,
-		message: DefaultRpcSemanticMessage,
+		message: RpcSemanticMessage,
 	): void {
 		let encoded: Uint8Array;
 		try {
-			encoded = encodeDefaultRpcRecord(this._createEnvelope(sequence, message));
+			encoded = this._codec.encode(this._createEnvelope(sequence, message));
 		} catch (error) {
 			this._fault(
 				"resource-fault",
@@ -996,11 +986,11 @@ export class DefaultRpcSession implements IRpcProtocolSession {
 	}
 
 	_reserveReplayEntry(
-		message: DefaultRpcSemanticMessage,
-	): IDefaultRpcReplayEntry | undefined {
+		message: RpcSemanticMessage,
+	): IRpcReplayEntry | undefined {
 		let maximumEnvelope: Uint8Array;
 		try {
-			maximumEnvelope = encodeDefaultRpcRecord({
+			maximumEnvelope = this._codec.encode({
 				kind: "message",
 				seq: Number.MAX_SAFE_INTEGER,
 				ackThrough: Number.MAX_SAFE_INTEGER,
@@ -1060,11 +1050,11 @@ export class DefaultRpcSession implements IRpcProtocolSession {
 		return { message, charge, resourceClass, released: false };
 	}
 
-	_retainReplayEntry(sequence: number, replay: IDefaultRpcReplayEntry): void {
+	_retainReplayEntry(sequence: number, replay: IRpcReplayEntry): void {
 		this._replay.set(sequence, replay);
 	}
 
-	_releaseReplayEntry(replay: IDefaultRpcReplayEntry): void {
+	_releaseReplayEntry(replay: IRpcReplayEntry): void {
 		if (replay.released) {
 			return;
 		}
@@ -1087,8 +1077,8 @@ export class DefaultRpcSession implements IRpcProtocolSession {
 
 	_createEnvelope(
 		sequence: number,
-		message: DefaultRpcSemanticMessage,
-	): DefaultRpcMessageEnvelope {
+		message: RpcSemanticMessage,
+	): RpcMessageEnvelope {
 		return (
 			this._ackDirty
 				? {
@@ -1098,7 +1088,7 @@ export class DefaultRpcSession implements IRpcProtocolSession {
 						message,
 					}
 				: { kind: "message", seq: sequence, message }
-		) as DefaultRpcMessageEnvelope;
+		) as RpcMessageEnvelope;
 	}
 
 	_consumePiggybackAck(): void {
@@ -1113,13 +1103,10 @@ export class DefaultRpcSession implements IRpcProtocolSession {
 		}
 	}
 
-	_sendUnsequenced(
-		binding: IDefaultRpcBinding,
-		record: DefaultRpcJsonRecord,
-	): void {
+	_sendUnsequenced(binding: IRpcBinding, record: RpcJsonRecord): void {
 		let encoded: Uint8Array;
 		try {
-			encoded = encodeDefaultRpcRecord(record);
+			encoded = this._codec.encode(record);
 		} catch (error) {
 			this._fault(
 				"protocol-fault",
@@ -1132,7 +1119,7 @@ export class DefaultRpcSession implements IRpcProtocolSession {
 		this._sendEncoded(binding, encoded);
 	}
 
-	_sendEncoded(binding: IDefaultRpcBinding, encoded: Uint8Array): void {
+	_sendEncoded(binding: IRpcBinding, encoded: Uint8Array): void {
 		void binding.endpoint.sendNow(encoded).then(
 			() => {
 				if (this._binding === binding) {
@@ -1199,10 +1186,7 @@ export class DefaultRpcSession implements IRpcProtocolSession {
 		}, this._host.policy.ackDelayMs);
 	}
 
-	_finishInvocation(
-		entry: IDefaultRpcInvocationEntry,
-		outcome: RpcCallOutcome,
-	): void {
+	_finishInvocation(entry: IRpcInvocationEntry, outcome: RpcCallOutcome): void {
 		if (entry.publicFinished) {
 			return;
 		}
@@ -1210,7 +1194,7 @@ export class DefaultRpcSession implements IRpcProtocolSession {
 		entry.sink.finish(outcome);
 	}
 
-	_retireInvocation(entry: IDefaultRpcInvocationEntry): void {
+	_retireInvocation(entry: IRpcInvocationEntry): void {
 		if (entry.retired) {
 			return;
 		}
@@ -1224,7 +1208,7 @@ export class DefaultRpcSession implements IRpcProtocolSession {
 		this._checkGracefulShutdown();
 	}
 
-	_releasePendingInvocationCharge(entry: IDefaultRpcInvocationEntry): void {
+	_releasePendingInvocationCharge(entry: IRpcInvocationEntry): void {
 		if (!entry.pendingCharged) {
 			return;
 		}
@@ -1425,7 +1409,7 @@ export class DefaultRpcSession implements IRpcProtocolSession {
 		this._recoveryDeadline = undefined;
 	}
 
-	_startHealthTimer(binding: IDefaultRpcBinding): void {
+	_startHealthTimer(binding: IRpcBinding): void {
 		this._stopHealthTimer();
 		const now = Date.now();
 		this._healthStallGraceUntil = 0;
@@ -1434,7 +1418,7 @@ export class DefaultRpcSession implements IRpcProtocolSession {
 		this._scheduleHealthTimer(binding);
 	}
 
-	_recordInboundActivity(binding: IDefaultRpcBinding): void {
+	_recordInboundActivity(binding: IRpcBinding): void {
 		if (this._binding !== binding || !binding.active || this._closed) {
 			return;
 		}
@@ -1446,7 +1430,7 @@ export class DefaultRpcSession implements IRpcProtocolSession {
 		this._scheduleHealthTimer(binding);
 	}
 
-	_scheduleHealthTimer(binding: IDefaultRpcBinding): void {
+	_scheduleHealthTimer(binding: IRpcBinding): void {
 		this._stopHealthTimer();
 		if (this._binding !== binding || !binding.active || this._closed) {
 			return;
@@ -1462,7 +1446,7 @@ export class DefaultRpcSession implements IRpcProtocolSession {
 		);
 	}
 
-	_healthTimerFired(binding: IDefaultRpcBinding): void {
+	_healthTimerFired(binding: IRpcBinding): void {
 		this._healthTimer = undefined;
 		if (this._binding !== binding || !binding.active || this._closed) {
 			return;
@@ -1540,7 +1524,7 @@ export class DefaultRpcSession implements IRpcProtocolSession {
 		this._gracefulCloseStarted = true;
 		let encoded: Uint8Array;
 		try {
-			encoded = encodeDefaultRpcRecord({ kind: "close" });
+			encoded = this._codec.encode({ kind: "close" });
 		} catch {
 			this.forceClose();
 			return;

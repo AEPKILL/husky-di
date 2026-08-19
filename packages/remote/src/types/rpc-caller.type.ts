@@ -10,7 +10,7 @@ import type {
 	IRpcProtocolRuntimePolicy,
 	RpcProtocolFaultReason,
 	RpcSessionCloseReason,
-} from "@/interfaces/rpc-protocol.interface";
+} from "@/interfaces/protocol/rpc-protocol.interface";
 
 type RpcNormalSessionCloseReason = Extract<
 	RpcSessionCloseReason,

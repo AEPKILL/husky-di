@@ -6,23 +6,23 @@
 
 import type { Subscription } from "rxjs";
 
-import type { IRpcConnection } from "@/interfaces/rpc-connection.interface";
 import {
-	DEFAULT_RPC_MAX_INGRESS_BYTES,
-	DEFAULT_RPC_MAX_INGRESS_RECORDS,
-	DEFAULT_RPC_MAX_MESSAGE_BYTES,
-} from "@/protocols/default/default-rpc-profile.const";
-
-export type DefaultRpcEndpointFailure = "connection" | "protocol" | "resource";
+	RPC_MAX_INGRESS_BYTES,
+	RPC_MAX_INGRESS_RECORDS,
+	RPC_MAX_MESSAGE_BYTES,
+} from "@/constants/protocol/rpc-profile.const";
+import type { IRpcEndpoint } from "@/interfaces/protocol/rpc-endpoint.interface";
+import type { IRpcConnection } from "@/interfaces/rpc-connection.interface";
+import type {
+	CreateRpcEndpointOptions,
+	RpcEndpointFailure,
+} from "@/types/protocol/rpc-endpoint.type";
 
 /** Owns one exact Physical Connection endpoint and its bounded local work. */
-export class DefaultRpcEndpoint {
+export class RpcEndpointImpl implements IRpcEndpoint {
 	readonly _connection: IRpcConnection;
 	readonly _onMessage: (message: Uint8Array) => Promise<void> | void;
-	readonly _onFailure: (
-		reason: DefaultRpcEndpointFailure,
-		error?: Error,
-	) => void;
+	readonly _onFailure: (reason: RpcEndpointFailure, error?: Error) => void;
 	readonly _ingress: Uint8Array[] = [];
 	_subscription: Subscription | undefined;
 	_ingressBytes = 0;
@@ -36,11 +36,8 @@ export class DefaultRpcEndpoint {
 	_closed = false;
 	_failed = false;
 
-	constructor(
-		connection: IRpcConnection,
-		onMessage: (message: Uint8Array) => Promise<void> | void,
-		onFailure: (reason: DefaultRpcEndpointFailure, error?: Error) => void,
-	) {
+	public constructor(options: CreateRpcEndpointOptions) {
+		const { connection, onFailure, onMessage } = options;
 		this._connection = connection;
 		this._onMessage = onMessage;
 		this._onFailure = onFailure;
@@ -129,7 +126,7 @@ export class DefaultRpcEndpoint {
 			);
 			return;
 		}
-		if (message.byteLength > DEFAULT_RPC_MAX_MESSAGE_BYTES) {
+		if (message.byteLength > RPC_MAX_MESSAGE_BYTES) {
 			this._fail(
 				"protocol",
 				new Error("RPC Connection emitted an oversized Transport message."),
@@ -137,8 +134,8 @@ export class DefaultRpcEndpoint {
 			return;
 		}
 		if (
-			this._ingress.length >= DEFAULT_RPC_MAX_INGRESS_RECORDS ||
-			this._ingressBytes + message.byteLength > DEFAULT_RPC_MAX_INGRESS_BYTES
+			this._ingress.length >= RPC_MAX_INGRESS_RECORDS ||
+			this._ingressBytes + message.byteLength > RPC_MAX_INGRESS_BYTES
 		) {
 			this._fail(
 				"resource",
@@ -178,7 +175,7 @@ export class DefaultRpcEndpoint {
 		}
 	}
 
-	_fail(reason: DefaultRpcEndpointFailure, error?: Error): void {
+	_fail(reason: RpcEndpointFailure, error?: Error): void {
 		if (this._failed || this._closed) {
 			return;
 		}

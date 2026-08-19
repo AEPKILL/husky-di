@@ -5,6 +5,7 @@
  */
 
 import { createRpcError } from "@/exceptions/rpc-error.exception";
+import { getRpcProtocol } from "@/factories/rpc-protocol.factory";
 import type {
 	IRpcApplicationArgumentsSnapshot,
 	IRpcApplicationSnapshot,
@@ -17,8 +18,7 @@ import type {
 	IRpcProtocolSession,
 	IRpcProtocolSessionHost,
 	RpcProtocolFaultReason,
-} from "@/interfaces/rpc-protocol.interface";
-import { getDefaultRpcProtocol } from "@/protocols/default/default-rpc-protocol.impl";
+} from "@/interfaces/protocol/rpc-protocol.interface";
 import {
 	normalizeRpcApplicationArguments,
 	normalizeRpcApplicationValue,
@@ -47,7 +47,7 @@ export interface RpcProtocolAcceptorHostPorts {
 export function resolveRpcProtocol(
 	protocol: IRpcProtocol | undefined,
 ): IRpcProtocol {
-	return protocol ?? getDefaultRpcProtocol();
+	return protocol ?? getRpcProtocol();
 }
 
 function constructionViolation(guard: ConstructionGuard): never {

@@ -9,29 +9,17 @@ import { readFile } from "node:fs/promises";
 
 import { describe, expect, it } from "vitest";
 
-import {
-	decodeDefaultRpcRecord,
-	validateDefaultRpcActiveRecord,
-	validateDefaultRpcFreshAccept,
-	validateDefaultRpcFreshRequest,
-	validateDefaultRpcResumeOutcome,
-	validateDefaultRpcResumeRequest,
-} from "../../src/protocols/default/default-rpc-codec.util";
-import {
-	canonicalizeDefaultRpcRecord,
-	deriveDefaultRpcProofKey,
-	signDefaultRpcAuthenticatedReject,
-	signDefaultRpcFreshAccept,
-	signDefaultRpcResumeAccept,
-	signDefaultRpcResumeRequest,
-} from "../../src/protocols/default/default-rpc-crypto.util";
+import { RpcCodecImpl } from "../../src/impls/protocol/rpc-codec.impl";
+import { RpcCryptographyImpl } from "../../src/impls/protocol/rpc-cryptography.impl";
 import type {
-	DefaultRpcFreshRequest,
-	DefaultRpcJsonRecord,
-	DefaultRpcResumeRequest,
-} from "../../src/protocols/default/default-rpc-record.type";
+	RpcFreshRequest,
+	RpcJsonRecord,
+	RpcResumeRequest,
+} from "../../src/types/protocol/rpc-wire-record.type";
 
 const corpusRoot = new URL("../../wire/husky-di-rpc-1/", import.meta.url);
+const codec = new RpcCodecImpl();
+const cryptography = new RpcCryptographyImpl();
 
 async function readJsonAsset(path: string): Promise<unknown> {
 	return JSON.parse(await readFile(new URL(path, corpusRoot), "utf8"));
@@ -73,20 +61,20 @@ function renderRawVector(vector: RawVector): Uint8Array {
 }
 
 function validateRawVector(vector: RawVector): string {
-	const record = decodeDefaultRpcRecord(renderRawVector(vector));
+	const bytes = renderRawVector(vector);
 	switch (vector.validator) {
 		case "fresh-request":
-			return validateDefaultRpcFreshRequest(record).kind;
+			return codec.decode(bytes, "bootstrap-request").kind;
 		case "fresh-accept":
-			return validateDefaultRpcFreshAccept(record).kind;
+			return codec.decode(bytes, "fresh-accept").kind;
 		case "resume-request":
-			return validateDefaultRpcResumeRequest(record).kind;
+			return codec.decode(bytes, "bootstrap-request").kind;
 		case "resume-outcome":
-			return validateDefaultRpcResumeOutcome(record).kind;
+			return codec.decode(bytes, "resume-outcome").kind;
 		case "active":
-			return validateDefaultRpcActiveRecord(record).kind;
+			return codec.decode(bytes, "active").kind;
 		default:
-			return record.kind as string;
+			return codec.decode(bytes, "json").kind as string;
 	}
 }
 
@@ -178,7 +166,7 @@ describe("published husky-di-rpc/1 wire corpus", () => {
 			readonly jcs: readonly {
 				readonly id: string;
 				readonly covers: readonly string[];
-				readonly input: DefaultRpcJsonRecord;
+				readonly input: RpcJsonRecord;
 				readonly canonical: string;
 			}[];
 			readonly hkdfSha256: {
@@ -205,18 +193,18 @@ describe("published husky-di-rpc/1 wire corpus", () => {
 				readonly sessionContextSha256Hex: string;
 				readonly proofKeyDomainHex: string;
 				readonly proofKeyHex: string;
-				readonly freshRequest: DefaultRpcFreshRequest;
+				readonly freshRequest: RpcFreshRequest;
 				readonly freshRequestCanonical: string;
-				readonly freshAccept: DefaultRpcJsonRecord;
+				readonly freshAccept: RpcJsonRecord;
 				readonly freshAcceptCanonicalWithoutProof: string;
 				readonly freshAcceptProof: string;
-				readonly resumeRequest: DefaultRpcJsonRecord;
+				readonly resumeRequest: RpcJsonRecord;
 				readonly resumeRequestCanonicalWithoutProof: string;
 				readonly resumeRequestProof: string;
-				readonly resumeAccept: DefaultRpcJsonRecord;
+				readonly resumeAccept: RpcJsonRecord;
 				readonly resumeAcceptCanonicalWithoutProof: string;
 				readonly resumeAcceptProof: string;
-				readonly authenticatedReject: DefaultRpcJsonRecord;
+				readonly authenticatedReject: RpcJsonRecord;
 				readonly authenticatedRejectCanonicalWithoutProof: string;
 				readonly authenticatedRejectProof: string;
 			};
@@ -244,7 +232,7 @@ describe("published husky-di-rpc/1 wire corpus", () => {
 		});
 
 		for (const vector of vectors.jcs) {
-			expect(canonicalizeDefaultRpcRecord(vector.input)).toBe(vector.canonical);
+			expect(cryptography.canonicalize(vector.input)).toBe(vector.canonical);
 		}
 
 		const hkdf = vectors.hkdfSha256;
@@ -285,37 +273,44 @@ describe("published husky-di-rpc/1 wire corpus", () => {
 				),
 			).toString("hex"),
 		).toBe(transcript.proofKeyHex);
-		expect(canonicalizeDefaultRpcRecord(transcript.freshRequest)).toBe(
+		expect(cryptography.canonicalize(transcript.freshRequest)).toBe(
 			transcript.freshRequestCanonical,
 		);
-		const proofKey = await deriveDefaultRpcProofKey(
+		const proofKey = await cryptography.deriveProofKey(
 			fromHex(transcript.sessionSecretHex),
 			transcript.freshAccept.sessionId as string,
 		);
 		expect(proofKey.extractable).toBe(false);
 		expect(
-			await signDefaultRpcFreshAccept(
+			await cryptography.signProof({
+				kind: "fresh-accept",
 				proofKey,
-				transcript.freshRequest,
-				transcript.freshAccept,
-			),
+				request: transcript.freshRequest,
+				record: transcript.freshAccept,
+			}),
 		).toBe(transcript.freshAcceptProof);
 		expect(
-			await signDefaultRpcResumeRequest(proofKey, transcript.resumeRequest),
+			await cryptography.signProof({
+				kind: "resume-request",
+				proofKey,
+				record: transcript.resumeRequest,
+			}),
 		).toBe(transcript.resumeRequestProof);
 		expect(
-			await signDefaultRpcResumeAccept(
+			await cryptography.signProof({
+				kind: "resume-accept",
 				proofKey,
-				transcript.resumeRequest as DefaultRpcResumeRequest,
-				transcript.resumeAccept,
-			),
+				request: transcript.resumeRequest as RpcResumeRequest,
+				record: transcript.resumeAccept,
+			}),
 		).toBe(transcript.resumeAcceptProof);
 		expect(
-			await signDefaultRpcAuthenticatedReject(
+			await cryptography.signProof({
+				kind: "resume-reject",
 				proofKey,
-				transcript.resumeRequest as DefaultRpcResumeRequest,
-				transcript.authenticatedReject,
-			),
+				request: transcript.resumeRequest as RpcResumeRequest,
+				record: transcript.authenticatedReject,
+			}),
 		).toBe(transcript.authenticatedRejectProof);
 
 		for (const [record, canonical] of [
@@ -328,7 +323,7 @@ describe("published husky-di-rpc/1 wire corpus", () => {
 			],
 		] as const) {
 			const { proof: _proof, ...withoutProof } = record;
-			expect(canonicalizeDefaultRpcRecord(withoutProof)).toBe(canonical);
+			expect(cryptography.canonicalize(withoutProof)).toBe(canonical);
 		}
 	});
 

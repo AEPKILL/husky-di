@@ -4,32 +4,82 @@
  * @created 2026-08-19 00:00:00
  */
 
-import type { RpcApplicationValue } from "@/interfaces/rpc-protocol.interface";
 import {
-	DEFAULT_RPC_MAX_MESSAGE_BYTES,
-	DEFAULT_RPC_PROFILE_ID,
-} from "@/protocols/default/default-rpc-profile.const";
+	RPC_MAX_MESSAGE_BYTES,
+	RPC_PROFILE_ID,
+} from "@/constants/protocol/rpc-profile.const";
+import type { IRpcCodec } from "@/interfaces/protocol/rpc-codec.interface";
 import type {
-	DefaultRpcAckRecord,
-	DefaultRpcActiveRecord,
-	DefaultRpcCallMessage,
-	DefaultRpcCancelMessage,
-	DefaultRpcControlRecord,
-	DefaultRpcErrorMessage,
-	DefaultRpcFreshAccept,
-	DefaultRpcFreshRequest,
-	DefaultRpcJsonRecord,
-	DefaultRpcJsonValue,
-	DefaultRpcMessageEnvelope,
-	DefaultRpcResultMessage,
-	DefaultRpcResumeAccept,
-	DefaultRpcResumeOutcome,
-	DefaultRpcResumeReject,
-	DefaultRpcResumeRejectCode,
-	DefaultRpcResumeRequest,
-	DefaultRpcSemanticMessage,
-	DefaultRpcWireErrorCode,
-} from "@/protocols/default/default-rpc-record.type";
+	RpcDecodedRecord,
+	RpcDecodePhase,
+} from "@/types/protocol/rpc-codec.type";
+import type {
+	RpcAckRecord,
+	RpcActiveRecord,
+	RpcCallMessage,
+	RpcCancelMessage,
+	RpcControlRecord,
+	RpcErrorMessage,
+	RpcFreshAccept,
+	RpcFreshRequest,
+	RpcJsonRecord,
+	RpcJsonValue,
+	RpcMessageEnvelope,
+	RpcResultMessage,
+	RpcResumeAccept,
+	RpcResumeOutcome,
+	RpcResumeReject,
+	RpcResumeRejectCode,
+	RpcResumeRequest,
+	RpcSemanticMessage,
+	RpcWireErrorCode,
+} from "@/types/protocol/rpc-wire-record.type";
+
+export class RpcCodecImpl implements IRpcCodec {
+	public encode(record: RpcJsonRecord): Uint8Array {
+		return encodeRpcRecord(record);
+	}
+
+	public decode<TPhase extends RpcDecodePhase>(
+		bytes: Uint8Array,
+		phase: TPhase,
+	): RpcDecodedRecord<TPhase> {
+		const record = decodeRpcRecord(bytes);
+		let decoded:
+			| RpcJsonRecord
+			| RpcFreshRequest
+			| RpcFreshAccept
+			| RpcResumeRequest
+			| RpcResumeOutcome
+			| RpcActiveRecord;
+		switch (phase) {
+			case "bootstrap-request": {
+				const kind = readRpcRecordKind(record);
+				if (kind === "fresh") {
+					decoded = validateRpcFreshRequest(record);
+					break;
+				}
+				if (kind === "resume") {
+					decoded = validateRpcResumeRequest(record);
+					break;
+				}
+				throw new Error("The first initiator record must be fresh or resume.");
+			}
+			case "fresh-accept":
+				decoded = validateRpcFreshAccept(record);
+				break;
+			case "resume-outcome":
+				decoded = validateRpcResumeOutcome(record);
+				break;
+			case "active":
+				decoded = validateRpcActiveRecord(record);
+				break;
+			default:
+				decoded = record;
+		}
+		return decoded as RpcDecodedRecord<TPhase>;
+	}
+}
 
 const textDecoder = new TextDecoder("utf-8", {
 	fatal: true,
@@ -39,14 +89,14 @@ const textEncoder = new TextEncoder();
 const base64Url32Pattern = /^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$/;
 const callOrdinalPattern = /^(?:[1-9][0-9]{0,15})$/;
 const numberPattern = /-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?/y;
-const wireErrorCodes = new Set<DefaultRpcWireErrorCode>([
+const wireErrorCodes = new Set<RpcWireErrorCode>([
 	"canceled",
 	"unavailable",
 	"handler-failed",
 	"unknown-service",
 	"unknown-method",
 ]);
-const resumeRejectCodes = new Set<DefaultRpcResumeRejectCode>([
+const resumeRejectCodes = new Set<RpcResumeRejectCode>([
 	"resume-rejected",
 	"continuity-failure",
 	"session-terminated",
@@ -75,7 +125,7 @@ const closeForbiddenMembers = new Set([
 	"reason",
 ]);
 
-type MutableJsonRecord = Record<string, DefaultRpcJsonValue>;
+type MutableJsonRecord = Record<string, RpcJsonValue>;
 
 class BoundedJsonParser {
 	readonly _text: string;
@@ -86,7 +136,7 @@ class BoundedJsonParser {
 		this._text = text;
 	}
 
-	parse(): DefaultRpcJsonRecord {
+	parse(): RpcJsonRecord {
 		if (this._text.charCodeAt(0) === 0xfeff) {
 			throw new Error("RPC JSON must not start with a BOM.");
 		}
@@ -102,7 +152,7 @@ class BoundedJsonParser {
 		return value;
 	}
 
-	_parseValue(depth: number): DefaultRpcJsonValue {
+	_parseValue(depth: number): RpcJsonValue {
 		if (depth > 64) {
 			throw new Error("RPC JSON exceeds the depth limit.");
 		}
@@ -136,7 +186,7 @@ class BoundedJsonParser {
 		return this._parseNumber();
 	}
 
-	_parseObject(depth: number): DefaultRpcJsonRecord {
+	_parseObject(depth: number): RpcJsonRecord {
 		this._index += 1;
 		this._skipWhitespace();
 		const result = Object.create(null) as MutableJsonRecord;
@@ -178,10 +228,10 @@ class BoundedJsonParser {
 		}
 	}
 
-	_parseArray(depth: number): readonly DefaultRpcJsonValue[] {
+	_parseArray(depth: number): readonly RpcJsonValue[] {
 		this._index += 1;
 		this._skipWhitespace();
-		const result: DefaultRpcJsonValue[] = [];
+		const result: RpcJsonValue[] = [];
 		if (this._text[this._index] === "]") {
 			this._index += 1;
 			return result;
@@ -299,17 +349,15 @@ function validatePairedSurrogates(value: string, label: string): void {
 	}
 }
 
-function isJsonRecord(
-	value: DefaultRpcJsonValue,
-): value is DefaultRpcJsonRecord {
+function isJsonRecord(value: RpcJsonValue): value is RpcJsonRecord {
 	return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function own(record: DefaultRpcJsonRecord, key: string): boolean {
+function own(record: RpcJsonRecord, key: string): boolean {
 	return Object.getOwnPropertyDescriptor(record, key) !== undefined;
 }
 
-function readString(record: DefaultRpcJsonRecord, key: string): string {
+function readString(record: RpcJsonRecord, key: string): string {
 	const value = record[key];
 	if (typeof value !== "string") {
 		throw new Error(`RPC record ${key} must be a string.`);
@@ -317,7 +365,7 @@ function readString(record: DefaultRpcJsonRecord, key: string): string {
 	return value;
 }
 
-function readIdentifier(record: DefaultRpcJsonRecord, key: string): string {
+function readIdentifier(record: RpcJsonRecord, key: string): string {
 	const value = readString(record, key);
 	if (value.length === 0 || textEncoder.encode(value).byteLength > 256) {
 		throw new Error(`RPC record ${key} is not a valid identifier.`);
@@ -325,7 +373,7 @@ function readIdentifier(record: DefaultRpcJsonRecord, key: string): string {
 	return value;
 }
 
-function readBase64Url32(record: DefaultRpcJsonRecord, key: string): string {
+function readBase64Url32(record: RpcJsonRecord, key: string): string {
 	const value = readString(record, key);
 	if (!base64Url32Pattern.test(value)) {
 		throw new Error(`RPC record ${key} is not canonical Base64Url32.`);
@@ -333,7 +381,7 @@ function readBase64Url32(record: DefaultRpcJsonRecord, key: string): string {
 	return value;
 }
 
-function readSequence(record: DefaultRpcJsonRecord, key: string): number {
+function readSequence(record: RpcJsonRecord, key: string): number {
 	const value = record[key];
 	if (!Number.isSafeInteger(value) || (value as number) < 1) {
 		throw new Error(`RPC record ${key} must be a positive safe integer.`);
@@ -341,7 +389,7 @@ function readSequence(record: DefaultRpcJsonRecord, key: string): number {
 	return value as number;
 }
 
-function readAckCursor(record: DefaultRpcJsonRecord, key: string): number {
+function readAckCursor(record: RpcJsonRecord, key: string): number {
 	const value = record[key];
 	if (!Number.isSafeInteger(value) || (value as number) < 0) {
 		throw new Error(`RPC record ${key} must be a non-negative safe integer.`);
@@ -349,7 +397,7 @@ function readAckCursor(record: DefaultRpcJsonRecord, key: string): number {
 	return value as number;
 }
 
-function readCallId(record: DefaultRpcJsonRecord): string {
+function readCallId(record: RpcJsonRecord): string {
 	const value = readString(record, "callId");
 	if (!callOrdinalPattern.test(value)) {
 		throw new Error("RPC callId must be a canonical Call Ordinal.");
@@ -362,8 +410,8 @@ function readCallId(record: DefaultRpcJsonRecord): string {
 }
 
 function validateSemanticMessage(
-	value: DefaultRpcJsonValue | undefined,
-): DefaultRpcSemanticMessage {
+	value: RpcJsonValue | undefined,
+): RpcSemanticMessage {
 	if (value === undefined || !isJsonRecord(value)) {
 		throw new Error("RPC semantic message must be an object.");
 	}
@@ -378,13 +426,13 @@ function validateSemanticMessage(
 		if (!Array.isArray(value.args)) {
 			throw new Error("RPC call args must be an array.");
 		}
-		return value as DefaultRpcCallMessage;
+		return value as RpcCallMessage;
 	}
 	if (kind === "cancel") {
-		return value as DefaultRpcCancelMessage;
+		return value as RpcCancelMessage;
 	}
 	if (kind === "result") {
-		return value as DefaultRpcResultMessage;
+		return value as RpcResultMessage;
 	}
 	if (kind === "error") {
 		if (!isJsonRecord(value.error)) {
@@ -396,29 +444,25 @@ function validateSemanticMessage(
 			}
 		}
 		const code = readString(value.error, "code");
-		if (!wireErrorCodes.has(code as DefaultRpcWireErrorCode)) {
+		if (!wireErrorCodes.has(code as RpcWireErrorCode)) {
 			throw new Error("RPC error code is outside the profile union.");
 		}
 		readString(value.error, "message");
-		return value as DefaultRpcErrorMessage;
+		return value as RpcErrorMessage;
 	}
 	throw new Error("RPC semantic message kind is unknown.");
 }
 
-export function encodeDefaultRpcRecord(
-	record: DefaultRpcJsonRecord,
-): Uint8Array {
+function encodeRpcRecord(record: RpcJsonRecord): Uint8Array {
 	const encoded = textEncoder.encode(JSON.stringify(record));
-	if (encoded.byteLength > DEFAULT_RPC_MAX_MESSAGE_BYTES) {
+	if (encoded.byteLength > RPC_MAX_MESSAGE_BYTES) {
 		throw new Error("RPC record exceeds the Transport message limit.");
 	}
 	return encoded;
 }
 
-export function decodeDefaultRpcRecord(
-	bytes: Uint8Array,
-): DefaultRpcJsonRecord {
-	if (bytes.byteLength > DEFAULT_RPC_MAX_MESSAGE_BYTES) {
+function decodeRpcRecord(bytes: Uint8Array): RpcJsonRecord {
+	if (bytes.byteLength > RPC_MAX_MESSAGE_BYTES) {
 		throw new Error("RPC Transport message exceeds the profile limit.");
 	}
 	let text: string;
@@ -430,14 +474,12 @@ export function decodeDefaultRpcRecord(
 	return new BoundedJsonParser(text).parse();
 }
 
-export function readDefaultRpcRecordKind(record: DefaultRpcJsonRecord): string {
+function readRpcRecordKind(record: RpcJsonRecord): string {
 	return readString(record, "kind");
 }
 
-export function validateDefaultRpcFreshRequest(
-	record: DefaultRpcJsonRecord,
-): DefaultRpcFreshRequest {
-	if (readDefaultRpcRecordKind(record) !== "fresh") {
+function validateRpcFreshRequest(record: RpcJsonRecord): RpcFreshRequest {
+	if (readRpcRecordKind(record) !== "fresh") {
 		throw new Error("The first initiator record must be fresh or resume.");
 	}
 	if (!Array.isArray(record.profiles) || record.profiles.length === 0) {
@@ -456,16 +498,14 @@ export function validateDefaultRpcFreshRequest(
 		profiles.add(profile);
 	}
 	readBase64Url32(record, "initiatorNonce");
-	return record as DefaultRpcFreshRequest;
+	return record as RpcFreshRequest;
 }
 
-export function validateDefaultRpcFreshAccept(
-	record: DefaultRpcJsonRecord,
-): DefaultRpcFreshAccept {
-	if (readDefaultRpcRecordKind(record) !== "accept") {
+function validateRpcFreshAccept(record: RpcJsonRecord): RpcFreshAccept {
+	if (readRpcRecordKind(record) !== "accept") {
 		throw new Error("RPC fresh attempt did not receive accept.");
 	}
-	if (readIdentifier(record, "profile") !== DEFAULT_RPC_PROFILE_ID) {
+	if (readIdentifier(record, "profile") !== RPC_PROFILE_ID) {
 		throw new Error("RPC fresh accept selected a different profile.");
 	}
 	readBase64Url32(record, "sessionId");
@@ -475,13 +515,11 @@ export function validateDefaultRpcFreshAccept(
 	readBase64Url32(record, "responderNonce");
 	readBase64Url32(record, "sessionSecret");
 	readBase64Url32(record, "proof");
-	return record as DefaultRpcFreshAccept;
+	return record as RpcFreshAccept;
 }
 
-export function validateDefaultRpcResumeRequest(
-	record: DefaultRpcJsonRecord,
-): DefaultRpcResumeRequest {
-	if (readDefaultRpcRecordKind(record) !== "resume") {
+function validateRpcResumeRequest(record: RpcJsonRecord): RpcResumeRequest {
+	if (readRpcRecordKind(record) !== "resume") {
 		throw new Error("The first initiator record must be fresh or resume.");
 	}
 	readIdentifier(record, "profile");
@@ -490,13 +528,11 @@ export function validateDefaultRpcResumeRequest(
 	readSequence(record, "resumeAttempt");
 	readBase64Url32(record, "initiatorNonce");
 	readBase64Url32(record, "proof");
-	return record as DefaultRpcResumeRequest;
+	return record as RpcResumeRequest;
 }
 
-export function validateDefaultRpcResumeOutcome(
-	record: DefaultRpcJsonRecord,
-): DefaultRpcResumeOutcome {
-	const kind = readDefaultRpcRecordKind(record);
+function validateRpcResumeOutcome(record: RpcJsonRecord): RpcResumeOutcome {
+	const kind = readRpcRecordKind(record);
 	if (kind === "accept") {
 		readIdentifier(record, "profile");
 		readBase64Url32(record, "sessionId");
@@ -504,11 +540,11 @@ export function validateDefaultRpcResumeOutcome(
 		readAckCursor(record, "receivedThrough");
 		readBase64Url32(record, "responderNonce");
 		readBase64Url32(record, "proof");
-		return record as DefaultRpcResumeAccept;
+		return record as RpcResumeAccept;
 	}
 	if (kind === "reject") {
 		const code = readString(record, "code");
-		if (!resumeRejectCodes.has(code as DefaultRpcResumeRejectCode)) {
+		if (!resumeRejectCodes.has(code as RpcResumeRejectCode)) {
 			throw new Error("RPC resume reject code is outside the profile union.");
 		}
 		if (own(record, "message")) {
@@ -516,26 +552,24 @@ export function validateDefaultRpcResumeOutcome(
 		}
 		readBase64Url32(record, "responderNonce");
 		readBase64Url32(record, "proof");
-		return record as DefaultRpcResumeReject;
+		return record as RpcResumeReject;
 	}
 	throw new Error("RPC resume attempt did not receive accept or reject.");
 }
 
-export function validateDefaultRpcActiveRecord(
-	record: DefaultRpcJsonRecord,
-): DefaultRpcActiveRecord {
-	const kind = readDefaultRpcRecordKind(record);
+function validateRpcActiveRecord(record: RpcJsonRecord): RpcActiveRecord {
+	const kind = readRpcRecordKind(record);
 	if (kind === "message") {
 		readSequence(record, "seq");
 		if (own(record, "ackThrough")) {
 			readAckCursor(record, "ackThrough");
 		}
 		validateSemanticMessage(record.message);
-		return record as DefaultRpcMessageEnvelope;
+		return record as RpcMessageEnvelope;
 	}
 	if (kind === "ack") {
 		readAckCursor(record, "ackThrough");
-		return record as DefaultRpcAckRecord;
+		return record as RpcAckRecord;
 	}
 	if (kind === "ping" || kind === "pong" || kind === "close") {
 		if (
@@ -544,20 +578,7 @@ export function validateDefaultRpcActiveRecord(
 		) {
 			throw new Error("RPC close contains a forbidden control member.");
 		}
-		return record as DefaultRpcControlRecord;
+		return record as RpcControlRecord;
 	}
 	throw new Error("RPC active record kind is unknown.");
-}
-
-export function hasDefaultRpcRecordMember(
-	record: DefaultRpcJsonRecord,
-	key: string,
-): boolean {
-	return own(record, key);
-}
-
-export function asDefaultRpcApplicationValue(
-	value: DefaultRpcJsonValue,
-): RpcApplicationValue {
-	return value as RpcApplicationValue;
 }

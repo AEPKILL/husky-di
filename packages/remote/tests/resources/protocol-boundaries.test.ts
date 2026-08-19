@@ -6,18 +6,15 @@
 
 import { Subject } from "rxjs";
 import { describe, expect, it, vi } from "vitest";
-
-import type { IRpcConnection } from "../../src/interfaces/rpc-connection.interface";
+import { RpcCodecImpl } from "../../src/impls/protocol/rpc-codec.impl";
+import { RpcEndpointImpl } from "../../src/impls/protocol/rpc-endpoint.impl";
+import { RpcSessionImpl } from "../../src/impls/protocol/rpc-session.impl";
 import type {
 	IRpcProtocolHost,
 	IRpcProtocolRuntimePolicy,
-} from "../../src/interfaces/rpc-protocol.interface";
-import { decodeDefaultRpcRecord } from "../../src/protocols/default/default-rpc-codec.util";
-import {
-	DefaultRpcEndpoint,
-	type DefaultRpcEndpointFailure,
-} from "../../src/protocols/default/default-rpc-endpoint.impl";
-import { DefaultRpcSession } from "../../src/protocols/default/default-rpc-session.impl";
+} from "../../src/interfaces/protocol/rpc-protocol.interface";
+import type { IRpcConnection } from "../../src/interfaces/rpc-connection.interface";
+import type { RpcEndpointFailure } from "../../src/types/protocol/rpc-endpoint.type";
 import {
 	normalizeRpcApplicationArguments,
 	normalizeRpcApplicationValue,
@@ -25,6 +22,7 @@ import {
 } from "../../src/utils/rpc-application-value.util";
 
 const encoder = new TextEncoder();
+const codec = new RpcCodecImpl();
 const mebibyte = 1024 * 1024;
 const defaultPolicy: IRpcProtocolRuntimePolicy = {
 	maxSessions: 1,
@@ -44,7 +42,7 @@ const defaultPolicy: IRpcProtocolRuntimePolicy = {
 };
 
 function decodeJson(source: string): void {
-	decodeDefaultRpcRecord(encoder.encode(source));
+	codec.decode(encoder.encode(source), "json");
 }
 
 function createNodeBoundaryJson(totalNodes: number): string {
@@ -60,21 +58,21 @@ function createNodeBoundaryJson(totalNodes: number): string {
 }
 
 function createEndpoint(messages: readonly Uint8Array[]): {
-	readonly endpoint: DefaultRpcEndpoint;
-	readonly failures: DefaultRpcEndpointFailure[];
+	readonly endpoint: RpcEndpointImpl;
+	readonly failures: RpcEndpointFailure[];
 } {
 	const messageSource = new Subject<Uint8Array>();
-	const failures: DefaultRpcEndpointFailure[] = [];
+	const failures: RpcEndpointFailure[] = [];
 	const connection: IRpcConnection = {
 		message$: messageSource.asObservable(),
 		async send() {},
 		async close() {},
 	};
-	const endpoint = new DefaultRpcEndpoint(
+	const endpoint = new RpcEndpointImpl({
 		connection,
-		() => {},
-		(reason) => failures.push(reason),
-	);
+		onMessage: () => {},
+		onFailure: (reason) => failures.push(reason),
+	});
 	for (const message of messages) {
 		messageSource.next(message);
 	}
@@ -83,7 +81,7 @@ function createEndpoint(messages: readonly Uint8Array[]): {
 
 function createSession(
 	policy: Partial<IRpcProtocolRuntimePolicy> = {},
-): DefaultRpcSession {
+): RpcSessionImpl {
 	const host: IRpcProtocolHost = {
 		policy: { ...defaultPolicy, ...policy },
 		normalizeApplicationValue: normalizeRpcApplicationValue,
@@ -91,13 +89,14 @@ function createSession(
 		applicationValuesEqual: rpcApplicationValuesEqual,
 		fault() {},
 	};
-	return new DefaultRpcSession(
-		"connector",
+	return new RpcSessionImpl({
+		role: "connector",
 		host,
-		"boundary-session",
-		{} as CryptoKey,
-		() => {},
-	);
+		sessionId: "boundary-session",
+		proofKey: {} as CryptoKey,
+		codec,
+		onTerminal: () => {},
+	});
 }
 
 describe("Default RPC Protocol resource boundaries", () => {
@@ -229,13 +228,13 @@ describe("Default RPC Protocol resource boundaries", () => {
 		const order: number[] = [];
 		let callbackDepth = 0;
 		let maximumCallbackDepth = 0;
-		const endpoint = new DefaultRpcEndpoint(
-			{
+		const endpoint = new RpcEndpointImpl({
+			connection: {
 				message$: source.asObservable(),
 				async send() {},
 				async close() {},
 			},
-			(message) => {
+			onMessage: (message) => {
 				callbackDepth += 1;
 				maximumCallbackDepth = Math.max(maximumCallbackDepth, callbackDepth);
 				order.push(message[0] as number);
@@ -244,8 +243,8 @@ describe("Default RPC Protocol resource boundaries", () => {
 				}
 				callbackDepth -= 1;
 			},
-			() => {},
-		);
+			onFailure: () => {},
+		});
 		source.next(Uint8Array.of(1));
 		await vi.waitFor(() => expect(order).toEqual([1, 2]));
 		expect(maximumCallbackDepth).toBe(1);

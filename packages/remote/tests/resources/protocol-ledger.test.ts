@@ -6,21 +6,22 @@
 
 import { createServiceIdentifier } from "@husky-di/core";
 import { describe, expect, it, vi } from "vitest";
-
+import { RpcCodecImpl } from "../../src/impls/protocol/rpc-codec.impl";
 import {
 	createRemoteServiceDescriptor,
 	createRpcAcceptor,
 	createRpcConnector,
 } from "../../src/index";
-import { encodeDefaultRpcRecord } from "../../src/protocols/default/default-rpc-codec.util";
 import {
-	createDefaultRpcDirectSessionHarness,
-	createDefaultRpcTestNetwork,
-} from "../default-protocol/test.utils";
+	createRpcDirectSessionHarness,
+	createRpcTestNetwork,
+} from "../protocol/test.utils";
 
 interface ILedgerService {
 	run(value: number): number;
 }
+
+const codec = new RpcCodecImpl();
 
 interface ILargeLedgerService {
 	run(): string;
@@ -34,7 +35,7 @@ const ILargeLedgerService = createServiceIdentifier<ILargeLedgerService>(
 
 describe("Default RPC Protocol retained ledger", () => {
 	it("RPC-ACK-007 removes newly acknowledged entries from an in-progress replay barrier", async () => {
-		const harness = createDefaultRpcDirectSessionHarness();
+		const harness = createRpcDirectSessionHarness();
 		const { session } = harness;
 		for (let ordinal = 1; ordinal <= 3; ordinal += 1) {
 			session._queueSemantic({ kind: "cancel", callId: String(ordinal) });
@@ -50,10 +51,7 @@ describe("Default RPC Protocol retained ledger", () => {
 		const endpoint = harness.installReplacement();
 		await vi.waitFor(() => expect(harness.sent).toHaveLength(4));
 
-		session.receive(
-			endpoint,
-			encodeDefaultRpcRecord({ kind: "ack", ackThrough: 3 }),
-		);
+		session.receive(endpoint, codec.encode({ kind: "ack", ackThrough: 3 }));
 		releaseReplay();
 		await Promise.resolve();
 		await Promise.resolve();
@@ -65,7 +63,7 @@ describe("Default RPC Protocol retained ledger", () => {
 	});
 
 	it("RPC-ACK-005 RPC-LEDGER-005 releases payload fingerprints after terminal ACK GC without redispatch", async () => {
-		const network = createDefaultRpcTestNetwork();
+		const network = createRpcTestNetwork();
 		const descriptor = createRemoteServiceDescriptor(ILedgerService, {
 			wireName: "example.ledger.v1",
 			methods: { run: true },
@@ -120,7 +118,7 @@ describe("Default RPC Protocol retained ledger", () => {
 	});
 
 	it("RPC-LEDGER-003 RPC-LEDGER-005 RPC-VALID-006 rejects capacity before route lookup at 256 unacknowledged incoming ledgers RPC-CORPUS-004", async () => {
-		const network = createDefaultRpcTestNetwork();
+		const network = createRpcTestNetwork();
 		const descriptor = createRemoteServiceDescriptor(ILedgerService, {
 			wireName: "example.ledger.v1",
 			methods: { run: true },
@@ -171,7 +169,7 @@ describe("Default RPC Protocol retained ledger", () => {
 	});
 
 	it("RPC-LEDGER-004 RPC-RESOURCE-001 RPC-RESOURCE-002 RPC-POLICY-002 uses the protected terminal reserve when the ordinary replay-entry cap is full", async () => {
-		const network = createDefaultRpcTestNetwork();
+		const network = createRpcTestNetwork();
 		const descriptor = createRemoteServiceDescriptor(ILedgerService, {
 			wireName: "example.ledger.v1",
 			methods: { run: true },
@@ -213,7 +211,7 @@ describe("Default RPC Protocol retained ledger", () => {
 	});
 
 	it("RPC-ACK-004 RPC-LEDGER-004 RPC-RESOURCE-001 RPC-RESOURCE-002 selects exactly one protected handler-failed terminal when ordinary replay bytes are full", async () => {
-		const network = createDefaultRpcTestNetwork();
+		const network = createRpcTestNetwork();
 		const descriptor = createRemoteServiceDescriptor(ILargeLedgerService, {
 			wireName: "example.large-ledger.v1",
 			methods: { run: true },

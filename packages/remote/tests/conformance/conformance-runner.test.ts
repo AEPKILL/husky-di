@@ -14,11 +14,11 @@ import {
 	runRpcConnectorAdapterConformance,
 	runRpcProtocolConformance,
 } from "../../src/conformance";
-import type { IRpcProtocol } from "../../src/protocol";
 import {
-	createDefaultRpcCounterExhaustionProtocolForTest,
-	getDefaultRpcProtocol,
-} from "../../src/protocols/default/default-rpc-protocol.impl";
+	createRpcCounterExhaustionProtocolForTest,
+	getRpcProtocol,
+} from "../../src/factories/rpc-protocol.factory";
+import type { IRpcProtocol } from "../../src/protocol";
 import {
 	createMemoryAcceptorFixture,
 	createMemoryConnectorFixture,
@@ -117,9 +117,8 @@ describe("RPC conformance runner", () => {
 
 		await runRpcProtocolConformance(
 			{
-				protocol: getDefaultRpcProtocol(),
-				counterExhaustionProtocol:
-					createDefaultRpcCounterExhaustionProtocolForTest(),
+				protocol: getRpcProtocol(),
+				counterExhaustionProtocol: createRpcCounterExhaustionProtocolForTest(),
 				createActiveProtocolFaultMessage: () =>
 					encoder.encode(JSON.stringify({ kind: "bogus" })),
 			},

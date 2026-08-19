@@ -12,7 +12,7 @@ import {
 	createRpcAcceptor,
 	createRpcConnector,
 } from "../../src/index";
-import { createDefaultRpcTestNetwork } from "../default-protocol/test.utils";
+import { createRpcTestNetwork } from "../protocol/test.utils";
 
 interface IRequirementsService {
 	run(value: string): number;
@@ -43,7 +43,7 @@ function createDeferred(): {
 
 describe("Default RPC Protocol remaining requirements", () => {
 	it("RPC-LEDGER-001 RPC-RESOURCE-005 charges Pending payload weight plus 256 bytes before assigning wire identity", async () => {
-		const network = createDefaultRpcTestNetwork();
+		const network = createRpcTestNetwork();
 		const blocked = createDeferred();
 		const descriptor = createRemoteServiceDescriptor(IRequirementsService, {
 			wireName: "example.requirements.v1",
@@ -110,7 +110,7 @@ describe("Default RPC Protocol remaining requirements", () => {
 	});
 
 	it("RPC-LEDGER-001 allocates independent continuous Call Ordinals in both Session directions", async () => {
-		const network = createDefaultRpcTestNetwork();
+		const network = createRpcTestNetwork();
 		const descriptor = createRemoteServiceDescriptor(IRequirementsService, {
 			wireName: "example.bidirectional-ledger.v1",
 			methods: { run: true },
@@ -147,7 +147,7 @@ describe("Default RPC Protocol remaining requirements", () => {
 	});
 
 	it("RPC-SEC-001 ignores Adapter security-shaped properties and makes no secure-Recovery claim for plaintext fixtures", async () => {
-		const network = createDefaultRpcTestNetwork();
+		const network = createRpcTestNetwork();
 		const descriptor = createRemoteServiceDescriptor(IRequirementsService, {
 			wireName: "example.plaintext-deployment.v1",
 			methods: { run: true },
@@ -188,7 +188,7 @@ describe("Default RPC Protocol remaining requirements", () => {
 	});
 
 	it("RPC-SEC-004 generates one independent secret per Session and carries each only in its verified fresh accept", async () => {
-		const network = createDefaultRpcTestNetwork();
+		const network = createRpcTestNetwork();
 		const acceptor = createRpcAcceptor();
 		const firstConnector = createRpcConnector();
 		const secondConnector = createRpcConnector();
@@ -223,7 +223,7 @@ describe("Default RPC Protocol remaining requirements", () => {
 	});
 
 	it("RPC-RESOURCE-006 rejects fresh pressure without evicting an existing connected Session", async () => {
-		const network = createDefaultRpcTestNetwork();
+		const network = createRpcTestNetwork();
 		const descriptor = createRemoteServiceDescriptor(IRequirementsService, {
 			wireName: "example.retained-owner.v1",
 			methods: { run: true },
@@ -254,7 +254,7 @@ describe("Default RPC Protocol remaining requirements", () => {
 	});
 
 	it("RPC-SCHEDULE-005 serializes synchronous ingress emissions and never runs handlers in the Transport callback", async () => {
-		const network = createDefaultRpcTestNetwork();
+		const network = createRpcTestNetwork();
 		const descriptor = createRemoteServiceDescriptor(IRequirementsService, {
 			wireName: "example.ingress-order.v1",
 			methods: { run: true },
@@ -306,7 +306,7 @@ describe("Default RPC Protocol remaining requirements", () => {
 	});
 
 	it("RPC-SCHEDULE-006 RPC-CORPUS-004 preserves per-Session FIFO and round-robins ready Sessions while a running handler owns the sole permit", async () => {
-		const network = createDefaultRpcTestNetwork();
+		const network = createRpcTestNetwork();
 		const descriptor = createRemoteServiceDescriptor(
 			IScheduledRequirementsService,
 			{
@@ -359,7 +359,7 @@ describe("Default RPC Protocol remaining requirements", () => {
 	});
 
 	it("RPC-CORPUS-004 RPC-SHUTDOWN-008 gracefully converges the default 64-Session boundary in parallel", async () => {
-		const network = createDefaultRpcTestNetwork();
+		const network = createRpcTestNetwork();
 		const acceptor = createRpcAcceptor();
 		const connectors = Array.from({ length: 64 }, () => createRpcConnector());
 		const closeSettlement = createDeferred();

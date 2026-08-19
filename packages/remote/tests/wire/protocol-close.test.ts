@@ -6,12 +6,10 @@
 
 import { describe, expect, it } from "vitest";
 
-import {
-	decodeDefaultRpcRecord,
-	validateDefaultRpcActiveRecord,
-} from "../../src/protocols/default/default-rpc-codec.util";
+import { RpcCodecImpl } from "../../src/impls/protocol/rpc-codec.impl";
 
 const encoder = new TextEncoder();
+const codec = new RpcCodecImpl();
 
 describe("Default RPC Protocol Close wire shape", () => {
 	it.each([
@@ -37,21 +35,21 @@ describe("Default RPC Protocol Close wire shape", () => {
 		"message",
 		"reason",
 	] as const)("RPC-WIRE-015 rejects Close carrying the known %s field", (field) => {
-		const record = decodeDefaultRpcRecord(
-			encoder.encode(JSON.stringify({ kind: "close", [field]: null })),
-		);
-
-		expect(() => validateDefaultRpcActiveRecord(record)).toThrow(
-			"RPC close contains a forbidden control member.",
-		);
+		expect(() =>
+			codec.decode(
+				encoder.encode(JSON.stringify({ kind: "close", [field]: null })),
+				"active",
+			),
+		).toThrow("RPC close contains a forbidden control member.");
 	});
 
 	it("RPC-WIRE-005 RPC-WIRE-015 accepts and ignores a bounded unknown Close tail", () => {
-		const record = decodeDefaultRpcRecord(
+		const record = codec.decode(
 			encoder.encode(JSON.stringify({ kind: "close", future: true })),
+			"active",
 		);
 
-		expect(validateDefaultRpcActiveRecord(record)).toMatchObject({
+		expect(record).toMatchObject({
 			kind: "close",
 			future: true,
 		});

@@ -9,7 +9,7 @@ import type {
 	IRpcApplicationRecord,
 	IRpcApplicationSnapshot,
 	RpcApplicationValue,
-} from "@/interfaces/rpc-protocol.interface";
+} from "@/interfaces/protocol/rpc-protocol.interface";
 
 const maximumDepth = 64;
 const maximumStringBytes = 512 * 1024;
