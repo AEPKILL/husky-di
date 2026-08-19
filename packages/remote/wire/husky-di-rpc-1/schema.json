@@ -1,0 +1,344 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://husky-di.dev/wire/husky-di-rpc-1/schema.json",
+  "title": "husky-di-rpc/1 Transport message",
+  "description": "Decoded tree grammar for one husky-di-rpc/1 Transport message. Raw-byte constraints that JSON Schema cannot express are normative in raw-vectors.json.",
+  "oneOf": [
+    { "$ref": "#/$defs/freshRequest" },
+    { "$ref": "#/$defs/freshAccept" },
+    { "$ref": "#/$defs/resumeRequest" },
+    { "$ref": "#/$defs/resumeAccept" },
+    { "$ref": "#/$defs/freshReject" },
+    { "$ref": "#/$defs/resumeReject" },
+    { "$ref": "#/$defs/messageEnvelope" },
+    { "$ref": "#/$defs/ack" },
+    { "$ref": "#/$defs/ping" },
+    { "$ref": "#/$defs/pong" },
+    { "$ref": "#/$defs/close" }
+  ],
+  "$defs": {
+    "profileId": {
+      "type": "string",
+      "minLength": 1,
+      "x-maxUtf8Bytes": 256
+    },
+    "identifier": {
+      "type": "string",
+      "minLength": 1,
+      "x-maxUtf8Bytes": 256
+    },
+    "base64Url32": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$"
+    },
+    "sequence": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991
+    },
+    "ackCursor": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "callOrdinal": {
+      "type": "string",
+      "pattern": "^[1-9][0-9]{0,15}$",
+      "x-maximumDecimal": "9007199254740991"
+    },
+    "applicationString": {
+      "type": "string",
+      "x-maxUtf8Bytes": 524288,
+      "x-rejectUnpairedUtf16Surrogate": true
+    },
+    "applicationNumber": {
+      "type": "number",
+      "x-finiteBinary64": true,
+      "x-rejectNegativeZero": true
+    },
+    "applicationArray": {
+      "type": "array",
+      "maxItems": 8192,
+      "items": { "$ref": "#/$defs/applicationValue" }
+    },
+    "applicationRecord": {
+      "type": "object",
+      "maxProperties": 1024,
+      "propertyNames": {
+        "x-maxUtf8Bytes": 256,
+        "x-rejectUnpairedUtf16Surrogate": true
+      },
+      "additionalProperties": { "$ref": "#/$defs/applicationValue" }
+    },
+    "applicationValue": {
+      "oneOf": [
+        { "type": "null" },
+        { "type": "boolean" },
+        { "$ref": "#/$defs/applicationString" },
+        { "$ref": "#/$defs/applicationNumber" },
+        { "$ref": "#/$defs/applicationArray" },
+        { "$ref": "#/$defs/applicationRecord" }
+      ],
+      "x-maxDepth": 64,
+      "x-maxNodes": 65536,
+      "x-maxCompactJsonWeight": 1000000
+    },
+    "freshRequest": {
+      "type": "object",
+      "required": ["kind", "profiles", "initiatorNonce"],
+      "properties": {
+        "kind": { "const": "fresh" },
+        "profiles": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/profileId" }
+        },
+        "initiatorNonce": { "$ref": "#/$defs/base64Url32" }
+      },
+      "additionalProperties": true
+    },
+    "freshAccept": {
+      "type": "object",
+      "required": [
+        "kind",
+        "profile",
+        "sessionId",
+        "bindingEpoch",
+        "responderNonce",
+        "sessionSecret",
+        "proof"
+      ],
+      "properties": {
+        "kind": { "const": "accept" },
+        "profile": { "const": "husky-di-rpc/1" },
+        "sessionId": { "$ref": "#/$defs/base64Url32" },
+        "bindingEpoch": { "const": 1 },
+        "responderNonce": { "$ref": "#/$defs/base64Url32" },
+        "sessionSecret": { "$ref": "#/$defs/base64Url32" },
+        "proof": { "$ref": "#/$defs/base64Url32" }
+      },
+      "not": { "required": ["receivedThrough"] },
+      "additionalProperties": true
+    },
+    "resumeRequest": {
+      "type": "object",
+      "required": [
+        "kind",
+        "profile",
+        "sessionId",
+        "receivedThrough",
+        "resumeAttempt",
+        "initiatorNonce",
+        "proof"
+      ],
+      "properties": {
+        "kind": { "const": "resume" },
+        "profile": { "$ref": "#/$defs/profileId" },
+        "sessionId": { "$ref": "#/$defs/base64Url32" },
+        "receivedThrough": { "$ref": "#/$defs/ackCursor" },
+        "resumeAttempt": { "$ref": "#/$defs/sequence" },
+        "initiatorNonce": { "$ref": "#/$defs/base64Url32" },
+        "proof": { "$ref": "#/$defs/base64Url32" }
+      },
+      "additionalProperties": true
+    },
+    "resumeAccept": {
+      "type": "object",
+      "required": [
+        "kind",
+        "profile",
+        "sessionId",
+        "bindingEpoch",
+        "receivedThrough",
+        "responderNonce",
+        "proof"
+      ],
+      "properties": {
+        "kind": { "const": "accept" },
+        "profile": { "$ref": "#/$defs/profileId" },
+        "sessionId": { "$ref": "#/$defs/base64Url32" },
+        "bindingEpoch": { "$ref": "#/$defs/sequence" },
+        "receivedThrough": { "$ref": "#/$defs/ackCursor" },
+        "responderNonce": { "$ref": "#/$defs/base64Url32" },
+        "proof": { "$ref": "#/$defs/base64Url32" }
+      },
+      "not": { "required": ["sessionSecret"] },
+      "additionalProperties": true
+    },
+    "freshReject": {
+      "type": "object",
+      "required": ["kind", "code"],
+      "properties": {
+        "kind": { "const": "reject" },
+        "code": {
+          "enum": ["unsupported-profile", "admission-rejected"]
+        },
+        "message": { "$ref": "#/$defs/applicationString" }
+      },
+      "additionalProperties": true
+    },
+    "resumeReject": {
+      "type": "object",
+      "required": ["kind", "code", "responderNonce", "proof"],
+      "properties": {
+        "kind": { "const": "reject" },
+        "code": {
+          "enum": [
+            "resume-rejected",
+            "continuity-failure",
+            "session-terminated"
+          ]
+        },
+        "responderNonce": { "$ref": "#/$defs/base64Url32" },
+        "proof": { "$ref": "#/$defs/base64Url32" }
+      },
+      "not": { "required": ["message"] },
+      "additionalProperties": true
+    },
+    "call": {
+      "type": "object",
+      "required": ["kind", "callId", "service", "method", "args"],
+      "properties": {
+        "kind": { "const": "call" },
+        "callId": { "$ref": "#/$defs/callOrdinal" },
+        "service": { "$ref": "#/$defs/identifier" },
+        "method": {
+          "allOf": [
+            { "$ref": "#/$defs/identifier" },
+            { "not": { "const": "then" } }
+          ]
+        },
+        "args": {
+          "type": "array",
+          "maxItems": 8192,
+          "items": { "$ref": "#/$defs/applicationValue" },
+          "x-maxCompactJsonWeight": 1000000
+        }
+      },
+      "additionalProperties": true
+    },
+    "cancel": {
+      "type": "object",
+      "required": ["kind", "callId"],
+      "properties": {
+        "kind": { "const": "cancel" },
+        "callId": { "$ref": "#/$defs/callOrdinal" }
+      },
+      "additionalProperties": true
+    },
+    "result": {
+      "type": "object",
+      "required": ["kind", "callId"],
+      "properties": {
+        "kind": { "const": "result" },
+        "callId": { "$ref": "#/$defs/callOrdinal" },
+        "value": { "$ref": "#/$defs/applicationValue" }
+      },
+      "additionalProperties": true
+    },
+    "wireError": {
+      "type": "object",
+      "required": ["code", "message"],
+      "properties": {
+        "code": {
+          "enum": [
+            "canceled",
+            "unavailable",
+            "handler-failed",
+            "unknown-service",
+            "unknown-method"
+          ]
+        },
+        "message": { "$ref": "#/$defs/applicationString" },
+        "details": { "$ref": "#/$defs/applicationValue" }
+      },
+      "additionalProperties": false
+    },
+    "error": {
+      "type": "object",
+      "required": ["kind", "callId", "error"],
+      "properties": {
+        "kind": { "const": "error" },
+        "callId": { "$ref": "#/$defs/callOrdinal" },
+        "error": { "$ref": "#/$defs/wireError" }
+      },
+      "additionalProperties": true
+    },
+    "semanticMessage": {
+      "oneOf": [
+        { "$ref": "#/$defs/call" },
+        { "$ref": "#/$defs/cancel" },
+        { "$ref": "#/$defs/result" },
+        { "$ref": "#/$defs/error" }
+      ]
+    },
+    "messageEnvelope": {
+      "type": "object",
+      "required": ["kind", "seq", "message"],
+      "properties": {
+        "kind": { "const": "message" },
+        "seq": { "$ref": "#/$defs/sequence" },
+        "ackThrough": { "$ref": "#/$defs/ackCursor" },
+        "message": { "$ref": "#/$defs/semanticMessage" }
+      },
+      "additionalProperties": true
+    },
+    "ack": {
+      "type": "object",
+      "required": ["kind", "ackThrough"],
+      "properties": {
+        "kind": { "const": "ack" },
+        "ackThrough": { "$ref": "#/$defs/ackCursor" }
+      },
+      "additionalProperties": true
+    },
+    "ping": {
+      "type": "object",
+      "required": ["kind"],
+      "properties": { "kind": { "const": "ping" } },
+      "additionalProperties": true
+    },
+    "pong": {
+      "type": "object",
+      "required": ["kind"],
+      "properties": { "kind": { "const": "pong" } },
+      "additionalProperties": true
+    },
+    "close": {
+      "type": "object",
+      "required": ["kind"],
+      "properties": { "kind": { "const": "close" } },
+      "allOf": [
+        { "not": { "required": ["seq"] } },
+        { "not": { "required": ["ackThrough"] } },
+        { "not": { "required": ["profile"] } },
+        { "not": { "required": ["profiles"] } },
+        { "not": { "required": ["sessionId"] } },
+        { "not": { "required": ["bindingEpoch"] } },
+        { "not": { "required": ["resumeAttempt"] } },
+        { "not": { "required": ["receivedThrough"] } },
+        { "not": { "required": ["initiatorNonce"] } },
+        { "not": { "required": ["responderNonce"] } },
+        { "not": { "required": ["sessionSecret"] } },
+        { "not": { "required": ["proof"] } },
+        { "not": { "required": ["callId"] } },
+        { "not": { "required": ["service"] } },
+        { "not": { "required": ["method"] } },
+        { "not": { "required": ["args"] } },
+        { "not": { "required": ["value"] } },
+        { "not": { "required": ["error"] } },
+        { "not": { "required": ["code"] } },
+        { "not": { "required": ["message"] } },
+        { "not": { "required": ["reason"] } }
+      ],
+      "additionalProperties": true
+    }
+  },
+  "x-profile": "husky-di-rpc/1",
+  "x-maxTransportMessageBytes": 1048576,
+  "x-maxDepth": 64,
+  "x-maxNodes": 65536,
+  "x-maxObjectMembers": 1024,
+  "x-maxArrayElements": 8192
+}

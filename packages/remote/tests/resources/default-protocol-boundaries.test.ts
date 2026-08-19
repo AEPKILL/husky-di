@@ -1,0 +1,345 @@
+/**
+ * @overview Executable limit-minus-one, limit, and limit-plus-one evidence for Default Protocol resources.
+ * @author AEPKILL
+ * @created 2026-08-19 00:00:00
+ */
+
+import { Subject } from "rxjs";
+import { describe, expect, it, vi } from "vitest";
+
+import type { IRpcConnection } from "../../src/interfaces/rpc-connection.interface";
+import type {
+	IRpcProtocolHost,
+	IRpcProtocolRuntimePolicy,
+} from "../../src/interfaces/rpc-protocol.interface";
+import { decodeDefaultRpcRecord } from "../../src/protocols/default/default-rpc-codec.util";
+import {
+	DefaultRpcEndpoint,
+	type DefaultRpcEndpointFailure,
+} from "../../src/protocols/default/default-rpc-endpoint.impl";
+import { DefaultRpcSession } from "../../src/protocols/default/default-rpc-session.impl";
+import {
+	normalizeRpcApplicationArguments,
+	normalizeRpcApplicationValue,
+	rpcApplicationValuesEqual,
+} from "../../src/utils/rpc-application-value.util";
+
+const encoder = new TextEncoder();
+const mebibyte = 1024 * 1024;
+const defaultPolicy: IRpcProtocolRuntimePolicy = {
+	maxSessions: 1,
+	maxHandshakes: 1,
+	maxPendingInvocationsPerSession: 256,
+	maxRetainedBytesPerSession: 32 * mebibyte,
+	maxRetainedBytesTotal: 32 * mebibyte,
+	maxHandlersPerSession: 16,
+	maxHandlersTotal: 16,
+	ackDelayMs: 50,
+	activityProbeIntervalMs: 30_000,
+	silenceTimeoutMs: 120_000,
+	sendProgressTimeoutMs: 30_000,
+	bindingAttemptTimeoutMs: 30_000,
+	recoveryGraceMs: 300_000,
+	shutdownDeadlineMs: 5_000,
+};
+
+function decodeJson(source: string): void {
+	decodeDefaultRpcRecord(encoder.encode(source));
+}
+
+function createNodeBoundaryJson(totalNodes: number): string {
+	const innerArrays = 8;
+	let remainingLeaves = totalNodes - 3 - innerArrays;
+	const chunks: string[] = [];
+	for (let index = 0; index < innerArrays; index += 1) {
+		const leaves = Math.min(8192, remainingLeaves);
+		chunks.push(`[${"null,".repeat(leaves - 1)}null]`);
+		remainingLeaves -= leaves;
+	}
+	return `{"kind":"ping","future":[${chunks.join(",")}]}`;
+}
+
+function createEndpoint(messages: readonly Uint8Array[]): {
+	readonly endpoint: DefaultRpcEndpoint;
+	readonly failures: DefaultRpcEndpointFailure[];
+} {
+	const messageSource = new Subject<Uint8Array>();
+	const failures: DefaultRpcEndpointFailure[] = [];
+	const connection: IRpcConnection = {
+		message$: messageSource.asObservable(),
+		async send() {},
+		async close() {},
+	};
+	const endpoint = new DefaultRpcEndpoint(
+		connection,
+		() => {},
+		(reason) => failures.push(reason),
+	);
+	for (const message of messages) {
+		messageSource.next(message);
+	}
+	return { endpoint, failures };
+}
+
+function createSession(
+	policy: Partial<IRpcProtocolRuntimePolicy> = {},
+): DefaultRpcSession {
+	const host: IRpcProtocolHost = {
+		policy: { ...defaultPolicy, ...policy },
+		normalizeApplicationValue: normalizeRpcApplicationValue,
+		normalizeApplicationArguments: normalizeRpcApplicationArguments,
+		applicationValuesEqual: rpcApplicationValuesEqual,
+		fault() {},
+	};
+	return new DefaultRpcSession(
+		"connector",
+		host,
+		"boundary-session",
+		{} as CryptoKey,
+		() => {},
+	);
+}
+
+describe("Default RPC Protocol resource boundaries", () => {
+	it("RPC-CORPUS-004 executes limit-1, limit, and limit+1 for every fixed Codec allocation boundary", () => {
+		const objectWithMembers = (members: number) =>
+			`{"kind":"ping","future":{${Array.from(
+				{ length: members },
+				(_, index) => `"k${index}":null`,
+			).join(",")}}}`;
+		const arrayWithElements = (elements: number) =>
+			`{"kind":"ping","future":[${"null,".repeat(elements - 1)}null]}`;
+		const boundaries = [
+			{
+				name: "depth 64",
+				create: (value: number) =>
+					`{"kind":"ping","future":${"[".repeat(value - 2)}null${"]".repeat(value - 2)}}`,
+				limit: 64,
+			},
+			{
+				name: "string UTF-8 bytes 524288",
+				create: (value: number) =>
+					`{"kind":"ping","future":"${"a".repeat(value)}"}`,
+				limit: 524_288,
+			},
+			{
+				name: "member-name UTF-8 bytes 256",
+				create: (value: number) =>
+					`{"kind":"ping","${"a".repeat(value)}":null}`,
+				limit: 256,
+			},
+			{
+				name: "object members 1024",
+				create: objectWithMembers,
+				limit: 1024,
+			},
+			{
+				name: "array elements 8192",
+				create: arrayWithElements,
+				limit: 8192,
+			},
+			{
+				name: "JSON nodes 65536",
+				create: createNodeBoundaryJson,
+				limit: 65_536,
+			},
+		];
+
+		for (const boundary of boundaries) {
+			expect(
+				() => decodeJson(boundary.create(boundary.limit - 1)),
+				`${boundary.name} limit-1`,
+			).not.toThrow();
+			expect(
+				() => decodeJson(boundary.create(boundary.limit)),
+				`${boundary.name} limit`,
+			).not.toThrow();
+			expect(
+				() => decodeJson(boundary.create(boundary.limit + 1)),
+				`${boundary.name} limit+1`,
+			).toThrow();
+		}
+
+		const base = '{"kind":"ping"}';
+		const messageAt = (bytes: number) =>
+			base + " ".repeat(bytes - encoder.encode(base).byteLength);
+		expect(
+			() => decodeJson(messageAt(mebibyte - 1)),
+			"Transport message bytes limit-1",
+		).not.toThrow();
+		expect(
+			() => decodeJson(messageAt(mebibyte)),
+			"Transport message bytes limit",
+		).not.toThrow();
+		expect(
+			() => decodeJson(messageAt(mebibyte + 1)),
+			"Transport message bytes limit+1",
+		).toThrow();
+	});
+
+	it("RPC-CORPUS-004 RPC-SCHEDULE-005 executes message, record, and byte backlog triplets and charges reentrant input", async () => {
+		for (const [size, failure] of [
+			[mebibyte - 1, undefined],
+			[mebibyte, undefined],
+			[mebibyte + 1, "protocol"],
+		] as const) {
+			const result = createEndpoint([new Uint8Array(size)]);
+			expect(result.failures, `message bytes ${size}`).toEqual(
+				failure === undefined ? [] : [failure],
+			);
+			result.endpoint.fenceAndClose();
+		}
+
+		for (const [records, failure] of [
+			[63, undefined],
+			[64, undefined],
+			[65, "resource"],
+		] as const) {
+			const result = createEndpoint(
+				Array.from({ length: records }, () => new Uint8Array(1)),
+			);
+			expect(result.failures, `ingress records ${records}`).toEqual(
+				failure === undefined ? [] : [failure],
+			);
+			result.endpoint.fenceAndClose();
+		}
+
+		for (const [bytes, failure] of [
+			[8 * mebibyte - 1, undefined],
+			[8 * mebibyte, undefined],
+			[8 * mebibyte + 1, "resource"],
+		] as const) {
+			const fullMessages = Math.floor(bytes / mebibyte);
+			const remainder = bytes % mebibyte;
+			const messages = Array.from(
+				{ length: fullMessages },
+				() => new Uint8Array(mebibyte),
+			);
+			if (remainder !== 0) {
+				messages.push(new Uint8Array(remainder));
+			}
+			const result = createEndpoint(messages);
+			expect(result.failures, `ingress bytes ${bytes}`).toEqual(
+				failure === undefined ? [] : [failure],
+			);
+			result.endpoint.fenceAndClose();
+		}
+
+		const source = new Subject<Uint8Array>();
+		const order: number[] = [];
+		let callbackDepth = 0;
+		let maximumCallbackDepth = 0;
+		const endpoint = new DefaultRpcEndpoint(
+			{
+				message$: source.asObservable(),
+				async send() {},
+				async close() {},
+			},
+			(message) => {
+				callbackDepth += 1;
+				maximumCallbackDepth = Math.max(maximumCallbackDepth, callbackDepth);
+				order.push(message[0] as number);
+				if (message[0] === 1) {
+					source.next(Uint8Array.of(2));
+				}
+				callbackDepth -= 1;
+			},
+			() => {},
+		);
+		source.next(Uint8Array.of(1));
+		await vi.waitFor(() => expect(order).toEqual([1, 2]));
+		expect(maximumCallbackDepth).toBe(1);
+		endpoint.fenceAndClose();
+	});
+
+	it("RPC-CORPUS-004 RPC-RESOURCE-005 executes Pending count and byte subcap triplets", () => {
+		for (const delta of [-1, 0, 1]) {
+			const session = createSession({
+				maxRetainedBytesPerSession: 4 * mebibyte,
+				maxRetainedBytesTotal: 4 * mebibyte,
+			});
+			const reserve = (stringBytes: number) =>
+				session.reserveInvocation({
+					service: "example.boundary.v1",
+					method: "run",
+					args: normalizeRpcApplicationArguments(["x".repeat(stringBytes)]),
+				});
+			const first = reserve(524_028);
+			const second = reserve(524_028 + delta);
+			expect(
+				first,
+				`Pending bytes ${delta < 0 ? "limit-1" : "first half"}`,
+			).toBeDefined();
+			expect(
+				second,
+				`Pending bytes ${delta === -1 ? "limit-1" : delta === 0 ? "limit" : "limit+1"}`,
+			).toEqual(delta <= 0 ? expect.any(Object) : undefined);
+			first?.release();
+			second?.release();
+			session.forceClose();
+		}
+
+		const session = createSession({ maxPendingInvocationsPerSession: 2 });
+		const reserve = () =>
+			session.reserveInvocation({
+				service: "example.boundary.v1",
+				method: "run",
+				args: normalizeRpcApplicationArguments([]),
+			});
+		const limitMinusOne = reserve();
+		const limit = reserve();
+		const limitPlusOne = reserve();
+		expect(limitMinusOne, "Pending entries limit-1").toBeDefined();
+		expect(limit, "Pending entries limit").toBeDefined();
+		expect(limitPlusOne, "Pending entries limit+1").toBeUndefined();
+		limitMinusOne?.release();
+		limit?.release();
+		session.forceClose();
+	});
+
+	it("RPC-CORPUS-004 executes ordinary replay and protected terminal/cancel entry triplets", () => {
+		const ordinary = createSession({ maxPendingInvocationsPerSession: 1 });
+		for (let ordinal = 1; ordinal <= 3; ordinal += 1) {
+			expect(
+				ordinary._queueSemantic({
+					kind: "result",
+					callId: String(ordinal),
+				}),
+				"ordinary replay entries limit-1",
+			).toBe(true);
+		}
+		expect(
+			ordinary._queueSemantic({ kind: "result", callId: "4" }),
+			"ordinary replay entries limit",
+		).toBe(true);
+		expect(
+			ordinary._queueSemantic({ kind: "result", callId: "5" }),
+			"ordinary replay entries limit+1",
+		).toBe(false);
+		ordinary.forceClose();
+
+		for (const kind of ["terminal", "cancel"] as const) {
+			const protectedSession = createSession();
+			const queue = (ordinal: number) =>
+				kind === "terminal"
+					? protectedSession._queueSemantic({
+							kind: "error",
+							callId: String(ordinal),
+							error: {
+								code: "unavailable",
+								message: "Remote call failed with code unavailable.",
+							},
+						})
+					: protectedSession._queueSemantic({
+							kind: "cancel",
+							callId: String(ordinal),
+						});
+			for (let ordinal = 1; ordinal <= 255; ordinal += 1) {
+				expect(queue(ordinal), `${kind} entries limit-1`).toBe(true);
+			}
+			expect(queue(256), `${kind} entries limit`).toBe(true);
+			expect(queue(257), `${kind} entries limit+1`).toBe(false);
+			protectedSession.forceClose();
+		}
+	});
+});

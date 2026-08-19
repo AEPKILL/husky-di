@@ -41,24 +41,42 @@ snapshot 与 replay-latest state stream 共同表达，发生过程由独立的 
 - Adapter-level与 Owner-level `listen()` 都只等待 listener ready，不等待已接受 Connections 的
   Protocol admission。ready 前已完成 handoff 的 Connections 已独立归 Acceptor；listener startup
   后续失败不能撤销 handoff，也不能让这些 Connections 自动失败。
+- 若 source 在 ready 前正常 complete、Owner仍 active且既非Owner abort也非resource-pressure先赢，
+  listener投影 `stopped(normal, completed)`，尚未settle的Owner `listen()` 以无cause的
+  `RpcError(unavailable)` reject；不得把从未ready的listener误报为fulfill。ready后正常complete只更新
+  listener snapshot，已fulfill的startup不反悔。
+- Acceptor ordinary owned-Connection cap满后的下一 handoff只占用预留 overflow-close slot；Owner在该
+  notification内同步 abort listener/gate，handoff barrier返回后的首个 continuation才 Direct Close。
+  该 owner-requested capacity stop把 listener投影为 intentional normal `stopped`（并可发 safe
+  resource-pressure observation），不终止已有 peers；若发生在 ready前，Adapter/Owner `listen()`
+  reject同一 `AbortError`；ready后已 fulfilled的 listen不改判，source normal complete。
+  overflow close未 settle前再次 `listen()` 以 `unavailable` reject，容量恢复后可提供新 Adapter重试。
 
-### Failure scope、terminal 与 close
+### Failure scope、graceful shutdown 与 force close
 
 - Connection terminal 只影响其绑定或正在绑定的 Session；listener terminal 只停止未来
   acceptance；Acceptor 中的 Session fault 只终止对应 peer。只有 shared owner runtime/startup
   fault 才终止整个 Acceptor。Connector 只有一个 Session，所以 fatal Session fault 可以终止其
   topology。
-- `close()` 有唯一线性化点：同步提交 Owner `closing` state，禁止并在接触 Adapter 前拒绝新的
-  `connect()` / `listen()`，并 abort 未完成的 Adapter startup。尚未成功的 Owner operation reject
-  `AbortError`；handoff 已完成的 Connection 属于 Owner teardown；违反契约的 late Connection 仍由
-  Adapter 关闭。
-- `close()` 是幂等 cleanup barrier，等待所有 owned resources 在本地收敛。先前的运行故障不令
-  `close()` reject；资源成功释放即 fulfill。只有 cleanup 本身失败才 reject，重复调用观察同一
-  cleanup outcome。grace、in-flight call settlement、deadline 与 Protocol shutdown choreography
-  仍由 call/resource/shutdown tickets 决定。
+- `shutdown()` 与 `close()` 共享一个 cached termination task。前者同步提交 Owner `draining`，停止
+  新 admission但让 cutoff前有限 work继续；后者同步提交 `closing`并立即 force，或把 draining不可逆
+  升级。两者都在接触 Adapter前拒绝新的 `connect()` / `listen()` / `expose()` / invocation并 abort
+  listener；尚未成功的 startup operation reject `AbortError`，handoff后的 Connection属于 teardown。
+- repeated/concurrent/cross-mode调用以及 closed后再调用都返回同一 Promise；grace deadline auto-force
+  也不替换 task。Termination成功即 fulfill，不因“未完全 graceful”本身 reject；只有 cleanup
+  reject/force-cleanup timeout才 reject，多失败使用标准 `AggregateError`。
+- Grace phase与随后唯一 cleanup phase各自最多使用同一个 configured interval；cleanup deadline后
+  Framework必须以安全 timeout Error提交 bounded local final state并detach broken resource，不能因
+  任意 Adapter Promise永久 pending。Running handler与无法取消的 WebCrypto job只保留 bounded late
+  sink，不属于 cleanup barrier。精确 drain、call settlement、wire Close与deadline由 issue 18唯一决定。
 - Owner 的 final state 和唯一 terminal event 区分 normal/failed topology outcome。State streams
   发出 final snapshot 后 complete；`event$` 发出唯一 topology terminal event 后 complete 且永不
-  error。Replay-latest state streams 的 late subscriber 仍收到 final snapshot 后再观察 complete。
+  error。Normal termination的 sticky reason区分 `graceful-shutdown | forced-close |
+  shutdown-deadline`，Connector唯一Session的authenticated remote terminal还可为
+  `remote-terminated`。Connector因Recovery/continuity/counter/Protocol/resource终止、Acceptor shared
+  Protocol/resource fault及任一Owner cleanup failure进入failed；cleanup failure保存同一
+  Error/AggregateError并只改写Owner reason。Replay-latest state streams 的
+  late subscriber 仍收到 final snapshot 后再观察 complete。
 
 ### Current state surfaces
 
@@ -67,7 +85,7 @@ mutation 前，同步 getter 保持相同 object identity，对应 stream 发出
 state streams 都是只读、multicast、replay latest，并在每次变化时发出完整 snapshot；零订阅不
 影响资源，晚订阅立即得到当前值。
 
-- `RpcConnector` 提供 `state` / `state$`，只表达 Owner 的 `active | closing | closed` lifecycle；
+- `RpcConnector` 提供 `state` / `state$`，只表达 Owner 的 `active | draining | closing | closed` lifecycle；
   final `closed` snapshot 保存 topology outcome/reason。
 - `RpcAcceptor` 提供 `state` / `state$`。它同样表达 Owner lifecycle；active snapshot 还包含
   listener 的 `idle | starting | listening | stopped` state。`stopped` 保存 listener normal/failed
@@ -75,29 +93,42 @@ state streams 都是只读、multicast、replay latest，并在每次变化时�
 - `RpcAcceptor` 提供 `peers` / `peers$` plain peer snapshots。`peers$` replay current 完整数组，
   membership mutation 与同步 getter 在通知前原子提交。
 - 每个稳定 `RpcPeer` 提供自己的 `state` / `state$`，使 caller 即使在 peer 从 Acceptor membership
-  移除后仍能读取 final Session reason。Connector 的 unbound、connecting、connected、recovering
+  移除后仍能读取 final Session reason。Connector 的 unbound、connecting、connected、draining、recovering
   等状态只属于其稳定 peer，不在 Owner state 重复。精确 Session variants、transition 和 reason
   由 Logical Session ticket 决定。
 
 因此早期“`RpcPeer` 只有 `expose()` / `resolve()`”与“Topology Owner 只有 `close()` / `event$`”的
 prototype 最小形态被本票有意深化：新增的 state pairs 不是另一套 ownership control，而是
-hot/no-replay events 无法回答 current/sticky state 后证明必要的 observation surface。
+hot/no-replay events 无法回答 current/sticky state 后证明必要的 observation surface；最终 Owner
+Interface还增加独立 `shutdown()`，避免让立即 force的 `close()` 同时承担互斥的 graceful语义。
 
 ### Event、diagnostics 与一致性
 
 - Owner-level `event$` 是 hot、multicast、no-replay 的结构化发生过程，覆盖 lifecycle、Session、
   call 与 fault observations，并提供 local correlation identity；peer 已知时事件携带稳定 peer。
   它服务业务日志、Tracing、Metrics 与异常因果分析，但不是当前状态的权威来源。
-- `event$` 只公开跨 Protocol 稳定的 normalized semantics。Handshake、frame kind、sequence、ACK、
-  replay proof 或 raw bytes 等 wire diagnostics 由具体 Protocol 以 opt-in facility 提供，并通过
-  correlation identity 与 Framework events 关联；通用 Interface 不固化某个 Protocol 的 message
-  shape，也不默认记录敏感 payload。
+- `event$` 只公开跨 Protocol 稳定、payload-free 的 normalized semantics。Handshake、frame kind、
+  sequence、ACK、Session/call identity、proof/nonce/secret、raw bytes、args/result/details 与 raw thrown
+  value都不进入通用 event；Default Protocol v1 也不提供 transcript ring 或 opt-in raw diagnostic
+  facility。Service/method 只有 exact-match 本地 Descriptor/allowlist 后才投影 canonical name，unknown
+  remote spelling省略且不进入 log/error；需要 payload diagnostics 的 application 在自己拥有的
+  caller/handler 边界显式埋点。Duration 使用 floor 后的非负 safe-integer milliseconds，count 使用
+  非负 safe integer，溢出一律 saturate 到 `Number.MAX_SAFE_INTEGER`。
 - 一次 transition 先原子提交全部相关同步 snapshots，再同步发出 changed state/membership streams，
   最后发出对应 `event$` notifications；operation Promise 只能在该 notification batch 后 settle。
-  Subscriber 内发起的 Owner mutation 排在当前 batch 之后，因此 reentrancy 不会打乱因果顺序。
-- Subscriber throw 不能改变已提交 state、终止 RPC、阻止其他 subscribers 或改变 operation
-  outcome；它只进入 RxJS 的 subscriber error reporting。Framework 不吞掉或转换它为 topology
-  fault。
-- 同一 public incident 只规范化一次 Error。Operation rejection、sticky state reason 与 event
-  复用同一 Error object identity，Adapter/Protocol 的原始 Error 保存在 `cause`；精确 public
-  `RpcError` taxonomy 由后续 error ticket 确定。
+  Subscriber 内发起的异步 lifecycle command（`connect` / `listen` / `shutdown` / `close`）排在当前 batch 之后，
+  因此不会重入同一 transition。`expose()` 与 Cleanup 是不产生 public notification 的同步 registry
+  mutation，始终立即针对已经提交的 state 线性化；它们不经过 notification command queue。
+- Subscriber throw 不能回滚已提交 state、阻止 Framework 继续当前 notification batch 的其他
+  subscribers，或改变 operation outcome；Framework 不把它转换为 topology fault。异常交给 RxJS
+  host reporting。默认 host policy 可能随后抛出并终止进程，因此 Framework 不承诺进程存活，
+  也不修改全局 RxJS error configuration。
+- 同一 public incident 只规范化一次 Error。Operation rejection 与 sticky state reason 复用同一
+  Error object identity，trusted local Adapter/Protocol Error 可以保存在其 `cause`；event 只投影
+  correlation identity、safe category/code，不复制 Error 或 raw cause。Adapter/Protocol 不得把
+  credential、secret 或攻击 raw input拼入 public message；精确 public `RpcError` taxonomy 由后续
+  error ticket 确定。
+
+2026-08-18 consistency amendment 的 listener-error 边界依据 VS Code emitter 与默认 host error
+handler 的同类行为，并与 RxJS host reporting 一致；固定提交证据见
+[`vscode-rpc-ipc-precedents.md`](../research/vscode-rpc-ipc-precedents.md)。

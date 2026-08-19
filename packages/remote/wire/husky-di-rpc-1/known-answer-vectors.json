@@ -1,0 +1,138 @@
+{
+  "profile": "husky-di-rpc/1",
+  "sources": {
+    "jcs": "https://www.rfc-editor.org/rfc/rfc8785#section-3.2.2",
+    "hkdfSha256": "https://www.rfc-editor.org/rfc/rfc5869#appendix-A.1",
+    "hmacSha256": "https://www.rfc-editor.org/rfc/rfc4231#section-4.2",
+    "profileTranscript": "Independently calculated with Python 3 hashlib, hmac, json sort_keys, and UTF-8; no @husky-di/remote implementation was used."
+  },
+  "jcs": [
+    {
+      "id": "rfc8785-section-3.2.2",
+      "covers": ["RPC-CORPUS-001", "RPC-SEC-002"],
+      "input": {
+        "numbers": [333333333.33333329, 1e30, 4.5, 0.002, 1e-27],
+        "string": "€$\u000f\nA'B\"\\\\\"/",
+        "literals": [null, true, false]
+      },
+      "canonical": "{\"literals\":[null,true,false],\"numbers\":[333333333.3333333,1e+30,4.5,0.002,1e-27],\"string\":\"€$\\u000f\\nA'B\\\"\\\\\\\\\\\"/\"}"
+    },
+    {
+      "id": "rfc8785-section-3.2.3-utf16-property-order",
+      "covers": ["RPC-CORPUS-001", "RPC-SEC-002"],
+      "input": {
+        "€": "Euro Sign",
+        "\r": "Carriage Return",
+        "דּ": "Hebrew Letter Dalet With Dagesh",
+        "1": "One",
+        "😀": "Emoji: Grinning Face",
+        "": "Control",
+        "ö": "Latin Small Letter O With Diaeresis"
+      },
+      "canonical": "{\"\\r\":\"Carriage Return\",\"1\":\"One\",\"\":\"Control\",\"ö\":\"Latin Small Letter O With Diaeresis\",\"€\":\"Euro Sign\",\"😀\":\"Emoji: Grinning Face\",\"דּ\":\"Hebrew Letter Dalet With Dagesh\"}"
+    }
+  ],
+  "hkdfSha256": {
+    "id": "rfc5869-appendix-a.1",
+    "covers": ["RPC-CORPUS-001", "RPC-SEC-002"],
+    "ikmHex": "0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b",
+    "saltHex": "000102030405060708090a0b0c",
+    "infoHex": "f0f1f2f3f4f5f6f7f8f9",
+    "length": 42,
+    "prkHex": "077709362c2e32df0ddc3f0dc47bba6390b6c73bb50f9c3122ec844ad7c2b3e5",
+    "okmHex": "3cb25f25faacd57a90434f64d0362f2a2d2d0a90cf1a5a4c5db02d56ecc4c5bf34007208d5b887185865"
+  },
+  "hmacSha256": {
+    "id": "rfc4231-section-4.2-test-case-1",
+    "covers": ["RPC-CORPUS-001", "RPC-SEC-002"],
+    "keyHex": "0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b",
+    "dataHex": "4869205468657265",
+    "tagHex": "b0344c61d8db38535ca8afceaf0bf12b881dc200c9833da726e9376c2e32cff7"
+  },
+  "profileTranscript": {
+    "id": "husky-di-rpc-1-proof-transcript",
+    "covers": ["RPC-CORPUS-001", "RPC-SEC-002", "RPC-SEC-003"],
+    "sessionSecretHex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+    "sessionSecretBase64Url": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8",
+    "sessionId": "ICEiIyQlJicoKSorLC0uLzAxMjM0NTY3ODk6Ozw9Pj8",
+    "sessionContext": {
+      "profile": "husky-di-rpc/1",
+      "sessionId": "ICEiIyQlJicoKSorLC0uLzAxMjM0NTY3ODk6Ozw9Pj8"
+    },
+    "sessionContextCanonical": "{\"profile\":\"husky-di-rpc/1\",\"sessionId\":\"ICEiIyQlJicoKSorLC0uLzAxMjM0NTY3ODk6Ozw9Pj8\"}",
+    "sessionContextSha256Hex": "145471d9f488ba17d756afdd76a235da2b734e8cc1b23c4c0b62edc828617879",
+    "proofKeyDomainHex": "6875736b792d64692d7270632f310070726f6f662d6b657900",
+    "hkdfPrkHex": "91782df6785cf7251a5d77530af0ff5c3936e2831141228b1b4326a907d8a4a6",
+    "proofKeyHex": "14f6427f2dfe04a9c0b6689e087de6d28b9c5f130b7db7a2e50eee29c3001a01",
+    "freshRequest": {
+      "kind": "fresh",
+      "profiles": ["future/2", "husky-di-rpc/1"],
+      "initiatorNonce": "QEFCQ0RFRkdISUpLTE1OT1BRUlNUVVZXWFlaW1xdXl8",
+      "zUnknown": {
+        "proof": "nested-kept",
+        "n": 1
+      },
+      "aUnknown": true
+    },
+    "freshRequestCanonical": "{\"aUnknown\":true,\"initiatorNonce\":\"QEFCQ0RFRkdISUpLTE1OT1BRUlNUVVZXWFlaW1xdXl8\",\"kind\":\"fresh\",\"profiles\":[\"future/2\",\"husky-di-rpc/1\"],\"zUnknown\":{\"n\":1,\"proof\":\"nested-kept\"}}",
+    "freshRequestSha256Hex": "b7bd6805523e2f755ad26f5aafa43a2212a096a15595beddfe3556b762fc101c",
+    "freshAccept": {
+      "kind": "accept",
+      "profile": "husky-di-rpc/1",
+      "sessionId": "ICEiIyQlJicoKSorLC0uLzAxMjM0NTY3ODk6Ozw9Pj8",
+      "bindingEpoch": 1,
+      "responderNonce": "YGFiY2RlZmdoaWprbG1ub3BxcnN0dXZ3eHl6e3x9fn8",
+      "sessionSecret": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8",
+      "future": ["x"],
+      "proof": "IDaiGH9L4FKlDeqZr3opPKl7kTomk2yGH54TzHZYsUk"
+    },
+    "freshAcceptCanonicalWithoutProof": "{\"bindingEpoch\":1,\"future\":[\"x\"],\"kind\":\"accept\",\"profile\":\"husky-di-rpc/1\",\"responderNonce\":\"YGFiY2RlZmdoaWprbG1ub3BxcnN0dXZ3eHl6e3x9fn8\",\"sessionId\":\"ICEiIyQlJicoKSorLC0uLzAxMjM0NTY3ODk6Ozw9Pj8\",\"sessionSecret\":\"AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8\"}",
+    "freshAcceptSha256Hex": "7933215299ad14bde97ee77ffe84f500b68c2ba577b800e17b634f8da726368d",
+    "freshAcceptTranscriptHex": "6875736b792d64692d7270632f310066726573682d61636365707400b7bd6805523e2f755ad26f5aafa43a2212a096a15595beddfe3556b762fc101c7933215299ad14bde97ee77ffe84f500b68c2ba577b800e17b634f8da726368d",
+    "freshAcceptProof": "IDaiGH9L4FKlDeqZr3opPKl7kTomk2yGH54TzHZYsUk",
+    "resumeRequest": {
+      "kind": "resume",
+      "profile": "husky-di-rpc/1",
+      "sessionId": "ICEiIyQlJicoKSorLC0uLzAxMjM0NTY3ODk6Ozw9Pj8",
+      "receivedThrough": 7,
+      "resumeAttempt": 3,
+      "initiatorNonce": "gIGCg4SFhoeIiYqLjI2Oj5CRkpOUlZaXmJmam5ydnp8",
+      "future": {
+        "proof": "nested-kept",
+        "mode": "resume"
+      },
+      "proof": "AayJUaWcyWV0egPR_oLFNQqS1MDjsfrxZSUd_EJhFkY"
+    },
+    "resumeRequestCanonicalWithoutProof": "{\"future\":{\"mode\":\"resume\",\"proof\":\"nested-kept\"},\"initiatorNonce\":\"gIGCg4SFhoeIiYqLjI2Oj5CRkpOUlZaXmJmam5ydnp8\",\"kind\":\"resume\",\"profile\":\"husky-di-rpc/1\",\"receivedThrough\":7,\"resumeAttempt\":3,\"sessionId\":\"ICEiIyQlJicoKSorLC0uLzAxMjM0NTY3ODk6Ozw9Pj8\"}",
+    "resumeRequestSha256Hex": "c825a1920a8ca0274678d65cc13d36f76b9d6389dffa1012765922f2495f1296",
+    "resumeRequestTranscriptHex": "6875736b792d64692d7270632f3100726573756d652d7265717565737400c825a1920a8ca0274678d65cc13d36f76b9d6389dffa1012765922f2495f1296",
+    "resumeRequestProof": "AayJUaWcyWV0egPR_oLFNQqS1MDjsfrxZSUd_EJhFkY",
+    "resumeAccept": {
+      "kind": "accept",
+      "profile": "husky-di-rpc/1",
+      "sessionId": "ICEiIyQlJicoKSorLC0uLzAxMjM0NTY3ODk6Ozw9Pj8",
+      "bindingEpoch": 4,
+      "receivedThrough": 5,
+      "responderNonce": "oKGio6SlpqeoqaqrrK2ur7CxsrO0tba3uLm6u7y9vr8",
+      "future": false,
+      "proof": "OthHLT7z2teQRj3PNgqOwUTdFFANwCZNP5_zt476Vtc"
+    },
+    "resumeAcceptCanonicalWithoutProof": "{\"bindingEpoch\":4,\"future\":false,\"kind\":\"accept\",\"profile\":\"husky-di-rpc/1\",\"receivedThrough\":5,\"responderNonce\":\"oKGio6SlpqeoqaqrrK2ur7CxsrO0tba3uLm6u7y9vr8\",\"sessionId\":\"ICEiIyQlJicoKSorLC0uLzAxMjM0NTY3ODk6Ozw9Pj8\"}",
+    "resumeAcceptSha256Hex": "f6d7b2b636cb2b5b690348ad4d91c6ffb3061fe57aefeb6e9aa29b61250dec80",
+    "resumeAcceptTranscriptHex": "6875736b792d64692d7270632f3100726573756d652d61636365707400c825a1920a8ca0274678d65cc13d36f76b9d6389dffa1012765922f2495f1296f6d7b2b636cb2b5b690348ad4d91c6ffb3061fe57aefeb6e9aa29b61250dec80",
+    "resumeAcceptProof": "OthHLT7z2teQRj3PNgqOwUTdFFANwCZNP5_zt476Vtc",
+    "authenticatedReject": {
+      "kind": "reject",
+      "code": "continuity-failure",
+      "responderNonce": "wMHCw8TFxsfIycrLzM3Oz9DR0tPU1dbX2Nna29zd3t8",
+      "future": {
+        "proof": "nested-kept"
+      },
+      "proof": "UN4tSL-lWsIBo7XzUR9aM3HFG6m-ZPpPEwei6HNsOog"
+    },
+    "authenticatedRejectCanonicalWithoutProof": "{\"code\":\"continuity-failure\",\"future\":{\"proof\":\"nested-kept\"},\"kind\":\"reject\",\"responderNonce\":\"wMHCw8TFxsfIycrLzM3Oz9DR0tPU1dbX2Nna29zd3t8\"}",
+    "authenticatedRejectSha256Hex": "9b07816b5f95b6a16789ddc87dc1b23587e3568eb0f953b4c73290219ed68500",
+    "authenticatedRejectTranscriptHex": "6875736b792d64692d7270632f3100726573756d652d72656a65637400c825a1920a8ca0274678d65cc13d36f76b9d6389dffa1012765922f2495f12969b07816b5f95b6a16789ddc87dc1b23587e3568eb0f953b4c73290219ed68500",
+    "authenticatedRejectProof": "UN4tSL-lWsIBo7XzUR9aM3HFG6m-ZPpPEwei6HNsOog"
+  }
+}

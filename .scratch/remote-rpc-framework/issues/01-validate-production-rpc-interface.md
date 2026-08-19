@@ -33,10 +33,11 @@ observation stream，形成最小而完整的 caller Interface。可编译 throw
   `topology-closed` terminal 后 complete，永不 error。Current/sticky state、replay-latest state
   streams 与精确 membership bootstrap 当时明确留给后续 lifecycle 决策；最终 surface 以
   [决定 Topology Owner 启动、资源所有权与可发现状态](08-decide-topology-owner-lifecycle.md)为准。
-- Call observation 用本地 `observationId` 关联 started/finished，携带 direction、peer、wire
-  service/method、参数以及 fulfilled result 或 `RpcError`。参数排除本地 cancellation signal；
-  参数和结果是与业务活值断开的未脱敏 observation snapshot，不能用来改写调用，subscriber
-  负责日志脱敏。
+- Call observation 用本地 `observationId` 关联 started/finished，并保留 direction、peer及已经本地
+  exact-match的 wire service/method。早期 prototype曾携带参数、result与 `RpcError`并要求 subscriber
+  脱敏；该结论已被 issues 08/11/14 的 security consistency decision明确取代。最终通用 event是
+  payload-free：不复制 args/result/raw Error/cause，只有 safe outcome code与 bounded metadata；需要
+  payload diagnostics的 application必须在自己拥有的 caller/handler boundary埋点。
 - Public Transport 数据面另外有 `IRpcConnection.message$: Observable<Uint8Array>` 和
   Acceptor Adapter 的 `connection$: Observable<IRpcConnection>`。三类 Observable 都允许
   多订阅；订阅数量和引用持有不建立 ownership。把 Adapter 交给 `acceptor.listen(adapter)`

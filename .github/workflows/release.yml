@@ -53,6 +53,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Install Playwright browsers
+        run: pnpm --filter @husky-di/remote exec playwright install --with-deps chromium firefox webkit
+
       - name: Detect pending changesets
         id: pending_changesets
         shell: bash

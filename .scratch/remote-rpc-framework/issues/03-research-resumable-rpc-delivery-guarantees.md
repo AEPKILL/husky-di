@@ -25,8 +25,10 @@ Call：
 
 - 同一 Logical Session incarnation 仍有效，恢复被明确接受，并且并发恢复与旧
   Physical Connection 已被单一权威 owner/fencing 排除；
-- call identity 至少在 Session incarnation 内唯一，所有恢复重放沿用原 identity；同一
-  identity 与不同 service、method 或 arguments 的冲突复用必须拒绝；
+- call identity 至少在 Session incarnation 内唯一，所有恢复重放沿用原 identity；以新的
+  transport/message identity 再次呈现同一 call identity，无论 body 相同或不同，都必须拒绝。
+  已由 retained receive cursor 证明接纳的旧 transport identity 在 semantic dispatch 前被抑制，
+  不要求为了比较其已无状态影响的 body 而永久保留 payload fingerprint；
 - responder 在 handler 可见 request 前，先原子或串行登记
   `(session incarnation, call identity)`；重复 identity 只能关联既有 in-progress 或
   terminal entry，不能再次 dispatch；

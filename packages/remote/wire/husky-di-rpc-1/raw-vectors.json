@@ -1,0 +1,495 @@
+{
+  "profile": "husky-di-rpc/1",
+  "format": "Each source deterministically expands to the exact Transport-message bytes. utf8 and hex segments are concatenated in order; repeatUtf8 is repeated count times before UTF-8 encoding.",
+  "vectors": [
+    {
+      "id": "valid-fresh-request",
+      "validity": "valid",
+      "validator": "fresh-request",
+      "source": {
+        "segments": [
+          { "utf8": "{\"kind\":\"fresh\",\"profiles\":[\"husky-di-rpc/1\"],\"initiatorNonce\":\"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\"}" }
+        ]
+      },
+      "expectedKind": "fresh",
+      "covers": ["RPC-WIRE-001", "RPC-WIRE-002", "RPC-WIRE-007", "RPC-WIRE-008", "RPC-WIRE-009"]
+    },
+    {
+      "id": "valid-fresh-accept",
+      "validity": "valid",
+      "validator": "fresh-accept",
+      "source": {
+        "segments": [
+          { "utf8": "{\"kind\":\"accept\",\"profile\":\"husky-di-rpc/1\",\"sessionId\":\"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\",\"bindingEpoch\":1,\"responderNonce\":\"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\",\"sessionSecret\":\"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\",\"proof\":\"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\"}" }
+        ]
+      },
+      "expectedKind": "accept",
+      "covers": ["RPC-WIRE-001", "RPC-WIRE-008", "RPC-WIRE-009"]
+    },
+    {
+      "id": "valid-resume-request",
+      "validity": "valid",
+      "validator": "resume-request",
+      "source": {
+        "segments": [
+          { "utf8": "{\"kind\":\"resume\",\"profile\":\"husky-di-rpc/1\",\"sessionId\":\"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\",\"receivedThrough\":0,\"resumeAttempt\":1,\"initiatorNonce\":\"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\",\"proof\":\"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\"}" }
+        ]
+      },
+      "expectedKind": "resume",
+      "covers": ["RPC-WIRE-008", "RPC-WIRE-009"]
+    },
+    {
+      "id": "valid-resume-accept",
+      "validity": "valid",
+      "validator": "resume-outcome",
+      "source": {
+        "segments": [
+          { "utf8": "{\"kind\":\"accept\",\"profile\":\"husky-di-rpc/1\",\"sessionId\":\"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\",\"bindingEpoch\":2,\"receivedThrough\":0,\"responderNonce\":\"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\",\"proof\":\"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\"}" }
+        ]
+      },
+      "expectedKind": "accept",
+      "covers": ["RPC-WIRE-008", "RPC-WIRE-009"]
+    },
+    {
+      "id": "valid-fresh-reject",
+      "validity": "valid",
+      "validator": "decode",
+      "source": {
+        "segments": [
+          { "utf8": "{\"kind\":\"reject\",\"code\":\"unsupported-profile\",\"message\":\"No common profile\"}" }
+        ]
+      },
+      "expectedKind": "reject",
+      "covers": ["RPC-WIRE-009", "RPC-WIRE-010"]
+    },
+    {
+      "id": "valid-generic-resume-reject-with-unknown-tail",
+      "validity": "valid",
+      "validator": "resume-outcome",
+      "source": {
+        "segments": [
+          { "utf8": "{\"kind\":\"reject\",\"code\":\"resume-rejected\",\"responderNonce\":\"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\",\"proof\":\"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\",\"future\":true}" }
+        ]
+      },
+      "expectedKind": "reject",
+      "covers": ["RPC-WIRE-005", "RPC-WIRE-006", "RPC-WIRE-010"]
+    },
+    {
+      "id": "valid-call-with-unknown-tails",
+      "validity": "valid",
+      "validator": "active",
+      "source": {
+        "segments": [
+          { "utf8": "{\"kind\":\"message\",\"seq\":1,\"futureEnvelope\":null,\"message\":{\"kind\":\"call\",\"callId\":\"1\",\"service\":\"calculator\",\"method\":\"add\",\"args\":[1,2,{\"proof\":\"application-data\"}],\"futureMessage\":true}}" }
+        ]
+      },
+      "expectedKind": "message",
+      "covers": ["RPC-WIRE-005", "RPC-WIRE-006", "RPC-WIRE-011", "RPC-SEC-003"]
+    },
+    {
+      "id": "valid-cancel",
+      "validity": "valid",
+      "validator": "active",
+      "source": {
+        "segments": [
+          { "utf8": "{\"kind\":\"message\",\"seq\":2,\"ackThrough\":1,\"message\":{\"kind\":\"cancel\",\"callId\":\"1\"}}" }
+        ]
+      },
+      "expectedKind": "message",
+      "covers": ["RPC-WIRE-013"]
+    },
+    {
+      "id": "valid-result-with-void",
+      "validity": "valid",
+      "validator": "active",
+      "source": {
+        "segments": [
+          { "utf8": "{\"kind\":\"message\",\"seq\":3,\"message\":{\"kind\":\"result\",\"callId\":\"1\"}}" }
+        ]
+      },
+      "expectedKind": "message",
+      "covers": ["RPC-WIRE-004", "RPC-WIRE-011"]
+    },
+    {
+      "id": "valid-result-with-null",
+      "validity": "valid",
+      "validator": "active",
+      "source": {
+        "segments": [
+          { "utf8": "{\"kind\":\"message\",\"seq\":4,\"message\":{\"kind\":\"result\",\"callId\":\"2\",\"value\":null}}" }
+        ]
+      },
+      "expectedKind": "message",
+      "covers": ["RPC-WIRE-011"]
+    },
+    {
+      "id": "valid-safe-error",
+      "validity": "valid",
+      "validator": "active",
+      "source": {
+        "segments": [
+          { "utf8": "{\"kind\":\"message\",\"seq\":5,\"message\":{\"kind\":\"error\",\"callId\":\"2\",\"error\":{\"code\":\"handler-failed\",\"message\":\"failed\",\"details\":{\"retryable\":false}}}}" }
+        ]
+      },
+      "expectedKind": "message",
+      "covers": ["RPC-WIRE-012"]
+    },
+    {
+      "id": "valid-ack-zero",
+      "validity": "valid",
+      "validator": "active",
+      "source": { "segments": [{ "utf8": "{\"kind\":\"ack\",\"ackThrough\":0}" }] },
+      "expectedKind": "ack",
+      "covers": ["RPC-WIRE-009"]
+    },
+    {
+      "id": "valid-ping",
+      "validity": "valid",
+      "validator": "active",
+      "source": { "segments": [{ "utf8": "{\"kind\":\"ping\"}" }] },
+      "expectedKind": "ping",
+      "covers": ["RPC-WIRE-014"]
+    },
+    {
+      "id": "valid-pong",
+      "validity": "valid",
+      "validator": "active",
+      "source": { "segments": [{ "utf8": "{\"kind\":\"pong\"}" }] },
+      "expectedKind": "pong",
+      "covers": ["RPC-WIRE-014"]
+    },
+    {
+      "id": "valid-close",
+      "validity": "valid",
+      "validator": "active",
+      "source": { "segments": [{ "utf8": "{\"kind\":\"close\"}" }] },
+      "expectedKind": "close",
+      "covers": ["RPC-WIRE-015"]
+    },
+    {
+      "id": "valid-legal-whitespace-order-and-escape",
+      "validity": "valid",
+      "validator": "active",
+      "source": {
+        "segments": [{ "utf8": " \n { \"future\" : true , \"\\u006b\\u0069\\u006e\\u0064\" : \"ping\" } \r\t" }]
+      },
+      "expectedKind": "ping",
+      "covers": ["RPC-WIRE-003", "RPC-WIRE-005", "utf8"]
+    },
+    {
+      "id": "valid-number-domain",
+      "validity": "valid",
+      "validator": "active",
+      "source": {
+        "segments": [{ "utf8": "{\"kind\":\"message\",\"seq\":1,\"message\":{\"kind\":\"call\",\"callId\":\"1\",\"service\":\"n\",\"method\":\"m\",\"args\":[0,-1.5,1e21,100000000000000000000]}}" }]
+      },
+      "expectedKind": "message",
+      "covers": ["RPC-WIRE-004", "number"]
+    },
+    {
+      "id": "valid-depth-limit",
+      "validity": "valid",
+      "validator": "active",
+      "source": {
+        "segments": [
+          { "utf8": "{\"kind\":\"ping\",\"future\":" },
+          { "repeatUtf8": "[", "count": 62 },
+          { "utf8": "null" },
+          { "repeatUtf8": "]", "count": 62 },
+          { "utf8": "}" }
+        ]
+      },
+      "expectedKind": "ping",
+      "covers": ["RPC-WIRE-003", "limit"]
+    },
+    {
+      "id": "valid-string-byte-limit",
+      "validity": "valid",
+      "validator": "active",
+      "source": {
+        "segments": [
+          { "utf8": "{\"kind\":\"ping\",\"future\":\"" },
+          { "repeatUtf8": "a", "count": 524288 },
+          { "utf8": "\"}" }
+        ]
+      },
+      "expectedKind": "ping",
+      "covers": ["RPC-WIRE-003", "limit"]
+    },
+    {
+      "id": "valid-member-name-byte-limit",
+      "validity": "valid",
+      "validator": "active",
+      "source": {
+        "segments": [
+          { "utf8": "{\"kind\":\"ping\",\"" },
+          { "repeatUtf8": "a", "count": 256 },
+          { "utf8": "\":null}" }
+        ]
+      },
+      "expectedKind": "ping",
+      "covers": ["RPC-WIRE-003", "limit"]
+    },
+    {
+      "id": "valid-array-element-limit",
+      "validity": "valid",
+      "validator": "active",
+      "source": {
+        "segments": [
+          { "utf8": "{\"kind\":\"message\",\"seq\":1,\"message\":{\"kind\":\"call\",\"callId\":\"1\",\"service\":\"s\",\"method\":\"m\",\"args\":[" },
+          { "repeatUtf8": "null,", "count": 8191 },
+          { "utf8": "null]}}" }
+        ]
+      },
+      "expectedKind": "message",
+      "covers": ["RPC-WIRE-003", "limit"]
+    },
+    {
+      "id": "valid-transport-message-byte-limit",
+      "validity": "valid",
+      "validator": "active",
+      "source": {
+        "segments": [
+          { "utf8": "{\"kind\":\"ping\"}" },
+          { "repeatUtf8": " ", "count": 1048561 }
+        ]
+      },
+      "expectedKind": "ping",
+      "covers": ["RPC-WIRE-002", "limit", "allocation-boundary"]
+    },
+    {
+      "id": "invalid-malformed-utf8",
+      "validity": "invalid",
+      "validator": "decode",
+      "source": { "segments": [{ "hex": "7b226b696e64223a2270696e67222c2278223a22c328227d" }] },
+      "covers": ["RPC-WIRE-002", "RPC-WIRE-003", "RPC-VALID-001", "RPC-VALID-005", "utf8"]
+    },
+    {
+      "id": "invalid-leading-bom",
+      "validity": "invalid",
+      "validator": "decode",
+      "source": {
+        "segments": [
+          { "hex": "efbbbf" },
+          { "utf8": "{\"kind\":\"ping\"}" }
+        ]
+      },
+      "covers": ["RPC-WIRE-003", "RPC-VALID-001", "RPC-VALID-005", "bom"]
+    },
+    {
+      "id": "invalid-duplicate-key-after-escape",
+      "validity": "invalid",
+      "validator": "decode",
+      "source": {
+        "segments": [{ "utf8": "{\"kind\":\"ping\",\"\\u006b\\u0069\\u006e\\u0064\":\"pong\"}" }]
+      },
+      "covers": ["RPC-WIRE-003", "RPC-WIRE-005", "RPC-VALID-001", "RPC-VALID-005", "duplicate-key"]
+    },
+    {
+      "id": "invalid-second-json-value",
+      "validity": "invalid",
+      "validator": "decode",
+      "source": { "segments": [{ "utf8": "{\"kind\":\"ping\"}{\"kind\":\"pong\"}" }] },
+      "covers": ["RPC-WIRE-002", "RPC-WIRE-003", "RPC-VALID-001", "RPC-VALID-005", "trailing-data"]
+    },
+    {
+      "id": "invalid-non-whitespace-trailing-data",
+      "validity": "invalid",
+      "validator": "decode",
+      "source": { "segments": [{ "utf8": "{\"kind\":\"ping\"}x" }] },
+      "covers": ["RPC-WIRE-003", "RPC-VALID-001", "RPC-VALID-005", "trailing-data"]
+    },
+    {
+      "id": "invalid-root-array",
+      "validity": "invalid",
+      "validator": "decode",
+      "source": { "segments": [{ "utf8": "[]" }] },
+      "covers": ["RPC-WIRE-002", "RPC-VALID-001", "RPC-VALID-005"]
+    },
+    {
+      "id": "invalid-unpaired-surrogate",
+      "validity": "invalid",
+      "validator": "decode",
+      "source": { "segments": [{ "utf8": "{\"kind\":\"ping\",\"future\":\"\\uD800\"}" }] },
+      "covers": ["RPC-WIRE-003", "RPC-VALID-001", "RPC-VALID-005", "utf8"]
+    },
+    {
+      "id": "invalid-negative-zero",
+      "validity": "invalid",
+      "validator": "decode",
+      "source": { "segments": [{ "utf8": "{\"kind\":\"message\",\"seq\":1,\"message\":{\"kind\":\"result\",\"callId\":\"1\",\"value\":-0}}" }] },
+      "covers": ["RPC-WIRE-004", "RPC-VALID-001", "RPC-VALID-005", "number"]
+    },
+    {
+      "id": "invalid-non-finite-number",
+      "validity": "invalid",
+      "validator": "decode",
+      "source": { "segments": [{ "utf8": "{\"kind\":\"message\",\"seq\":1,\"message\":{\"kind\":\"result\",\"callId\":\"1\",\"value\":1e400}}" }] },
+      "covers": ["RPC-WIRE-004", "RPC-VALID-001", "RPC-VALID-005", "number"]
+    },
+    {
+      "id": "invalid-unsafe-protocol-integer",
+      "validity": "invalid",
+      "validator": "active",
+      "source": { "segments": [{ "utf8": "{\"kind\":\"message\",\"seq\":9007199254740992,\"message\":{\"kind\":\"cancel\",\"callId\":\"1\"}}" }] },
+      "covers": ["RPC-WIRE-004", "RPC-VALID-001", "RPC-VALID-005", "number"]
+    },
+    {
+      "id": "invalid-empty-profile-offer",
+      "validity": "invalid",
+      "validator": "fresh-request",
+      "source": { "segments": [{ "utf8": "{\"kind\":\"fresh\",\"profiles\":[],\"initiatorNonce\":\"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\"}" }] },
+      "covers": ["RPC-WIRE-007", "RPC-VALID-001"]
+    },
+    {
+      "id": "invalid-duplicate-profile-offer",
+      "validity": "invalid",
+      "validator": "fresh-request",
+      "source": { "segments": [{ "utf8": "{\"kind\":\"fresh\",\"profiles\":[\"husky-di-rpc/1\",\"husky-di-rpc/1\"],\"initiatorNonce\":\"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\"}" }] },
+      "covers": ["RPC-WIRE-007", "RPC-VALID-001"]
+    },
+    {
+      "id": "invalid-base64-padding",
+      "validity": "invalid",
+      "validator": "fresh-request",
+      "source": { "segments": [{ "utf8": "{\"kind\":\"fresh\",\"profiles\":[\"husky-di-rpc/1\"],\"initiatorNonce\":\"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=\"}" }] },
+      "covers": ["RPC-WIRE-008", "RPC-VALID-001", "base64"]
+    },
+    {
+      "id": "invalid-base64-non-url-alphabet",
+      "validity": "invalid",
+      "validator": "fresh-request",
+      "source": { "segments": [{ "utf8": "{\"kind\":\"fresh\",\"profiles\":[\"husky-di-rpc/1\"],\"initiatorNonce\":\"+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\"}" }] },
+      "covers": ["RPC-WIRE-008", "RPC-VALID-001", "base64"]
+    },
+    {
+      "id": "invalid-base64-wrong-length",
+      "validity": "invalid",
+      "validator": "fresh-request",
+      "source": { "segments": [{ "utf8": "{\"kind\":\"fresh\",\"profiles\":[\"husky-di-rpc/1\"],\"initiatorNonce\":\"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\"}" }] },
+      "covers": ["RPC-WIRE-008", "RPC-VALID-001", "base64"]
+    },
+    {
+      "id": "invalid-fresh-binding-epoch",
+      "validity": "invalid",
+      "validator": "fresh-accept",
+      "source": { "segments": [{ "utf8": "{\"kind\":\"accept\",\"profile\":\"husky-di-rpc/1\",\"sessionId\":\"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\",\"bindingEpoch\":2,\"responderNonce\":\"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\",\"sessionSecret\":\"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\",\"proof\":\"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\"}" }] },
+      "covers": ["RPC-WIRE-009", "RPC-VALID-004"]
+    },
+    {
+      "id": "invalid-resume-reject-message",
+      "validity": "invalid",
+      "validator": "resume-outcome",
+      "source": { "segments": [{ "utf8": "{\"kind\":\"reject\",\"code\":\"resume-rejected\",\"responderNonce\":\"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\",\"proof\":\"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\",\"message\":\"secret\"}" }] },
+      "covers": ["RPC-WIRE-010", "RPC-VALID-001"]
+    },
+    {
+      "id": "invalid-reserved-then-method",
+      "validity": "invalid",
+      "validator": "active",
+      "source": { "segments": [{ "utf8": "{\"kind\":\"message\",\"seq\":1,\"message\":{\"kind\":\"call\",\"callId\":\"1\",\"service\":\"s\",\"method\":\"then\",\"args\":[]}}" }] },
+      "covers": ["RPC-WIRE-011", "RPC-VALID-005", "RPC-VALID-007"]
+    },
+    {
+      "id": "invalid-leading-zero-call-ordinal",
+      "validity": "invalid",
+      "validator": "active",
+      "source": { "segments": [{ "utf8": "{\"kind\":\"message\",\"seq\":1,\"message\":{\"kind\":\"cancel\",\"callId\":\"01\"}}" }] },
+      "covers": ["RPC-WIRE-011", "RPC-VALID-001", "RPC-VALID-005"]
+    },
+    {
+      "id": "invalid-outcome-unknown-wire-error",
+      "validity": "invalid",
+      "validator": "active",
+      "source": { "segments": [{ "utf8": "{\"kind\":\"message\",\"seq\":1,\"message\":{\"kind\":\"error\",\"callId\":\"1\",\"error\":{\"code\":\"outcome-unknown\",\"message\":\"unknown\"}}}" }] },
+      "covers": ["RPC-WIRE-012", "RPC-VALID-001", "RPC-VALID-005"]
+    },
+    {
+      "id": "invalid-error-object-unknown-field",
+      "validity": "invalid",
+      "validator": "active",
+      "source": { "segments": [{ "utf8": "{\"kind\":\"message\",\"seq\":1,\"message\":{\"kind\":\"error\",\"callId\":\"1\",\"error\":{\"code\":\"handler-failed\",\"message\":\"failed\",\"stack\":\"secret\"}}}" }] },
+      "covers": ["RPC-WIRE-005", "RPC-WIRE-012", "RPC-VALID-001", "RPC-VALID-005"]
+    },
+    {
+      "id": "invalid-close-sequence",
+      "validity": "invalid",
+      "validator": "active",
+      "source": { "segments": [{ "utf8": "{\"kind\":\"close\",\"seq\":1}" }] },
+      "covers": ["RPC-WIRE-015", "RPC-VALID-001", "RPC-VALID-005"]
+    },
+    {
+      "id": "invalid-active-kind",
+      "validity": "invalid",
+      "validator": "active",
+      "source": { "segments": [{ "utf8": "{\"kind\":\"future-kind\"}" }] },
+      "covers": ["RPC-WIRE-006", "RPC-WIRE-009", "RPC-VALID-001", "RPC-VALID-005"]
+    },
+    {
+      "id": "invalid-depth-limit-plus-one",
+      "validity": "invalid",
+      "validator": "decode",
+      "source": {
+        "segments": [
+          { "utf8": "{\"kind\":\"ping\",\"future\":" },
+          { "repeatUtf8": "[", "count": 63 },
+          { "utf8": "null" },
+          { "repeatUtf8": "]", "count": 63 },
+          { "utf8": "}" }
+        ]
+      },
+      "covers": ["RPC-WIRE-003", "RPC-VALID-001", "RPC-VALID-005", "limit"]
+    },
+    {
+      "id": "invalid-string-byte-limit-plus-one",
+      "validity": "invalid",
+      "validator": "decode",
+      "source": {
+        "segments": [
+          { "utf8": "{\"kind\":\"ping\",\"future\":\"" },
+          { "repeatUtf8": "a", "count": 524289 },
+          { "utf8": "\"}" }
+        ]
+      },
+      "covers": ["RPC-WIRE-003", "RPC-VALID-001", "RPC-VALID-005", "limit"]
+    },
+    {
+      "id": "invalid-member-name-byte-limit-plus-one",
+      "validity": "invalid",
+      "validator": "decode",
+      "source": {
+        "segments": [
+          { "utf8": "{\"kind\":\"ping\",\"" },
+          { "repeatUtf8": "a", "count": 257 },
+          { "utf8": "\":null}" }
+        ]
+      },
+      "covers": ["RPC-WIRE-003", "RPC-VALID-001", "RPC-VALID-005", "limit"]
+    },
+    {
+      "id": "invalid-array-element-limit-plus-one",
+      "validity": "invalid",
+      "validator": "decode",
+      "source": {
+        "segments": [
+          { "utf8": "{\"kind\":\"message\",\"seq\":1,\"message\":{\"kind\":\"call\",\"callId\":\"1\",\"service\":\"s\",\"method\":\"m\",\"args\":[" },
+          { "repeatUtf8": "null,", "count": 8192 },
+          { "utf8": "null]}}" }
+        ]
+      },
+      "covers": ["RPC-WIRE-003", "RPC-VALID-001", "RPC-VALID-005", "limit"]
+    },
+    {
+      "id": "invalid-transport-message-byte-limit-plus-one",
+      "validity": "invalid",
+      "validator": "decode",
+      "source": {
+        "segments": [
+          { "utf8": "{\"kind\":\"ping\"}" },
+          { "repeatUtf8": " ", "count": 1048562 }
+        ]
+      },
+      "covers": ["RPC-WIRE-002", "RPC-VALID-001", "RPC-VALID-005", "limit", "allocation-boundary"]
+    }
+  ]
+}

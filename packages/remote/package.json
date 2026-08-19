@@ -2,28 +2,59 @@
 	"name": "@husky-di/remote",
 	"version": "0.0.0",
 	"type": "module",
+	"sideEffects": false,
+	"engines": {
+		"node": ">=23.6"
+	},
 	"exports": {
 		".": {
 			"types": "./dist/index.d.ts",
 			"import": "./dist/index.js",
 			"require": "./dist/index.cjs"
-		}
+		},
+		"./protocol": {
+			"types": "./dist/protocol.d.ts",
+			"import": "./dist/protocol.js",
+			"require": "./dist/protocol.cjs"
+		},
+		"./transport": {
+			"types": "./dist/transport.d.ts",
+			"import": "./dist/transport.js",
+			"require": "./dist/transport.cjs"
+		},
+		"./conformance": {
+			"types": "./dist/conformance.d.ts",
+			"import": "./dist/conformance.js",
+			"require": "./dist/conformance.cjs"
+		},
+		"./wire/husky-di-rpc-1/schema": "./wire/husky-di-rpc-1/schema.json",
+		"./wire/husky-di-rpc-1/vectors": "./wire/husky-di-rpc-1/raw-vectors.json",
+		"./wire/husky-di-rpc-1/transcripts": "./wire/husky-di-rpc-1/transcripts.json",
+		"./wire/husky-di-rpc-1/security-vectors": "./wire/husky-di-rpc-1/known-answer-vectors.json"
 	},
 	"main": "./dist/index.cjs",
 	"types": "./dist/index.d.ts",
 	"files": [
-		"dist"
+		"dist",
+		"wire",
+		"docs",
+		"README.md",
+		"CHANGELOG.md",
+		"LICENSE"
 	],
 	"scripts": {
 		"build": "rslib build",
 		"dev": "rslib build --watch",
-		"test": "pnpm run typecheck && vitest run",
+		"test": "pnpm run typecheck && vitest run && pnpm run test:browser",
+		"test:browser": "playwright test --config playwright.config.ts",
 		"typecheck": "tsc -p tsconfig.json && tsc -p tests/tsconfig.json && tsc -p examples/user-facing-rpc-interface/tsconfig.json"
 	},
 	"devDependencies": {
 		"@husky-di/config": "workspace:*",
+		"@playwright/test": "1.62.1",
 		"@rslib/core": "^0.20.1",
 		"@types/node": "^25.5.0",
+		"esbuild": "0.27.4",
 		"typescript": "^6.0.3",
 		"vitest": "^4.1.2"
 	},

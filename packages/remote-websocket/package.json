@@ -1,0 +1,51 @@
+{
+	"name": "@husky-di/remote-websocket",
+	"version": "0.0.0",
+	"type": "module",
+	"sideEffects": false,
+	"engines": {
+		"node": ">=23.6"
+	},
+	"exports": {
+		".": {
+			"types": "./dist/index.d.ts",
+			"import": "./dist/index.js",
+			"require": "./dist/index.cjs"
+		},
+		"./node": {
+			"types": "./dist/node.d.ts",
+			"import": "./dist/node.js",
+			"require": "./dist/node.cjs"
+		}
+	},
+	"main": "./dist/index.cjs",
+	"types": "./dist/index.d.ts",
+	"files": [
+		"dist",
+		"docs",
+		"README.md",
+		"CHANGELOG.md",
+		"LICENSE"
+	],
+	"scripts": {
+		"build": "rslib build",
+		"dev": "rslib build --watch",
+		"test": "pnpm run typecheck && vitest run",
+		"typecheck": "tsc -p tsconfig.json && tsc -p tests/tsconfig.json"
+	},
+	"dependencies": {
+		"@husky-di/remote": "workspace:^",
+		"rxjs": "^7.8.2",
+		"ws": "^8.20.0"
+	},
+	"devDependencies": {
+		"@husky-di/config": "workspace:*",
+		"@rslib/core": "^0.20.1",
+		"@types/node": "^25.5.0",
+		"typescript": "^6.0.3",
+		"vitest": "^4.1.2"
+	},
+	"publishConfig": {
+		"access": "public"
+	}
+}

@@ -1,0 +1,34 @@
+/**
+ * @overview Creates a cold RPC Acceptor Topology Owner.
+ * @author AEPKILL
+ * @created 2026-08-19 00:00:00
+ */
+
+import { RpcAcceptorImpl } from "@/impls/rpc-acceptor.impl";
+import type { IRpcAcceptor } from "@/interfaces/rpc-caller.interface";
+import type { RpcAcceptorOptions } from "@/types/rpc-caller.type";
+import {
+	createRpcProtocolAcceptorRuntime,
+	resolveRpcProtocol,
+} from "@/utils/rpc-protocol-runtime.util";
+import {
+	createRpcAcceptorRuntimePolicy,
+	snapshotRpcFactoryOptions,
+} from "@/utils/rpc-runtime-policy.util";
+
+/** Creates a cold Acceptor without starting transport I/O. */
+export function createRpcAcceptor(options?: RpcAcceptorOptions): IRpcAcceptor {
+	const snapshot = snapshotRpcFactoryOptions(options);
+	const policy = createRpcAcceptorRuntimePolicy(snapshot.runtimePolicy);
+	let owner: RpcAcceptorImpl | undefined;
+	const runtime = createRpcProtocolAcceptorRuntime(
+		resolveRpcProtocol(snapshot.protocol),
+		policy,
+		{
+			admitSession: (session) => owner?.admitProtocolSession(session),
+			fault: (reason, error) => owner?.protocolFault(reason, error),
+		},
+	);
+	owner = new RpcAcceptorImpl(runtime, policy);
+	return owner;
+}
