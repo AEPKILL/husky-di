@@ -65,6 +65,9 @@ Additional placement rules:
 - Reuse an existing semantic directory before creating a sibling alternative.
 - Keep package tests under that package's `tests/` and shared helpers near their
   consumers, usually as `test.utils.ts`.
+- Name domain test directories after the domain or behavior, such as
+  `tests/protocol/`; avoid implementation-status qualifiers such as `default`
+  when no alternative exists.
 - Keep repository scripts under `scripts/` unless a package already owns a local
   scripts directory.
 - Keep configuration at the nearest root that already owns the tool.
@@ -97,16 +100,37 @@ composition and type-level modeling, and `class` for concrete behavior or state.
 
 When a component is intentionally replaceable at construction time:
 
+- derive the smallest behavioral contract from real consumers before writing the
+  concrete implementation;
 - put its contract in `interfaces/<domain>/`;
 - put construction inputs in `types/<domain>/` as `CreateXxxOptions`;
 - put the concrete class in `impls/<domain>/` as `XxxImpl`;
 - assemble dependencies in a `*.factory.ts` file;
 - use `readonly` references and snapshot or freeze assembly options when runtime
   replacement is unsupported;
+- bind dependencies during creation and omit runtime replacement APIs unless the
+  requirement explicitly needs them;
+- keep constructors public by default; restrict construction only for a required
+  invariant enforced consistently by both types and runtime behavior;
+- call accessible constructors directly from factories; reserve
+  `Reflect.construct` for cases that require its runtime semantics, not as a way
+  around an access modifier;
 - avoid adding setters or exposing internal seams through a package entrypoint.
 
 Introduce this structure only for a real assembly, testing, or implementation
 boundary—not for speculative flexibility.
+
+## Exceptions
+
+- Name custom exception classes `XxxException` and files `xxx.exception.ts`.
+- Extend `CodedException<TCode>` when the exception exposes a stable branch code;
+  keep its code alias in `types/`.
+- Put reusable creation policy or literal-code narrowing in
+  `factories/xxx-exception.factory.ts` as `createXxxException`.
+- Treat a factory as creation policy, not constructor access control. Keep the
+  constructor directly usable unless a real invariant requires restriction.
+- Export the exception and public code type through the package entrypoint; keep
+  an internal factory unexported when callers do not need its policy.
 
 ## Imports And Exports
 
