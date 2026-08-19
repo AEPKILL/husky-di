@@ -195,9 +195,12 @@ describe("Remote RPC requirement evidence", () => {
 			sourceImports.filter(
 				(specifier) =>
 					specifier.startsWith("../src/") &&
-					!new Set(["../src/index", "../src/protocol", "../src/transport"]).has(
-						specifier,
-					),
+					!new Set([
+						"../src/conformance",
+						"../src/index",
+						"../src/protocol",
+						"../src/transport",
+					]).has(specifier),
 			),
 		).toEqual([]);
 	});

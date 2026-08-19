@@ -6,7 +6,7 @@
 
 import { createServiceIdentifier } from "@husky-di/core";
 import { Subject } from "rxjs";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
 	createRemoteServiceDescriptor,
@@ -32,6 +32,8 @@ import type {
 interface CalculatorService {
 	add(left: number, right: number): number;
 }
+
+afterEach(() => vi.useRealTimers());
 
 interface DeferredCalculatorService {
 	add(left: number, right: number): Promise<number>;
@@ -1266,6 +1268,7 @@ describe("Default RPC Protocol", () => {
 	});
 
 	it("RPC-RECOVERY-002 restarts retention when an installed binding attempt times out", async () => {
+		vi.useFakeTimers();
 		const network = createRecoveryNetwork();
 		let releaseTimedOutAccept!: () => void;
 		const timedOutAccept = new Promise<void>((resolve) => {
@@ -1297,9 +1300,8 @@ describe("Default RPC Protocol", () => {
 						: undefined,
 			})),
 		);
-		await vi.waitFor(() => {
-			expect(connector.peer.state.status).toBe("recovering");
-		});
+		await vi.advanceTimersByTimeAsync(50);
+		expect(connector.peer.state.status).toBe("recovering");
 		expect(acceptorPeer?.state.status).toBe("recovering");
 
 		await connector.connect(network.createConnectorAdapter());
