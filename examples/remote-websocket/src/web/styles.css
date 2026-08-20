@@ -1,0 +1,109 @@
+/**
+ * @overview Tailwind theme and visualization styles for the Web RPC observatory.
+ * @author AEPKILL
+ * @created 2026-08-20 23:34:16
+ */
+
+@import "tailwindcss";
+
+@theme inline {
+	--color-background: var(--background);
+	--color-foreground: var(--foreground);
+	--color-card: var(--card);
+	--color-card-foreground: var(--card-foreground);
+	--color-primary: var(--primary);
+	--color-primary-foreground: var(--primary-foreground);
+	--color-muted: var(--muted);
+	--color-muted-foreground: var(--muted-foreground);
+	--color-accent: var(--accent);
+	--color-border: var(--border);
+	--color-input: var(--input);
+	--color-ring: var(--ring);
+	--color-warning: var(--warning);
+	--color-destructive: var(--destructive);
+	--font-sans: "Inter", "SF Pro Display", ui-sans-serif, system-ui, sans-serif;
+	--font-mono: "SFMono-Regular", "Cascadia Code", ui-monospace, monospace;
+}
+
+:root {
+	--background: oklch(0.13 0.018 258);
+	--foreground: oklch(0.94 0.012 250);
+	--card: oklch(0.18 0.022 258);
+	--card-foreground: oklch(0.94 0.012 250);
+	--primary: oklch(0.78 0.15 190);
+	--primary-foreground: oklch(0.13 0.018 258);
+	--muted: oklch(0.23 0.022 258);
+	--muted-foreground: oklch(0.67 0.025 250);
+	--accent: oklch(0.25 0.035 250);
+	--border: oklch(0.3 0.025 258);
+	--input: oklch(0.32 0.025 258);
+	--ring: oklch(0.78 0.15 190);
+	--warning: oklch(0.8 0.15 78);
+	--destructive: oklch(0.68 0.19 24);
+}
+
+@layer base {
+	* {
+		border-color: var(--border);
+	}
+	body {
+		margin: 0;
+		background: var(--background);
+		font-family: var(--font-sans);
+		-webkit-font-smoothing: antialiased;
+	}
+	button,
+	input {
+		font: inherit;
+	}
+	::selection {
+		background: color-mix(in oklab, var(--primary) 30%, transparent);
+	}
+}
+
+.rpc-grid {
+	background-image:
+		linear-gradient(
+			color-mix(in oklab, var(--primary) 4%, transparent) 1px,
+			transparent 1px
+		),
+		linear-gradient(
+			90deg,
+			color-mix(in oklab, var(--primary) 4%, transparent) 1px,
+			transparent 1px
+		),
+		radial-gradient(
+			circle at 50% -10%,
+			color-mix(in oklab, var(--primary) 14%, transparent),
+			transparent 38rem
+		);
+	background-size:
+		32px 32px,
+		32px 32px,
+		100% 100%;
+}
+
+.flow-line::after {
+	position: absolute;
+	top: -2px;
+	left: -2rem;
+	width: 2rem;
+	height: 5px;
+	content: "";
+	background: var(--primary);
+	border-radius: 999px;
+	box-shadow: 0 0 14px var(--primary);
+	animation: packet-flow 1.6s linear infinite;
+}
+
+@keyframes packet-flow {
+	to {
+		left: calc(100% + 2rem);
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.flow-line::after {
+		animation: none;
+	}
+}

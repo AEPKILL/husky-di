@@ -1,0 +1,14 @@
+{
+	"extends": "@husky-di/config/tsconfig/base.json",
+	"compilerOptions": {
+		"lib": ["ESNext", "DOM"],
+		"jsx": "react-jsx",
+		"target": "ESNext",
+		"rootDir": "./src",
+		"types": ["node", "vite/client"],
+		"paths": {
+			"@/*": ["./src/*"]
+		}
+	},
+	"include": ["src"]
+}

@@ -1,0 +1,12 @@
+{
+	"root": false,
+	"extends": [
+		"../../packages/config/biome/base.json",
+		"../../packages/config/biome/package-config.json"
+	],
+	"css": {
+		"parser": {
+			"tailwindDirectives": true
+		}
+	}
+}

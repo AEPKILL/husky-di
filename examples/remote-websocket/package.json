@@ -1,0 +1,43 @@
+{
+	"name": "@husky-di/example-remote-websocket",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"build:web": "vite build",
+		"build:dependencies": "pnpm --filter @husky-di/core build && pnpm --filter @husky-di/remote build && pnpm --filter @husky-di/remote-websocket build",
+		"prestart": "pnpm run build:dependencies",
+		"start": "concurrently --kill-others --names server,web \"tsx src/server/main.ts\" \"vite\"",
+		"start:server": "tsx src/server/main.ts",
+		"start:web": "vite",
+		"pretest": "pnpm run build:dependencies",
+		"test": "node --import tsx --test tests/**/*.test.ts",
+		"pretypecheck": "pnpm --filter @husky-di/core build && pnpm --filter @husky-di/remote build && pnpm --filter @husky-di/remote-websocket build",
+		"typecheck": "tsc -p tsconfig.json --noEmit"
+	},
+	"dependencies": {
+		"@hono/node-server": "^2.1.1",
+		"@husky-di/core": "workspace:*",
+		"@husky-di/remote": "workspace:*",
+		"@husky-di/remote-websocket": "workspace:*",
+		"@tanstack/react-query": "^5.101.4",
+		"class-variance-authority": "^0.7.1",
+		"clsx": "^2.1.1",
+		"hono": "^4.13.3",
+		"react": "^19.2.7",
+		"react-dom": "^19.2.7",
+		"tailwind-merge": "^3.6.0"
+	},
+	"devDependencies": {
+		"@husky-di/config": "workspace:*",
+		"@tailwindcss/vite": "^4.3.1",
+		"@types/node": "^25.5.0",
+		"@types/react": "^19.2.17",
+		"@types/react-dom": "^19.2.3",
+		"@vitejs/plugin-react": "^6.0.3",
+		"concurrently": "^10.0.5",
+		"tailwindcss": "^4.3.1",
+		"tsx": "^4.20.5",
+		"typescript": "^6.0.3",
+		"vite": "^8.1.0"
+	}
+}

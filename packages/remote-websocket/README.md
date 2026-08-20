@@ -32,6 +32,9 @@ Adapter according to the application's retry policy.
 Node applications can import `createNodeWebSocketConnectorAdapter` and
 `createNodeWebSocketAcceptorAdapter` from `@husky-di/remote-websocket/node`.
 
+For a runnable end-to-end RPC call over a real local WebSocket connection, see
+the [Remote WebSocket example](../../examples/remote-websocket/README.md).
+
 ## Resource limits
 
 Every Adapter has finite message and queue limits. `maxMessageBytes` defaults to
