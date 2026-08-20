@@ -6,9 +6,8 @@ Date: 2026-08-19
 
 ## 1. Scope and terminology
 
-This document is the normative contract for the RPC Protocol provider and WebSocket Transport Adapters used
-with `@husky-di/remote`. The Protocol provider delegates the normative `husky-di-rpc/1` semantics to
-`@husky-di/remote`; this package does not redefine or inspect those messages.
+This document is the normative contract for the WebSocket Transport Adapters used at the
+`@husky-di/remote` Physical Connection seam. It does not define or inspect RPC Protocol messages.
 
 The key words **MUST**, **MUST NOT**, **SHOULD**, and **MAY** are normative. “Transferred Connection” means a
 Connection after the synchronous return of its `connection$` notification. “Local Admission” has the meaning
@@ -56,8 +55,6 @@ function createWebSocketConnectorAdapter(
   options: IWebSocketConnectorAdapterOptions,
 ): IRpcConnectorAdapter;
 
-function createWebSocketRpcProtocol(): IRpcProtocol;
-
 function createNodeWebSocketConnectorAdapter(
   options: INodeWebSocketConnectorAdapterOptions,
 ): IRpcConnectorAdapter;
@@ -68,18 +65,11 @@ function createNodeWebSocketAcceptorAdapter(
 ```
 
 **WS-API-001 — Entry points.** The browser-safe package root **MUST** export
-`IRpcProtocol`, `createWebSocketRpcProtocol()`, and `createWebSocketConnectorAdapter(options)`. It **MUST NOT**
-load Node-only modules. The `./node` entry point
-**MUST** additionally export `createNodeWebSocketConnectorAdapter(options)` and
-`createNodeWebSocketAcceptorAdapter(options)`. Every factory **MUST** return the corresponding structural
-`IRpcConnectorAdapter` or `IRpcAcceptorAdapter` without opening a socket or listener. A Node Acceptor **MUST**
-receive exactly one of `port` or `server`.
-
-**WS-PROTOCOL-001 — Protocol implementation.** `createWebSocketRpcProtocol()` **MUST** return a frozen,
-reusable structural `IRpcProtocol` implementation. Every `createConnector(host)` and `createAcceptor(host)`
-call **MUST** return a fresh isolated role runtime implementing the normative `husky-di-rpc/1` semantics. The
-Protocol remains transport-neutral after it receives an `IRpcConnection`; WebSocket construction, framing,
-limits, and lifecycle remain the responsibility of this package's Adapter factories.
+`createWebSocketConnectorAdapter(options)`. It **MUST NOT** load Node-only modules. The `./node` entry point
+**MUST** export only `createNodeWebSocketConnectorAdapter(options)` and
+`createNodeWebSocketAcceptorAdapter(options)` as runtime values. Every factory **MUST** return the corresponding
+structural `IRpcConnectorAdapter` or `IRpcAcceptorAdapter` without opening a socket or listener. A Node Acceptor
+**MUST** receive exactly one of `port` or `server`.
 
 **WS-API-002 — Cold single use.** An Adapter **MUST** perform native startup only from its first `connect()` or
 `listen()` call. A later call on the same Adapter **MUST** reject. Construction and subscription alone **MUST
@@ -168,10 +158,10 @@ through the core Transport seam.
 
 ## 8. Stable package compatibility
 
-**RPC-RELEASE-005 — Independent Protocol and Adapter release.** The stable package **MUST** depend on the compatible
-`@husky-di/remote` major and import only its public root, Protocol, Transport, and conformance entry points. It **MUST**
-run the shared Protocol runner and both matching shared Adapter conformance runners in addition to this
-platform-specific admission, framing, limit, and security suite. The packed ESM and CJS entry points **MUST**
+**RPC-RELEASE-005 — Independent Adapter release.** The stable package **MUST** depend on the compatible
+`@husky-di/remote` major and import only its public root, Transport, and conformance entry points. It **MUST**
+run both matching shared Adapter conformance runners in addition to this platform-specific admission, framing,
+limit, and security suite. The packed ESM and CJS entry points **MUST**
 remain closed to private deep imports and
 include this specification, README, CHANGELOG, and LICENSE. Release documentation **MUST** describe the finite
 message and queue limits, Node `ws` `maxPayload` enforcement, and the application's secure-deployment duties.
@@ -184,7 +174,6 @@ complete unless this specification and its matching tests change together.
 
 | Core requirement | WebSocket clauses and evidence |
 | --- | --- |
-| `RPC-SPI-001` | `WS-PROTOCOL-001`, shared runner |
 | `RPC-TRANSPORT-001` | `WS-CONNECT-001`, `WS-ACCEPT-001`, `WS-MESSAGE-001`, shared runners |
 | `RPC-TRANSPORT-002` | `WS-MESSAGE-001`, shared runners |
 | `RPC-TRANSPORT-003` | `WS-CONNECT-002`, `WS-MESSAGE-001`, `WS-SEND-001`, `WS-TERM-001`, shared runners |

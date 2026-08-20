@@ -8,7 +8,6 @@ export {
 	createNodeWebSocketAcceptorAdapter,
 	createNodeWebSocketConnectorAdapter,
 } from "@/factories/node-web-socket-adapter.factory";
-export * from "@/index";
 export type {
 	INodeWebSocketAcceptorAdapterOptions,
 	INodeWebSocketConnectorAdapterOptions,
