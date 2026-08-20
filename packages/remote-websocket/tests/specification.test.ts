@@ -6,14 +6,17 @@
 
 import { createServer } from "node:http";
 import type { IRpcConnection } from "@husky-di/remote";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { WebSocket as RawNodeWebSocket } from "ws";
 import { NodeWebSocketAcceptorAdapterImpl } from "../src/impls/node-web-socket-acceptor-adapter.impl";
 import { createWebSocketConnectorAdapter } from "../src/index";
+import type { IWebSocketNetworkStatus } from "../src/interfaces/web-socket-platform.interface";
 import {
 	createNodeWebSocketAcceptorAdapter,
 	createNodeWebSocketConnectorAdapter,
 } from "../src/node";
+
+afterEach(() => vi.unstubAllGlobals());
 
 describe("Shared Adapter conformance", () => {
 	it("WS-API-001 RPC-TRANSPORT-001 RPC-TRANSPORT-002 RPC-TRANSPORT-003 RPC-TRANSPORT-004 RPC-TRANSPORT-005 RPC-TRANSPORT-006 RPC-TRANSPORT-007 RPC-TRANSPORT-010 RPC-RELEASE-005 passes the shared Connector and Acceptor Adapter runners", async () => {
@@ -138,6 +141,82 @@ describe("WebSocket Connector handoff", () => {
 		await expect(abortedStartup).rejects.toMatchObject({ name: "AbortError" });
 		expect(completed).toBe(true);
 		expect(aborted.socket?.closeCalls).toBe(1);
+	});
+
+	it("RPC-TRANSPORT-003 WS-CONNECT-003 rejects an offline browser before socket construction", async () => {
+		const networkStatus = new ControlledNetworkStatus(false);
+		installNetworkStatus(networkStatus);
+		const harness = createControlledConnector();
+		let sourceFailure: unknown;
+		harness.adapter.connection$.subscribe({
+			error(error) {
+				sourceFailure = error;
+			},
+		});
+
+		const failure = await harness.adapter
+			.connect(new AbortController().signal)
+			.then(
+				() => undefined,
+				(error: unknown) => error,
+			);
+
+		expect(failure).toBeInstanceOf(Error);
+		expect(failure).toMatchObject({
+			message: "The browser network is offline.",
+		});
+		expect(sourceFailure).toBe(failure);
+		expect(harness.socket).toBeUndefined();
+		expect(networkStatus.listenerCount("offline")).toBe(0);
+	});
+
+	it("RPC-TRANSPORT-003 WS-CONNECT-003 fails a half-open startup on offline", async () => {
+		const networkStatus = new ControlledNetworkStatus(true);
+		installNetworkStatus(networkStatus);
+		const harness = createControlledConnector();
+		let sourceFailure: unknown;
+		harness.adapter.connection$.subscribe({
+			error(error) {
+				sourceFailure = error;
+			},
+		});
+		const startup = harness.adapter.connect(new AbortController().signal);
+
+		networkStatus.setOnline(false);
+		const failure = await startup.then(
+			() => undefined,
+			(error: unknown) => error,
+		);
+
+		expect(failure).toMatchObject({
+			message: "The browser network is offline.",
+		});
+		expect(sourceFailure).toBe(failure);
+		expect(harness.socket?.closeCalls).toBe(1);
+		expect(networkStatus.listenerCount("offline")).toBe(0);
+	});
+
+	it("RPC-TRANSPORT-003 WS-CONNECT-003 terminates a transferred browser Connection on offline", async () => {
+		const networkStatus = new ControlledNetworkStatus(true);
+		installNetworkStatus(networkStatus);
+		const { connection, socket } = await openControlledConnection();
+		let connectionFailure: unknown;
+		connection.message$.subscribe({
+			error(error) {
+				connectionFailure = error;
+			},
+		});
+
+		networkStatus.setOnline(false);
+
+		expect(connectionFailure).toMatchObject({
+			message: "The browser network is offline.",
+		});
+		expect(socket.closeCalls).toBe(1);
+		expect(networkStatus.listenerCount("offline")).toBe(0);
+		networkStatus.setOnline(true);
+		expect(socket.closeCalls).toBe(1);
+		socket.remoteClose(1006);
 	});
 
 	it("RPC-TRANSPORT-004 WS-CONNECT-002 ignores Adapter abort after handoff", async () => {
@@ -904,6 +983,54 @@ describe("Node ws Adapters", () => {
 });
 
 type ControlledListener = (event: Event) => void;
+
+class ControlledNetworkStatus implements IWebSocketNetworkStatus {
+	private readonly _listeners = new Map<string, Set<ControlledListener>>();
+	online: boolean;
+
+	constructor(online: boolean) {
+		this.online = online;
+	}
+
+	get onLine(): boolean {
+		return this.online;
+	}
+
+	addEventListener(type: string, listener: ControlledListener): void {
+		const listeners = this._listeners.get(type) ?? new Set();
+		listeners.add(listener);
+		this._listeners.set(type, listeners);
+	}
+
+	removeEventListener(type: string, listener: ControlledListener): void {
+		this._listeners.get(type)?.delete(listener);
+	}
+
+	listenerCount(type: string): number {
+		return this._listeners.get(type)?.size ?? 0;
+	}
+
+	setOnline(online: boolean): void {
+		this.online = online;
+		const type = online ? "online" : "offline";
+		const event = new Event(type);
+		for (const listener of [...(this._listeners.get(type) ?? [])]) {
+			listener(event);
+		}
+	}
+}
+
+function installNetworkStatus(networkStatus: ControlledNetworkStatus): void {
+	vi.stubGlobal("navigator", networkStatus);
+	vi.stubGlobal(
+		"addEventListener",
+		networkStatus.addEventListener.bind(networkStatus),
+	);
+	vi.stubGlobal(
+		"removeEventListener",
+		networkStatus.removeEventListener.bind(networkStatus),
+	);
+}
 
 class ControlledWebSocket {
 	private _binaryType = "blob";

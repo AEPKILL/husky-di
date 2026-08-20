@@ -9,6 +9,7 @@ import { type Observable, Subject } from "rxjs";
 
 import type {
 	IWebSocketLike,
+	IWebSocketNetworkStatus,
 	IWebSocketTransportLimits,
 } from "@/interfaces/web-socket-platform.interface";
 import {
@@ -32,6 +33,7 @@ interface IWebSocketPendingSend {
 export class WebSocketConnectionImpl implements IRpcConnection {
 	private readonly _socket: IWebSocketLike;
 	private readonly _limits: IWebSocketTransportLimits;
+	private readonly _networkStatus: IWebSocketNetworkStatus | undefined;
 	private readonly _messageSubject = new Subject<Uint8Array>();
 	private readonly _onTerminal: () => void;
 	private readonly _inboundQueue: IWebSocketInboundEntry[] = [];
@@ -71,14 +73,20 @@ export class WebSocketConnectionImpl implements IRpcConnection {
 		this._finish(getWebSocketCloseError(event), true);
 	};
 
+	private readonly _handleOffline = (): void => {
+		this._failAndTerminate(new Error("The browser network is offline."));
+	};
+
 	constructor(
 		socket: IWebSocketLike,
 		limits: IWebSocketTransportLimits,
 		onTerminal: () => void = () => {},
+		networkStatus?: IWebSocketNetworkStatus,
 	) {
 		this._socket = socket;
 		this._limits = limits;
 		this._onTerminal = onTerminal;
+		this._networkStatus = networkStatus;
 		this.message$ = this._messageSubject.asObservable();
 		this._nativeCleanupTask = new Promise<void>((resolve) => {
 			this._resolveNativeCleanup = resolve;
@@ -86,6 +94,7 @@ export class WebSocketConnectionImpl implements IRpcConnection {
 		socket.addEventListener("message", this._handleMessage);
 		socket.addEventListener("error", this._handleError);
 		socket.addEventListener("close", this._handleClose);
+		networkStatus?.addEventListener("offline", this._handleOffline);
 	}
 
 	activate(): void {
@@ -355,6 +364,7 @@ export class WebSocketConnectionImpl implements IRpcConnection {
 		this._state = "terminated";
 		this._socket.removeEventListener("message", this._handleMessage);
 		this._socket.removeEventListener("error", this._handleError);
+		this._networkStatus?.removeEventListener("offline", this._handleOffline);
 		this._inboundQueue.length = 0;
 		this._inboundQueuedBytes = 0;
 		this._rejectPendingSend(
@@ -381,6 +391,7 @@ export class WebSocketConnectionImpl implements IRpcConnection {
 		this._socket.removeEventListener("message", this._handleMessage);
 		this._socket.removeEventListener("error", this._handleError);
 		this._socket.removeEventListener("close", this._handleClose);
+		this._networkStatus?.removeEventListener("offline", this._handleOffline);
 		this._resolveNativeCleanup();
 		this._onTerminal();
 	}

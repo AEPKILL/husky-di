@@ -10,6 +10,7 @@ import { type Observable, Subject } from "rxjs";
 import { WebSocketConnectionImpl } from "@/impls/web-socket-connection.impl";
 import type {
 	IWebSocketLike,
+	IWebSocketNetworkStatus,
 	IWebSocketTransportLimits,
 } from "@/interfaces/web-socket-platform.interface";
 import {
@@ -24,6 +25,7 @@ import {
 export class WebSocketConnectorAdapterImpl implements IRpcConnectorAdapter {
 	private readonly _createSocket: () => IWebSocketLike;
 	private readonly _limits: IWebSocketTransportLimits;
+	private readonly _networkStatus: IWebSocketNetworkStatus | undefined;
 	private readonly _connectionSubject = new Subject<IRpcConnection>();
 	private _used = false;
 	readonly connection$: Observable<IRpcConnection>;
@@ -31,9 +33,11 @@ export class WebSocketConnectorAdapterImpl implements IRpcConnectorAdapter {
 	constructor(
 		createSocket: () => IWebSocketLike,
 		limits: IWebSocketTransportLimits,
+		networkStatus?: IWebSocketNetworkStatus,
 	) {
 		this._createSocket = createSocket;
 		this._limits = limits;
+		this._networkStatus = networkStatus;
 		this.connection$ = this._connectionSubject.asObservable();
 	}
 
@@ -51,6 +55,11 @@ export class WebSocketConnectorAdapterImpl implements IRpcConnectorAdapter {
 				return Promise.reject(error);
 			}
 		} catch (error) {
+			return Promise.reject(error);
+		}
+		if (this._networkStatus?.online === false) {
+			const error = new Error("The browser network is offline.");
+			this._connectionSubject.error(error);
 			return Promise.reject(error);
 		}
 
@@ -83,6 +92,7 @@ export class WebSocketConnectorAdapterImpl implements IRpcConnectorAdapter {
 				socket.removeEventListener("open", handleOpen);
 				socket.removeEventListener("error", handleError);
 				socket.removeEventListener("close", handleClose);
+				this._networkStatus?.removeEventListener("offline", handleOffline);
 				removeAbortListener();
 			};
 			const rejectStartup = (error: Error, complete: boolean): void => {
@@ -112,7 +122,12 @@ export class WebSocketConnectorAdapterImpl implements IRpcConnectorAdapter {
 					return;
 				}
 				settled = true;
-				const connection = new WebSocketConnectionImpl(socket, this._limits);
+				const connection = new WebSocketConnectionImpl(
+					socket,
+					this._limits,
+					undefined,
+					this._networkStatus,
+				);
 				this._connectionSubject.next(connection);
 				this._connectionSubject.complete();
 				cleanup();
@@ -131,12 +146,18 @@ export class WebSocketConnectorAdapterImpl implements IRpcConnectorAdapter {
 			const handleAbort = (): void => {
 				rejectStartup(createAbortError(), true);
 			};
+			const handleOffline = (): void => {
+				rejectStartup(new Error("The browser network is offline."), false);
+			};
 
 			socket.addEventListener("open", handleOpen);
 			socket.addEventListener("error", handleError);
 			socket.addEventListener("close", handleClose);
+			this._networkStatus?.addEventListener("offline", handleOffline);
 			removeAbortListener = addAbortListener(signal, handleAbort);
-			if (isAbortSignalAborted(signal)) {
+			if (this._networkStatus?.online === false) {
+				handleOffline();
+			} else if (isAbortSignalAborted(signal)) {
 				handleAbort();
 			}
 		});

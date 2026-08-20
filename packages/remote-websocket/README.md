@@ -22,6 +22,13 @@ await connector.connect(
 );
 ```
 
+In browsers, the Connector Adapter samples `navigator.onLine` and listens for
+the global `offline` event. Starting while offline fails without creating a
+socket; going offline after handoff immediately terminates the physical
+Connection so the RPC peer can enter Recovery. A later `online` event does not
+reuse the single-use Adapter or reconnect automatically; create a replacement
+Adapter according to the application's retry policy.
+
 Node applications can import `createNodeWebSocketConnectorAdapter` and
 `createNodeWebSocketAcceptorAdapter` from `@husky-di/remote-websocket/node`.
 

@@ -21,6 +21,18 @@ export interface IWebSocketTransportLimits {
 	readonly maxQueuedBytes: number;
 }
 
+export interface IWebSocketNetworkStatus {
+	readonly online: boolean;
+	addEventListener(
+		type: "online" | "offline",
+		listener: (event: Event) => void,
+	): void;
+	removeEventListener(
+		type: "online" | "offline",
+		listener: (event: Event) => void,
+	): void;
+}
+
 export interface INodeWebSocketServerLike {
 	on(event: string, listener: (...arguments_: unknown[]) => void): this;
 	off(event: string, listener: (...arguments_: unknown[]) => void): this;

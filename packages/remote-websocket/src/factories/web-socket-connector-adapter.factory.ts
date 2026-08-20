@@ -8,7 +8,10 @@ import type { IRpcConnectorAdapter } from "@husky-di/remote";
 
 import { WebSocketConnectorAdapterImpl } from "@/impls/web-socket-connector-adapter.impl";
 import type { IWebSocketConnectorAdapterOptions } from "@/interfaces/web-socket-options.interface";
-import type { IWebSocketLike } from "@/interfaces/web-socket-platform.interface";
+import type {
+	IWebSocketLike,
+	IWebSocketNetworkStatus,
+} from "@/interfaces/web-socket-platform.interface";
 import { normalizeWebSocketTransportLimits } from "@/utils/web-socket-policy.util";
 
 /** Creates a cold Connector Adapter backed by the supplied or global WebSocket. */
@@ -34,5 +37,31 @@ export function createWebSocketConnectorAdapter(
 				protocols as string | string[] | undefined,
 			) as unknown as IWebSocketLike,
 		limits,
+		getGlobalNetworkStatus(),
 	);
+}
+
+function getGlobalNetworkStatus(): IWebSocketNetworkStatus | undefined {
+	const browserNavigator = globalThis.navigator;
+	if (
+		typeof globalThis.addEventListener !== "function" ||
+		typeof globalThis.removeEventListener !== "function" ||
+		typeof browserNavigator !== "object" ||
+		browserNavigator === null ||
+		typeof browserNavigator.onLine !== "boolean"
+	) {
+		return undefined;
+	}
+
+	return {
+		get online() {
+			return browserNavigator.onLine;
+		},
+		addEventListener: (type, listener) => {
+			globalThis.addEventListener(type, listener);
+		},
+		removeEventListener: (type, listener) => {
+			globalThis.removeEventListener(type, listener);
+		},
+	};
 }

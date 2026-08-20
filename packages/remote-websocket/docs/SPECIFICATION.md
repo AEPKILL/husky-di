@@ -96,6 +96,14 @@ half-open socket, complete `connection$` without a value, and reject with `Abort
 close failure before handoff **MUST** error `connection$` and reject with the same `Error` object. Abort after
 handoff **MUST NOT** revoke or close the Transferred Connection.
 
+**WS-CONNECT-003 — Browser network status.** When the browser exposes global network status, the browser
+Connector **MUST** reject without constructing a socket if `navigator.onLine` is false at startup. An `offline`
+event before handoff **MUST** fail startup; after handoff it **MUST** immediately error the Transferred
+Connection and Direct Close its socket. Network listeners **MUST** be removed when their startup or Connection
+lifetime ends. A later `online` event **MUST NOT** reuse the single-use Adapter or automatically dial a
+replacement Connection; the application owns replacement-Adapter and retry policy. A platform without the
+browser network-status surface **MUST** retain the ordinary WebSocket lifecycle behavior.
+
 ## 4. Acceptor startup and capacity
 
 **WS-ACCEPT-001 — Listener lifecycle.** The Node Acceptor **MUST** attach handlers before listener readiness.
@@ -176,7 +184,7 @@ complete unless this specification and its matching tests change together.
 | --- | --- |
 | `RPC-TRANSPORT-001` | `WS-CONNECT-001`, `WS-ACCEPT-001`, `WS-MESSAGE-001`, shared runners |
 | `RPC-TRANSPORT-002` | `WS-MESSAGE-001`, shared runners |
-| `RPC-TRANSPORT-003` | `WS-CONNECT-002`, `WS-MESSAGE-001`, `WS-SEND-001`, `WS-TERM-001`, shared runners |
+| `RPC-TRANSPORT-003` | `WS-CONNECT-002`, `WS-CONNECT-003`, `WS-MESSAGE-001`, `WS-SEND-001`, `WS-TERM-001`, shared runners |
 | `RPC-TRANSPORT-004` | `WS-CONNECT-001`, `WS-ACCEPT-001`, shared runners |
 | `RPC-TRANSPORT-005` | `WS-SEND-001`, `WS-SEND-002`, shared runners |
 | `RPC-TRANSPORT-006` | `WS-MESSAGE-002`, `WS-SEND-001`, shared runners |
