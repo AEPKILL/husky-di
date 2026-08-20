@@ -37,7 +37,12 @@
 	"files": [
 		"dist",
 		"wire",
-		"docs",
+		"docs/ARCHITECTURE.drawio",
+		"docs/ARCHITECTURE.png",
+		"docs/PROTOCOL.md",
+		"docs/REQUIREMENTS.md",
+		"docs/SPECIFICATION.md",
+		"docs/TRANSPORT.md",
 		"README.md",
 		"CHANGELOG.md",
 		"LICENSE"

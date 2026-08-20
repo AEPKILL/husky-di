@@ -6,6 +6,12 @@
 
 import type { Cleanup } from "@husky-di/core";
 import { Observable, Subject } from "rxjs";
+import { RpcCallTerminalTypeEnum } from "@/enums/protocol/rpc-call-terminal-type.enum";
+import { RpcIncomingCallKindEnum } from "@/enums/protocol/rpc-incoming-call-kind.enum";
+import { RpcCallDirectionEnum } from "@/enums/rpc-call-direction.enum";
+import { RpcCallStatusEnum } from "@/enums/rpc-call-status.enum";
+import { RpcEventTypeEnum } from "@/enums/rpc-event-type.enum";
+import { RpcExceptionCodeEnum } from "@/enums/rpc-exception-code.enum";
 import { getRemoteServiceDescriptorData } from "@/factories/remote-service-descriptor.factory";
 import { createRpcException } from "@/factories/rpc-exception.factory";
 import type {
@@ -73,12 +79,12 @@ function observationDuration(startedAt: number): number {
 }
 
 const outgoingFailureCodes = new Set([
-	"canceled",
-	"unavailable",
-	"outcome-unknown",
-	"handler-failed",
-	"unknown-service",
-	"unknown-method",
+	RpcExceptionCodeEnum.canceled,
+	RpcExceptionCodeEnum.unavailable,
+	RpcExceptionCodeEnum.outcomeUnknown,
+	RpcExceptionCodeEnum.handlerFailed,
+	RpcExceptionCodeEnum.unknownService,
+	RpcExceptionCodeEnum.unknownMethod,
 ]);
 
 function readProtocolFields(
@@ -122,20 +128,20 @@ function isRpcCallOutcome(value: unknown): value is RpcCallOutcome {
 		return false;
 	}
 	const type = fields.get("type");
-	if (type === "returned-void") {
+	if (type === RpcCallTerminalTypeEnum.returnedVoid) {
 		return hasExactProtocolFields(fields, ["type"]);
 	}
-	if (type === "returned") {
+	if (type === RpcCallTerminalTypeEnum.returned) {
 		return (
 			hasExactProtocolFields(fields, ["type", "value"]) &&
 			isRpcApplicationSnapshot(fields.get("value"))
 		);
 	}
 	return (
-		type === "failed" &&
+		type === RpcCallTerminalTypeEnum.failed &&
 		hasExactProtocolFields(fields, ["type", "code"]) &&
 		typeof fields.get("code") === "string" &&
-		outgoingFailureCodes.has(fields.get("code") as string)
+		outgoingFailureCodes.has(fields.get("code") as RpcExceptionCodeEnum)
 	);
 }
 
@@ -147,22 +153,24 @@ function isExpectedUnknownTerminal(
 	return (
 		fields !== undefined &&
 		hasExactProtocolFields(fields, ["type", "code"]) &&
-		fields.get("type") === "failed" &&
+		fields.get("type") === RpcCallTerminalTypeEnum.failed &&
 		fields.get("code") === code
 	);
 }
 
 type RpcHandlerTerminal =
-	| { readonly type: "returned-void" }
+	| { readonly type: RpcCallTerminalTypeEnum.returnedVoid }
 	| {
-			readonly type: "returned";
+			readonly type: RpcCallTerminalTypeEnum.returned;
 			readonly value: IRpcApplicationSnapshot;
 	  }
 	| {
-			readonly type: "failed";
-			readonly code: "canceled" | "handler-failed";
+			readonly type: RpcCallTerminalTypeEnum.failed;
+			readonly code:
+				| RpcExceptionCodeEnum.canceled
+				| RpcExceptionCodeEnum.handlerFailed;
 	  }
-	| { readonly type: "session-terminated" };
+	| { readonly type: RpcCallTerminalTypeEnum.sessionTerminated };
 
 function isHandlerTerminal(value: unknown): value is RpcHandlerTerminal {
 	const fields = readProtocolFields(value);
@@ -170,10 +178,13 @@ function isHandlerTerminal(value: unknown): value is RpcHandlerTerminal {
 		return false;
 	}
 	const type = fields.get("type");
-	if (type === "session-terminated" || type === "returned-void") {
+	if (
+		type === RpcCallTerminalTypeEnum.sessionTerminated ||
+		type === RpcCallTerminalTypeEnum.returnedVoid
+	) {
 		return hasExactProtocolFields(fields, ["type"]);
 	}
-	if (type === "returned") {
+	if (type === RpcCallTerminalTypeEnum.returned) {
 		return (
 			hasExactProtocolFields(fields, ["type", "value"]) &&
 			isRpcApplicationSnapshot(fields.get("value"))
@@ -181,9 +192,10 @@ function isHandlerTerminal(value: unknown): value is RpcHandlerTerminal {
 	}
 	const code = fields.get("code");
 	return (
-		type === "failed" &&
+		type === RpcCallTerminalTypeEnum.failed &&
 		hasExactProtocolFields(fields, ["type", "code"]) &&
-		(code === "canceled" || code === "handler-failed")
+		(code === RpcExceptionCodeEnum.canceled ||
+			code === RpcExceptionCodeEnum.handlerFailed)
 	);
 }
 
@@ -296,7 +308,7 @@ export class RpcPeerImpl implements IRpcPeer {
 			this.state.status === "draining" ||
 			this.state.status === "closed"
 		) {
-			throw createRpcException("unavailable");
+			throw createRpcException(RpcExceptionCodeEnum.unavailable);
 		}
 		return installRpcExposure(
 			descriptor,
@@ -328,7 +340,9 @@ export class RpcPeerImpl implements IRpcPeer {
 				this.state.status !== "recovering") ||
 			this.#session === undefined
 		) {
-			return Promise.reject(createRpcException("unavailable"));
+			return Promise.reject(
+				createRpcException(RpcExceptionCodeEnum.unavailable),
+			);
 		}
 		const args = normalizeRpcApplicationArguments(
 			prepared.applicationArguments,
@@ -344,7 +358,9 @@ export class RpcPeerImpl implements IRpcPeer {
 			return Promise.reject(error);
 		}
 		if (reservation === undefined) {
-			return Promise.reject(createRpcException("unavailable"));
+			return Promise.reject(
+				createRpcException(RpcExceptionCodeEnum.unavailable),
+			);
 		}
 
 		let invocation: RpcPeerCommittedInvocation;
@@ -481,31 +497,36 @@ export class RpcPeerImpl implements IRpcPeer {
 			}
 			settled = true;
 			const durationMs = observationDuration(startedAt);
-			if (outcome.type === "returned" || outcome.type === "returned-void") {
+			if (
+				outcome.type === RpcCallTerminalTypeEnum.returned ||
+				outcome.type === RpcCallTerminalTypeEnum.returnedVoid
+			) {
 				this.#emitEvent({
-					type: "call-finished",
+					type: RpcEventTypeEnum.callFinished,
 					observationId,
 					peer: this,
-					direction: "outgoing",
+					direction: RpcCallDirectionEnum.outgoing,
 					service,
 					method,
-					outcome: "fulfilled",
+					outcome: RpcCallStatusEnum.fulfilled,
 					durationMs,
 				});
 				resolveResult(
-					outcome.type === "returned" ? outcome.value.value : undefined,
+					outcome.type === RpcCallTerminalTypeEnum.returned
+						? outcome.value.value
+						: undefined,
 				);
 				return;
 			}
 
 			this.#emitEvent({
-				type: "call-finished",
+				type: RpcEventTypeEnum.callFinished,
 				observationId,
 				peer: this,
-				direction: "outgoing",
+				direction: RpcCallDirectionEnum.outgoing,
 				service,
 				method,
-				outcome: "rejected",
+				outcome: RpcCallStatusEnum.rejected,
 				code: outcome.code,
 				durationMs,
 			});
@@ -528,10 +549,10 @@ export class RpcPeerImpl implements IRpcPeer {
 		}
 
 		this.#emitEvent({
-			type: "call-started",
+			type: RpcEventTypeEnum.callStarted,
 			observationId,
 			peer: this,
-			direction: "outgoing",
+			direction: RpcCallDirectionEnum.outgoing,
 			service,
 			method,
 		});
@@ -593,12 +614,15 @@ export class RpcPeerImpl implements IRpcPeer {
 			this.#localExposureRegistry.get(request.service) ??
 			this.#ownerExposureRegistry.get(request.service);
 		if (exposure === undefined) {
-			return this.#reserveUnknownIncoming("unknown-service", charge);
+			return this.#reserveUnknownIncoming(
+				RpcExceptionCodeEnum.unknownService,
+				charge,
+			);
 		}
 		const route = exposure.methods.get(request.method);
 		if (route === undefined) {
 			return this.#reserveUnknownIncoming(
-				"unknown-method",
+				RpcExceptionCodeEnum.unknownMethod,
 				charge,
 				exposure.wireName,
 			);
@@ -646,25 +670,25 @@ export class RpcPeerImpl implements IRpcPeer {
 				settled = true;
 				this.#releaseIncomingCapacity(charge);
 				const durationMs = observationDuration(startedAt);
-				if (code === "unknown-service") {
+				if (code === RpcExceptionCodeEnum.unknownService) {
 					this.#emitEvent({
-						type: "call-finished",
+						type: RpcEventTypeEnum.callFinished,
 						observationId,
 						peer: this,
-						direction: "incoming",
-						outcome: "rejected",
-						code: "unknown-service",
+						direction: RpcCallDirectionEnum.incoming as const,
+						outcome: RpcCallStatusEnum.rejected,
+						code: RpcExceptionCodeEnum.unknownService,
 						durationMs,
 					});
 				} else {
 					this.#emitEvent({
-						type: "call-finished",
+						type: RpcEventTypeEnum.callFinished,
 						observationId,
 						peer: this,
-						direction: "incoming",
+						direction: RpcCallDirectionEnum.incoming,
 						service: service as string,
-						outcome: "rejected",
-						code: "unknown-method",
+						outcome: RpcCallStatusEnum.rejected,
+						code: RpcExceptionCodeEnum.unknownMethod,
 						durationMs,
 					});
 				}
@@ -672,7 +696,7 @@ export class RpcPeerImpl implements IRpcPeer {
 		});
 
 		return {
-			kind: "unknown",
+			kind: RpcIncomingCallKindEnum.unknown,
 			code,
 			reservation: Object.freeze({
 				commit: () => {
@@ -686,13 +710,13 @@ export class RpcPeerImpl implements IRpcPeer {
 					observationId = createObservationId();
 					startedAt = Date.now();
 					const base = {
-						type: "call-started" as const,
+						type: RpcEventTypeEnum.callStarted as const,
 						observationId,
 						peer: this,
-						direction: "incoming" as const,
+						direction: RpcCallDirectionEnum.incoming as const,
 					};
 					this.#emitEvent(
-						code === "unknown-service"
+						code === RpcExceptionCodeEnum.unknownService
 							? base
 							: { ...base, service: service as string },
 					);
@@ -745,34 +769,37 @@ export class RpcPeerImpl implements IRpcPeer {
 				settled = true;
 				this.#releaseIncomingCapacity(charge);
 				if (
-					outcome.type === "session-terminated" ||
-					(outcome.type === "failed" && outcome.code === "canceled")
+					outcome.type === RpcCallTerminalTypeEnum.sessionTerminated ||
+					(outcome.type === RpcCallTerminalTypeEnum.failed &&
+						outcome.code === RpcExceptionCodeEnum.canceled)
 				) {
 					abortController.abort();
 				}
 				if (!handlerStarted) {
-					resolveHandlerOutcome({ type: "not-started" });
+					resolveHandlerOutcome({
+						type: RpcCallTerminalTypeEnum.notStarted,
+					});
 				}
 				const base = {
-					type: "call-finished" as const,
+					type: RpcEventTypeEnum.callFinished as const,
 					observationId,
 					peer: this,
-					direction: "incoming" as const,
+					direction: RpcCallDirectionEnum.incoming as const,
 					service,
 					method: request.method,
 					durationMs: observationDuration(startedAt),
 				};
-				if (outcome.type === "session-terminated") {
-					this.#emitEvent({ ...base, outcome: "terminated" });
+				if (outcome.type === RpcCallTerminalTypeEnum.sessionTerminated) {
+					this.#emitEvent({ ...base, outcome: RpcCallStatusEnum.terminated });
 				} else if (
-					outcome.type === "returned" ||
-					outcome.type === "returned-void"
+					outcome.type === RpcCallTerminalTypeEnum.returned ||
+					outcome.type === RpcCallTerminalTypeEnum.returnedVoid
 				) {
-					this.#emitEvent({ ...base, outcome: "fulfilled" });
+					this.#emitEvent({ ...base, outcome: RpcCallStatusEnum.fulfilled });
 				} else {
 					this.#emitEvent({
 						...base,
-						outcome: "rejected",
+						outcome: RpcCallStatusEnum.rejected,
 						code: outcome.code,
 					});
 				}
@@ -781,7 +808,7 @@ export class RpcPeerImpl implements IRpcPeer {
 
 		const runHandler = (releasePermit: () => void): boolean => {
 			if (settled) {
-				resolveHandlerOutcome({ type: "not-started" });
+				resolveHandlerOutcome({ type: RpcCallTerminalTypeEnum.notStarted });
 				return false;
 			}
 			handlerStarted = true;
@@ -793,7 +820,10 @@ export class RpcPeerImpl implements IRpcPeer {
 			try {
 				result = Reflect.apply(route.handler, route.implementation, args);
 			} catch {
-				resolveHandlerOutcome({ type: "failed", code: "handler-failed" });
+				resolveHandlerOutcome({
+					type: RpcCallTerminalTypeEnum.failed,
+					code: RpcExceptionCodeEnum.handlerFailed,
+				});
 				releasePermit();
 				return true;
 			}
@@ -801,33 +831,35 @@ export class RpcPeerImpl implements IRpcPeer {
 				(value) => {
 					if (settled) {
 						resolveHandlerOutcome({
-							type: "failed",
-							code: "handler-failed",
+							type: RpcCallTerminalTypeEnum.failed,
+							code: RpcExceptionCodeEnum.handlerFailed,
 						});
 						releasePermit();
 						return;
 					}
 					try {
 						if (value === undefined) {
-							resolveHandlerOutcome({ type: "returned-void" });
+							resolveHandlerOutcome({
+								type: RpcCallTerminalTypeEnum.returnedVoid,
+							});
 						} else {
 							const snapshot = normalizeRpcApplicationValue(value);
 							if (settled) {
 								resolveHandlerOutcome({
-									type: "failed",
-									code: "handler-failed",
+									type: RpcCallTerminalTypeEnum.failed,
+									code: RpcExceptionCodeEnum.handlerFailed,
 								});
 								return;
 							}
 							resolveHandlerOutcome({
-								type: "returned",
+								type: RpcCallTerminalTypeEnum.returned,
 								value: snapshot,
 							});
 						}
 					} catch {
 						resolveHandlerOutcome({
-							type: "failed",
-							code: "handler-failed",
+							type: RpcCallTerminalTypeEnum.failed,
+							code: RpcExceptionCodeEnum.handlerFailed,
 						});
 					} finally {
 						releasePermit();
@@ -835,8 +867,8 @@ export class RpcPeerImpl implements IRpcPeer {
 				},
 				() => {
 					resolveHandlerOutcome({
-						type: "failed",
-						code: "handler-failed",
+						type: RpcCallTerminalTypeEnum.failed,
+						code: RpcExceptionCodeEnum.handlerFailed,
 					});
 					releasePermit();
 				},
@@ -845,7 +877,7 @@ export class RpcPeerImpl implements IRpcPeer {
 		};
 
 		return {
-			kind: "handler",
+			kind: RpcIncomingCallKindEnum.handler,
 			reservation: Object.freeze({
 				commit: () => {
 					if (state !== "pending") {
@@ -858,10 +890,10 @@ export class RpcPeerImpl implements IRpcPeer {
 					observationId = createObservationId();
 					startedAt = Date.now();
 					this.#emitEvent({
-						type: "call-started",
+						type: RpcEventTypeEnum.callStarted,
 						observationId,
 						peer: this,
-						direction: "incoming",
+						direction: RpcCallDirectionEnum.incoming,
 						service,
 						method: request.method,
 					});
@@ -886,7 +918,7 @@ export class RpcPeerImpl implements IRpcPeer {
 		const cause =
 			error instanceof Error ? error : new Error("Protocol invocation failed.");
 		this.#onProtocolFault(cause);
-		return createRpcException("protocol", cause);
+		return createRpcException(RpcExceptionCodeEnum.protocol, cause);
 	}
 
 	/** Package-private Session attachment retained across bindings. */

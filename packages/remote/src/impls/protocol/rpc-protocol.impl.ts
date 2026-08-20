@@ -4,7 +4,12 @@
  * @created 2026-08-19 00:00:00
  */
 
-import { RPC_PROFILE_ID } from "@/constants/protocol/rpc-profile.const";
+import { RpcDecodePhaseEnum } from "@/enums/protocol/rpc-decode-phase.enum";
+import { RpcEndpointFailureEnum } from "@/enums/protocol/rpc-endpoint-failure.enum";
+import { RpcProfileEnum } from "@/enums/protocol/rpc-profile.enum";
+import { RpcProofOperationKindEnum } from "@/enums/protocol/rpc-proof-operation-kind.enum";
+import { RpcProtocolRoleEnum } from "@/enums/protocol/rpc-protocol-role.enum";
+import { RpcCloseReasonEnum } from "@/enums/rpc-close-reason.enum";
 import type { IRpcEndpoint } from "@/interfaces/protocol/rpc-endpoint.interface";
 import type {
 	IRpcProtocol,
@@ -15,7 +20,6 @@ import type {
 } from "@/interfaces/protocol/rpc-protocol.interface";
 import type { IRpcSession } from "@/interfaces/protocol/rpc-session.interface";
 import type { IRpcConnection } from "@/interfaces/rpc-connection.interface";
-import type { RpcEndpointFailure } from "@/types/protocol/rpc-endpoint.type";
 import type { CreateRpcProtocolOptions } from "@/types/protocol/rpc-protocol.type";
 import type {
 	RpcFreshAccept,
@@ -78,13 +82,13 @@ function createEndpoint<TKey>(
 	) => Promise<void> | void,
 	onFailure: (
 		endpoint: IRpcEndpoint,
-		reason: RpcEndpointFailure,
+		reason: RpcEndpointFailureEnum,
 		error?: Error,
 	) => void,
 ): IRpcEndpoint {
 	let endpoint: IRpcEndpoint | undefined;
 	let earlyFailure:
-		| { readonly reason: RpcEndpointFailure; readonly error?: Error }
+		| { readonly reason: RpcEndpointFailureEnum; readonly error?: Error }
 		| undefined;
 	endpoint = factory({
 		connection,
@@ -300,7 +304,7 @@ class RpcConnectorRuntime<TKey> implements IRpcProtocolConnectorRuntime {
 			initiatorNonce.bytes.fill(0);
 			request = Object.freeze({
 				kind: "fresh",
-				profiles: Object.freeze([RPC_PROFILE_ID]),
+				profiles: Object.freeze([RpcProfileEnum.huskyDiRpc1]),
 				initiatorNonce: initiatorNonce.value,
 			}) as RpcFreshRequest;
 			encoded = this._options.codec.encode(request);
@@ -331,7 +335,7 @@ class RpcConnectorRuntime<TKey> implements IRpcProtocolConnectorRuntime {
 			initiatorNonce.bytes.fill(0);
 			const requestWithoutProof = Object.freeze({
 				kind: "resume",
-				profile: RPC_PROFILE_ID,
+				profile: RpcProfileEnum.huskyDiRpc1,
 				sessionId: session.sessionId,
 				receivedThrough: session.receivedThrough,
 				resumeAttempt,
@@ -339,7 +343,7 @@ class RpcConnectorRuntime<TKey> implements IRpcProtocolConnectorRuntime {
 			}) as RpcJsonRecord;
 			const proof = await runAttemptCrypto(attempt, () =>
 				this._options.cryptography.signProof({
-					kind: "resume-request",
+					kind: RpcProofOperationKindEnum.resumeRequest,
 					proofKey,
 					record: requestWithoutProof,
 				}),
@@ -403,7 +407,10 @@ class RpcConnectorRuntime<TKey> implements IRpcProtocolConnectorRuntime {
 		}
 		try {
 			await requestAdmission;
-			const accept = this._options.codec.decode(bytes, "fresh-accept");
+			const accept = this._options.codec.decode(
+				bytes,
+				RpcDecodePhaseEnum.freshAccept,
+			);
 			const proofKey = await runAttemptCrypto(attempt, () =>
 				this._options.cryptography.deriveProofKey(
 					this._options.cryptography.decodeBase64Url32(accept.sessionSecret),
@@ -415,7 +422,7 @@ class RpcConnectorRuntime<TKey> implements IRpcProtocolConnectorRuntime {
 			}
 			const valid = await runAttemptCrypto(attempt, () =>
 				this._options.cryptography.verifyProof({
-					kind: "fresh-accept",
+					kind: RpcProofOperationKindEnum.freshAccept,
 					proofKey,
 					request,
 					record: accept,
@@ -426,7 +433,7 @@ class RpcConnectorRuntime<TKey> implements IRpcProtocolConnectorRuntime {
 			}
 
 			const session = this._options.createSession({
-				role: "connector",
+				role: RpcProtocolRoleEnum.connector,
 				host: this._host,
 				sessionId: accept.sessionId,
 				proofKey,
@@ -483,14 +490,17 @@ class RpcConnectorRuntime<TKey> implements IRpcProtocolConnectorRuntime {
 
 		try {
 			await requestAdmission;
-			const outcome = this._options.codec.decode(bytes, "resume-outcome");
+			const outcome = this._options.codec.decode(
+				bytes,
+				RpcDecodePhaseEnum.resumeOutcome,
+			);
 			if (outcome.kind === "reject") {
 				if (outcome.code === "resume-rejected") {
 					throw new Error("Default RPC resume was generically rejected.");
 				}
 				const valid = await runAttemptCrypto(attempt, () =>
 					this._options.cryptography.verifyProof({
-						kind: "resume-reject",
+						kind: RpcProofOperationKindEnum.resumeReject,
 						proofKey,
 						request,
 						record: outcome,
@@ -511,7 +521,7 @@ class RpcConnectorRuntime<TKey> implements IRpcProtocolConnectorRuntime {
 
 			const valid = await runAttemptCrypto(attempt, () =>
 				this._options.cryptography.verifyProof({
-					kind: "resume-accept",
+					kind: RpcProofOperationKindEnum.resumeAccept,
 					proofKey,
 					request,
 					record: outcome,
@@ -521,7 +531,7 @@ class RpcConnectorRuntime<TKey> implements IRpcProtocolConnectorRuntime {
 				throw new Error("Default RPC resume accept proof is invalid or stale.");
 			}
 			const contradictory =
-				outcome.profile !== RPC_PROFILE_ID ||
+				outcome.profile !== RpcProfileEnum.huskyDiRpc1 ||
 				outcome.sessionId !== session.sessionId ||
 				outcome.bindingEpoch <= session.bindingEpoch ||
 				session.classifyPeerCursor(outcome.receivedThrough) !== "valid" ||
@@ -547,7 +557,7 @@ class RpcConnectorRuntime<TKey> implements IRpcProtocolConnectorRuntime {
 
 	_connectorEndpointFailed(
 		attempt: IRpcConnectorAttempt<TKey>,
-		reason: RpcEndpointFailure,
+		reason: RpcEndpointFailureEnum,
 		error?: Error,
 	): void {
 		const session = attempt.session;
@@ -670,7 +680,7 @@ class RpcAcceptorRuntime<TKey> implements IRpcProtocolAcceptorRuntime {
 			() =>
 				this._acceptorEndpointFailed(
 					attempt,
-					"connection",
+					RpcEndpointFailureEnum.connection,
 					new Error("Default RPC fresh acceptance timed out."),
 				),
 			this._host.policy.bindingAttemptTimeoutMs,
@@ -678,7 +688,7 @@ class RpcAcceptorRuntime<TKey> implements IRpcProtocolAcceptorRuntime {
 		installAttemptAbort(attempt, () =>
 			this._acceptorEndpointFailed(
 				attempt,
-				"connection",
+				RpcEndpointFailureEnum.connection,
 				new Error("Default RPC fresh acceptance was aborted."),
 			),
 		);
@@ -726,7 +736,10 @@ class RpcAcceptorRuntime<TKey> implements IRpcProtocolAcceptorRuntime {
 		}
 		let record: RpcFreshRequest | RpcResumeRequest;
 		try {
-			record = this._options.codec.decode(bytes, "bootstrap-request");
+			record = this._options.codec.decode(
+				bytes,
+				RpcDecodePhaseEnum.bootstrapRequest,
+			);
 		} catch (error) {
 			this._failAttempt(attempt, error);
 			return;
@@ -745,7 +758,7 @@ class RpcAcceptorRuntime<TKey> implements IRpcProtocolAcceptorRuntime {
 			return;
 		}
 		try {
-			if (!request.profiles.includes(RPC_PROFILE_ID)) {
+			if (!request.profiles.includes(RpcProfileEnum.huskyDiRpc1)) {
 				await this._rejectFresh(attempt, "unsupported-profile");
 				return;
 			}
@@ -757,7 +770,7 @@ class RpcAcceptorRuntime<TKey> implements IRpcProtocolAcceptorRuntime {
 			const sessionId = this._reserveSessionId(attempt);
 			if (sessionId === undefined) {
 				this._host.fault(
-					"protocol-fault",
+					RpcCloseReasonEnum.protocolFault,
 					new Error("Default RPC CSPRNG repeated eight Session identifiers."),
 				);
 				this._failAttempt(attempt, new Error("Default RPC Session ID failed."));
@@ -777,7 +790,7 @@ class RpcAcceptorRuntime<TKey> implements IRpcProtocolAcceptorRuntime {
 			}
 			const acceptWithoutProof = Object.freeze({
 				kind: "accept",
-				profile: RPC_PROFILE_ID,
+				profile: RpcProfileEnum.huskyDiRpc1,
 				sessionId,
 				bindingEpoch: 1,
 				responderNonce: responderNonce.value,
@@ -785,7 +798,7 @@ class RpcAcceptorRuntime<TKey> implements IRpcProtocolAcceptorRuntime {
 			}) as RpcJsonRecord;
 			const proof = await runAttemptCrypto(attempt, () =>
 				this._options.cryptography.signProof({
-					kind: "fresh-accept",
+					kind: RpcProofOperationKindEnum.freshAccept,
 					proofKey,
 					request,
 					record: acceptWithoutProof,
@@ -802,7 +815,7 @@ class RpcAcceptorRuntime<TKey> implements IRpcProtocolAcceptorRuntime {
 				proof,
 			}) as RpcFreshAccept;
 			const session = this._options.createSession({
-				role: "acceptor",
+				role: RpcProtocolRoleEnum.acceptor,
 				host: this._host,
 				sessionId,
 				proofKey,
@@ -831,7 +844,7 @@ class RpcAcceptorRuntime<TKey> implements IRpcProtocolAcceptorRuntime {
 			} catch (error) {
 				session.endpointFailed(
 					attempt.endpoint,
-					"connection",
+					RpcEndpointFailureEnum.connection,
 					error instanceof Error ? error : undefined,
 				);
 				this._failAttempt(attempt, error, true);
@@ -856,7 +869,7 @@ class RpcAcceptorRuntime<TKey> implements IRpcProtocolAcceptorRuntime {
 		if (
 			session === undefined ||
 			proofKey === undefined ||
-			request.profile !== RPC_PROFILE_ID
+			request.profile !== RpcProfileEnum.huskyDiRpc1
 		) {
 			await this._rejectResumeGeneric(attempt, request);
 			return;
@@ -866,7 +879,7 @@ class RpcAcceptorRuntime<TKey> implements IRpcProtocolAcceptorRuntime {
 		try {
 			proofValid = await runAttemptCrypto(attempt, () =>
 				this._options.cryptography.verifyProof({
-					kind: "resume-request",
+					kind: RpcProofOperationKindEnum.resumeRequest,
 					proofKey,
 					request,
 				}),
@@ -923,7 +936,7 @@ class RpcAcceptorRuntime<TKey> implements IRpcProtocolAcceptorRuntime {
 			responderNonce.bytes.fill(0);
 			const acceptWithoutProof = Object.freeze({
 				kind: "accept",
-				profile: RPC_PROFILE_ID,
+				profile: RpcProfileEnum.huskyDiRpc1,
 				sessionId: session.sessionId,
 				bindingEpoch,
 				receivedThrough,
@@ -931,7 +944,7 @@ class RpcAcceptorRuntime<TKey> implements IRpcProtocolAcceptorRuntime {
 			}) as RpcJsonRecord;
 			const proof = await runAttemptCrypto(attempt, () =>
 				this._options.cryptography.signProof({
-					kind: "resume-accept",
+					kind: RpcProofOperationKindEnum.resumeAccept,
 					proofKey,
 					request,
 					record: acceptWithoutProof,
@@ -979,7 +992,7 @@ class RpcAcceptorRuntime<TKey> implements IRpcProtocolAcceptorRuntime {
 				if (session.ownsEndpoint(attempt.endpoint)) {
 					session.endpointFailed(
 						attempt.endpoint,
-						"connection",
+						RpcEndpointFailureEnum.connection,
 						error instanceof Error ? error : undefined,
 					);
 				}
@@ -1012,7 +1025,7 @@ class RpcAcceptorRuntime<TKey> implements IRpcProtocolAcceptorRuntime {
 			}) as RpcJsonRecord;
 			const proof = await runAttemptCrypto(attempt, () =>
 				this._options.cryptography.signProof({
-					kind: "generic-reject",
+					kind: RpcProofOperationKindEnum.genericReject,
 					request,
 					record: rejectWithoutProof,
 				}),
@@ -1051,7 +1064,7 @@ class RpcAcceptorRuntime<TKey> implements IRpcProtocolAcceptorRuntime {
 			}) as RpcJsonRecord;
 			const proof = await runAttemptCrypto(attempt, () =>
 				this._options.cryptography.signProof({
-					kind: "resume-reject",
+					kind: RpcProofOperationKindEnum.resumeReject,
 					proofKey,
 					request,
 					record: rejectWithoutProof,
@@ -1141,7 +1154,7 @@ class RpcAcceptorRuntime<TKey> implements IRpcProtocolAcceptorRuntime {
 
 	_acceptorEndpointFailed(
 		attempt: IRpcAttempt<TKey>,
-		reason: RpcEndpointFailure,
+		reason: RpcEndpointFailureEnum,
 		error?: Error,
 	): void {
 		const session = attempt.session;

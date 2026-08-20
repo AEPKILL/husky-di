@@ -4,6 +4,11 @@
  * @created 2026-08-19 00:00:00
  */
 
+export { RpcCallTerminalTypeEnum } from "@/enums/protocol/rpc-call-terminal-type.enum";
+export { RpcIncomingCallKindEnum } from "@/enums/protocol/rpc-incoming-call-kind.enum";
+export { RpcProtocolSessionTransitionTypeEnum } from "@/enums/protocol/rpc-protocol-session-transition-type.enum";
+export { RpcCloseReasonEnum } from "@/enums/rpc-close-reason.enum";
+export { RpcExceptionCodeEnum } from "@/enums/rpc-exception-code.enum";
 export { createRpcProtocol } from "@/factories/rpc-protocol.factory";
 
 export type {

@@ -12,6 +12,7 @@ import type {
 	IRpcConnectorAdapterConformanceFixture,
 	IRpcProtocolConformanceFixture,
 } from "../../src/conformance";
+import { RpcCloseReasonEnum, RpcExceptionCodeEnum } from "../../src/index";
 import type {
 	IRpcProtocol,
 	IRpcProtocolAcceptorHost,
@@ -32,6 +33,10 @@ import type {
 	IRpcConnectorAdapter,
 } from "../../src/interfaces/rpc-adapter.interface";
 import type { IRpcConnection } from "../../src/interfaces/rpc-connection.interface";
+import {
+	RpcCallTerminalTypeEnum,
+	RpcProtocolSessionTransitionTypeEnum,
+} from "../../src/protocol";
 
 interface Deferred<T> {
 	readonly promise: Promise<T>;
@@ -103,8 +108,8 @@ class MemoryProtocolRuntime
 		number,
 		{
 			finish(outcome: {
-				readonly type: "failed";
-				readonly code: "canceled";
+				readonly type: RpcCallTerminalTypeEnum.failed;
+				readonly code: RpcExceptionCodeEnum.canceled;
 			}): void;
 		}
 	>();
@@ -156,7 +161,10 @@ class MemoryProtocolRuntime
 	public close(): void {
 		this._closing = true;
 		for (const sink of this._outgoing.values()) {
-			sink.finish({ type: "failed", code: "outcome-unknown" });
+			sink.finish({
+				type: RpcCallTerminalTypeEnum.failed,
+				code: RpcExceptionCodeEnum.outcomeUnknown,
+			});
 		}
 		this._outgoing.clear();
 		void this._connection?.close();
@@ -175,8 +183,8 @@ class MemoryProtocolRuntime
 		}
 		if (this._counterExhaustion && this._nextCallId === 1) {
 			this._sessionHost.transition({
-				type: "draining",
-				reason: "counter-exhaustion",
+				type: RpcProtocolSessionTransitionTypeEnum.draining,
+				reason: RpcCloseReasonEnum.counterExhaustion,
 			});
 			return undefined;
 		}
@@ -224,9 +232,9 @@ class MemoryProtocolRuntime
 					const cause =
 						error instanceof Error ? error : new Error(String(error));
 					if (this._sessionHost === undefined) {
-						this._host.fault("protocol-fault", cause);
+						this._host.fault(RpcCloseReasonEnum.protocolFault, cause);
 					} else {
-						this._sessionHost.fault("protocol-fault", cause);
+						this._sessionHost.fault(RpcCloseReasonEnum.protocolFault, cause);
 					}
 				});
 			},
@@ -250,13 +258,16 @@ class MemoryProtocolRuntime
 				break;
 			case "cancel": {
 				const call = this._incoming.get(record.id);
-				call?.finish({ type: "failed", code: "canceled" });
+				call?.finish({
+					type: RpcCallTerminalTypeEnum.failed,
+					code: RpcExceptionCodeEnum.canceled,
+				});
 				this._incoming.delete(record.id);
 				await this._send({
 					kind: "result",
 					id: record.id,
 					outcome: "failed",
-					code: "canceled",
+					code: RpcExceptionCodeEnum.canceled,
 				});
 				break;
 			}
@@ -265,14 +276,14 @@ class MemoryProtocolRuntime
 				break;
 			case "fault":
 				this._sessionHost?.fault(
-					"protocol-fault",
+					RpcCloseReasonEnum.protocolFault,
 					new Error("Active Protocol fault fixture."),
 				);
 				break;
 			case "close":
 				this._sessionHost?.transition({
-					type: "closed",
-					reason: "remote-terminated",
+					type: RpcProtocolSessionTransitionTypeEnum.closed,
+					reason: RpcCloseReasonEnum.remoteTerminated,
 				});
 				this._closing = true;
 				await this._connection?.close();
@@ -310,7 +321,7 @@ class MemoryProtocolRuntime
 				kind: "result",
 				id: record.id,
 				outcome: "failed",
-				code: "unavailable",
+				code: RpcExceptionCodeEnum.unavailable,
 			});
 			return;
 		}
@@ -340,14 +351,17 @@ class MemoryProtocolRuntime
 		}
 		this._outgoing.delete(record.id);
 		if (record.outcome === "void") {
-			sink.finish({ type: "returned-void" });
+			sink.finish({ type: RpcCallTerminalTypeEnum.returnedVoid });
 		} else if (record.outcome === "returned" && record.value !== undefined) {
 			sink.finish({
-				type: "returned",
+				type: RpcCallTerminalTypeEnum.returned,
 				value: this._host.normalizeApplicationValue(record.value),
 			});
 		} else {
-			sink.finish({ type: "failed", code: record.code ?? "handler-failed" });
+			sink.finish({
+				type: RpcCallTerminalTypeEnum.failed,
+				code: record.code ?? RpcExceptionCodeEnum.handlerFailed,
+			});
 		}
 	}
 
@@ -381,10 +395,10 @@ function handlerOutcomeRecord(
 	id: number,
 	outcome: RpcHandlerOutcome,
 ): MemoryProtocolRecord {
-	if (outcome.type === "returned-void") {
+	if (outcome.type === RpcCallTerminalTypeEnum.returnedVoid) {
 		return { kind: "result", id, outcome: "void" };
 	}
-	if (outcome.type === "returned") {
+	if (outcome.type === RpcCallTerminalTypeEnum.returned) {
 		return {
 			kind: "result",
 			id,
@@ -396,7 +410,10 @@ function handlerOutcomeRecord(
 		kind: "result",
 		id,
 		outcome: "failed",
-		code: outcome.type === "failed" ? outcome.code : "canceled",
+		code:
+			outcome.type === RpcCallTerminalTypeEnum.failed
+				? outcome.code
+				: RpcExceptionCodeEnum.canceled,
 	};
 }
 

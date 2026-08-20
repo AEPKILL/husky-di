@@ -8,6 +8,7 @@ import type {
 	RpcConformanceFailure,
 	RpcConformanceOptions,
 } from "@/conformance/rpc-conformance.type";
+import { RpcConformanceStatusEnum } from "@/enums/conformance/rpc-conformance-status.enum";
 
 export interface IRpcConformanceCase {
 	readonly caseId: string;
@@ -24,7 +25,10 @@ export async function runRpcConformanceCases(
 		try {
 			await testCase.run();
 			options?.report?.(
-				Object.freeze({ caseId: testCase.caseId, status: "passed" }),
+				Object.freeze({
+					caseId: testCase.caseId,
+					status: RpcConformanceStatusEnum.passed,
+				}),
 			);
 		} catch (cause) {
 			const failure = createRpcConformanceFailure(testCase.caseId, cause);
@@ -32,7 +36,7 @@ export async function runRpcConformanceCases(
 			options?.report?.(
 				Object.freeze({
 					caseId: testCase.caseId,
-					status: "failed",
+					status: RpcConformanceStatusEnum.failed,
 					error: failure,
 				}),
 			);

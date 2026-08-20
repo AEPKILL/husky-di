@@ -6,6 +6,9 @@
 
 import { Observable, Subject } from "rxjs";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { RpcDecodePhaseEnum } from "../../src/enums/protocol/rpc-decode-phase.enum";
+import { RpcProofOperationKindEnum } from "../../src/enums/protocol/rpc-proof-operation-kind.enum";
+import { RpcWireRecordKindEnum } from "../../src/enums/protocol/rpc-wire-record-kind.enum";
 import { getRpcProtocol } from "../../src/factories/rpc-protocol.factory";
 import { RpcCodecImpl } from "../../src/impls/protocol/rpc-codec.impl";
 import { RpcCryptographyImpl } from "../../src/impls/protocol/rpc-cryptography.impl";
@@ -182,7 +185,7 @@ async function createFreshAccept(
 ): Promise<RpcFreshAccept> {
 	const request = codec.decode(
 		codec.encode(requestRecord as RpcJsonRecord),
-		"bootstrap-request",
+		RpcDecodePhaseEnum.bootstrapRequest,
 	);
 	if (request.kind !== "fresh") {
 		throw new Error("Expected a fresh bootstrap request.");
@@ -195,7 +198,7 @@ async function createFreshAccept(
 		sessionId.value,
 	);
 	const acceptWithoutProof = {
-		kind: "accept",
+		kind: RpcWireRecordKindEnum.accept,
 		profile: "husky-di-rpc/1",
 		sessionId: sessionId.value,
 		bindingEpoch: 1,
@@ -205,7 +208,7 @@ async function createFreshAccept(
 	return {
 		...acceptWithoutProof,
 		proof: await cryptography.signProof({
-			kind: "fresh-accept",
+			kind: RpcProofOperationKindEnum.freshAccept,
 			proofKey,
 			request,
 			record: acceptWithoutProof,

@@ -10,8 +10,8 @@ import {
 	type IRpcAcceptor,
 	type IRpcConnector,
 	type RpcAcceptorOptions,
+	RpcCloseReasonEnum,
 	type RpcConnectorOptions,
-	type RpcTopologyCloseReason,
 } from "../../src/index";
 
 const connector: IRpcConnector = createRpcConnector({
@@ -50,7 +50,7 @@ const acceptor: IRpcAcceptor = createRpcAcceptor({
 
 const connectorOptions: RpcConnectorOptions = {};
 const acceptorOptions: RpcAcceptorOptions = {};
-const closeReason: RpcTopologyCloseReason = "cleanup-failed";
+const closeReason: RpcCloseReasonEnum = RpcCloseReasonEnum.cleanupFailed;
 void connector;
 void acceptor;
 void connectorOptions;

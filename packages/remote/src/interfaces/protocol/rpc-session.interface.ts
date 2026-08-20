@@ -9,8 +9,6 @@ import type {
 	IRpcProtocolSession,
 	IRpcProtocolSessionHost,
 } from "@/interfaces/protocol/rpc-protocol.interface";
-import type { RpcEndpointFailure } from "@/types/protocol/rpc-endpoint.type";
-import type { RpcPeerCursorClassification } from "@/types/protocol/rpc-session.type";
 
 export interface IRpcSession<TKey> extends IRpcProtocolSession {
 	readonly sessionId: string;
@@ -24,7 +22,7 @@ export interface IRpcSession<TKey> extends IRpcProtocolSession {
 	readonly highestAcceptedResumeAttempt: number;
 	ownsEndpoint(endpoint: IRpcEndpoint): boolean;
 	consumeResumeAttempt(): number;
-	classifyPeerCursor(cursor: number): RpcPeerCursorClassification;
+	classifyPeerCursor(cursor: number): RpcPeerCursorClassificationEnum;
 	canAcceptResumeAttempt(resumeAttempt: number): boolean;
 	acceptResumeBinding(
 		endpoint: IRpcEndpoint,
@@ -43,8 +41,11 @@ export interface IRpcSession<TKey> extends IRpcProtocolSession {
 	receive(endpoint: IRpcEndpoint, bytes: Uint8Array): void;
 	endpointFailed(
 		endpoint: IRpcEndpoint,
-		reason: RpcEndpointFailure,
+		reason: RpcEndpointFailureEnum,
 		error?: Error,
 	): void;
 	shutdown(): Promise<void>;
 }
+
+import type { RpcEndpointFailureEnum } from "@/enums/protocol/rpc-endpoint-failure.enum";
+import type { RpcPeerCursorClassificationEnum } from "@/enums/protocol/rpc-peer-cursor-classification.enum";

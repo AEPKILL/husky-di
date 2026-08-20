@@ -7,6 +7,12 @@
 import type { Cleanup } from "@husky-di/core";
 import type { Observable } from "rxjs";
 
+import type { RpcCallDirectionEnum } from "@/enums/rpc-call-direction.enum";
+import type { RpcCallStatusEnum } from "@/enums/rpc-call-status.enum";
+import type { RpcCloseOutcomeEnum } from "@/enums/rpc-close-outcome.enum";
+import type { RpcCloseReasonEnum } from "@/enums/rpc-close-reason.enum";
+import type { RpcEventTypeEnum } from "@/enums/rpc-event-type.enum";
+import type { RpcExceptionCodeEnum } from "@/enums/rpc-exception-code.enum";
 import type { RpcException } from "@/exceptions/rpc.exception";
 import type { RpcCallFailure } from "@/interfaces/protocol/rpc-protocol.interface";
 import type { IRemoteServiceDescriptor } from "@/interfaces/remote-service-descriptor.interface";
@@ -29,18 +35,17 @@ import type {
 	RpcConnectorOptions,
 	RpcConnectorState,
 	RpcPeerState,
-	RpcTopologyCloseReason,
 } from "@/types/rpc-caller.type";
 
 export type RpcPeerResult<T> =
 	| {
 			readonly peer: IRpcPeer;
-			readonly status: "fulfilled";
+			readonly status: RpcCallStatusEnum.fulfilled;
 			readonly value: T;
 	  }
 	| {
 			readonly peer: IRpcPeer;
-			readonly status: "rejected";
+			readonly status: RpcCallStatusEnum.rejected;
 			readonly reason: RpcException;
 	  };
 
@@ -80,33 +85,31 @@ export interface IRpcPeer {
 	): RemoteService<T, Definitions>;
 }
 
-export type RpcCallDirection = "incoming" | "outgoing";
-
 type RpcCallObservationBase = {
 	readonly observationId: string;
 	readonly peer: IRpcPeer;
 };
 
 type RpcOutgoingCallContext = {
-	readonly direction: "outgoing";
+	readonly direction: RpcCallDirectionEnum.outgoing;
 	readonly service: string;
 	readonly method: string;
 };
 
 type RpcKnownIncomingCallContext = {
-	readonly direction: "incoming";
+	readonly direction: RpcCallDirectionEnum.incoming;
 	readonly service: string;
 	readonly method: string;
 };
 
 type RpcUnknownServiceCallContext = {
-	readonly direction: "incoming";
+	readonly direction: RpcCallDirectionEnum.incoming;
 	readonly service?: never;
 	readonly method?: never;
 };
 
 type RpcUnknownMethodCallContext = {
-	readonly direction: "incoming";
+	readonly direction: RpcCallDirectionEnum.incoming;
 	readonly service: string;
 	readonly method?: never;
 };
@@ -117,95 +120,108 @@ type RpcCallStartedEvent = RpcCallObservationBase &
 		| RpcKnownIncomingCallContext
 		| RpcUnknownServiceCallContext
 		| RpcUnknownMethodCallContext
-	) & { readonly type: "call-started" };
+	) & { readonly type: RpcEventTypeEnum.callStarted };
 
 type RpcCallFinishedBase = RpcCallObservationBase & {
-	readonly type: "call-finished";
+	readonly type: RpcEventTypeEnum.callFinished;
 	readonly durationMs: number;
 };
 
 type RpcCallFinishedEvent = RpcCallFinishedBase &
 	(
-		| (RpcOutgoingCallContext & { readonly outcome: "fulfilled" })
 		| (RpcOutgoingCallContext & {
-				readonly outcome: "rejected";
+				readonly outcome: RpcCallStatusEnum.fulfilled;
+		  })
+		| (RpcOutgoingCallContext & {
+				readonly outcome: RpcCallStatusEnum.rejected;
 				readonly code: RpcCallFailure;
 		  })
-		| (RpcKnownIncomingCallContext & { readonly outcome: "fulfilled" })
 		| (RpcKnownIncomingCallContext & {
-				readonly outcome: "rejected";
-				readonly code: "canceled" | "handler-failed";
+				readonly outcome: RpcCallStatusEnum.fulfilled;
 		  })
-		| (RpcKnownIncomingCallContext & { readonly outcome: "terminated" })
+		| (RpcKnownIncomingCallContext & {
+				readonly outcome: RpcCallStatusEnum.rejected;
+				readonly code:
+					| RpcExceptionCodeEnum.canceled
+					| RpcExceptionCodeEnum.handlerFailed;
+		  })
+		| (RpcKnownIncomingCallContext & {
+				readonly outcome: RpcCallStatusEnum.terminated;
+		  })
 		| (RpcUnknownServiceCallContext & {
-				readonly outcome: "rejected";
-				readonly code: "unknown-service";
+				readonly outcome: RpcCallStatusEnum.rejected;
+				readonly code: RpcExceptionCodeEnum.unknownService;
 		  })
 		| (RpcUnknownMethodCallContext & {
-				readonly outcome: "rejected";
-				readonly code: "unknown-method";
+				readonly outcome: RpcCallStatusEnum.rejected;
+				readonly code: RpcExceptionCodeEnum.unknownMethod;
 		  })
 	);
 
 type RpcPeerLifecycleEvent =
 	| {
-			readonly type: "peer-opened" | "peer-recovering" | "peer-recovered";
+			readonly type:
+				| RpcEventTypeEnum.peerOpened
+				| RpcEventTypeEnum.peerRecovering
+				| RpcEventTypeEnum.peerRecovered;
 			readonly peer: IRpcPeer;
 	  }
 	| {
-			readonly type: "peer-draining";
+			readonly type: RpcEventTypeEnum.peerDraining;
 			readonly peer: IRpcPeer;
-			readonly reason: "graceful-shutdown" | "counter-exhaustion";
+			readonly reason:
+				| RpcCloseReasonEnum.gracefulShutdown
+				| RpcCloseReasonEnum.counterExhaustion;
 	  }
 	| {
-			readonly type: "peer-closed";
+			readonly type: RpcEventTypeEnum.peerClosed;
 			readonly peer: IRpcPeer;
-			readonly outcome: "normal";
+			readonly outcome: RpcCloseOutcomeEnum.normal;
 			readonly reason: Extract<
-				RpcTopologyCloseReason,
-				| "graceful-shutdown"
-				| "forced-close"
-				| "shutdown-deadline"
-				| "remote-terminated"
+				RpcCloseReasonEnum,
+				| RpcCloseReasonEnum.gracefulShutdown
+				| RpcCloseReasonEnum.forcedClose
+				| RpcCloseReasonEnum.shutdownDeadline
+				| RpcCloseReasonEnum.remoteTerminated
 			>;
 	  }
 	| {
-			readonly type: "peer-closed";
+			readonly type: RpcEventTypeEnum.peerClosed;
 			readonly peer: IRpcPeer;
-			readonly outcome: "failed";
+			readonly outcome: RpcCloseOutcomeEnum.failed;
 			readonly reason: Extract<
-				RpcTopologyCloseReason,
-				| "recovery-expired"
-				| "counter-exhaustion"
-				| "continuity-failure"
-				| "protocol-fault"
-				| "resource-fault"
+				RpcCloseReasonEnum,
+				| RpcCloseReasonEnum.recoveryExpired
+				| RpcCloseReasonEnum.counterExhaustion
+				| RpcCloseReasonEnum.continuityFailure
+				| RpcCloseReasonEnum.protocolFault
+				| RpcCloseReasonEnum.resourceFault
 			>;
 	  };
 
 type RpcTopologyLifecycleEvent =
-	| { readonly type: "owner-draining" }
-	| { readonly type: "owner-closing" }
+	| { readonly type: RpcEventTypeEnum.ownerDraining }
+	| { readonly type: RpcEventTypeEnum.ownerClosing }
 	| {
-			readonly type: "topology-closed";
-			readonly outcome: "normal";
+			readonly type: RpcEventTypeEnum.topologyClosed;
+			readonly outcome: RpcCloseOutcomeEnum.normal;
 			readonly reason: Extract<
-				RpcTopologyCloseReason,
-				| "graceful-shutdown"
-				| "forced-close"
-				| "shutdown-deadline"
-				| "remote-terminated"
+				RpcCloseReasonEnum,
+				| RpcCloseReasonEnum.gracefulShutdown
+				| RpcCloseReasonEnum.forcedClose
+				| RpcCloseReasonEnum.shutdownDeadline
+				| RpcCloseReasonEnum.remoteTerminated
 			>;
 	  }
 	| {
-			readonly type: "topology-closed";
-			readonly outcome: "failed";
+			readonly type: RpcEventTypeEnum.topologyClosed;
+			readonly outcome: RpcCloseOutcomeEnum.failed;
 			readonly reason: Exclude<
-				RpcTopologyCloseReason,
-				| "graceful-shutdown"
-				| "forced-close"
-				| "shutdown-deadline"
-				| "remote-terminated"
+				RpcCloseReasonEnum,
+				| RpcCloseReasonEnum.gracefulShutdown
+				| RpcCloseReasonEnum.forcedClose
+				| RpcCloseReasonEnum.shutdownDeadline
+				| RpcCloseReasonEnum.remoteTerminated
 			>;
 	  };
 

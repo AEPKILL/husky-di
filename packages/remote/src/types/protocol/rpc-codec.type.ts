@@ -4,6 +4,7 @@
  * @created 2026-08-19 00:00:00
  */
 
+import type { RpcDecodePhaseEnum } from "@/enums/protocol/rpc-decode-phase.enum";
 import type {
 	RpcActiveRecord,
 	RpcBootstrapRequest,
@@ -12,20 +13,13 @@ import type {
 	RpcResumeOutcome,
 } from "@/types/protocol/rpc-wire-record.type";
 
-export type RpcDecodePhase =
-	| "json"
-	| "bootstrap-request"
-	| "fresh-accept"
-	| "resume-outcome"
-	| "active";
-
-export type RpcDecodedRecord<TPhase extends RpcDecodePhase> =
-	TPhase extends "bootstrap-request"
+export type RpcDecodedRecord<TPhase extends RpcDecodePhaseEnum> =
+	TPhase extends RpcDecodePhaseEnum.bootstrapRequest
 		? RpcBootstrapRequest
-		: TPhase extends "fresh-accept"
+		: TPhase extends RpcDecodePhaseEnum.freshAccept
 			? RpcFreshAccept
-			: TPhase extends "resume-outcome"
+			: TPhase extends RpcDecodePhaseEnum.resumeOutcome
 				? RpcResumeOutcome
-				: TPhase extends "active"
+				: TPhase extends RpcDecodePhaseEnum.active
 					? RpcActiveRecord
 					: RpcJsonRecord;

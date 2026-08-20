@@ -7,6 +7,7 @@
 import { createServiceIdentifier } from "@husky-di/core";
 import { Subject } from "rxjs";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { RpcProofOperationKindEnum } from "../src/enums/protocol/rpc-proof-operation-kind.enum";
 import { createRpcCounterExhaustionProtocolForTest } from "../src/factories/rpc-protocol.factory";
 import { RpcCryptographyImpl } from "../src/impls/protocol/rpc-cryptography.impl";
 import {
@@ -524,11 +525,9 @@ describe("Default RPC Protocol", () => {
 		acceptor.event$.subscribe((event) => events.push(event.type));
 
 		await acceptor.listen(network.acceptorAdapter);
-		await Promise.all(
-			connectors.map((connector) =>
-				connector.connect(network.createConnectorAdapter()),
-			),
-		);
+		for (const connector of connectors) {
+			await connector.connect(network.createConnectorAdapter());
+		}
 		const firstPeer = acceptor.peers[0];
 		const secondPeer = acceptor.peers[1];
 		if (firstPeer === undefined || secondPeer === undefined) {
@@ -1116,7 +1115,7 @@ describe("Default RPC Protocol", () => {
 			initiatorNonce: nonce.value,
 		};
 		const proof = await cryptography.signProof({
-			kind: "resume-request",
+			kind: RpcProofOperationKindEnum.resumeRequest,
 			proofKey,
 			record: requestWithoutProof,
 		});
@@ -1137,7 +1136,7 @@ describe("Default RPC Protocol", () => {
 		const reject = raw.responses[0] as RpcResumeReject;
 		expect(
 			await cryptography.verifyProof({
-				kind: "resume-reject",
+				kind: RpcProofOperationKindEnum.resumeReject,
 				proofKey,
 				request,
 				record: reject,
@@ -1145,7 +1144,7 @@ describe("Default RPC Protocol", () => {
 		).toBe(true);
 		expect(
 			await cryptography.verifyProof({
-				kind: "resume-reject",
+				kind: RpcProofOperationKindEnum.resumeReject,
 				proofKey,
 				request: { ...request, receivedThrough: receivedThrough + 1 },
 				record: reject,
@@ -1371,7 +1370,7 @@ describe("Default RPC Protocol", () => {
 			initiatorNonce: nonce.value,
 		};
 		const higherProof = await cryptography.signProof({
-			kind: "resume-request",
+			kind: RpcProofOperationKindEnum.resumeRequest,
 			proofKey,
 			record: higherWithoutProof,
 		});
@@ -1456,7 +1455,7 @@ describe("Default RPC Protocol", () => {
 			initiatorNonce: nonce.value,
 		};
 		const rawProof = await cryptography.signProof({
-			kind: "resume-request",
+			kind: RpcProofOperationKindEnum.resumeRequest,
 			proofKey,
 			record: rawRequestWithoutProof,
 		});

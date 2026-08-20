@@ -4,6 +4,7 @@
  * @created 2026-08-19 00:00:00
  */
 
+import type { RpcProofOperationKindEnum } from "@/enums/protocol/rpc-proof-operation-kind.enum";
 import type {
 	RpcFreshAccept,
 	RpcFreshRequest,
@@ -20,48 +21,50 @@ export type RpcRandomCarrier = {
 
 export type SignRpcProofOptions<TKey> =
 	| {
-			readonly kind: "fresh-accept";
+			readonly kind: RpcProofOperationKindEnum.freshAccept;
 			readonly proofKey: TKey;
 			readonly request: RpcFreshRequest;
 			readonly record: RpcJsonRecord;
 	  }
 	| {
-			readonly kind: "resume-request";
+			readonly kind: RpcProofOperationKindEnum.resumeRequest;
 			readonly proofKey: TKey;
 			readonly record: RpcJsonRecord;
 	  }
 	| {
-			readonly kind: "resume-accept" | "resume-reject";
+			readonly kind:
+				| RpcProofOperationKindEnum.resumeAccept
+				| RpcProofOperationKindEnum.resumeReject;
 			readonly proofKey: TKey;
 			readonly request: RpcResumeRequest;
 			readonly record: RpcJsonRecord;
 	  }
 	| {
-			readonly kind: "generic-reject";
+			readonly kind: RpcProofOperationKindEnum.genericReject;
 			readonly request: RpcResumeRequest;
 			readonly record: RpcJsonRecord;
 	  };
 
 export type VerifyRpcProofOptions<TKey> =
 	| {
-			readonly kind: "fresh-accept";
+			readonly kind: RpcProofOperationKindEnum.freshAccept;
 			readonly proofKey: TKey;
 			readonly request: RpcFreshRequest;
 			readonly record: RpcFreshAccept;
 	  }
 	| {
-			readonly kind: "resume-request";
+			readonly kind: RpcProofOperationKindEnum.resumeRequest;
 			readonly proofKey: TKey;
 			readonly request: RpcResumeRequest;
 	  }
 	| {
-			readonly kind: "resume-accept";
+			readonly kind: RpcProofOperationKindEnum.resumeAccept;
 			readonly proofKey: TKey;
 			readonly request: RpcResumeRequest;
 			readonly record: RpcResumeAccept;
 	  }
 	| {
-			readonly kind: "resume-reject";
+			readonly kind: RpcProofOperationKindEnum.resumeReject;
 			readonly proofKey: TKey;
 			readonly request: RpcResumeRequest;
 			readonly record: RpcResumeReject;

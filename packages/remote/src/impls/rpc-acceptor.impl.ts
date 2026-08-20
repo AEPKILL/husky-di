@@ -6,6 +6,14 @@
 
 import type { Cleanup } from "@husky-di/core";
 import { Observable, Subject, type Subscription } from "rxjs";
+import { RpcProtocolSessionTransitionTypeEnum } from "@/enums/protocol/rpc-protocol-session-transition-type.enum";
+import { RpcAcceptorListenerStopReasonEnum } from "@/enums/rpc-acceptor-listener-stop-reason.enum";
+import { RpcCallStatusEnum } from "@/enums/rpc-call-status.enum";
+import { RpcCloseOutcomeEnum } from "@/enums/rpc-close-outcome.enum";
+import { RpcCloseReasonEnum } from "@/enums/rpc-close-reason.enum";
+import { RpcEventTypeEnum } from "@/enums/rpc-event-type.enum";
+import { RpcExceptionCodeEnum } from "@/enums/rpc-exception-code.enum";
+import { RpcStateStatusEnum } from "@/enums/rpc-state-status.enum";
 import { getRemoteServiceDescriptorData } from "@/factories/remote-service-descriptor.factory";
 import { createRpcException } from "@/factories/rpc-exception.factory";
 import {
@@ -73,7 +81,7 @@ interface RpcAcceptorOwnedCleanup {
 
 type RpcAcceptorClosedState = Extract<
 	RpcAcceptorState,
-	{ readonly status: "closed" }
+	{ readonly status: RpcStateStatusEnum.closed }
 >;
 
 /** Owns Acceptor listener state and its current stable peer membership. */
@@ -126,9 +134,11 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 		);
 		this.#ordinaryConnectionLimit =
 			policy.maxSessions + 2 * policy.maxHandshakes;
-		const listener = Object.freeze({ status: "idle" as const });
+		const listener = Object.freeze({
+			status: RpcStateStatusEnum.idle as const,
+		});
 		this.#state = Object.freeze<RpcAcceptorState>({
-			status: "active",
+			status: RpcStateStatusEnum.active,
 			listener,
 		});
 		this.#peers = Object.freeze<readonly IRpcPeer[]>([]);
@@ -161,8 +171,8 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 		descriptor: IRemoteServiceDescriptor<T, Definitions>,
 		implementation: NoInfer<RemoteServiceImplementation<T, Definitions>>,
 	): Cleanup {
-		if (this.state.status !== "active") {
-			throw createRpcException("unavailable");
+		if (this.state.status !== RpcStateStatusEnum.active) {
+			throw createRpcException(RpcExceptionCodeEnum.unavailable);
 		}
 		return installRpcExposure(
 			descriptor,
@@ -184,14 +194,16 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 
 	#listen(adapter: IRpcAcceptorAdapter): Promise<void> {
 		if (
-			this.state.status !== "active" ||
-			(this.state.listener.status !== "idle" &&
-				this.state.listener.status !== "stopped") ||
+			this.state.status !== RpcStateStatusEnum.active ||
+			(this.state.listener.status !== RpcStateStatusEnum.idle &&
+				this.state.listener.status !== RpcStateStatusEnum.stopped) ||
 			this.#listenerAttempt !== undefined ||
 			this.#listenerCleanupBarrier !== undefined ||
 			this.#overflowConnection !== undefined
 		) {
-			return Promise.reject(createRpcException("unavailable"));
+			return Promise.reject(
+				createRpcException(RpcExceptionCodeEnum.unavailable),
+			);
 		}
 		if (typeof adapter !== "object" || adapter === null) {
 			return Promise.reject(new TypeError("adapter must be an object."));
@@ -235,7 +247,7 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 			cleanupRequested: false,
 		};
 		this.#listenerAttempt = attempt;
-		this.#commitListener({ status: "starting" });
+		this.#commitListener({ status: RpcStateStatusEnum.starting });
 
 		try {
 			attempt.subscription = connectionSource.subscribe({
@@ -262,7 +274,7 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 					return;
 				}
 				attempt.ready = true;
-				this.#commitListener({ status: "listening" });
+				this.#commitListener({ status: RpcStateStatusEnum.listening });
 				attempt.resolve();
 			},
 			(error) => {
@@ -280,12 +292,12 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 	}
 
 	#commitListener(listener: RpcAcceptorListenerState): void {
-		if (this.state.status !== "active") {
+		if (this.state.status !== RpcStateStatusEnum.active) {
 			return;
 		}
 		this.#commitState(
 			Object.freeze<RpcAcceptorState>({
-				status: "active" as const,
+				status: RpcStateStatusEnum.active as const,
 				listener: Object.freeze(listener),
 			}),
 		);
@@ -330,28 +342,34 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 		this.#listenerAttempt = undefined;
 		if (kind === "complete") {
 			this.#commitListener({
-				status: "stopped",
-				outcome: "normal",
-				reason: "completed",
+				status: RpcStateStatusEnum.stopped,
+				outcome: RpcCloseOutcomeEnum.normal,
+				reason: RpcAcceptorListenerStopReasonEnum.completed,
 			});
 			if (!attempt.ready) {
 				attempt.abortController.abort();
-				attempt.reject(createRpcException("unavailable"));
+				attempt.reject(createRpcException(RpcExceptionCodeEnum.unavailable));
 			}
 		} else {
 			const error =
 				value instanceof Error ? value : new Error("Adapter listener failed.");
-			this.#commitListener({ status: "stopped", outcome: "failed", error });
+			this.#commitListener({
+				status: RpcStateStatusEnum.stopped,
+				outcome: RpcCloseOutcomeEnum.failed,
+				error,
+			});
 			if (!attempt.ready) {
 				attempt.abortController.abort();
-				attempt.reject(createRpcException("unavailable", error));
+				attempt.reject(
+					createRpcException(RpcExceptionCodeEnum.unavailable, error),
+				);
 			}
 		}
 	}
 
 	#acceptConnection(connection: IRpcConnection): void {
 		if (
-			this.state.status !== "active" ||
+			this.state.status !== RpcStateStatusEnum.active ||
 			this.#listenerAttempt === undefined ||
 			this.#listenerAttempt.terminal
 		) {
@@ -410,9 +428,9 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 		attempt.terminal = true;
 		this.#listenerAttempt = undefined;
 		this.#commitListener({
-			status: "stopped",
-			outcome: "normal",
-			reason: "resource-pressure",
+			status: RpcStateStatusEnum.stopped,
+			outcome: RpcCloseOutcomeEnum.normal,
+			reason: RpcAcceptorListenerStopReasonEnum.resourcePressure,
 		});
 		attempt.abortController.abort();
 		if (!attempt.ready) {
@@ -567,8 +585,10 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 		actualArguments: readonly unknown[],
 	): Promise<readonly RpcPeerResult<unknown>[]> {
 		const prepared = prepareRpcInvocationArguments(cancelable, actualArguments);
-		if (this.state.status !== "active") {
-			return Promise.reject(createRpcException("unavailable"));
+		if (this.state.status !== RpcStateStatusEnum.active) {
+			return Promise.reject(
+				createRpcException(RpcExceptionCodeEnum.unavailable),
+			);
 		}
 		const args = normalizeRpcApplicationArguments(
 			prepared.applicationArguments,
@@ -576,8 +596,8 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 		const peers = this.#peers.filter(
 			(peer): peer is RpcPeerImpl =>
 				peer instanceof RpcPeerImpl &&
-				(peer.state.status === "connected" ||
-					peer.state.status === "recovering"),
+				(peer.state.status === RpcStateStatusEnum.connected ||
+					peer.state.status === RpcStateStatusEnum.recovering),
 		);
 		if (peers.length === 0) {
 			return Promise.resolve(Object.freeze([]));
@@ -595,7 +615,9 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 					for (const retained of reservations) {
 						retained.release();
 					}
-					return Promise.reject(createRpcException("unavailable"));
+					return Promise.reject(
+						createRpcException(RpcExceptionCodeEnum.unavailable),
+					);
 				}
 				reservations.push(reservation);
 			}
@@ -643,13 +665,13 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 				(value) =>
 					Object.freeze<RpcPeerResult<unknown>>({
 						peer: peers[index] as RpcPeerImpl,
-						status: "fulfilled",
+						status: RpcCallStatusEnum.fulfilled,
 						value,
 					}),
 				(error) =>
 					Object.freeze<RpcPeerResult<unknown>>({
 						peer: peers[index] as RpcPeerImpl,
-						status: "rejected",
+						status: RpcCallStatusEnum.rejected,
 						reason: error,
 					}),
 			),
@@ -674,8 +696,11 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 
 	close(): Promise<void> {
 		const task = this.#terminationTask ?? this.#createTerminationTask();
-		if (this.state.status === "active" || this.state.status === "draining") {
-			this.#beginClosing("forced-close", true);
+		if (
+			this.state.status === RpcStateStatusEnum.active ||
+			this.state.status === RpcStateStatusEnum.draining
+		) {
+			this.#beginClosing(RpcCloseReasonEnum.forcedClose, true);
 		}
 		return task;
 	}
@@ -691,12 +716,12 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 	}
 
 	#beginGracefulShutdown(): void {
-		if (this.state.status !== "active") {
+		if (this.state.status !== RpcStateStatusEnum.active) {
 			return;
 		}
-		this.#stageState(Object.freeze({ status: "draining" }));
+		this.#stageState(Object.freeze({ status: RpcStateStatusEnum.draining }));
 		this.#graceTimer = setTimeout(
-			() => this.#beginClosing("shutdown-deadline", true),
+			() => this.#beginClosing(RpcCloseReasonEnum.shutdownDeadline, true),
 			this.#policy.shutdownDeadlineMs,
 		);
 		const peerEvents: RpcEvent[] = [];
@@ -704,32 +729,32 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 		const terminalPeers: RpcPeerImpl[] = [];
 		const terminalSessions: IRpcProtocolSession[] = [];
 		for (const [session, peer] of this.#sessions) {
-			if (peer.state.status === "connected") {
+			if (peer.state.status === RpcStateStatusEnum.connected) {
 				peer.stageState({
-					status: "draining",
-					reason: "graceful-shutdown",
+					status: RpcStateStatusEnum.draining,
+					reason: RpcCloseReasonEnum.gracefulShutdown,
 				});
 				changedPeers.push(peer);
 				peerEvents.push({
-					type: "peer-draining",
+					type: RpcEventTypeEnum.peerDraining,
 					peer,
-					reason: "graceful-shutdown",
+					reason: RpcCloseReasonEnum.gracefulShutdown,
 				});
-			} else if (peer.state.status === "recovering") {
+			} else if (peer.state.status === RpcStateStatusEnum.recovering) {
 				peer.stageState({
-					status: "closed",
-					outcome: "normal",
-					reason: "forced-close",
+					status: RpcStateStatusEnum.closed,
+					outcome: RpcCloseOutcomeEnum.normal,
+					reason: RpcCloseReasonEnum.forcedClose,
 				});
 				this.#sessions.delete(session);
 				terminalSessions.push(session);
 				changedPeers.push(peer);
 				terminalPeers.push(peer);
 				peerEvents.push({
-					type: "peer-closed",
+					type: RpcEventTypeEnum.peerClosed,
 					peer,
-					outcome: "normal",
-					reason: "forced-close",
+					outcome: RpcCloseOutcomeEnum.normal,
+					reason: RpcCloseReasonEnum.forcedClose,
 				});
 			}
 		}
@@ -757,7 +782,7 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 		for (const peer of changedPeers) {
 			peer.flushState();
 		}
-		this.#eventSubject.next({ type: "owner-draining" });
+		this.#eventSubject.next({ type: RpcEventTypeEnum.ownerDraining });
 		for (const event of peerEvents) {
 			this.#eventSubject.next(event);
 		}
@@ -769,31 +794,37 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 		try {
 			grace = Promise.resolve(this.#runtime.shutdown());
 		} catch {
-			this.#beginClosing("forced-close", true);
+			this.#beginClosing(RpcCloseReasonEnum.forcedClose, true);
 			return;
 		}
 		grace.then(
 			() => {
-				if (this.state.status === "draining") {
-					this.#beginClosing("graceful-shutdown", false);
+				if (this.state.status === RpcStateStatusEnum.draining) {
+					this.#beginClosing(RpcCloseReasonEnum.gracefulShutdown, false);
 				}
 			},
-			() => this.#beginClosing("forced-close", true),
+			() => this.#beginClosing(RpcCloseReasonEnum.forcedClose, true),
 		);
 	}
 
 	#beginClosing(
-		reason: "graceful-shutdown" | "forced-close" | "shutdown-deadline",
+		reason:
+			| RpcCloseReasonEnum.gracefulShutdown
+			| RpcCloseReasonEnum.forcedClose
+			| RpcCloseReasonEnum.shutdownDeadline,
 		forced: boolean,
 	): void {
-		if (this.state.status === "closing" || this.state.status === "closed") {
+		if (
+			this.state.status === RpcStateStatusEnum.closing ||
+			this.state.status === RpcStateStatusEnum.closed
+		) {
 			return;
 		}
 		if (this.#graceTimer !== undefined) {
 			clearTimeout(this.#graceTimer);
 			this.#graceTimer = undefined;
 		}
-		this.#stageState(Object.freeze({ status: "closing" }));
+		this.#stageState(Object.freeze({ status: RpcStateStatusEnum.closing }));
 		const peerClosures = this.#stageRemainingPeers(reason);
 		this.#abortListener();
 		if (forced) {
@@ -816,14 +847,21 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 		for (const peer of peerClosures.peers) {
 			peer.completeState();
 		}
-		this.#eventSubject.next({ type: "owner-closing" });
+		this.#eventSubject.next({ type: RpcEventTypeEnum.ownerClosing });
 		this.#startCleanup(
-			Object.freeze({ status: "closed", outcome: "normal", reason }),
+			Object.freeze({
+				status: RpcStateStatusEnum.closed,
+				outcome: RpcCloseOutcomeEnum.normal,
+				reason,
+			}),
 		);
 	}
 
 	#stageRemainingPeers(
-		reason: "graceful-shutdown" | "forced-close" | "shutdown-deadline",
+		reason:
+			| RpcCloseReasonEnum.gracefulShutdown
+			| RpcCloseReasonEnum.forcedClose
+			| RpcCloseReasonEnum.shutdownDeadline,
 	): {
 		readonly events: readonly RpcEvent[];
 		readonly peers: readonly RpcPeerImpl[];
@@ -834,28 +872,32 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 		const membershipChanged = this.#peers.length > 0;
 		for (const peer of this.#sessions.values()) {
 			if (
-				reason === "graceful-shutdown" &&
-				peer.state.status === "draining" &&
-				peer.state.reason === "counter-exhaustion"
+				reason === RpcCloseReasonEnum.gracefulShutdown &&
+				peer.state.status === RpcStateStatusEnum.draining &&
+				peer.state.reason === RpcCloseReasonEnum.counterExhaustion
 			) {
 				peer.stageState({
-					status: "closed",
-					outcome: "failed",
-					reason: "counter-exhaustion",
-					error: createRpcException("unavailable"),
+					status: RpcStateStatusEnum.closed,
+					outcome: RpcCloseOutcomeEnum.failed,
+					reason: RpcCloseReasonEnum.counterExhaustion,
+					error: createRpcException(RpcExceptionCodeEnum.unavailable),
 				});
 				closeEvents.push({
-					type: "peer-closed",
+					type: RpcEventTypeEnum.peerClosed,
 					peer,
-					outcome: "failed",
-					reason: "counter-exhaustion",
+					outcome: RpcCloseOutcomeEnum.failed,
+					reason: RpcCloseReasonEnum.counterExhaustion,
 				});
 			} else {
-				peer.stageState({ status: "closed", outcome: "normal", reason });
+				peer.stageState({
+					status: RpcStateStatusEnum.closed,
+					outcome: RpcCloseOutcomeEnum.normal,
+					reason,
+				});
 				closeEvents.push({
-					type: "peer-closed",
+					type: RpcEventTypeEnum.peerClosed,
 					peer,
-					outcome: "normal",
+					outcome: RpcCloseOutcomeEnum.normal,
 					reason,
 				});
 			}
@@ -922,7 +964,7 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 			this.#finishCleanupFailure(this.#combineOwnedCleanupErrors(errors));
 		}, this.#policy.shutdownDeadlineMs);
 		void Promise.allSettled(cleanups).then(() => {
-			if (this.state.status !== "closing") {
+			if (this.state.status !== RpcStateStatusEnum.closing) {
 				return;
 			}
 			const errors = this.#collectOwnedCleanupErrors();
@@ -951,7 +993,7 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 	}
 
 	#finishCleanupSuccess(finalState: RpcAcceptorClosedState): void {
-		if (this.state.status !== "closing") {
+		if (this.state.status !== RpcStateStatusEnum.closing) {
 			return;
 		}
 		this.#clearCleanupTimer();
@@ -959,16 +1001,16 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 		this.#detachOwnedCleanupState();
 		this.#stateSubject.complete();
 		this.#peersSubject.complete();
-		if (finalState.outcome === "normal") {
+		if (finalState.outcome === RpcCloseOutcomeEnum.normal) {
 			this.#eventSubject.next({
-				type: "topology-closed",
-				outcome: "normal",
+				type: RpcEventTypeEnum.topologyClosed,
+				outcome: RpcCloseOutcomeEnum.normal,
 				reason: finalState.reason,
 			});
 		} else {
 			this.#eventSubject.next({
-				type: "topology-closed",
-				outcome: "failed",
+				type: RpcEventTypeEnum.topologyClosed,
+				outcome: RpcCloseOutcomeEnum.failed,
 				reason: finalState.reason,
 			});
 		}
@@ -977,7 +1019,7 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 	}
 
 	#finishCleanupFailure(value: unknown): void {
-		if (this.state.status !== "closing") {
+		if (this.state.status !== RpcStateStatusEnum.closing) {
 			return;
 		}
 		this.#clearCleanupTimer();
@@ -985,9 +1027,9 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 			value instanceof Error ? value : new Error("RPC Owner cleanup failed.");
 		this.#commitState(
 			Object.freeze({
-				status: "closed",
-				outcome: "failed",
-				reason: "cleanup-failed",
+				status: RpcStateStatusEnum.closed,
+				outcome: RpcCloseOutcomeEnum.failed,
+				reason: RpcCloseReasonEnum.cleanupFailed,
 				error,
 			}),
 		);
@@ -995,9 +1037,9 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 		this.#stateSubject.complete();
 		this.#peersSubject.complete();
 		this.#eventSubject.next({
-			type: "topology-closed",
-			outcome: "failed",
-			reason: "cleanup-failed",
+			type: RpcEventTypeEnum.topologyClosed,
+			outcome: RpcCloseOutcomeEnum.failed,
+			reason: RpcCloseReasonEnum.cleanupFailed,
 		});
 		this.#eventSubject.complete();
 		this.#rejectTermination?.(error);
@@ -1030,7 +1072,7 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 		session: IRpcProtocolSession,
 	): IRpcProtocolSessionHost | undefined {
 		if (
-			this.state.status !== "active" ||
+			this.state.status !== RpcStateStatusEnum.active ||
 			this.#insideConnectionHandoff ||
 			this.#sessions.size >= this.#policy.maxSessions ||
 			this.#sessions.has(session) ||
@@ -1043,18 +1085,19 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 		}
 
 		const peer = new RpcPeerImpl(
-			{ status: "connected" },
+			{ status: RpcStateStatusEnum.connected },
 			this.#ownerExposureRegistry,
-			() => this.state.status === "active",
+			() => this.state.status === RpcStateStatusEnum.active,
 			(event) => this.#eventSubject.next(event),
-			(error) => this.#faultSession(session, "protocol-fault", error),
+			(error) =>
+				this.#faultSession(session, RpcCloseReasonEnum.protocolFault, error),
 			this.#handlerScheduler,
 			Math.floor(this.#policy.maxRetainedBytesPerSession / 4),
 		);
 		peer.attachProtocolSession(session);
 		this.#sessions.set(session, peer);
 		this.#commitPeers(Object.freeze([...this.#peers, peer]));
-		this.#eventSubject.next({ type: "peer-opened", peer });
+		this.#eventSubject.next({ type: RpcEventTypeEnum.peerOpened, peer });
 		return Object.freeze<IRpcProtocolSessionHost>({
 			reserveIncomingCall: (request) =>
 				peer.reserveIncomingProtocolCall(request),
@@ -1093,14 +1136,17 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 		if (this.#faultingSessions.has(session)) {
 			return;
 		}
-		if (this.state.status === "closing" || this.state.status === "closed") {
+		if (
+			this.state.status === RpcStateStatusEnum.closing ||
+			this.state.status === RpcStateStatusEnum.closed
+		) {
 			return;
 		}
 		const peer = this.#sessions.get(session);
 		if (peer === undefined) {
 			this.#faultSession(
 				session,
-				"protocol-fault",
+				RpcCloseReasonEnum.protocolFault,
 				new Error("Protocol repeated a terminal Session transition."),
 			);
 			return;
@@ -1108,30 +1154,30 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 		if (!this.#isSessionTransitionAllowed(peer, transition)) {
 			this.#faultSession(
 				session,
-				"protocol-fault",
+				RpcCloseReasonEnum.protocolFault,
 				new Error("Protocol requested an invalid Session transition."),
 			);
 			return;
 		}
-		if (transition.type === "recovering") {
-			peer.commitState({ status: "recovering" });
-			this.#eventSubject.next({ type: "peer-recovering", peer });
+		if (transition.type === RpcProtocolSessionTransitionTypeEnum.recovering) {
+			peer.commitState({ status: RpcStateStatusEnum.recovering });
+			this.#eventSubject.next({ type: RpcEventTypeEnum.peerRecovering, peer });
 			return;
 		}
-		if (transition.type === "recovered") {
-			peer.commitState({ status: "connected" });
-			this.#eventSubject.next({ type: "peer-recovered", peer });
+		if (transition.type === RpcProtocolSessionTransitionTypeEnum.recovered) {
+			peer.commitState({ status: RpcStateStatusEnum.connected });
+			this.#eventSubject.next({ type: RpcEventTypeEnum.peerRecovered, peer });
 			return;
 		}
-		if (transition.type === "draining") {
+		if (transition.type === RpcProtocolSessionTransitionTypeEnum.draining) {
 			peer.commitState({
-				status: "draining",
-				reason: "counter-exhaustion",
+				status: RpcStateStatusEnum.draining,
+				reason: RpcCloseReasonEnum.counterExhaustion,
 			});
 			this.#eventSubject.next({
-				type: "peer-draining",
+				type: RpcEventTypeEnum.peerDraining,
 				peer,
-				reason: "counter-exhaustion",
+				reason: RpcCloseReasonEnum.counterExhaustion,
 			});
 			return;
 		}
@@ -1144,39 +1190,40 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 	): boolean {
 		const ownerStatus = this.state.status;
 		const peerState = peer.state;
-		if (ownerStatus === "draining") {
+		if (ownerStatus === RpcStateStatusEnum.draining) {
 			return (
-				transition.type === "closed" &&
-				peerState.status === "draining" &&
-				transition.reason !== "recovery-expired" &&
-				(transition.reason !== "counter-exhaustion" ||
-					peerState.reason === "counter-exhaustion")
+				transition.type === RpcProtocolSessionTransitionTypeEnum.closed &&
+				peerState.status === RpcStateStatusEnum.draining &&
+				transition.reason !== RpcCloseReasonEnum.recoveryExpired &&
+				(transition.reason !== RpcCloseReasonEnum.counterExhaustion ||
+					peerState.reason === RpcCloseReasonEnum.counterExhaustion)
 			);
 		}
-		if (ownerStatus !== "active") {
+		if (ownerStatus !== RpcStateStatusEnum.active) {
 			return false;
 		}
-		if (transition.type === "recovering") {
-			return peerState.status === "connected";
+		if (transition.type === RpcProtocolSessionTransitionTypeEnum.recovering) {
+			return peerState.status === RpcStateStatusEnum.connected;
 		}
-		if (transition.type === "recovered") {
-			return peerState.status === "recovering";
+		if (transition.type === RpcProtocolSessionTransitionTypeEnum.recovered) {
+			return peerState.status === RpcStateStatusEnum.recovering;
 		}
-		if (transition.type === "draining") {
+		if (transition.type === RpcProtocolSessionTransitionTypeEnum.draining) {
 			return (
-				peerState.status === "connected" || peerState.status === "recovering"
+				peerState.status === RpcStateStatusEnum.connected ||
+				peerState.status === RpcStateStatusEnum.recovering
 			);
 		}
-		if (transition.reason === "recovery-expired") {
-			return peerState.status === "recovering";
+		if (transition.reason === RpcCloseReasonEnum.recoveryExpired) {
+			return peerState.status === RpcStateStatusEnum.recovering;
 		}
-		if (transition.reason === "counter-exhaustion") {
+		if (transition.reason === RpcCloseReasonEnum.counterExhaustion) {
 			return (
-				peerState.status === "draining" &&
-				peerState.reason === "counter-exhaustion"
+				peerState.status === RpcStateStatusEnum.draining &&
+				peerState.reason === RpcCloseReasonEnum.counterExhaustion
 			);
 		}
-		return transition.reason !== "graceful-shutdown";
+		return transition.reason !== RpcCloseReasonEnum.gracefulShutdown;
 	}
 
 	#closePeerFromSession(
@@ -1185,46 +1232,56 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 		cause?: Error,
 	): void {
 		const peer = this.#sessions.get(session);
-		if (peer === undefined || peer.state.status === "closed") {
+		if (peer === undefined || peer.state.status === RpcStateStatusEnum.closed) {
 			return;
 		}
-		let closeEvent: Extract<RpcEvent, { readonly type: "peer-closed" }>;
-		if (reason === "recovery-expired" || reason === "counter-exhaustion") {
+		let closeEvent: Extract<
+			RpcEvent,
+			{ readonly type: RpcEventTypeEnum.peerClosed }
+		>;
+		if (
+			reason === RpcCloseReasonEnum.recoveryExpired ||
+			reason === RpcCloseReasonEnum.counterExhaustion
+		) {
 			peer.stageState({
-				status: "closed",
-				outcome: "failed",
+				status: RpcStateStatusEnum.closed,
+				outcome: RpcCloseOutcomeEnum.failed,
 				reason,
-				error: createRpcException("unavailable", cause),
+				error: createRpcException(RpcExceptionCodeEnum.unavailable, cause),
 			});
 			closeEvent = {
-				type: "peer-closed",
+				type: RpcEventTypeEnum.peerClosed,
 				peer,
-				outcome: "failed",
+				outcome: RpcCloseOutcomeEnum.failed,
 				reason,
 			};
 		} else if (
-			reason === "continuity-failure" ||
-			reason === "protocol-fault" ||
-			reason === "resource-fault"
+			reason === RpcCloseReasonEnum.continuityFailure ||
+			reason === RpcCloseReasonEnum.protocolFault ||
+			reason === RpcCloseReasonEnum.resourceFault
 		) {
 			peer.stageState({
-				status: "closed",
-				outcome: "failed",
+				status: RpcStateStatusEnum.closed,
+				outcome: RpcCloseOutcomeEnum.failed,
 				reason,
-				error: createRpcException("protocol", cause),
+				error: createRpcException(RpcExceptionCodeEnum.protocol, cause),
 			});
 			closeEvent = {
-				type: "peer-closed",
+				type: RpcEventTypeEnum.peerClosed,
 				peer,
-				outcome: "failed",
+				outcome: RpcCloseOutcomeEnum.failed,
 				reason,
 			};
 		} else {
-			peer.stageState({ status: "closed", outcome: "normal", reason });
+			peer.stageState({
+				status: RpcStateStatusEnum.closed,
+				outcome: RpcCloseOutcomeEnum.normal,
+				reason,
+			});
 			closeEvent = {
-				type: "peer-closed",
+				type: RpcEventTypeEnum.peerClosed,
 				peer,
-				outcome: "normal",
+				outcome: RpcCloseOutcomeEnum.normal,
 				reason,
 			};
 		}
@@ -1240,7 +1297,10 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 
 	/** Package-private shared Protocol fault port. */
 	protocolFault(reason: RpcProtocolFaultReason, error: Error): void {
-		if (this.state.status === "closing" || this.state.status === "closed") {
+		if (
+			this.state.status === RpcStateStatusEnum.closing ||
+			this.state.status === RpcStateStatusEnum.closed
+		) {
 			return;
 		}
 		if (this.#terminationTask === undefined) {
@@ -1257,14 +1317,14 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 			// The original shared Protocol fault remains authoritative.
 		}
 
-		const faultError = createRpcException("protocol", error);
+		const faultError = createRpcException(RpcExceptionCodeEnum.protocol, error);
 		const terminalPeers = [...this.#sessions.values()];
 		const membershipChanged = this.#peers.length > 0;
 		this.#sessions.clear();
 		for (const peer of terminalPeers) {
 			peer.stageState({
-				status: "closed",
-				outcome: "failed",
+				status: RpcStateStatusEnum.closed,
+				outcome: RpcCloseOutcomeEnum.failed,
 				reason,
 				error: faultError,
 			});
@@ -1272,7 +1332,7 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 		if (membershipChanged) {
 			this.#stagePeers(Object.freeze([]));
 		}
-		this.#stageState(Object.freeze({ status: "closing" }));
+		this.#stageState(Object.freeze({ status: RpcStateStatusEnum.closing }));
 		this.#flushState();
 		if (membershipChanged) {
 			this.#flushPeers();
@@ -1282,18 +1342,18 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 		}
 		for (const peer of terminalPeers) {
 			this.#eventSubject.next({
-				type: "peer-closed",
+				type: RpcEventTypeEnum.peerClosed,
 				peer,
-				outcome: "failed",
+				outcome: RpcCloseOutcomeEnum.failed,
 				reason,
 			});
 			peer.completeState();
 		}
-		this.#eventSubject.next({ type: "owner-closing" });
+		this.#eventSubject.next({ type: RpcEventTypeEnum.ownerClosing });
 		this.#startCleanup(
 			Object.freeze({
-				status: "closed",
-				outcome: "failed",
+				status: RpcStateStatusEnum.closed,
+				outcome: RpcCloseOutcomeEnum.failed,
 				reason,
 				error: faultError,
 			}),

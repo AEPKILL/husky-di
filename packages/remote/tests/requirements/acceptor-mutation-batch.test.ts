@@ -12,13 +12,19 @@ import {
 	createRpcAcceptor,
 	type IRpcAcceptor,
 	type IRpcProtocol,
+	RpcCloseReasonEnum,
 	type RpcEvent,
+	RpcExceptionCodeEnum,
 } from "../../src/index";
 import type {
 	IRpcProtocolAcceptorHost,
 	IRpcProtocolInvocationSink,
 	IRpcProtocolSession,
 	IRpcProtocolSessionHost,
+} from "../../src/protocol";
+import {
+	RpcCallTerminalTypeEnum,
+	RpcProtocolSessionTransitionTypeEnum,
 } from "../../src/protocol";
 
 interface BatchService {
@@ -119,8 +125,8 @@ describe("Acceptor mutation batches", () => {
 		});
 
 		sessionHost.transition({
-			type: "closed",
-			reason: "remote-terminated",
+			type: RpcProtocolSessionTransitionTypeEnum.closed,
+			reason: RpcCloseReasonEnum.remoteTerminated,
 		});
 
 		expect(observations).toEqual([
@@ -171,8 +177,8 @@ describe("Acceptor mutation batches", () => {
 			},
 			forceClose() {
 				invocationSink?.finish({
-					type: "failed",
-					code: "outcome-unknown",
+					type: RpcCallTerminalTypeEnum.failed,
+					code: RpcExceptionCodeEnum.outcomeUnknown,
 				});
 			},
 		};
@@ -185,7 +191,9 @@ describe("Acceptor mutation batches", () => {
 		) {
 			throw new Error("Expected two admitted Acceptor peers.");
 		}
-		recoveringHost.transition({ type: "recovering" });
+		recoveringHost.transition({
+			type: RpcProtocolSessionTransitionTypeEnum.recovering,
+		});
 
 		const observations: {
 			readonly source: string;
@@ -290,8 +298,8 @@ describe("Acceptor mutation batches", () => {
 		const { acceptor, host } = createAcceptorHarness({
 			close: () => {
 				invocationSink?.finish({
-					type: "failed",
-					code: "outcome-unknown",
+					type: RpcCallTerminalTypeEnum.failed,
+					code: RpcExceptionCodeEnum.outcomeUnknown,
 				});
 			},
 		});
@@ -524,7 +532,10 @@ describe("Acceptor mutation batches", () => {
 			}
 		});
 
-		harness.host.fault("protocol-fault", new Error("shared fault"));
+		harness.host.fault(
+			RpcCloseReasonEnum.protocolFault,
+			new Error("shared fault"),
+		);
 
 		expect(acceptorDuringRuntimeClose).toEqual({
 			ownerStatus: "active",

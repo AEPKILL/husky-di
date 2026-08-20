@@ -4,15 +4,13 @@
  * @created 2026-08-19 00:00:00
  */
 
-import {
-	RPC_MAX_MESSAGE_BYTES,
-	RPC_PROFILE_ID,
-} from "@/constants/protocol/rpc-profile.const";
+import { RPC_MAX_MESSAGE_BYTES } from "@/constants/protocol/rpc-profile.const";
+import type { RpcDecodePhaseEnum } from "@/enums/protocol/rpc-decode-phase.enum";
+import { RpcProfileEnum } from "@/enums/protocol/rpc-profile.enum";
+import { RpcResumeRejectCodeEnum } from "@/enums/protocol/rpc-resume-reject-code.enum";
+import { RpcExceptionCodeEnum } from "@/enums/rpc-exception-code.enum";
 import type { IRpcCodec } from "@/interfaces/protocol/rpc-codec.interface";
-import type {
-	RpcDecodedRecord,
-	RpcDecodePhase,
-} from "@/types/protocol/rpc-codec.type";
+import type { RpcDecodedRecord } from "@/types/protocol/rpc-codec.type";
 import type {
 	RpcAckRecord,
 	RpcActiveRecord,
@@ -29,7 +27,6 @@ import type {
 	RpcResumeAccept,
 	RpcResumeOutcome,
 	RpcResumeReject,
-	RpcResumeRejectCode,
 	RpcResumeRequest,
 	RpcSemanticMessage,
 	RpcWireErrorCode,
@@ -40,7 +37,7 @@ export class RpcCodecImpl implements IRpcCodec {
 		return encodeRpcRecord(record);
 	}
 
-	public decode<TPhase extends RpcDecodePhase>(
+	public decode<TPhase extends RpcDecodePhaseEnum>(
 		bytes: Uint8Array,
 		phase: TPhase,
 	): RpcDecodedRecord<TPhase> {
@@ -90,16 +87,16 @@ const base64Url32Pattern = /^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$/;
 const callOrdinalPattern = /^(?:[1-9][0-9]{0,15})$/;
 const numberPattern = /-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?/y;
 const wireErrorCodes = new Set<RpcWireErrorCode>([
-	"canceled",
-	"unavailable",
-	"handler-failed",
-	"unknown-service",
-	"unknown-method",
+	RpcExceptionCodeEnum.canceled,
+	RpcExceptionCodeEnum.unavailable,
+	RpcExceptionCodeEnum.handlerFailed,
+	RpcExceptionCodeEnum.unknownService,
+	RpcExceptionCodeEnum.unknownMethod,
 ]);
-const resumeRejectCodes = new Set<RpcResumeRejectCode>([
-	"resume-rejected",
-	"continuity-failure",
-	"session-terminated",
+const resumeRejectCodes = new Set<RpcResumeRejectCodeEnum>([
+	RpcResumeRejectCodeEnum.resumeRejected,
+	RpcResumeRejectCodeEnum.continuityFailure,
+	RpcResumeRejectCodeEnum.sessionTerminated,
 ]);
 const closeForbiddenMembers = new Set([
 	"seq",
@@ -505,7 +502,7 @@ function validateRpcFreshAccept(record: RpcJsonRecord): RpcFreshAccept {
 	if (readRpcRecordKind(record) !== "accept") {
 		throw new Error("RPC fresh attempt did not receive accept.");
 	}
-	if (readIdentifier(record, "profile") !== RPC_PROFILE_ID) {
+	if (readIdentifier(record, "profile") !== RpcProfileEnum.huskyDiRpc1) {
 		throw new Error("RPC fresh accept selected a different profile.");
 	}
 	readBase64Url32(record, "sessionId");
@@ -544,7 +541,7 @@ function validateRpcResumeOutcome(record: RpcJsonRecord): RpcResumeOutcome {
 	}
 	if (kind === "reject") {
 		const code = readString(record, "code");
-		if (!resumeRejectCodes.has(code as RpcResumeRejectCode)) {
+		if (!resumeRejectCodes.has(code as RpcResumeRejectCodeEnum)) {
 			throw new Error("RPC resume reject code is outside the profile union.");
 		}
 		if (own(record, "message")) {

@@ -4,6 +4,15 @@
  * @created 2026-08-19 00:00:00
  */
 
+import { RpcCallTerminalTypeEnum } from "@/enums/protocol/rpc-call-terminal-type.enum";
+import { RpcDecodePhaseEnum } from "@/enums/protocol/rpc-decode-phase.enum";
+import { RpcEndpointFailureEnum } from "@/enums/protocol/rpc-endpoint-failure.enum";
+import { RpcIncomingCallKindEnum } from "@/enums/protocol/rpc-incoming-call-kind.enum";
+import { RpcPeerCursorClassificationEnum } from "@/enums/protocol/rpc-peer-cursor-classification.enum";
+import type { RpcProtocolRoleEnum } from "@/enums/protocol/rpc-protocol-role.enum";
+import { RpcProtocolSessionTransitionTypeEnum } from "@/enums/protocol/rpc-protocol-session-transition-type.enum";
+import { RpcCloseReasonEnum } from "@/enums/rpc-close-reason.enum";
+import { RpcExceptionCodeEnum } from "@/enums/rpc-exception-code.enum";
 import type { IRpcCodec } from "@/interfaces/protocol/rpc-codec.interface";
 import type { IRpcEndpoint } from "@/interfaces/protocol/rpc-endpoint.interface";
 import type {
@@ -20,7 +29,6 @@ import type {
 	RpcIncomingTerminal,
 } from "@/interfaces/protocol/rpc-protocol.interface";
 import type { IRpcSession } from "@/interfaces/protocol/rpc-session.interface";
-import type { RpcEndpointFailure } from "@/types/protocol/rpc-endpoint.type";
 import type { CreateRpcSessionOptions } from "@/types/protocol/rpc-session.type";
 import type {
 	RpcActiveRecord,
@@ -82,7 +90,7 @@ function hasOwn(record: RpcJsonRecord, key: string): boolean {
 
 /** Retains one Session Incarnation independently from its current Connection. */
 export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
-	readonly _role: "connector" | "acceptor";
+	readonly _role: RpcProtocolRoleEnum;
 	readonly _host: IRpcProtocolHost;
 	readonly _sessionId: string;
 	readonly _codec: IRpcCodec;
@@ -211,14 +219,14 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 		return this._resumeAttempt;
 	}
 
-	classifyPeerCursor(cursor: number): "valid" | "lower" | "upper" {
+	classifyPeerCursor(cursor: number): RpcPeerCursorClassificationEnum {
 		if (cursor < this._peerReceivedThrough) {
-			return "lower";
+			return RpcPeerCursorClassificationEnum.lower;
 		}
 		if (cursor > this._highestSentSequence) {
-			return "upper";
+			return RpcPeerCursorClassificationEnum.upper;
 		}
-		return "valid";
+		return RpcPeerCursorClassificationEnum.valid;
 	}
 
 	canAcceptResumeAttempt(resumeAttempt: number): boolean {
@@ -241,7 +249,8 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 	): number {
 		if (
 			!this.canAcceptResumeAttempt(resumeAttempt) ||
-			this.classifyPeerCursor(peerReceivedThrough) !== "valid"
+			this.classifyPeerCursor(peerReceivedThrough) !==
+				RpcPeerCursorClassificationEnum.valid
 		) {
 			throw new Error("Default RPC resume candidate is no longer current.");
 		}
@@ -253,11 +262,11 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 	}
 
 	terminateContinuityFailure(cause?: Error): void {
-		this._terminateRetainedSession("continuity-failure", cause);
+		this._terminateRetainedSession(RpcCloseReasonEnum.continuityFailure, cause);
 	}
 
 	terminateAuthenticatedRemote(cause?: Error): void {
-		this._terminateRetainedSession("remote-terminated", cause);
+		this._terminateRetainedSession(RpcCloseReasonEnum.remoteTerminated, cause);
 	}
 
 	installHost(host: IRpcProtocolSessionHost): void {
@@ -314,7 +323,9 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 		this._recoveryDeadline = undefined;
 		if (this._recovering) {
 			this._recovering = false;
-			this._sessionHost?.transition({ type: "recovered" });
+			this._sessionHost?.transition({
+				type: RpcProtocolSessionTransitionTypeEnum.recovered,
+			});
 		}
 		this._startHealthTimer(binding);
 		this._pump();
@@ -334,10 +345,10 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 
 		let record: RpcActiveRecord;
 		try {
-			record = this._codec.decode(bytes, "active");
+			record = this._codec.decode(bytes, RpcDecodePhaseEnum.active);
 		} catch (error) {
 			this._fault(
-				"protocol-fault",
+				RpcCloseReasonEnum.protocolFault,
 				error instanceof Error
 					? error
 					: new Error("Default RPC active record is invalid."),
@@ -367,7 +378,7 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 		}
 		if (record.kind !== "message") {
 			this._fault(
-				"protocol-fault",
+				RpcCloseReasonEnum.protocolFault,
 				new Error("Default RPC active phase produced an invalid record kind."),
 			);
 			return;
@@ -379,15 +390,20 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 
 	endpointFailed(
 		endpoint: IRpcEndpoint,
-		reason: RpcEndpointFailure,
+		reason: RpcEndpointFailureEnum,
 		error?: Error,
 	): void {
 		if (this._binding?.endpoint !== endpoint || this._closed) {
 			return;
 		}
-		if (reason === "protocol" || reason === "resource") {
+		if (
+			reason === RpcEndpointFailureEnum.protocol ||
+			reason === RpcEndpointFailureEnum.resource
+		) {
 			this._fault(
-				reason === "protocol" ? "protocol-fault" : "resource-fault",
+				reason === RpcEndpointFailureEnum.protocol
+					? RpcCloseReasonEnum.protocolFault
+					: RpcCloseReasonEnum.resourceFault,
 				error ?? new Error(`Default RPC endpoint ${reason} failure.`),
 			);
 			return;
@@ -420,7 +436,7 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 			commit: (sink: IRpcProtocolInvocationSink): IRpcProtocolInvocation => {
 				if (reservationState !== "reserved") {
 					this._fault(
-						"protocol-fault",
+						RpcCloseReasonEnum.protocolFault,
 						new Error(
 							"Default RPC invocation reservation had multiple winners.",
 						),
@@ -447,7 +463,7 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 			release: (): void => {
 				if (reservationState !== "reserved") {
 					this._fault(
-						"protocol-fault",
+						RpcCloseReasonEnum.protocolFault,
 						new Error(
 							"Default RPC invocation reservation had multiple winners.",
 						),
@@ -486,15 +502,23 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 			this._finishInvocation(
 				entry,
 				entry.admitted
-					? { type: "failed", code: "outcome-unknown" }
-					: { type: "failed", code: "unavailable" },
+					? {
+							type: RpcCallTerminalTypeEnum.failed,
+							code: RpcExceptionCodeEnum.outcomeUnknown,
+						}
+					: {
+							type: RpcCallTerminalTypeEnum.failed,
+							code: RpcExceptionCodeEnum.unavailable,
+						},
 			);
 			this._retireInvocation(entry);
 		}
 		for (const incoming of this._incomingCalls.values()) {
 			if (!incoming.terminalSelected && incoming.call !== undefined) {
 				incoming.terminalSelected = true;
-				incoming.call.finish({ type: "session-terminated" });
+				incoming.call.finish({
+					type: RpcCallTerminalTypeEnum.sessionTerminated,
+				});
 			}
 		}
 		this._binding?.endpoint.fenceAndClose();
@@ -519,7 +543,7 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 		}
 		if (envelope.seq !== expected) {
 			this._fault(
-				"protocol-fault",
+				RpcCloseReasonEnum.protocolFault,
 				new Error("Default RPC message sequence contains a gap."),
 			);
 			return false;
@@ -529,7 +553,7 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 			this._dispatchSemantic(envelope.message);
 		} catch (error) {
 			this._fault(
-				"protocol-fault",
+				RpcCloseReasonEnum.protocolFault,
 				error instanceof Error
 					? error
 					: new Error("Default RPC semantic message is invalid."),
@@ -571,7 +595,7 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 		}
 		if (this._draining || this._incomingCalls.size >= 256) {
 			this._highestIncomingCallOrdinal = ordinal;
-			this._queueError(message.callId, "unavailable");
+			this._queueError(message.callId, RpcExceptionCodeEnum.unavailable);
 			return;
 		}
 		const args = this._host.normalizeApplicationArguments(message.args);
@@ -586,11 +610,11 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 				callId: message.callId,
 				terminalSelected: true,
 			});
-			this._queueError(message.callId, "unavailable");
+			this._queueError(message.callId, RpcExceptionCodeEnum.unavailable);
 			return;
 		}
 
-		if (reservation.kind === "unknown") {
+		if (reservation.kind === RpcIncomingCallKindEnum.unknown) {
 			const incoming = reservation.reservation.commit();
 			const entry: IRpcIncomingEntry = {
 				callId: message.callId,
@@ -598,7 +622,10 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 				terminalSelected: true,
 			};
 			this._incomingCalls.set(message.callId, entry);
-			incoming.finish({ type: "failed", code: reservation.code });
+			incoming.finish({
+				type: RpcCallTerminalTypeEnum.failed,
+				code: reservation.code,
+			});
 			this._queueError(message.callId, reservation.code);
 			return;
 		}
@@ -615,8 +642,8 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 			(outcome) => this._finishIncomingHandler(entry, outcome),
 			() =>
 				this._finishIncomingHandler(entry, {
-					type: "failed",
-					code: "handler-failed",
+					type: RpcCallTerminalTypeEnum.failed,
+					code: RpcExceptionCodeEnum.handlerFailed,
 				}),
 		);
 	}
@@ -633,8 +660,11 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 			return;
 		}
 		incoming.terminalSelected = true;
-		incoming.call.finish({ type: "failed", code: "canceled" });
-		this._queueError(callId, "canceled");
+		incoming.call.finish({
+			type: RpcCallTerminalTypeEnum.failed,
+			code: RpcExceptionCodeEnum.canceled,
+		});
+		this._queueError(callId, RpcExceptionCodeEnum.canceled);
 	}
 
 	_receiveResult(message: RpcResultMessage): void {
@@ -645,11 +675,11 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 		let outcome: RpcCallOutcome;
 		if (hasOwn(message, "value")) {
 			outcome = {
-				type: "returned",
+				type: RpcCallTerminalTypeEnum.returned,
 				value: this._host.normalizeApplicationValue(message.value),
 			};
 		} else {
-			outcome = { type: "returned-void" };
+			outcome = { type: RpcCallTerminalTypeEnum.returnedVoid };
 		}
 		this._finishInvocation(invocation, outcome);
 		this._retireInvocation(invocation);
@@ -664,7 +694,7 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 			this._host.normalizeApplicationValue(message.error.details);
 		}
 		this._finishInvocation(invocation, {
-			type: "failed",
+			type: RpcCallTerminalTypeEnum.failed,
 			code: message.error.code,
 		});
 		this._retireInvocation(invocation);
@@ -679,7 +709,7 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 		}
 		entry.terminalSelected = true;
 		let terminal: RpcIncomingTerminal;
-		if (outcome.type === "returned") {
+		if (outcome.type === RpcCallTerminalTypeEnum.returned) {
 			const queued = this._queueSemantic(
 				Object.freeze({
 					kind: "result",
@@ -688,12 +718,15 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 				}) as RpcResultMessage,
 			);
 			terminal = queued
-				? { type: "returned", value: outcome.value }
-				: { type: "failed", code: "handler-failed" };
+				? { type: RpcCallTerminalTypeEnum.returned, value: outcome.value }
+				: {
+						type: RpcCallTerminalTypeEnum.failed,
+						code: RpcExceptionCodeEnum.handlerFailed,
+					};
 			if (!queued) {
-				this._queueError(entry.callId, "handler-failed");
+				this._queueError(entry.callId, RpcExceptionCodeEnum.handlerFailed);
 			}
-		} else if (outcome.type === "returned-void") {
+		} else if (outcome.type === RpcCallTerminalTypeEnum.returnedVoid) {
 			const queued = this._queueSemantic(
 				Object.freeze({
 					kind: "result",
@@ -701,14 +734,20 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 				}) as RpcResultMessage,
 			);
 			terminal = queued
-				? { type: "returned-void" }
-				: { type: "failed", code: "handler-failed" };
+				? { type: RpcCallTerminalTypeEnum.returnedVoid }
+				: {
+						type: RpcCallTerminalTypeEnum.failed,
+						code: RpcExceptionCodeEnum.handlerFailed,
+					};
 			if (!queued) {
-				this._queueError(entry.callId, "handler-failed");
+				this._queueError(entry.callId, RpcExceptionCodeEnum.handlerFailed);
 			}
 		} else {
-			terminal = { type: "failed", code: "handler-failed" };
-			this._queueError(entry.callId, "handler-failed");
+			terminal = {
+				type: RpcCallTerminalTypeEnum.failed,
+				code: RpcExceptionCodeEnum.handlerFailed,
+			};
+			this._queueError(entry.callId, RpcExceptionCodeEnum.handlerFailed);
 		}
 		entry.call.finish(terminal);
 	}
@@ -726,7 +765,7 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 		);
 		if (!queued) {
 			this._fault(
-				"resource-fault",
+				RpcCloseReasonEnum.resourceFault,
 				new Error("Default RPC protected terminal reserve is exhausted."),
 			);
 		}
@@ -749,14 +788,17 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 	_startInvocation(entry: IRpcInvocationEntry): void {
 		if (entry.started || entry.retired) {
 			this._fault(
-				"protocol-fault",
+				RpcCloseReasonEnum.protocolFault,
 				new Error("Default RPC invocation start was called more than once."),
 			);
 			return;
 		}
 		entry.started = true;
 		if (this._closed) {
-			this._finishInvocation(entry, { type: "failed", code: "unavailable" });
+			this._finishInvocation(entry, {
+				type: RpcCallTerminalTypeEnum.failed,
+				code: RpcExceptionCodeEnum.unavailable,
+			});
 			this._retireInvocation(entry);
 			return;
 		}
@@ -768,7 +810,10 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 		if (entry.retired || entry.publicFinished) {
 			return;
 		}
-		this._finishInvocation(entry, { type: "failed", code: "canceled" });
+		this._finishInvocation(entry, {
+			type: RpcCallTerminalTypeEnum.failed,
+			code: RpcExceptionCodeEnum.canceled,
+		});
 		if (!entry.admitted) {
 			this._retireInvocation(entry);
 			return;
@@ -822,7 +867,7 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 			const replay = this._replay.get(replaySequence);
 			if (replay === undefined) {
 				this._fault(
-					"resource-fault",
+					RpcCloseReasonEnum.resourceFault,
 					new Error("Default RPC replay barrier lost a retained message."),
 				);
 				return;
@@ -882,7 +927,10 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 		const replay = this._reserveReplayEntry(message);
 		if (replay === undefined) {
 			this._pendingInvocations.shift();
-			this._finishInvocation(entry, { type: "failed", code: "unavailable" });
+			this._finishInvocation(entry, {
+				type: RpcCallTerminalTypeEnum.failed,
+				code: RpcExceptionCodeEnum.unavailable,
+			});
 			this._retireInvocation(entry);
 			this._pump();
 			return;
@@ -893,7 +941,10 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 		} catch {
 			this._releaseReplayEntry(replay);
 			this._pendingInvocations.shift();
-			this._finishInvocation(entry, { type: "failed", code: "unavailable" });
+			this._finishInvocation(entry, {
+				type: RpcCallTerminalTypeEnum.failed,
+				code: RpcExceptionCodeEnum.unavailable,
+			});
 			this._retireInvocation(entry);
 			this._pump();
 			return;
@@ -928,7 +979,7 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 		) {
 			this._releaseReplayEntry(replay);
 			this._terminateRetainedSession(
-				"counter-exhaustion",
+				RpcCloseReasonEnum.counterExhaustion,
 				new Error("Default RPC sequence counter is exhausted."),
 			);
 			return;
@@ -940,7 +991,7 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 		} catch (error) {
 			this._releaseReplayEntry(replay);
 			this._fault(
-				"resource-fault",
+				RpcCloseReasonEnum.resourceFault,
 				error instanceof Error
 					? error
 					: new Error("Default RPC terminal cannot be encoded."),
@@ -974,7 +1025,7 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 			encoded = this._codec.encode(this._createEnvelope(sequence, message));
 		} catch (error) {
 			this._fault(
-				"resource-fault",
+				RpcCloseReasonEnum.resourceFault,
 				error instanceof Error
 					? error
 					: new Error("Default RPC replay cannot be encoded."),
@@ -1109,7 +1160,7 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 			encoded = this._codec.encode(record);
 		} catch (error) {
 			this._fault(
-				"protocol-fault",
+				RpcCloseReasonEnum.protocolFault,
 				error instanceof Error
 					? error
 					: new Error("Default RPC control record cannot be encoded."),
@@ -1141,7 +1192,7 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 	_applyAck(ackThrough: number): boolean {
 		if (ackThrough > this._highestSentSequence) {
 			this._fault(
-				"protocol-fault",
+				RpcCloseReasonEnum.protocolFault,
 				new Error("Default RPC ACK exceeds the highest sent sequence."),
 			);
 			return false;
@@ -1223,19 +1274,22 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 		this._counterDraining = true;
 		this._draining = true;
 		this._sessionHost?.transition({
-			type: "draining",
-			reason: "counter-exhaustion",
+			type: RpcProtocolSessionTransitionTypeEnum.draining,
+			reason: RpcCloseReasonEnum.counterExhaustion,
 		});
 		this._counterDrainTimer = setTimeout(() => {
 			this._counterDrainTimer = undefined;
 			this._terminateRetainedSession(
-				"counter-exhaustion",
+				RpcCloseReasonEnum.counterExhaustion,
 				new Error("Default RPC counter drain deadline expired."),
 			);
 		}, this._host.policy.shutdownDeadlineMs);
 		for (const entry of [...this._invocations]) {
 			if (!entry.admitted) {
-				this._finishInvocation(entry, { type: "failed", code: "unavailable" });
+				this._finishInvocation(entry, {
+					type: RpcCallTerminalTypeEnum.failed,
+					code: RpcExceptionCodeEnum.unavailable,
+				});
 				this._retireInvocation(entry);
 			}
 		}
@@ -1254,16 +1308,22 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 		this._pongDue = false;
 		binding?.endpoint.fenceAndClose();
 		if (this._counterDraining) {
-			this._terminateRetainedSession("counter-exhaustion", cause);
+			this._terminateRetainedSession(
+				RpcCloseReasonEnum.counterExhaustion,
+				cause,
+			);
 			return;
 		}
 		if (this._draining) {
-			this._terminateRetainedSession("forced-close", cause);
+			this._terminateRetainedSession(RpcCloseReasonEnum.forcedClose, cause);
 			return;
 		}
 		if (!this._recovering) {
 			this._recovering = true;
-			this._sessionHost?.transition({ type: "recovering", cause });
+			this._sessionHost?.transition({
+				type: RpcProtocolSessionTransitionTypeEnum.recovering,
+				cause,
+			});
 		}
 		if (this._recoveryTimer === undefined) {
 			this._recoveryDeadline = Date.now() + this._host.policy.recoveryGraceMs;
@@ -1290,33 +1350,41 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 			this._finishInvocation(
 				entry,
 				entry.admitted
-					? { type: "failed", code: "outcome-unknown" }
-					: { type: "failed", code: "unavailable" },
+					? {
+							type: RpcCallTerminalTypeEnum.failed,
+							code: RpcExceptionCodeEnum.outcomeUnknown,
+						}
+					: {
+							type: RpcCallTerminalTypeEnum.failed,
+							code: RpcExceptionCodeEnum.unavailable,
+						},
 			);
 			this._retireInvocation(entry);
 		}
 		for (const incoming of this._incomingCalls.values()) {
 			if (!incoming.terminalSelected && incoming.call !== undefined) {
 				incoming.terminalSelected = true;
-				incoming.call.finish({ type: "session-terminated" });
+				incoming.call.finish({
+					type: RpcCallTerminalTypeEnum.sessionTerminated,
+				});
 			}
 		}
 		this._closed = true;
 		this._clearTimers();
 		this._proofKey = undefined;
 		this._sessionHost?.transition({
-			type: "closed",
-			reason: "recovery-expired",
+			type: RpcProtocolSessionTransitionTypeEnum.closed,
+			reason: RpcCloseReasonEnum.recoveryExpired,
 		});
 		this._onTerminal(this);
 	}
 
 	_terminateRetainedSession(
 		reason:
-			| "continuity-failure"
-			| "counter-exhaustion"
-			| "forced-close"
-			| "remote-terminated",
+			| RpcCloseReasonEnum.continuityFailure
+			| RpcCloseReasonEnum.counterExhaustion
+			| RpcCloseReasonEnum.forcedClose
+			| RpcCloseReasonEnum.remoteTerminated,
 		cause?: Error,
 	): void {
 		if (this._closed) {
@@ -1326,15 +1394,23 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 			this._finishInvocation(
 				entry,
 				entry.admitted
-					? { type: "failed", code: "outcome-unknown" }
-					: { type: "failed", code: "unavailable" },
+					? {
+							type: RpcCallTerminalTypeEnum.failed,
+							code: RpcExceptionCodeEnum.outcomeUnknown,
+						}
+					: {
+							type: RpcCallTerminalTypeEnum.failed,
+							code: RpcExceptionCodeEnum.unavailable,
+						},
 			);
 			this._retireInvocation(entry);
 		}
 		for (const incoming of this._incomingCalls.values()) {
 			if (!incoming.terminalSelected && incoming.call !== undefined) {
 				incoming.terminalSelected = true;
-				incoming.call.finish({ type: "session-terminated" });
+				incoming.call.finish({
+					type: RpcCallTerminalTypeEnum.sessionTerminated,
+				});
 			}
 		}
 		this._closed = true;
@@ -1342,7 +1418,11 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 		this._binding?.endpoint.fenceAndClose();
 		this._binding = undefined;
 		this._proofKey = undefined;
-		this._sessionHost?.transition({ type: "closed", reason, cause });
+		this._sessionHost?.transition({
+			type: RpcProtocolSessionTransitionTypeEnum.closed,
+			reason,
+			cause,
+		});
 		this._onTerminal(this);
 		this._resolveShutdown?.();
 		this._resolveShutdown = undefined;
@@ -1356,15 +1436,23 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 			this._finishInvocation(
 				entry,
 				entry.admitted
-					? { type: "failed", code: "outcome-unknown" }
-					: { type: "failed", code: "unavailable" },
+					? {
+							type: RpcCallTerminalTypeEnum.failed,
+							code: RpcExceptionCodeEnum.outcomeUnknown,
+						}
+					: {
+							type: RpcCallTerminalTypeEnum.failed,
+							code: RpcExceptionCodeEnum.unavailable,
+						},
 			);
 			this._retireInvocation(entry);
 		}
 		for (const incoming of this._incomingCalls.values()) {
 			if (!incoming.terminalSelected && incoming.call !== undefined) {
 				incoming.terminalSelected = true;
-				incoming.call.finish({ type: "session-terminated" });
+				incoming.call.finish({
+					type: RpcCallTerminalTypeEnum.sessionTerminated,
+				});
 			}
 		}
 		this._closed = true;
@@ -1373,13 +1461,16 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 		this._binding = undefined;
 		this._proofKey = undefined;
 		this._sessionHost?.transition({
-			type: "closed",
-			reason: "remote-terminated",
+			type: RpcProtocolSessionTransitionTypeEnum.closed,
+			reason: RpcCloseReasonEnum.remoteTerminated,
 		});
 		this._onTerminal(this);
 	}
 
-	_fault(reason: "protocol-fault" | "resource-fault", error: Error): void {
+	_fault(
+		reason: RpcCloseReasonEnum.protocolFault | RpcCloseReasonEnum.resourceFault,
+		error: Error,
+	): void {
 		if (this._closed) {
 			return;
 		}
@@ -1497,7 +1588,7 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 		const binding = this._binding;
 		if (binding === undefined || this._recovering) {
 			if (this._counterDraining) {
-				this._terminateRetainedSession("counter-exhaustion");
+				this._terminateRetainedSession(RpcCloseReasonEnum.counterExhaustion);
 			} else {
 				this.forceClose();
 			}
@@ -1532,7 +1623,7 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 		void binding.endpoint.sendNow(encoded).then(
 			() => {
 				if (this._counterDraining) {
-					this._terminateRetainedSession("counter-exhaustion");
+					this._terminateRetainedSession(RpcCloseReasonEnum.counterExhaustion);
 				} else {
 					this.forceClose();
 				}
@@ -1540,7 +1631,7 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 			(error: unknown) => {
 				if (this._counterDraining) {
 					this._terminateRetainedSession(
-						"counter-exhaustion",
+						RpcCloseReasonEnum.counterExhaustion,
 						error instanceof Error ? error : undefined,
 					);
 				} else {

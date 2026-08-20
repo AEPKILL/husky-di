@@ -4,6 +4,14 @@
  * @created 2026-08-11 21:07:13
  */
 
+export { RpcAcceptorListenerStopReasonEnum } from "@/enums/rpc-acceptor-listener-stop-reason.enum";
+export { RpcCallDirectionEnum } from "@/enums/rpc-call-direction.enum";
+export { RpcCallStatusEnum } from "@/enums/rpc-call-status.enum";
+export { RpcCloseOutcomeEnum } from "@/enums/rpc-close-outcome.enum";
+export { RpcCloseReasonEnum } from "@/enums/rpc-close-reason.enum";
+export { RpcEventTypeEnum } from "@/enums/rpc-event-type.enum";
+export { RpcExceptionCodeEnum } from "@/enums/rpc-exception-code.enum";
+export { RpcStateStatusEnum } from "@/enums/rpc-state-status.enum";
 export { RpcException } from "@/exceptions/rpc.exception";
 export { createRemoteServiceDescriptor } from "@/factories/remote-service-descriptor.factory";
 export { createRpcAcceptor } from "@/factories/rpc-acceptor.factory";
@@ -27,7 +35,6 @@ export type {
 	IRpcAcceptor,
 	IRpcConnector,
 	IRpcPeer,
-	RpcCallDirection,
 	RpcEvent,
 	RpcPeerResult,
 } from "@/interfaces/rpc-caller.interface";
@@ -41,6 +48,4 @@ export type {
 	RpcConnectorRuntimePolicyOptions,
 	RpcConnectorState,
 	RpcPeerState,
-	RpcTopologyCloseReason,
 } from "@/types/rpc-caller.type";
-export type { RpcExceptionCode } from "@/types/rpc-exception.type";

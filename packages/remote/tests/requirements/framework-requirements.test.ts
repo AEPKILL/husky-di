@@ -17,6 +17,7 @@ import {
 	type IRpcConnection,
 	type IRpcConnector,
 	type IRpcProtocol,
+	RpcCloseReasonEnum,
 	type RpcEvent,
 } from "../../src/index";
 import type {
@@ -28,6 +29,10 @@ import type {
 	IRpcProtocolSessionHost,
 } from "../../src/protocol";
 import * as protocolEntry from "../../src/protocol";
+import {
+	RpcCallTerminalTypeEnum,
+	RpcProtocolSessionTransitionTypeEnum,
+} from "../../src/protocol";
 import * as transportEntry from "../../src/transport";
 
 interface RequirementService {
@@ -254,13 +259,28 @@ describe("Framework requirement evidence", () => {
 
 	it("RPC-BASE-003 RPC-EVENT-005 RPC-POLICY-004 keeps private machinery out of public runtime surfaces", () => {
 		expect(Object.keys(rootEntry).sort()).toEqual([
+			"RpcAcceptorListenerStopReasonEnum",
+			"RpcCallDirectionEnum",
+			"RpcCallStatusEnum",
+			"RpcCloseOutcomeEnum",
+			"RpcCloseReasonEnum",
+			"RpcEventTypeEnum",
 			"RpcException",
+			"RpcExceptionCodeEnum",
+			"RpcStateStatusEnum",
 			"createRemoteServiceDescriptor",
 			"createRpcAcceptor",
 			"createRpcConnector",
 			"createRpcProtocol",
 		]);
-		expect(Object.keys(protocolEntry)).toEqual(["createRpcProtocol"]);
+		expect(Object.keys(protocolEntry).sort()).toEqual([
+			"RpcCallTerminalTypeEnum",
+			"RpcCloseReasonEnum",
+			"RpcExceptionCodeEnum",
+			"RpcIncomingCallKindEnum",
+			"RpcProtocolSessionTransitionTypeEnum",
+			"createRpcProtocol",
+		]);
 		expect(Object.keys(transportEntry)).toEqual([]);
 
 		const connector = createRpcConnector();
@@ -286,7 +306,7 @@ describe("Framework requirement evidence", () => {
 					commit(sink) {
 						return {
 							start() {
-								sink.finish({ type: "returned-void" });
+								sink.finish({ type: RpcCallTerminalTypeEnum.returnedVoid });
 							},
 							cancel() {},
 						};
@@ -345,7 +365,7 @@ describe("Framework requirement evidence", () => {
 			type: "returned",
 			value: { value: { secret: "captured:value" } },
 		});
-		call.finish({ type: "session-terminated" });
+		call.finish({ type: RpcCallTerminalTypeEnum.sessionTerminated });
 		await harness.connector.close();
 	});
 
@@ -365,7 +385,9 @@ describe("Framework requirement evidence", () => {
 		);
 		unboundCleanup();
 		const sessionHost = await harness.connect();
-		sessionHost.transition({ type: "recovering" });
+		sessionHost.transition({
+			type: RpcProtocolSessionTransitionTypeEnum.recovering,
+		});
 		const recoveringCleanup = harness.connector.peer.expose(
 			requirementDescriptor,
 			{
@@ -379,7 +401,10 @@ describe("Framework requirement evidence", () => {
 			},
 		);
 		recoveringCleanup();
-		sessionHost.transition({ type: "draining", reason: "counter-exhaustion" });
+		sessionHost.transition({
+			type: RpcProtocolSessionTransitionTypeEnum.draining,
+			reason: RpcCloseReasonEnum.counterExhaustion,
+		});
 
 		expect(() =>
 			harness.connector.peer.expose(requirementDescriptor, {
@@ -555,8 +580,12 @@ describe("Framework requirement evidence", () => {
 		const connectorHarness = createConnectorHarness();
 		const stablePeer = connectorHarness.connector.peer;
 		const sessionHost = await connectorHarness.connect();
-		sessionHost.transition({ type: "recovering" });
-		sessionHost.transition({ type: "recovered" });
+		sessionHost.transition({
+			type: RpcProtocolSessionTransitionTypeEnum.recovering,
+		});
+		sessionHost.transition({
+			type: RpcProtocolSessionTransitionTypeEnum.recovered,
+		});
 		expect(connectorHarness.connector.peer).toBe(stablePeer);
 		expect(
 			connectorHarness.host.attachSession(createEmptySession()),
@@ -567,8 +596,12 @@ describe("Framework requirement evidence", () => {
 		const firstHost = host.admitSession(firstSession);
 		expect(firstHost).toBeDefined();
 		const firstPeer = acceptor.peers[0];
-		firstHost?.transition({ type: "recovering" });
-		firstHost?.transition({ type: "recovered" });
+		firstHost?.transition({
+			type: RpcProtocolSessionTransitionTypeEnum.recovering,
+		});
+		firstHost?.transition({
+			type: RpcProtocolSessionTransitionTypeEnum.recovered,
+		});
 		expect(acceptor.peers[0]).toBe(firstPeer);
 		expect(host.admitSession(firstSession)).toBeUndefined();
 		for (let index = 1; index < 64; index += 1) {
@@ -590,7 +623,7 @@ describe("Framework requirement evidence", () => {
 						return {
 							start() {
 								sink.finish({
-									type: "returned",
+									type: RpcCallTerminalTypeEnum.returned,
 									value: harness.host.normalizeApplicationValue({
 										secret: "result-secret",
 									}),
@@ -677,7 +710,10 @@ describe("Framework requirement evidence", () => {
 			},
 		});
 		expect(lateEvents).toEqual([]);
-		sessionHost.transition({ type: "closed", reason: "remote-terminated" });
+		sessionHost.transition({
+			type: RpcProtocolSessionTransitionTypeEnum.closed,
+			reason: RpcCloseReasonEnum.remoteTerminated,
+		});
 		expect(acceptor.state.status).toBe("active");
 		expect(acceptor.peers).toEqual([]);
 		expect(lateEvents).toMatchObject([
@@ -720,7 +756,9 @@ describe("Framework requirement evidence", () => {
 			throw subscriberFailure;
 		});
 		try {
-			sessionHost.transition({ type: "recovering" });
+			sessionHost.transition({
+				type: RpcProtocolSessionTransitionTypeEnum.recovering,
+			});
 			await vi.waitFor(() => expect(reported).toContain(subscriberFailure));
 			expect(harness.connector.peer.state).toEqual({ status: "recovering" });
 		} finally {
@@ -788,7 +826,10 @@ describe("Framework requirement evidence", () => {
 			cleanup: () => Promise.reject(cleanupError),
 		});
 		const sessionHost = await harness.connect();
-		sessionHost.transition({ type: "closed", reason: "remote-terminated" });
+		sessionHost.transition({
+			type: RpcProtocolSessionTransitionTypeEnum.closed,
+			reason: RpcCloseReasonEnum.remoteTerminated,
+		});
 
 		await expect(harness.connector.close()).rejects.toBe(cleanupError);
 		expect(harness.connector.state).toEqual({

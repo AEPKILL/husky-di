@@ -70,3 +70,4 @@ export type {
 	RpcConformanceReport,
 } from "@/conformance/rpc-conformance.type";
 export { runRpcProtocolConformance } from "@/conformance/rpc-protocol-conformance.util";
+export { RpcConformanceStatusEnum } from "@/enums/conformance/rpc-conformance-status.enum";

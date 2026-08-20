@@ -235,7 +235,7 @@ The remote proxy replaces the implementation's final parameter with
 `AbortSignal | undefined`:
 
 ```typescript
-import { RpcException } from "@husky-di/remote";
+import { RpcException, RpcExceptionCodeEnum } from "@husky-di/remote";
 
 const controller = new AbortController();
 const pendingReport = reports.generate("weekly", controller.signal);
@@ -245,7 +245,10 @@ controller.abort();
 try {
   await pendingReport;
 } catch (error) {
-  if (!(error instanceof RpcException) || error.code !== "canceled") {
+  if (
+    !(error instanceof RpcException) ||
+    error.code !== RpcExceptionCodeEnum.canceled
+  ) {
     throw error;
   }
 }
@@ -303,12 +306,15 @@ reject with `TypeError`. Branch on the stable `RpcException.code`, not its
 message:
 
 ```typescript
-import { RpcException } from "@husky-di/remote";
+import { RpcException, RpcExceptionCodeEnum } from "@husky-di/remote";
 
 try {
   await calculator.add(20, 22);
 } catch (error) {
-  if (error instanceof RpcException && error.code === "unavailable") {
+  if (
+    error instanceof RpcException &&
+    error.code === RpcExceptionCodeEnum.unavailable
+  ) {
     // This invocation definitely did not execute remotely.
   } else {
     throw error;
@@ -328,6 +334,12 @@ try {
 Calls only accept RPC application values: `null`, booleans, strings, finite
 numbers, arrays, and string-keyed records recursively composed from those values.
 Unsupported values reject locally instead of being passed to the Transport.
+
+The root entry exports enums for public call directions/statuses, event types,
+state statuses, listener stop reasons, close outcomes/reasons, and exception
+codes. The `/protocol` entry likewise exports its call-terminal, incoming-kind,
+and Session-transition enums, so callers and Protocol implementors do not need
+to repeat wire-stable strings.
 
 ## Shutdown And Close
 

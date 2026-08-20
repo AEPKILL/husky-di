@@ -6,6 +6,11 @@
 
 import { Subject } from "rxjs";
 import { describe, expect, it, vi } from "vitest";
+import { RpcDecodePhaseEnum } from "../../src/enums/protocol/rpc-decode-phase.enum";
+import type { RpcEndpointFailureEnum } from "../../src/enums/protocol/rpc-endpoint-failure.enum";
+import { RpcProtocolRoleEnum } from "../../src/enums/protocol/rpc-protocol-role.enum";
+import { RpcWireRecordKindEnum } from "../../src/enums/protocol/rpc-wire-record-kind.enum";
+import { RpcExceptionCodeEnum } from "../../src/enums/rpc-exception-code.enum";
 import { RpcCodecImpl } from "../../src/impls/protocol/rpc-codec.impl";
 import { RpcEndpointImpl } from "../../src/impls/protocol/rpc-endpoint.impl";
 import { RpcSessionImpl } from "../../src/impls/protocol/rpc-session.impl";
@@ -14,7 +19,6 @@ import type {
 	IRpcProtocolRuntimePolicy,
 } from "../../src/interfaces/protocol/rpc-protocol.interface";
 import type { IRpcConnection } from "../../src/interfaces/rpc-connection.interface";
-import type { RpcEndpointFailure } from "../../src/types/protocol/rpc-endpoint.type";
 import {
 	normalizeRpcApplicationArguments,
 	normalizeRpcApplicationValue,
@@ -42,7 +46,7 @@ const defaultPolicy: IRpcProtocolRuntimePolicy = {
 };
 
 function decodeJson(source: string): void {
-	codec.decode(encoder.encode(source), "json");
+	codec.decode(encoder.encode(source), RpcDecodePhaseEnum.json);
 }
 
 function createNodeBoundaryJson(totalNodes: number): string {
@@ -59,10 +63,10 @@ function createNodeBoundaryJson(totalNodes: number): string {
 
 function createEndpoint(messages: readonly Uint8Array[]): {
 	readonly endpoint: RpcEndpointImpl;
-	readonly failures: RpcEndpointFailure[];
+	readonly failures: RpcEndpointFailureEnum[];
 } {
 	const messageSource = new Subject<Uint8Array>();
-	const failures: RpcEndpointFailure[] = [];
+	const failures: RpcEndpointFailureEnum[] = [];
 	const connection: IRpcConnection = {
 		message$: messageSource.asObservable(),
 		async send() {},
@@ -90,7 +94,7 @@ function createSession(
 		fault() {},
 	};
 	return new RpcSessionImpl({
-		role: "connector",
+		role: RpcProtocolRoleEnum.connector,
 		host,
 		sessionId: "boundary-session",
 		proofKey: {} as CryptoKey,
@@ -301,18 +305,24 @@ describe("Default RPC Protocol resource boundaries", () => {
 		for (let ordinal = 1; ordinal <= 3; ordinal += 1) {
 			expect(
 				ordinary._queueSemantic({
-					kind: "result",
+					kind: RpcWireRecordKindEnum.result,
 					callId: String(ordinal),
 				}),
 				"ordinary replay entries limit-1",
 			).toBe(true);
 		}
 		expect(
-			ordinary._queueSemantic({ kind: "result", callId: "4" }),
+			ordinary._queueSemantic({
+				kind: RpcWireRecordKindEnum.result,
+				callId: "4",
+			}),
 			"ordinary replay entries limit",
 		).toBe(true);
 		expect(
-			ordinary._queueSemantic({ kind: "result", callId: "5" }),
+			ordinary._queueSemantic({
+				kind: RpcWireRecordKindEnum.result,
+				callId: "5",
+			}),
 			"ordinary replay entries limit+1",
 		).toBe(false);
 		ordinary.forceClose();
@@ -322,15 +332,15 @@ describe("Default RPC Protocol resource boundaries", () => {
 			const queue = (ordinal: number) =>
 				kind === "terminal"
 					? protectedSession._queueSemantic({
-							kind: "error",
+							kind: RpcWireRecordKindEnum.error,
 							callId: String(ordinal),
 							error: {
-								code: "unavailable",
+								code: RpcExceptionCodeEnum.unavailable,
 								message: "Remote call failed with code unavailable.",
 							},
 						})
 					: protectedSession._queueSemantic({
-							kind: "cancel",
+							kind: RpcWireRecordKindEnum.cancel,
 							callId: String(ordinal),
 						});
 			for (let ordinal = 1; ordinal <= 255; ordinal += 1) {

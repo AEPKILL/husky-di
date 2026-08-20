@@ -22,15 +22,15 @@ export function createRpcConnector(
 ): IRpcConnector {
 	const snapshot = snapshotRpcFactoryOptions(options);
 	const policy = createRpcConnectorRuntimePolicy(snapshot.runtimePolicy);
-	let owner: RpcConnectorImpl | undefined;
+	let connector: RpcConnectorImpl | undefined;
 	const runtime = createRpcProtocolConnectorRuntime(
 		resolveRpcProtocol(snapshot.protocol),
 		policy,
 		{
-			attachSession: (session) => owner?.attachProtocolSession(session),
-			fault: (reason, error) => owner?.protocolFault(reason, error),
+			attachSession: (session) => connector?.attachProtocolSession(session),
+			fault: (reason, error) => connector?.protocolFault(reason, error),
 		},
 	);
-	owner = new RpcConnectorImpl(runtime, policy);
-	return owner;
+	connector = new RpcConnectorImpl(runtime, policy);
+	return connector;
 }

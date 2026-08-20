@@ -14,6 +14,7 @@ import { describe, expect, it, vi } from "vitest";
 import packageManifest from "../package.json";
 import {
 	type RpcConformanceCaseResult,
+	RpcConformanceStatusEnum,
 	runRpcConnectorAdapterConformance,
 } from "../src/conformance";
 import {
@@ -22,9 +23,17 @@ import {
 	createRpcConnector,
 	type IRpcConnector,
 	type IRpcProtocol,
+	RpcAcceptorListenerStopReasonEnum,
+	RpcCallDirectionEnum,
+	RpcCallStatusEnum,
+	RpcCloseOutcomeEnum,
+	RpcCloseReasonEnum,
 	type RpcConnectorRuntimePolicyOptions,
 	type RpcEvent,
+	RpcEventTypeEnum,
 	RpcException,
+	RpcExceptionCodeEnum,
+	RpcStateStatusEnum,
 } from "../src/index";
 import type {
 	IRpcConnection,
@@ -34,7 +43,12 @@ import type {
 	IRpcProtocolSession,
 	IRpcProtocolSessionHost,
 } from "../src/protocol";
-import { createRpcProtocol } from "../src/protocol";
+import {
+	createRpcProtocol,
+	RpcCallTerminalTypeEnum,
+	RpcIncomingCallKindEnum,
+	RpcProtocolSessionTransitionTypeEnum,
+} from "../src/protocol";
 import { createMemoryConnectorFixture } from "./conformance/test.utils";
 
 interface CalculatorService {
@@ -272,6 +286,19 @@ describe("cold Topology Owner factories", () => {
 			sideEffects: false,
 			engines: { node: ">=23.6" },
 			publishConfig: { access: "public" },
+			files: [
+				"dist",
+				"wire",
+				"docs/ARCHITECTURE.drawio",
+				"docs/ARCHITECTURE.png",
+				"docs/PROTOCOL.md",
+				"docs/REQUIREMENTS.md",
+				"docs/SPECIFICATION.md",
+				"docs/TRANSPORT.md",
+				"README.md",
+				"CHANGELOG.md",
+				"LICENSE",
+			],
 		});
 	});
 
@@ -1295,9 +1322,55 @@ describe("Adapter startup and Protocol handoff", () => {
 });
 
 describe("custom Protocol outgoing invocations", () => {
+	it("RPC-PKG-007 RPC-PKG-008 RPC-PKG-009 exposes stable string enums for public RPC vocabularies", async () => {
+		const protocolEntry = await import("../src/protocol");
+
+		expect(RpcCallDirectionEnum).toEqual({
+			incoming: "incoming",
+			outgoing: "outgoing",
+		});
+		expect(RpcExceptionCodeEnum).toEqual({
+			canceled: "canceled",
+			unavailable: "unavailable",
+			outcomeUnknown: "outcome-unknown",
+			handlerFailed: "handler-failed",
+			unknownService: "unknown-service",
+			unknownMethod: "unknown-method",
+			protocol: "protocol",
+		});
+		expect(RpcCloseReasonEnum.cleanupFailed).toBe("cleanup-failed");
+		expect(RpcCallStatusEnum).toEqual({
+			fulfilled: "fulfilled",
+			rejected: "rejected",
+			terminated: "terminated",
+		});
+		expect(RpcEventTypeEnum.topologyClosed).toBe("topology-closed");
+		expect(RpcCloseOutcomeEnum.failed).toBe("failed");
+		expect(RpcStateStatusEnum.recovering).toBe("recovering");
+		expect(RpcAcceptorListenerStopReasonEnum.resourcePressure).toBe(
+			"resource-pressure",
+		);
+		expect(RpcCallTerminalTypeEnum.sessionTerminated).toBe(
+			"session-terminated",
+		);
+		expect(RpcIncomingCallKindEnum.handler).toBe("handler");
+		expect(RpcProtocolSessionTransitionTypeEnum).toEqual({
+			draining: "draining",
+			recovering: "recovering",
+			recovered: "recovered",
+			closed: "closed",
+		});
+		expect(RpcConformanceStatusEnum).toEqual({
+			passed: "passed",
+			failed: "failed",
+		});
+		expect(protocolEntry.RpcExceptionCodeEnum).toBe(RpcExceptionCodeEnum);
+		expect(protocolEntry.RpcCloseReasonEnum).toBe(RpcCloseReasonEnum);
+	});
+
 	it("RPC-CALL-009 exposes a caller-constructible coded RpcException", () => {
 		const cause = new Error("trusted local failure");
-		const exception = new RpcException("unavailable", cause);
+		const exception = new RpcException(RpcExceptionCodeEnum.unavailable, cause);
 
 		expect(exception).toBeInstanceOf(CodedException);
 		expect(exception).toMatchObject({
@@ -1339,10 +1412,13 @@ describe("custom Protocol outgoing invocations", () => {
 		const remote = connector.peer.resolve(descriptor);
 		const admitted = remote.add(1, 2);
 
-		sink?.finish({ type: "failed", code: "outcome-unknown" });
+		sink?.finish({
+			type: RpcCallTerminalTypeEnum.failed,
+			code: RpcExceptionCodeEnum.outcomeUnknown,
+		});
 		sessionHost.transition({
-			type: "closed",
-			reason: "continuity-failure",
+			type: RpcProtocolSessionTransitionTypeEnum.closed,
+			reason: RpcCloseReasonEnum.continuityFailure,
 		});
 
 		const admittedError = await admitted.catch((error: unknown) => error);
@@ -1422,7 +1498,7 @@ describe("custom Protocol outgoing invocations", () => {
 		}
 		const fault = new Error("shared Protocol invariant failed");
 
-		protocolHost.fault("protocol-fault", fault);
+		protocolHost.fault(RpcCloseReasonEnum.protocolFault, fault);
 
 		expect(operations[0]).toBe("runtime-close");
 		expect(acceptor.state).toEqual({ status: "closing" });
@@ -1512,7 +1588,7 @@ describe("custom Protocol outgoing invocations", () => {
 		]);
 
 		sink?.finish({
-			type: "returned",
+			type: RpcCallTerminalTypeEnum.returned,
 			value: host.normalizeApplicationValue(3),
 		});
 		await expect(result).resolves.toBe(3);
@@ -1551,7 +1627,10 @@ describe("custom Protocol outgoing invocations", () => {
 							},
 							cancel() {
 								cancelCalls += 1;
-								sink?.finish({ type: "failed", code: "canceled" });
+								sink?.finish({
+									type: RpcCallTerminalTypeEnum.failed,
+									code: RpcExceptionCodeEnum.canceled,
+								});
 							},
 						};
 					},
@@ -1630,8 +1709,14 @@ describe("stable remote service groups", () => {
 		const createSession = (
 			name: string,
 			outcome:
-				| { readonly type: "returned"; readonly value: number }
-				| { readonly type: "failed"; readonly code: "handler-failed" },
+				| {
+						readonly type: RpcCallTerminalTypeEnum.returned;
+						readonly value: number;
+				  }
+				| {
+						readonly type: RpcCallTerminalTypeEnum.failed;
+						readonly code: RpcExceptionCodeEnum.handlerFailed;
+				  },
 		): IRpcProtocolSession => ({
 			reserveInvocation(request) {
 				operations.push(`reserve-${name}`);
@@ -1642,9 +1727,9 @@ describe("stable remote service groups", () => {
 						return {
 							start() {
 								operations.push(`start-${name}`);
-								if (outcome.type === "returned") {
+								if (outcome.type === RpcCallTerminalTypeEnum.returned) {
 									sink.finish({
-										type: "returned",
+										type: RpcCallTerminalTypeEnum.returned,
 										value: host.normalizeApplicationValue(outcome.value),
 									});
 								} else {
@@ -1662,13 +1747,18 @@ describe("stable remote service groups", () => {
 			forceClose() {},
 		});
 		expect(
-			host.admitSession(createSession("first", { type: "returned", value: 3 })),
+			host.admitSession(
+				createSession("first", {
+					type: RpcCallTerminalTypeEnum.returned,
+					value: 3,
+				}),
+			),
 		).toBeDefined();
 		expect(
 			host.admitSession(
 				createSession("second", {
-					type: "failed",
-					code: "handler-failed",
+					type: RpcCallTerminalTypeEnum.failed,
+					code: RpcExceptionCodeEnum.handlerFailed,
 				}),
 			),
 		).toBeDefined();
@@ -1788,7 +1878,10 @@ describe("custom Protocol incoming calls", () => {
 			},
 			forceClose() {
 				forceCalls += 1;
-				sink?.finish({ type: "failed", code: "outcome-unknown" });
+				sink?.finish({
+					type: RpcCallTerminalTypeEnum.failed,
+					code: RpcExceptionCodeEnum.outcomeUnknown,
+				});
 			},
 		};
 		const { connector } = await connectProtocolSession(session);
@@ -1799,7 +1892,7 @@ describe("custom Protocol incoming calls", () => {
 		const result = connector.peer.resolve(descriptor).add(20, 21);
 
 		sink?.finish({
-			type: "returned",
+			type: RpcCallTerminalTypeEnum.returned,
 			value: { value: 41, weight: 2 } as never,
 		});
 
@@ -1833,7 +1926,10 @@ describe("custom Protocol incoming calls", () => {
 		}
 		const call = reserved.reservation.commit();
 
-		call.finish({ type: "failed", code: "unknown-method" });
+		call.finish({
+			type: RpcCallTerminalTypeEnum.failed,
+			code: RpcExceptionCodeEnum.unknownMethod,
+		});
 
 		expect(forceCalls).toBe(1);
 		expect(connector.peer.state).toMatchObject({
@@ -1871,7 +1967,10 @@ describe("custom Protocol incoming calls", () => {
 		}
 		const call = reserved.reservation.commit();
 
-		call.finish({ type: "failed", code: "unknown-service" });
+		call.finish({
+			type: RpcCallTerminalTypeEnum.failed,
+			code: RpcExceptionCodeEnum.unknownService,
+		});
 
 		expect(forceCalls).toBe(1);
 		expect(connector.peer.state).toMatchObject({
@@ -1956,7 +2055,10 @@ describe("custom Protocol incoming calls", () => {
 		if (handlerOutcome.type !== "returned") {
 			throw new Error("Expected a returned handler value.");
 		}
-		call.finish({ type: "returned", value: handlerOutcome.value });
+		call.finish({
+			type: RpcCallTerminalTypeEnum.returned,
+			value: handlerOutcome.value,
+		});
 
 		expect(
 			events.filter(
@@ -2006,9 +2108,10 @@ describe("custom Protocol incoming calls", () => {
 		if (unknownService?.kind !== "unknown") {
 			throw new Error("Expected unknown-service reservation.");
 		}
-		unknownService.reservation
-			.commit()
-			.finish({ type: "failed", code: "unknown-service" });
+		unknownService.reservation.commit().finish({
+			type: RpcCallTerminalTypeEnum.failed,
+			code: RpcExceptionCodeEnum.unknownService,
+		});
 
 		const unknownMethod = sessionHost.reserveIncomingCall({
 			service: "example.calculator.v1",
@@ -2022,9 +2125,10 @@ describe("custom Protocol incoming calls", () => {
 		if (unknownMethod?.kind !== "unknown") {
 			throw new Error("Expected unknown-method reservation.");
 		}
-		unknownMethod.reservation
-			.commit()
-			.finish({ type: "failed", code: "unknown-method" });
+		unknownMethod.reservation.commit().finish({
+			type: RpcCallTerminalTypeEnum.failed,
+			code: RpcExceptionCodeEnum.unknownMethod,
+		});
 
 		const observations = events.filter(
 			(event) =>
@@ -2090,7 +2194,10 @@ describe("custom Protocol incoming calls", () => {
 		if (firstOutcome.type !== "returned") {
 			throw new Error("Expected the first handler result.");
 		}
-		first.finish({ type: "returned", value: firstOutcome.value });
+		first.finish({
+			type: RpcCallTerminalTypeEnum.returned,
+			value: firstOutcome.value,
+		});
 		await Promise.resolve();
 		expect(handlerCalls).toBe(2);
 
@@ -2099,7 +2206,10 @@ describe("custom Protocol incoming calls", () => {
 		if (secondOutcome.type !== "returned") {
 			throw new Error("Expected the second handler result.");
 		}
-		second.finish({ type: "returned", value: secondOutcome.value });
+		second.finish({
+			type: RpcCallTerminalTypeEnum.returned,
+			value: secondOutcome.value,
+		});
 	});
 
 	it("RPC-RESOURCE-001 rejects incoming work before route lookup when the args subcap is reserved", async () => {
@@ -2170,7 +2280,7 @@ describe("custom Protocol incoming calls", () => {
 		}
 		const call = reserved.reservation.commit();
 		await Promise.resolve();
-		call.finish({ type: "session-terminated" });
+		call.finish({ type: RpcCallTerminalTypeEnum.sessionTerminated });
 
 		resolveHandler(
 			new Proxy(
@@ -2289,11 +2399,18 @@ describe("Protocol Session state projection", () => {
 			},
 		});
 
-		sessionHost.transition({ type: "recovering" });
+		sessionHost.transition({
+			type: RpcProtocolSessionTransitionTypeEnum.recovering,
+		});
 		expect(connector.peer.state).toEqual({ status: "recovering" });
-		sessionHost.transition({ type: "recovered" });
+		sessionHost.transition({
+			type: RpcProtocolSessionTransitionTypeEnum.recovered,
+		});
 		expect(connector.peer.state).toEqual({ status: "connected" });
-		sessionHost.transition({ type: "closed", reason: "remote-terminated" });
+		sessionHost.transition({
+			type: RpcProtocolSessionTransitionTypeEnum.closed,
+			reason: RpcCloseReasonEnum.remoteTerminated,
+		});
 
 		expect(connector.peer.state).toEqual({
 			status: "closed",
@@ -2675,7 +2792,9 @@ describe("Acceptor Topology Owner termination", () => {
 		if (connectedPeer === undefined || recoveringPeer === undefined) {
 			throw new Error("Expected both admitted peers.");
 		}
-		recoveringHost.transition({ type: "recovering" });
+		recoveringHost.transition({
+			type: RpcProtocolSessionTransitionTypeEnum.recovering,
+		});
 		const events: RpcEvent[] = [];
 		acceptor.event$.subscribe((event) => events.push(event));
 

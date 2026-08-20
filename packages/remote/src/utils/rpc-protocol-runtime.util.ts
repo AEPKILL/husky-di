@@ -4,6 +4,8 @@
  * @created 2026-08-19 00:00:00
  */
 
+import { RpcCloseReasonEnum } from "@/enums/rpc-close-reason.enum";
+import { RpcExceptionCodeEnum } from "@/enums/rpc-exception-code.enum";
 import { createRpcException } from "@/factories/rpc-exception.factory";
 import { getRpcProtocol } from "@/factories/rpc-protocol.factory";
 import type {
@@ -100,7 +102,7 @@ function createHostBase(
 				return rpcApplicationValuesEqual(left, right);
 			} catch (error) {
 				fault(
-					"protocol-fault",
+					RpcCloseReasonEnum.protocolFault,
 					error instanceof Error
 						? error
 						: new Error("Protocol supplied an invalid Application snapshot."),
@@ -154,7 +156,7 @@ function wrapProtocolConstruction<T>(operation: () => T): T {
 		return operation();
 	} catch (error) {
 		throw createRpcException(
-			"protocol",
+			RpcExceptionCodeEnum.protocol,
 			error instanceof Error
 				? error
 				: new Error("Protocol construction failed."),

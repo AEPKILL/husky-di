@@ -6,6 +6,7 @@
 
 import { describe, expect, it } from "vitest";
 
+import { RpcDecodePhaseEnum } from "../../src/enums/protocol/rpc-decode-phase.enum";
 import { RpcCodecImpl } from "../../src/impls/protocol/rpc-codec.impl";
 
 const encoder = new TextEncoder();
@@ -38,7 +39,7 @@ describe("Default RPC Protocol Close wire shape", () => {
 		expect(() =>
 			codec.decode(
 				encoder.encode(JSON.stringify({ kind: "close", [field]: null })),
-				"active",
+				RpcDecodePhaseEnum.active,
 			),
 		).toThrow("RPC close contains a forbidden control member.");
 	});
@@ -46,7 +47,7 @@ describe("Default RPC Protocol Close wire shape", () => {
 	it("RPC-WIRE-005 RPC-WIRE-015 accepts and ignores a bounded unknown Close tail", () => {
 		const record = codec.decode(
 			encoder.encode(JSON.stringify({ kind: "close", future: true })),
-			"active",
+			RpcDecodePhaseEnum.active,
 		);
 
 		expect(record).toMatchObject({

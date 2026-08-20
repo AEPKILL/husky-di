@@ -5,6 +5,7 @@
  */
 
 import { Subject } from "rxjs";
+import { RpcProtocolRoleEnum } from "../../src/enums/protocol/rpc-protocol-role.enum";
 import { RpcCodecImpl } from "../../src/impls/protocol/rpc-codec.impl";
 import { RpcEndpointImpl } from "../../src/impls/protocol/rpc-endpoint.impl";
 import { RpcSessionImpl } from "../../src/impls/protocol/rpc-session.impl";
@@ -124,7 +125,7 @@ export function createRpcDirectSessionHarness(): IRpcDirectSessionHarness {
 		return endpoint;
 	};
 	const created = new RpcSessionImpl({
-		role: "connector",
+		role: RpcProtocolRoleEnum.connector,
 		host,
 		sessionId: "direct-session",
 		proofKey: {} as CryptoKey,

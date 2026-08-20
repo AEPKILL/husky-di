@@ -59,8 +59,9 @@ void structuralOptions;
 void structuralFailure;
 
 describe("RPC conformance package surface", () => {
-	it("RPC-PKG-009 exports exactly the three conformance runtime runners", () => {
+	it("RPC-PKG-009 exports the conformance status enum and exactly three runtime runners", () => {
 		expect(Object.keys(conformance).sort()).toEqual([
+			"RpcConformanceStatusEnum",
 			"runRpcAcceptorAdapterConformance",
 			"runRpcConnectorAdapterConformance",
 			"runRpcProtocolConformance",

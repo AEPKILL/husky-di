@@ -11,18 +11,16 @@ import {
 	RPC_MAX_INGRESS_RECORDS,
 	RPC_MAX_MESSAGE_BYTES,
 } from "@/constants/protocol/rpc-profile.const";
+import { RpcEndpointFailureEnum } from "@/enums/protocol/rpc-endpoint-failure.enum";
 import type { IRpcEndpoint } from "@/interfaces/protocol/rpc-endpoint.interface";
 import type { IRpcConnection } from "@/interfaces/rpc-connection.interface";
-import type {
-	CreateRpcEndpointOptions,
-	RpcEndpointFailure,
-} from "@/types/protocol/rpc-endpoint.type";
+import type { CreateRpcEndpointOptions } from "@/types/protocol/rpc-endpoint.type";
 
 /** Owns one exact Physical Connection endpoint and its bounded local work. */
 export class RpcEndpointImpl implements IRpcEndpoint {
 	readonly _connection: IRpcConnection;
 	readonly _onMessage: (message: Uint8Array) => Promise<void> | void;
-	readonly _onFailure: (reason: RpcEndpointFailure, error?: Error) => void;
+	readonly _onFailure: (reason: RpcEndpointFailureEnum, error?: Error) => void;
 	readonly _ingress: Uint8Array[] = [];
 	_subscription: Subscription | undefined;
 	_ingressBytes = 0;
@@ -45,12 +43,12 @@ export class RpcEndpointImpl implements IRpcEndpoint {
 			next: (message) => this._enqueue(message),
 			error: (error) =>
 				this._fail(
-					"connection",
+					RpcEndpointFailureEnum.connection,
 					error instanceof Error
 						? error
 						: new Error("RPC Connection message stream failed."),
 				),
-			complete: () => this._fail("connection"),
+			complete: () => this._fail(RpcEndpointFailureEnum.connection),
 		});
 	}
 
@@ -121,14 +119,14 @@ export class RpcEndpointImpl implements IRpcEndpoint {
 		}
 		if (!(message instanceof Uint8Array)) {
 			this._fail(
-				"protocol",
+				RpcEndpointFailureEnum.protocol,
 				new Error("RPC Connection emitted a non-byte message."),
 			);
 			return;
 		}
 		if (message.byteLength > RPC_MAX_MESSAGE_BYTES) {
 			this._fail(
-				"protocol",
+				RpcEndpointFailureEnum.protocol,
 				new Error("RPC Connection emitted an oversized Transport message."),
 			);
 			return;
@@ -138,7 +136,7 @@ export class RpcEndpointImpl implements IRpcEndpoint {
 			this._ingressBytes + message.byteLength > RPC_MAX_INGRESS_BYTES
 		) {
 			this._fail(
-				"resource",
+				RpcEndpointFailureEnum.resource,
 				new Error("RPC Connection ingress backlog overflowed."),
 			);
 			return;
@@ -165,7 +163,7 @@ export class RpcEndpointImpl implements IRpcEndpoint {
 				await this._onMessage(message);
 			} catch (error) {
 				this._fail(
-					"protocol",
+					RpcEndpointFailureEnum.protocol,
 					error instanceof Error
 						? error
 						: new Error("RPC endpoint ingress processing failed."),
@@ -175,7 +173,7 @@ export class RpcEndpointImpl implements IRpcEndpoint {
 		}
 	}
 
-	_fail(reason: RpcEndpointFailure, error?: Error): void {
+	_fail(reason: RpcEndpointFailureEnum, error?: Error): void {
 		if (this._failed || this._closed) {
 			return;
 		}
@@ -218,7 +216,7 @@ export class RpcEndpointImpl implements IRpcEndpoint {
 			return;
 		}
 		this._fail(
-			"connection",
+			RpcEndpointFailureEnum.connection,
 			new Error("RPC Connection send did not make bounded progress."),
 		);
 	}

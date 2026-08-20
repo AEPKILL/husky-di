@@ -12,12 +12,14 @@ import {
 	createRemoteServiceDescriptor,
 	createRpcAcceptor,
 	type IRpcProtocol,
+	RpcCloseReasonEnum,
 } from "../src/index";
 import type {
 	IRpcConnection,
 	IRpcProtocolAcceptorHost,
 	IRpcProtocolSession,
 } from "../src/protocol";
+import { RpcProtocolSessionTransitionTypeEnum } from "../src/protocol";
 
 interface FaultingService {
 	run(): Promise<void>;
@@ -52,8 +54,8 @@ describe("Acceptor termination cleanup", () => {
 			reserveInvocation: () => undefined,
 			forceClose() {
 				sessionHost?.transition({
-					type: "closed",
-					reason: "forced-close",
+					type: RpcProtocolSessionTransitionTypeEnum.closed,
+					reason: RpcCloseReasonEnum.forcedClose,
 				});
 			},
 		});
@@ -62,7 +64,7 @@ describe("Acceptor termination cleanup", () => {
 			throw new Error("Expected an admitted Acceptor Session.");
 		}
 
-		sessionHost.fault("protocol-fault", fault);
+		sessionHost.fault(RpcCloseReasonEnum.protocolFault, fault);
 
 		expect(peer.state).toMatchObject({
 			status: "closed",
@@ -176,8 +178,12 @@ describe("Acceptor termination cleanup", () => {
 			throw new Error("Expected the healthy sibling peer.");
 		}
 
-		firstHost.transition({ type: "recovering" });
-		firstHost.transition({ type: "recovering" });
+		firstHost.transition({
+			type: RpcProtocolSessionTransitionTypeEnum.recovering,
+		});
+		firstHost.transition({
+			type: RpcProtocolSessionTransitionTypeEnum.recovering,
+		});
 
 		expect(forced).toEqual([1, 0]);
 		expect(acceptor.state).toMatchObject({ status: "active" });
@@ -185,7 +191,9 @@ describe("Acceptor termination cleanup", () => {
 
 		const termination = acceptor.shutdown();
 		expect(acceptor.state).toEqual({ status: "draining" });
-		secondHost.transition({ type: "recovering" });
+		secondHost.transition({
+			type: RpcProtocolSessionTransitionTypeEnum.recovering,
+		});
 		expect(forced).toEqual([1, 1]);
 		expect(acceptor.state).toEqual({ status: "draining" });
 		expect(acceptor.peers).toEqual([]);

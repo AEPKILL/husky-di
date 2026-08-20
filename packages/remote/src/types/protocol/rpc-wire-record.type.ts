@@ -4,6 +4,9 @@
  * @created 2026-08-19 00:00:00
  */
 
+import type { RpcResumeRejectCodeEnum } from "@/enums/protocol/rpc-resume-reject-code.enum";
+import type { RpcWireRecordKindEnum } from "@/enums/protocol/rpc-wire-record-kind.enum";
+import type { RpcExceptionCodeEnum } from "@/enums/rpc-exception-code.enum";
 import type { RpcApplicationValue } from "@/interfaces/protocol/rpc-protocol.interface";
 
 export type RpcJsonRecord = {
@@ -19,13 +22,13 @@ export type RpcJsonValue =
 	| RpcJsonRecord;
 
 export type RpcFreshRequest = RpcJsonRecord & {
-	readonly kind: "fresh";
+	readonly kind: RpcWireRecordKindEnum.fresh;
 	readonly profiles: readonly string[];
 	readonly initiatorNonce: string;
 };
 
 export type RpcFreshAccept = RpcJsonRecord & {
-	readonly kind: "accept";
+	readonly kind: RpcWireRecordKindEnum.accept;
 	readonly profile: string;
 	readonly sessionId: string;
 	readonly bindingEpoch: 1;
@@ -35,7 +38,7 @@ export type RpcFreshAccept = RpcJsonRecord & {
 };
 
 export type RpcResumeRequest = RpcJsonRecord & {
-	readonly kind: "resume";
+	readonly kind: RpcWireRecordKindEnum.resume;
 	readonly profile: string;
 	readonly sessionId: string;
 	readonly receivedThrough: number;
@@ -47,7 +50,7 @@ export type RpcResumeRequest = RpcJsonRecord & {
 export type RpcBootstrapRequest = RpcFreshRequest | RpcResumeRequest;
 
 export type RpcResumeAccept = RpcJsonRecord & {
-	readonly kind: "accept";
+	readonly kind: RpcWireRecordKindEnum.accept;
 	readonly profile: string;
 	readonly sessionId: string;
 	readonly bindingEpoch: number;
@@ -56,14 +59,9 @@ export type RpcResumeAccept = RpcJsonRecord & {
 	readonly proof: string;
 };
 
-export type RpcResumeRejectCode =
-	| "resume-rejected"
-	| "continuity-failure"
-	| "session-terminated";
-
 export type RpcResumeReject = RpcJsonRecord & {
-	readonly kind: "reject";
-	readonly code: RpcResumeRejectCode;
+	readonly kind: RpcWireRecordKindEnum.reject;
+	readonly code: RpcResumeRejectCodeEnum;
 	readonly responderNonce: string;
 	readonly proof: string;
 };
@@ -71,7 +69,7 @@ export type RpcResumeReject = RpcJsonRecord & {
 export type RpcResumeOutcome = RpcResumeAccept | RpcResumeReject;
 
 export type RpcCallMessage = RpcJsonRecord & {
-	readonly kind: "call";
+	readonly kind: RpcWireRecordKindEnum.call;
 	readonly callId: string;
 	readonly service: string;
 	readonly method: string;
@@ -79,25 +77,27 @@ export type RpcCallMessage = RpcJsonRecord & {
 };
 
 export type RpcCancelMessage = RpcJsonRecord & {
-	readonly kind: "cancel";
+	readonly kind: RpcWireRecordKindEnum.cancel;
 	readonly callId: string;
 };
 
 export type RpcResultMessage = RpcJsonRecord & {
-	readonly kind: "result";
+	readonly kind: RpcWireRecordKindEnum.result;
 	readonly callId: string;
 	readonly value?: RpcApplicationValue;
 };
 
-export type RpcWireErrorCode =
-	| "canceled"
-	| "unavailable"
-	| "handler-failed"
-	| "unknown-service"
-	| "unknown-method";
+export type RpcWireErrorCode = Extract<
+	RpcExceptionCodeEnum,
+	| RpcExceptionCodeEnum.canceled
+	| RpcExceptionCodeEnum.unavailable
+	| RpcExceptionCodeEnum.handlerFailed
+	| RpcExceptionCodeEnum.unknownService
+	| RpcExceptionCodeEnum.unknownMethod
+>;
 
 export type RpcErrorMessage = RpcJsonRecord & {
-	readonly kind: "error";
+	readonly kind: RpcWireRecordKindEnum.error;
 	readonly callId: string;
 	readonly error: {
 		readonly code: RpcWireErrorCode;
@@ -113,19 +113,22 @@ export type RpcSemanticMessage =
 	| RpcErrorMessage;
 
 export type RpcMessageEnvelope = RpcJsonRecord & {
-	readonly kind: "message";
+	readonly kind: RpcWireRecordKindEnum.message;
 	readonly seq: number;
 	readonly ackThrough?: number;
 	readonly message: RpcSemanticMessage;
 };
 
 export type RpcAckRecord = RpcJsonRecord & {
-	readonly kind: "ack";
+	readonly kind: RpcWireRecordKindEnum.ack;
 	readonly ackThrough: number;
 };
 
 export type RpcControlRecord = RpcJsonRecord & {
-	readonly kind: "ping" | "pong" | "close";
+	readonly kind:
+		| RpcWireRecordKindEnum.ping
+		| RpcWireRecordKindEnum.pong
+		| RpcWireRecordKindEnum.close;
 };
 
 export type RpcActiveRecord =

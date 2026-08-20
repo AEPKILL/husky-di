@@ -4,6 +4,11 @@
  * @created 2026-08-19 00:00:00
  */
 
+import type { RpcCallTerminalTypeEnum } from "@/enums/protocol/rpc-call-terminal-type.enum";
+import type { RpcIncomingCallKindEnum } from "@/enums/protocol/rpc-incoming-call-kind.enum";
+import type { RpcProtocolSessionTransitionTypeEnum } from "@/enums/protocol/rpc-protocol-session-transition-type.enum";
+import type { RpcCloseReasonEnum } from "@/enums/rpc-close-reason.enum";
+import type { RpcExceptionCodeEnum } from "@/enums/rpc-exception-code.enum";
 import type { IRpcConnection } from "@/interfaces/rpc-connection.interface";
 
 export type RpcApplicationValue =
@@ -31,55 +36,57 @@ export interface IRpcApplicationSnapshot<
 export interface IRpcApplicationArgumentsSnapshot
 	extends IRpcApplicationSnapshot<readonly RpcApplicationValue[]> {}
 
-export type RpcCallFailure =
-	| "canceled"
-	| "unavailable"
-	| "outcome-unknown"
-	| "handler-failed"
-	| "unknown-service"
-	| "unknown-method";
+export type RpcCallFailure = Exclude<
+	RpcExceptionCodeEnum,
+	RpcExceptionCodeEnum.protocol
+>;
 
-export type RpcUnknownCallFailure = "unknown-service" | "unknown-method";
+export type RpcUnknownCallFailure = Extract<
+	RpcCallFailure,
+	RpcExceptionCodeEnum.unknownService | RpcExceptionCodeEnum.unknownMethod
+>;
 
-export type RpcIncomingFailure =
-	| "canceled"
-	| "handler-failed"
-	| RpcUnknownCallFailure;
+export type RpcIncomingFailure = Extract<
+	RpcCallFailure,
+	| RpcExceptionCodeEnum.canceled
+	| RpcExceptionCodeEnum.handlerFailed
+	| RpcUnknownCallFailure
+>;
 
 export type RpcCallOutcome =
-	| { readonly type: "returned-void" }
+	| { readonly type: RpcCallTerminalTypeEnum.returnedVoid }
 	| {
-			readonly type: "returned";
+			readonly type: RpcCallTerminalTypeEnum.returned;
 			readonly value: IRpcApplicationSnapshot;
 	  }
 	| {
-			readonly type: "failed";
+			readonly type: RpcCallTerminalTypeEnum.failed;
 			readonly code: RpcCallFailure;
 	  };
 
 export type RpcHandlerOutcome =
-	| { readonly type: "not-started" }
-	| { readonly type: "returned-void" }
+	| { readonly type: RpcCallTerminalTypeEnum.notStarted }
+	| { readonly type: RpcCallTerminalTypeEnum.returnedVoid }
 	| {
-			readonly type: "returned";
+			readonly type: RpcCallTerminalTypeEnum.returned;
 			readonly value: IRpcApplicationSnapshot;
 	  }
 	| {
-			readonly type: "failed";
-			readonly code: "handler-failed";
+			readonly type: RpcCallTerminalTypeEnum.failed;
+			readonly code: RpcExceptionCodeEnum.handlerFailed;
 	  };
 
 export type RpcIncomingTerminal =
-	| { readonly type: "returned-void" }
+	| { readonly type: RpcCallTerminalTypeEnum.returnedVoid }
 	| {
-			readonly type: "returned";
+			readonly type: RpcCallTerminalTypeEnum.returned;
 			readonly value: IRpcApplicationSnapshot;
 	  }
 	| {
-			readonly type: "failed";
+			readonly type: RpcCallTerminalTypeEnum.failed;
 			readonly code: RpcIncomingFailure;
 	  }
-	| { readonly type: "session-terminated" };
+	| { readonly type: RpcCallTerminalTypeEnum.sessionTerminated };
 
 export interface IRpcProtocolRuntimePolicy {
 	readonly maxSessions: number;
@@ -98,7 +105,10 @@ export interface IRpcProtocolRuntimePolicy {
 	readonly shutdownDeadlineMs: number;
 }
 
-export type RpcProtocolFaultReason = "protocol-fault" | "resource-fault";
+export type RpcProtocolFaultReason = Extract<
+	RpcCloseReasonEnum,
+	RpcCloseReasonEnum.protocolFault | RpcCloseReasonEnum.resourceFault
+>;
 
 export interface IRpcProtocolHost {
 	readonly policy: IRpcProtocolRuntimePolicy;
@@ -164,39 +174,37 @@ export interface IRpcProtocolIncomingCallReservation<
 
 export type RpcProtocolIncomingCallReservation =
 	| {
-			readonly kind: "handler";
+			readonly kind: RpcIncomingCallKindEnum.handler;
 			readonly reservation: IRpcProtocolIncomingCallReservation<IRpcProtocolIncomingHandlerCall>;
 	  }
 	| {
-			readonly kind: "unknown";
+			readonly kind: RpcIncomingCallKindEnum.unknown;
 			readonly code: RpcUnknownCallFailure;
 			readonly reservation: IRpcProtocolIncomingCallReservation<IRpcProtocolIncomingCall>;
 	  };
 
-export type RpcSessionCloseReason =
-	| "graceful-shutdown"
-	| "forced-close"
-	| "shutdown-deadline"
-	| "remote-terminated"
-	| "recovery-expired"
-	| "continuity-failure"
-	| "counter-exhaustion"
-	| RpcProtocolFaultReason;
+export type RpcSessionCloseReason = Exclude<
+	RpcCloseReasonEnum,
+	RpcCloseReasonEnum.cleanupFailed
+>;
 
 export type RpcProtocolSessionTransitionCloseReason = Exclude<
 	RpcSessionCloseReason,
-	RpcProtocolFaultReason | "shutdown-deadline"
+	RpcProtocolFaultReason | RpcCloseReasonEnum.shutdownDeadline
 >;
 
 export type RpcProtocolSessionTransition =
-	| { readonly type: "draining"; readonly reason: "counter-exhaustion" }
 	| {
-			readonly type: "recovering";
+			readonly type: RpcProtocolSessionTransitionTypeEnum.draining;
+			readonly reason: RpcCloseReasonEnum.counterExhaustion;
+	  }
+	| {
+			readonly type: RpcProtocolSessionTransitionTypeEnum.recovering;
 			readonly cause?: Error;
 	  }
-	| { readonly type: "recovered" }
+	| { readonly type: RpcProtocolSessionTransitionTypeEnum.recovered }
 	| {
-			readonly type: "closed";
+			readonly type: RpcProtocolSessionTransitionTypeEnum.closed;
 			readonly reason: RpcProtocolSessionTransitionCloseReason;
 			readonly cause?: Error;
 	  };

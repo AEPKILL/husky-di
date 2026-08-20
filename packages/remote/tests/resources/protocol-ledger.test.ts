@@ -6,6 +6,7 @@
 
 import { createServiceIdentifier } from "@husky-di/core";
 import { describe, expect, it, vi } from "vitest";
+import { RpcWireRecordKindEnum } from "../../src/enums/protocol/rpc-wire-record-kind.enum";
 import { RpcCodecImpl } from "../../src/impls/protocol/rpc-codec.impl";
 import {
 	createRemoteServiceDescriptor,
@@ -38,7 +39,10 @@ describe("Default RPC Protocol retained ledger", () => {
 		const harness = createRpcDirectSessionHarness();
 		const { session } = harness;
 		for (let ordinal = 1; ordinal <= 3; ordinal += 1) {
-			session._queueSemantic({ kind: "cancel", callId: String(ordinal) });
+			session._queueSemantic({
+				kind: RpcWireRecordKindEnum.cancel,
+				callId: String(ordinal),
+			});
 		}
 		await vi.waitFor(() => expect(harness.sent).toHaveLength(3));
 		await Promise.resolve();

@@ -95,32 +95,38 @@ wildcard that can expose future private files.
 Node-only polyfill.
 
 **RPC-PKG-006 — Artifact.** The packed tarball **MUST** contain only declared build output, normative wire
-assets, `docs/SPECIFICATION.md`, README, CHANGELOG, LICENSE, and package metadata. Every public subpath
+assets, the architecture source and rendered diagram, declared package documentation, README, CHANGELOG,
+LICENSE, and package metadata. Every public subpath
 **MUST** resolve from the installed tarball without workspace source or examples.
 
 **RPC-PKG-007 — Root inventory.** The root **MUST** export runtime values
-`createRemoteServiceDescriptor`, `createRpcConnector`, `createRpcAcceptor`, and `RpcException`; caller types
+`createRemoteServiceDescriptor`, `createRpcConnector`, `createRpcAcceptor`, `createRpcProtocol`, `RpcException`,
+`RpcAcceptorListenerStopReasonEnum`, `RpcCallDirectionEnum`, `RpcCallStatusEnum`, `RpcCloseOutcomeEnum`,
+`RpcCloseReasonEnum`, `RpcEventTypeEnum`, `RpcExceptionCodeEnum`, and `RpcStateStatusEnum`; caller types
 `IRemoteServiceDescriptor`, `IRpcPeer`, `IRpcConnector`, `IRpcAcceptor`, `RpcPeerResult`, `RpcPeerState`,
-`RpcConnectorState`, `RpcAcceptorListenerState`, `RpcAcceptorState`, `RpcTopologyCloseReason`,
-`RpcCallDirection`, `RpcEvent`, `RpcExceptionCode`, `RpcConnectorOptions`, `RpcAcceptorOptions`,
+`RpcConnectorState`, `RpcAcceptorListenerState`, `RpcAcceptorState`, `RpcCloseReasonEnum`,
+`RpcCallDirectionEnum`, `RpcEvent`, `RpcExceptionCodeEnum`, `RpcConnectorOptions`, `RpcAcceptorOptions`,
 `RpcConnectorRuntimePolicyOptions`, and `RpcAcceptorRuntimePolicyOptions`; Transport types `IRpcConnection`,
 `IRpcConnectorAdapter`, and `IRpcAcceptorAdapter`; and shared SPI types `IRpcProtocol`,
 `IRpcProtocolRuntimePolicy`, `IRpcApplicationRecord`, `RpcApplicationValue`, `RpcCallFailure`,
 `RpcProtocolFaultReason`, and `RpcSessionCloseReason`.
 
-**RPC-PKG-008 — Protocol inventory.** `/protocol` **MUST** export the complete issue-17 SPI vocabulary:
+**RPC-PKG-008 — Protocol inventory.** `/protocol` **MUST** export runtime values `createRpcProtocol`,
+`RpcCallTerminalTypeEnum`, `RpcCloseReasonEnum`, `RpcExceptionCodeEnum`, `RpcIncomingCallKindEnum`, and
+`RpcProtocolSessionTransitionTypeEnum` plus the complete issue-17 SPI vocabulary:
 `IRpcConnection`, `RpcApplicationValue`, `IRpcApplicationRecord`, `IRpcApplicationSnapshot`,
 `IRpcApplicationArgumentsSnapshot`, `RpcCallFailure`, `RpcUnknownCallFailure`, `RpcIncomingFailure`,
 `RpcCallOutcome`, `RpcHandlerOutcome`, `RpcIncomingTerminal`, `IRpcProtocolRuntimePolicy`, `IRpcProtocolHost`,
 all outgoing invocation request/sink/reservation/invocation/session types, all incoming request/call/handler/
-reservation types, `RpcProtocolFaultReason`, `RpcSessionCloseReason`,
+reservation types, `RpcCloseReasonEnum`, `RpcProtocolFaultReason`, `RpcSessionCloseReason`,
 `RpcProtocolSessionTransitionCloseReason`, `RpcProtocolSessionTransition`, all Session/role host and runtime
 interfaces, and `IRpcProtocol`.
 
 **RPC-PKG-009 — No helper exports.** Descriptor conditional/mapped helpers, concrete facade and implementation
 mapped types, a generic Topology Owner base, and implementation classes **MUST NOT** be exported. `/transport`
-**MUST** export exactly the three structural Transport types. `/conformance` **MUST** export the three named
-runners plus exactly `RpcConformanceFailure`, `RpcConformanceCaseResult`, `RpcConformanceReport`,
+**MUST** export exactly the three structural Transport types. `/conformance` **MUST** export
+`RpcConformanceStatusEnum`, the three named runners, plus exactly `RpcConformanceFailure`,
+`RpcConformanceCaseResult`, `RpcConformanceReport`,
 `RpcConformanceOptions`, `IRpcProtocolConformanceFixture`, `IRpcAdapterConformanceRemote`,
 `IRpcConnectorAdapterConformanceFixture`, and `IRpcAcceptorAdapterConformanceFixture`.
 
@@ -384,24 +390,35 @@ exposure **MUST NOT** alter an already admitted call, which uses its captured ro
 ### 6.1 Errors, peers, and owners
 
 ```typescript
-export type RpcCallFailure =
-  | "canceled"
-  | "unavailable"
-  | "outcome-unknown"
-  | "handler-failed"
-  | "unknown-service"
-  | "unknown-method";
+export enum RpcExceptionCodeEnum {
+  canceled = "canceled",
+  unavailable = "unavailable",
+  outcomeUnknown = "outcome-unknown",
+  handlerFailed = "handler-failed",
+  unknownService = "unknown-service",
+  unknownMethod = "unknown-method",
+  protocol = "protocol",
+}
 
-export type RpcExceptionCode = RpcCallFailure | "protocol";
+export type RpcCallFailure = Exclude<
+  RpcExceptionCodeEnum,
+  RpcExceptionCodeEnum.protocol
+>;
 
-export class RpcException extends CodedException<RpcExceptionCode> {
-  constructor(code: RpcExceptionCode, cause?: unknown);
+export enum RpcCallStatusEnum {
+  fulfilled = "fulfilled",
+  rejected = "rejected",
+  terminated = "terminated",
+}
+
+export class RpcException extends CodedException<RpcExceptionCodeEnum> {
+  constructor(code: RpcExceptionCodeEnum, cause?: unknown);
   readonly cause?: unknown;
 }
 
 export type RpcPeerResult<T> =
-  | { readonly peer: IRpcPeer; readonly status: "fulfilled"; readonly value: T }
-  | { readonly peer: IRpcPeer; readonly status: "rejected"; readonly reason: RpcException };
+  | { readonly peer: IRpcPeer; readonly status: RpcCallStatusEnum.fulfilled; readonly value: T }
+  | { readonly peer: IRpcPeer; readonly status: RpcCallStatusEnum.rejected; readonly reason: RpcException };
 
 export interface IRpcPeer {
   readonly state: RpcPeerState;
@@ -507,76 +524,99 @@ peers.
 ### 6.2 State unions
 
 ```typescript
-export type RpcTopologyCloseReason = RpcSessionCloseReason | "cleanup-failed";
+export enum RpcStateStatusEnum {
+  unbound = "unbound",
+  connecting = "connecting",
+  connected = "connected",
+  draining = "draining",
+  recovering = "recovering",
+  closed = "closed",
+  active = "active",
+  closing = "closing",
+  idle = "idle",
+  starting = "starting",
+  listening = "listening",
+  stopped = "stopped",
+}
+
+export enum RpcCloseOutcomeEnum {
+  normal = "normal",
+  failed = "failed",
+}
+
+export enum RpcAcceptorListenerStopReasonEnum {
+  completed = "completed",
+  resourcePressure = "resource-pressure",
+}
 
 export type RpcPeerState =
-  | { readonly status: "unbound" }
-  | { readonly status: "connecting" }
-  | { readonly status: "connected" }
-  | { readonly status: "draining"; readonly reason: "graceful-shutdown" | "counter-exhaustion" }
-  | { readonly status: "recovering" }
-  | { readonly status: "closed"; readonly outcome: "normal"; readonly reason:
-      "graceful-shutdown" | "forced-close" | "shutdown-deadline" | "remote-terminated" }
-  | { readonly status: "closed"; readonly outcome: "failed"; readonly reason:
-      "recovery-expired" | "counter-exhaustion"; readonly error: RpcException & { readonly code: "unavailable" } }
-  | { readonly status: "closed"; readonly outcome: "failed"; readonly reason:
-      "continuity-failure" | "protocol-fault" | "resource-fault";
-      readonly error: RpcException & { readonly code: "protocol" } };
+  | { readonly status: RpcStateStatusEnum.unbound }
+  | { readonly status: RpcStateStatusEnum.connecting }
+  | { readonly status: RpcStateStatusEnum.connected }
+  | { readonly status: RpcStateStatusEnum.draining; readonly reason: RpcCloseReasonEnum.gracefulShutdown | RpcCloseReasonEnum.counterExhaustion }
+  | { readonly status: RpcStateStatusEnum.recovering }
+  | { readonly status: RpcStateStatusEnum.closed; readonly outcome: RpcCloseOutcomeEnum.normal; readonly reason:
+      RpcCloseReasonEnum.gracefulShutdown | RpcCloseReasonEnum.forcedClose | RpcCloseReasonEnum.shutdownDeadline | RpcCloseReasonEnum.remoteTerminated }
+  | { readonly status: RpcStateStatusEnum.closed; readonly outcome: RpcCloseOutcomeEnum.failed; readonly reason:
+      RpcCloseReasonEnum.recoveryExpired | RpcCloseReasonEnum.counterExhaustion; readonly error: RpcException & { readonly code: RpcExceptionCodeEnum.unavailable } }
+  | { readonly status: RpcStateStatusEnum.closed; readonly outcome: RpcCloseOutcomeEnum.failed; readonly reason:
+      RpcCloseReasonEnum.continuityFailure | RpcCloseReasonEnum.protocolFault | RpcCloseReasonEnum.resourceFault;
+      readonly error: RpcException & { readonly code: RpcExceptionCodeEnum.protocol } };
 
 type RpcNormalSessionCloseReason =
-  | "graceful-shutdown"
-  | "forced-close"
-  | "shutdown-deadline"
-  | "remote-terminated";
+  | RpcCloseReasonEnum.gracefulShutdown
+  | RpcCloseReasonEnum.forcedClose
+  | RpcCloseReasonEnum.shutdownDeadline
+  | RpcCloseReasonEnum.remoteTerminated;
 
 type RpcUnavailableSessionFailureReason =
-  | "recovery-expired"
-  | "counter-exhaustion";
+  | RpcCloseReasonEnum.recoveryExpired
+  | RpcCloseReasonEnum.counterExhaustion;
 
 type RpcProtocolSessionFailureReason =
-  | "continuity-failure"
-  | "protocol-fault"
-  | "resource-fault";
+  | RpcCloseReasonEnum.continuityFailure
+  | RpcCloseReasonEnum.protocolFault
+  | RpcCloseReasonEnum.resourceFault;
 
 type RpcConnectorClosedState =
-  | { readonly status: "closed"; readonly outcome: "normal";
+  | { readonly status: RpcStateStatusEnum.closed; readonly outcome: RpcCloseOutcomeEnum.normal;
       readonly reason: RpcNormalSessionCloseReason }
-  | { readonly status: "closed"; readonly outcome: "failed";
+  | { readonly status: RpcStateStatusEnum.closed; readonly outcome: RpcCloseOutcomeEnum.failed;
       readonly reason: RpcUnavailableSessionFailureReason;
-      readonly error: RpcException & { readonly code: "unavailable" } }
-  | { readonly status: "closed"; readonly outcome: "failed";
+      readonly error: RpcException & { readonly code: RpcExceptionCodeEnum.unavailable } }
+  | { readonly status: RpcStateStatusEnum.closed; readonly outcome: RpcCloseOutcomeEnum.failed;
       readonly reason: RpcProtocolSessionFailureReason;
-      readonly error: RpcException & { readonly code: "protocol" } }
-  | { readonly status: "closed"; readonly outcome: "failed";
-      readonly reason: "cleanup-failed"; readonly error: Error };
+      readonly error: RpcException & { readonly code: RpcExceptionCodeEnum.protocol } }
+  | { readonly status: RpcStateStatusEnum.closed; readonly outcome: RpcCloseOutcomeEnum.failed;
+      readonly reason: RpcCloseReasonEnum.cleanupFailed; readonly error: Error };
 
 export type RpcConnectorState =
-  | { readonly status: "active" }
-  | { readonly status: "draining" }
-  | { readonly status: "closing" }
+  | { readonly status: RpcStateStatusEnum.active }
+  | { readonly status: RpcStateStatusEnum.draining }
+  | { readonly status: RpcStateStatusEnum.closing }
   | RpcConnectorClosedState;
 
 export type RpcAcceptorListenerState =
-  | { readonly status: "idle" }
-  | { readonly status: "starting" }
-  | { readonly status: "listening" }
-  | { readonly status: "stopped"; readonly outcome: "normal";
-      readonly reason: "completed" | "resource-pressure" }
-  | { readonly status: "stopped"; readonly outcome: "failed"; readonly error: Error };
+  | { readonly status: RpcStateStatusEnum.idle }
+  | { readonly status: RpcStateStatusEnum.starting }
+  | { readonly status: RpcStateStatusEnum.listening }
+  | { readonly status: RpcStateStatusEnum.stopped; readonly outcome: RpcCloseOutcomeEnum.normal;
+      readonly reason: RpcAcceptorListenerStopReasonEnum.completed | RpcAcceptorListenerStopReasonEnum.resourcePressure }
+  | { readonly status: RpcStateStatusEnum.stopped; readonly outcome: RpcCloseOutcomeEnum.failed; readonly error: Error };
 
 type RpcAcceptorClosedState =
-  | { readonly status: "closed"; readonly outcome: "normal";
-      readonly reason: "graceful-shutdown" | "forced-close" | "shutdown-deadline" }
-  | { readonly status: "closed"; readonly outcome: "failed";
-      readonly reason: "protocol-fault" | "resource-fault";
-      readonly error: RpcException & { readonly code: "protocol" } }
-  | { readonly status: "closed"; readonly outcome: "failed";
-      readonly reason: "cleanup-failed"; readonly error: Error };
+  | { readonly status: RpcStateStatusEnum.closed; readonly outcome: RpcCloseOutcomeEnum.normal;
+      readonly reason: RpcCloseReasonEnum.gracefulShutdown | RpcCloseReasonEnum.forcedClose | RpcCloseReasonEnum.shutdownDeadline }
+  | { readonly status: RpcStateStatusEnum.closed; readonly outcome: RpcCloseOutcomeEnum.failed;
+      readonly reason: RpcCloseReasonEnum.protocolFault | RpcCloseReasonEnum.resourceFault;
+      readonly error: RpcException & { readonly code: RpcExceptionCodeEnum.protocol } }
+  | { readonly status: RpcStateStatusEnum.closed; readonly outcome: RpcCloseOutcomeEnum.failed;
+      readonly reason: RpcCloseReasonEnum.cleanupFailed; readonly error: Error };
 
 export type RpcAcceptorState =
-  | { readonly status: "active"; readonly listener: RpcAcceptorListenerState }
-  | { readonly status: "draining" }
-  | { readonly status: "closing" }
+  | { readonly status: RpcStateStatusEnum.active; readonly listener: RpcAcceptorListenerState }
+  | { readonly status: RpcStateStatusEnum.draining }
+  | { readonly status: RpcStateStatusEnum.closing }
   | RpcAcceptorClosedState;
 ```
 
@@ -642,7 +682,7 @@ calling the captured handler. Cancellation/force that wins while queued **MUST**
 handler that ignores cancellation **MUST** continue occupying its finite permit until its real settlement, with
 late result consumed but unable to change the selected terminal.
 
-**RPC-CALL-009 — Public error object.** `RpcException` **MUST** extend `CodedException<RpcExceptionCode>` and
+**RPC-CALL-009 — Public error object.** `RpcException` **MUST** extend `CodedException<RpcExceptionCodeEnum>` and
 **MUST** expose a constructor accepting a code and optional cause. The package **MUST NOT** export its internal
 construction factory. `code` **MUST** be its only stable branch field; inherited `detail` **MUST NOT** contain
 remote data, and message text **MUST NOT** be normative. A trusted local Adapter/Protocol Error **MAY** be
@@ -668,7 +708,23 @@ The following declaration is the closed event union. Its non-exported helper typ
 must remain visible when TypeScript narrows an exported `RpcEvent`:
 
 ```typescript
-export type RpcCallDirection = "incoming" | "outgoing";
+export enum RpcCallDirectionEnum {
+  incoming = "incoming",
+  outgoing = "outgoing",
+}
+
+export enum RpcEventTypeEnum {
+  callStarted = "call-started",
+  callFinished = "call-finished",
+  peerOpened = "peer-opened",
+  peerRecovering = "peer-recovering",
+  peerRecovered = "peer-recovered",
+  peerDraining = "peer-draining",
+  peerClosed = "peer-closed",
+  ownerDraining = "owner-draining",
+  ownerClosing = "owner-closing",
+  topologyClosed = RpcEventTypeEnum.topologyClosed,
+}
 
 type RpcCallObservationBase = {
   readonly observationId: string;
@@ -676,25 +732,25 @@ type RpcCallObservationBase = {
 };
 
 type RpcOutgoingCallContext = {
-  readonly direction: "outgoing";
+  readonly direction: RpcCallDirectionEnum.outgoing;
   readonly service: string;
   readonly method: string;
 };
 
 type RpcKnownIncomingCallContext = {
-  readonly direction: "incoming";
+  readonly direction: RpcCallDirectionEnum.incoming;
   readonly service: string;
   readonly method: string;
 };
 
 type RpcUnknownServiceCallContext = {
-  readonly direction: "incoming";
+  readonly direction: RpcCallDirectionEnum.incoming;
   readonly service?: never;
   readonly method?: never;
 };
 
 type RpcUnknownMethodCallContext = {
-  readonly direction: "incoming";
+  readonly direction: RpcCallDirectionEnum.incoming;
   readonly service: string;
   readonly method?: never;
 };
@@ -702,55 +758,55 @@ type RpcUnknownMethodCallContext = {
 type RpcCallStartedEvent = RpcCallObservationBase &
   (RpcOutgoingCallContext | RpcKnownIncomingCallContext |
    RpcUnknownServiceCallContext | RpcUnknownMethodCallContext) & {
-    readonly type: "call-started";
+    readonly type: RpcEventTypeEnum.callStarted;
   };
 
 type RpcCallFinishedBase = RpcCallObservationBase & {
-  readonly type: "call-finished";
+  readonly type: RpcEventTypeEnum.callFinished;
   readonly durationMs: number;
 };
 
 type RpcCallFinishedEvent = RpcCallFinishedBase & (
-  | (RpcOutgoingCallContext & { readonly outcome: "fulfilled" })
+  | (RpcOutgoingCallContext & { readonly outcome: RpcCallStatusEnum.fulfilled })
   | (RpcOutgoingCallContext & {
-      readonly outcome: "rejected";
+      readonly outcome: RpcCallStatusEnum.rejected;
       readonly code: RpcCallFailure;
     })
-  | (RpcKnownIncomingCallContext & { readonly outcome: "fulfilled" })
+  | (RpcKnownIncomingCallContext & { readonly outcome: RpcCallStatusEnum.fulfilled })
   | (RpcKnownIncomingCallContext & {
-      readonly outcome: "rejected";
-      readonly code: "canceled" | "handler-failed";
+      readonly outcome: RpcCallStatusEnum.rejected;
+      readonly code: RpcExceptionCodeEnum.canceled | RpcExceptionCodeEnum.handlerFailed;
     })
-  | (RpcKnownIncomingCallContext & { readonly outcome: "terminated" })
+  | (RpcKnownIncomingCallContext & { readonly outcome: RpcCallStatusEnum.terminated })
   | (RpcUnknownServiceCallContext & {
-      readonly outcome: "rejected";
-      readonly code: "unknown-service";
+      readonly outcome: RpcCallStatusEnum.rejected;
+      readonly code: RpcExceptionCodeEnum.unknownService;
     })
   | (RpcUnknownMethodCallContext & {
-      readonly outcome: "rejected";
-      readonly code: "unknown-method";
+      readonly outcome: RpcCallStatusEnum.rejected;
+      readonly code: RpcExceptionCodeEnum.unknownMethod;
     })
 );
 
 type RpcPeerLifecycleEvent =
-  | { readonly type: "peer-opened" | "peer-recovering" | "peer-recovered";
+  | { readonly type: RpcEventTypeEnum.peerOpened | RpcEventTypeEnum.peerRecovering | RpcEventTypeEnum.peerRecovered;
       readonly peer: IRpcPeer }
-  | { readonly type: "peer-draining"; readonly peer: IRpcPeer;
-      readonly reason: "graceful-shutdown" | "counter-exhaustion" }
-  | { readonly type: "peer-closed"; readonly peer: IRpcPeer;
-      readonly outcome: "normal"; readonly reason: RpcNormalSessionCloseReason }
-  | { readonly type: "peer-closed"; readonly peer: IRpcPeer;
-      readonly outcome: "failed";
+  | { readonly type: RpcEventTypeEnum.peerDraining; readonly peer: IRpcPeer;
+      readonly reason: RpcCloseReasonEnum.gracefulShutdown | RpcCloseReasonEnum.counterExhaustion }
+  | { readonly type: RpcEventTypeEnum.peerClosed; readonly peer: IRpcPeer;
+      readonly outcome: RpcCloseOutcomeEnum.normal; readonly reason: RpcNormalSessionCloseReason }
+  | { readonly type: RpcEventTypeEnum.peerClosed; readonly peer: IRpcPeer;
+      readonly outcome: RpcCloseOutcomeEnum.failed;
       readonly reason: RpcUnavailableSessionFailureReason | RpcProtocolSessionFailureReason };
 
 type RpcTopologyLifecycleEvent =
-  | { readonly type: "owner-draining" }
-  | { readonly type: "owner-closing" }
-  | { readonly type: "topology-closed"; readonly outcome: "normal";
+  | { readonly type: RpcEventTypeEnum.ownerDraining }
+  | { readonly type: RpcEventTypeEnum.ownerClosing }
+  | { readonly type: RpcEventTypeEnum.topologyClosed; readonly outcome: RpcCloseOutcomeEnum.normal;
       readonly reason: RpcNormalSessionCloseReason }
-  | { readonly type: "topology-closed"; readonly outcome: "failed";
+  | { readonly type: RpcEventTypeEnum.topologyClosed; readonly outcome: RpcCloseOutcomeEnum.failed;
       readonly reason: RpcUnavailableSessionFailureReason |
-        RpcProtocolSessionFailureReason | "cleanup-failed" };
+        RpcProtocolSessionFailureReason | RpcCloseReasonEnum.cleanupFailed };
 
 export type RpcEvent =
   | RpcTopologyLifecycleEvent
@@ -932,29 +988,44 @@ export interface IRpcApplicationSnapshot<
 export interface IRpcApplicationArgumentsSnapshot
   extends IRpcApplicationSnapshot<readonly RpcApplicationValue[]> {}
 
-export type RpcUnknownCallFailure = "unknown-service" | "unknown-method";
+export type RpcUnknownCallFailure = Extract<
+  RpcCallFailure,
+  | RpcExceptionCodeEnum.unknownService
+  | RpcExceptionCodeEnum.unknownMethod
+>;
 
-export type RpcIncomingFailure =
-  | "canceled"
-  | "handler-failed"
-  | RpcUnknownCallFailure;
+export type RpcIncomingFailure = Extract<
+  RpcCallFailure,
+  | RpcExceptionCodeEnum.canceled
+  | RpcExceptionCodeEnum.handlerFailed
+  | RpcUnknownCallFailure
+>;
+
+export enum RpcCallTerminalTypeEnum {
+  notStarted = "not-started",
+  returnedVoid = "returned-void",
+  returned = "returned",
+  failed = "failed",
+  sessionTerminated = "session-terminated",
+}
 
 export type RpcCallOutcome =
-  | { readonly type: "returned-void" }
-  | { readonly type: "returned"; readonly value: IRpcApplicationSnapshot }
-  | { readonly type: "failed"; readonly code: RpcCallFailure };
+  | { readonly type: RpcCallTerminalTypeEnum.returnedVoid }
+  | { readonly type: RpcCallTerminalTypeEnum.returned; readonly value: IRpcApplicationSnapshot }
+  | { readonly type: RpcCallTerminalTypeEnum.failed; readonly code: RpcCallFailure };
 
 export type RpcHandlerOutcome =
-  | { readonly type: "not-started" }
-  | { readonly type: "returned-void" }
-  | { readonly type: "returned"; readonly value: IRpcApplicationSnapshot }
-  | { readonly type: "failed"; readonly code: "handler-failed" };
+  | { readonly type: RpcCallTerminalTypeEnum.notStarted }
+  | { readonly type: RpcCallTerminalTypeEnum.returnedVoid }
+  | { readonly type: RpcCallTerminalTypeEnum.returned; readonly value: IRpcApplicationSnapshot }
+  | { readonly type: RpcCallTerminalTypeEnum.failed;
+      readonly code: RpcExceptionCodeEnum.handlerFailed };
 
 export type RpcIncomingTerminal =
-  | { readonly type: "returned-void" }
-  | { readonly type: "returned"; readonly value: IRpcApplicationSnapshot }
-  | { readonly type: "failed"; readonly code: RpcIncomingFailure }
-  | { readonly type: "session-terminated" };
+  | { readonly type: RpcCallTerminalTypeEnum.returnedVoid }
+  | { readonly type: RpcCallTerminalTypeEnum.returned; readonly value: IRpcApplicationSnapshot }
+  | { readonly type: RpcCallTerminalTypeEnum.failed; readonly code: RpcIncomingFailure }
+  | { readonly type: RpcCallTerminalTypeEnum.sessionTerminated };
 
 export interface IRpcProtocol {
   createConnector(host: IRpcProtocolConnectorHost): IRpcProtocolConnectorRuntime;
@@ -978,7 +1049,24 @@ export interface IRpcProtocolRuntimePolicy {
   readonly shutdownDeadlineMs: number;
 }
 
-export type RpcProtocolFaultReason = "protocol-fault" | "resource-fault";
+export enum RpcCloseReasonEnum {
+  gracefulShutdown = "graceful-shutdown",
+  forcedClose = "forced-close",
+  shutdownDeadline = "shutdown-deadline",
+  remoteTerminated = "remote-terminated",
+  recoveryExpired = "recovery-expired",
+  continuityFailure = "continuity-failure",
+  counterExhaustion = "counter-exhaustion",
+  protocolFault = "protocol-fault",
+  resourceFault = "resource-fault",
+  cleanupFailed = "cleanup-failed",
+}
+
+export type RpcProtocolFaultReason = Extract<
+  RpcCloseReasonEnum,
+  | RpcCloseReasonEnum.protocolFault
+  | RpcCloseReasonEnum.resourceFault
+>;
 
 export interface IRpcProtocolHost {
   readonly policy: IRpcProtocolRuntimePolicy;
@@ -1057,15 +1145,20 @@ export interface IRpcProtocolIncomingCallReservation<
   release(): void;
 }
 
+export enum RpcIncomingCallKindEnum {
+  handler = "handler",
+  unknown = "unknown",
+}
+
 export type RpcProtocolIncomingCallReservation =
   | {
-      readonly kind: "handler";
+      readonly kind: RpcIncomingCallKindEnum.handler;
       readonly reservation: IRpcProtocolIncomingCallReservation<
         IRpcProtocolIncomingHandlerCall
       >;
     }
   | {
-      readonly kind: "unknown";
+      readonly kind: RpcIncomingCallKindEnum.unknown;
       readonly code: RpcUnknownCallFailure;
       readonly reservation: IRpcProtocolIncomingCallReservation<
         IRpcProtocolIncomingCall
@@ -1097,26 +1190,29 @@ report `unavailable` or `outcome-unknown` through a created incoming handle.
 ### 8.3 Sessions, role runtimes, and faults
 
 ```typescript
-export type RpcSessionCloseReason =
-  | "graceful-shutdown"
-  | "forced-close"
-  | "shutdown-deadline"
-  | "remote-terminated"
-  | "recovery-expired"
-  | "continuity-failure"
-  | "counter-exhaustion"
-  | RpcProtocolFaultReason;
+export type RpcSessionCloseReason = Exclude<
+  RpcCloseReasonEnum,
+  RpcCloseReasonEnum.cleanupFailed
+>;
 
 export type RpcProtocolSessionTransitionCloseReason = Exclude<
   RpcSessionCloseReason,
-  RpcProtocolFaultReason | "shutdown-deadline"
+  RpcProtocolFaultReason | RpcCloseReasonEnum.shutdownDeadline
 >;
 
+export enum RpcProtocolSessionTransitionTypeEnum {
+  draining = "draining",
+  recovering = "recovering",
+  recovered = "recovered",
+  closed = "closed",
+}
+
 export type RpcProtocolSessionTransition =
-  | { readonly type: "draining"; readonly reason: "counter-exhaustion" }
-  | { readonly type: "recovering"; readonly cause?: Error }
-  | { readonly type: "recovered" }
-  | { readonly type: "closed";
+  | { readonly type: RpcProtocolSessionTransitionTypeEnum.draining;
+      readonly reason: RpcCloseReasonEnum.counterExhaustion }
+  | { readonly type: RpcProtocolSessionTransitionTypeEnum.recovering; readonly cause?: Error }
+  | { readonly type: RpcProtocolSessionTransitionTypeEnum.recovered }
+  | { readonly type: RpcProtocolSessionTransitionTypeEnum.closed;
       readonly reason: RpcProtocolSessionTransitionCloseReason;
       readonly cause?: Error };
 
@@ -1965,13 +2061,18 @@ seams. It **MUST NOT** assert private class layout, private scheduler turns, or 
 `@husky-di/remote/conformance` exports three framework-neutral asynchronous runners:
 
 ```typescript
+export enum RpcConformanceStatusEnum {
+  passed = "passed",
+  failed = "failed",
+}
+
 export type RpcConformanceFailure = Error & {
   readonly caseId: string;
 };
 
 export type RpcConformanceCaseResult =
-  | { readonly caseId: string; readonly status: "passed" }
-  | { readonly caseId: string; readonly status: "failed";
+  | { readonly caseId: string; readonly status: RpcConformanceStatusEnum.passed }
+  | { readonly caseId: string; readonly status: RpcConformanceStatusEnum.failed;
       readonly error: RpcConformanceFailure };
 
 export type RpcConformanceReport = (result: RpcConformanceCaseResult) => void;
@@ -2102,7 +2203,8 @@ Node CJS, declaration, DOM-only, and browser-bundle consumers and resolve every 
 imports inside the workspace **MUST NOT** count as package evidence. Private deep import **MUST** fail.
 
 **RPC-RELEASE-004 — Release contents.** A stable release **MUST** include this specification, requirement matrix,
-normative suite, caller and implementor documentation, wire corpus, CHANGELOG, and a Changeset that moves
+normative suite, architecture source and rendered diagram, caller and implementor documentation, wire corpus,
+CHANGELOG, and a Changeset that moves
 `@husky-di/remote` from `0.0.0` to `1.0.0`. Build, code-standard, type, conformance, corpus, packed-consumer, and
 browser gates **MUST** pass without skips.
 

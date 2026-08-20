@@ -7,12 +7,17 @@
 import { Subject } from "rxjs";
 import { describe, expect, it, vi } from "vitest";
 
-import { createRpcConnector, type IRpcProtocol } from "../src/index";
+import {
+	createRpcConnector,
+	type IRpcProtocol,
+	RpcCloseReasonEnum,
+} from "../src/index";
 import type {
 	IRpcConnection,
 	IRpcProtocolSession,
 	IRpcProtocolSessionHost,
 } from "../src/protocol";
+import { RpcProtocolSessionTransitionTypeEnum } from "../src/protocol";
 
 function createColdProtocol(overrides?: {
 	readonly cleanup?: () => Promise<void>;
@@ -192,8 +197,8 @@ describe("Connector termination cleanup", () => {
 			forceClose() {
 				forceCalls += 1;
 				sessionHost?.transition({
-					type: "closed",
-					reason: "forced-close",
+					type: RpcProtocolSessionTransitionTypeEnum.closed,
+					reason: RpcCloseReasonEnum.forcedClose,
 				});
 			},
 		};
@@ -206,7 +211,7 @@ describe("Connector termination cleanup", () => {
 							if (sessionHost === undefined) {
 								throw new Error("Expected a provisional Session host.");
 							}
-							sessionHost.fault("protocol-fault", fault);
+							sessionHost.fault(RpcCloseReasonEnum.protocolFault, fault);
 						});
 					},
 					async shutdown() {},
@@ -260,8 +265,8 @@ describe("Connector termination cleanup", () => {
 				forceCalls += 1;
 				if (terminalKind === "Session fault") {
 					sessionHost?.transition({
-						type: "closed",
-						reason: "remote-terminated",
+						type: RpcProtocolSessionTransitionTypeEnum.closed,
+						reason: RpcCloseReasonEnum.remoteTerminated,
 					});
 				}
 			},
@@ -317,7 +322,9 @@ describe("Connector termination cleanup", () => {
 			});
 		};
 		await connect();
-		sessionHost?.transition({ type: "recovering" });
+		sessionHost?.transition({
+			type: RpcProtocolSessionTransitionTypeEnum.recovering,
+		});
 		let recoveryCloseCalls = 0;
 		const recovery = connect(() => {
 			recoveryCloseCalls += 1;
@@ -326,13 +333,15 @@ describe("Connector termination cleanup", () => {
 
 		if (terminalKind === "closed transition") {
 			sessionHost?.transition({
-				type: "closed",
-				reason: "remote-terminated",
+				type: RpcProtocolSessionTransitionTypeEnum.closed,
+				reason: RpcCloseReasonEnum.remoteTerminated,
 			});
 		} else if (terminalKind === "Session fault") {
-			sessionHost?.fault("resource-fault", fault);
+			sessionHost?.fault(RpcCloseReasonEnum.resourceFault, fault);
 		} else {
-			sessionHost?.transition({ type: "recovering" });
+			sessionHost?.transition({
+				type: RpcProtocolSessionTransitionTypeEnum.recovering,
+			});
 		}
 
 		expect(recoverySignal?.aborted).toBe(true);
@@ -534,7 +543,9 @@ describe("Connector termination cleanup", () => {
 									throw new Error("Expected a fresh Session attachment.");
 								}
 							} else {
-								sessionHost?.transition({ type: "recovered" });
+								sessionHost?.transition({
+									type: RpcProtocolSessionTransitionTypeEnum.recovered,
+								});
 							}
 						});
 					},
@@ -567,7 +578,9 @@ describe("Connector termination cleanup", () => {
 					connectionSource.complete();
 				},
 			});
-			sessionHost?.transition({ type: "recovering" });
+			sessionHost?.transition({
+				type: RpcProtocolSessionTransitionTypeEnum.recovering,
+			});
 			messageSource.complete();
 			await Promise.resolve();
 			await Promise.resolve();
@@ -788,8 +801,8 @@ describe("Connector termination cleanup", () => {
 			},
 		});
 		sessionHost?.transition({
-			type: "draining",
-			reason: "counter-exhaustion",
+			type: RpcProtocolSessionTransitionTypeEnum.draining,
+			reason: RpcCloseReasonEnum.counterExhaustion,
 		});
 
 		await connector.shutdown();
@@ -852,10 +865,12 @@ describe("Connector termination cleanup", () => {
 			},
 		});
 
-		sessionHost?.transition({ type: "recovering" });
 		sessionHost?.transition({
-			type: "draining",
-			reason: "counter-exhaustion",
+			type: RpcProtocolSessionTransitionTypeEnum.recovering,
+		});
+		sessionHost?.transition({
+			type: RpcProtocolSessionTransitionTypeEnum.draining,
+			reason: RpcCloseReasonEnum.counterExhaustion,
 		});
 
 		expect(connector.peer.state).toEqual({
@@ -866,9 +881,9 @@ describe("Connector termination cleanup", () => {
 	});
 
 	it.each([
-		"recovery-expired",
-		"counter-exhaustion",
-		"graceful-shutdown",
+		RpcCloseReasonEnum.recoveryExpired,
+		RpcCloseReasonEnum.counterExhaustion,
+		RpcCloseReasonEnum.gracefulShutdown,
 	] as const)("RPC-STATE-001 RPC-SPI-010 faults a connected Session that requests %s terminal", async (reason) => {
 		const connectionSource = new Subject<IRpcConnection>();
 		let sessionHost: IRpcProtocolSessionHost | undefined;
@@ -921,7 +936,10 @@ describe("Connector termination cleanup", () => {
 			},
 		});
 
-		sessionHost?.transition({ type: "closed", reason });
+		sessionHost?.transition({
+			type: RpcProtocolSessionTransitionTypeEnum.closed,
+			reason,
+		});
 
 		expect(forceCalls).toBe(1);
 		expect(runtimeCloseCalls).toBe(0);

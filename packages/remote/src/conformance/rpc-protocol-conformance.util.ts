@@ -5,7 +5,6 @@
  */
 
 import { Observable, Subject } from "rxjs";
-
 import type { IRpcProtocolConformanceFixture } from "@/conformance/rpc-conformance.interface";
 import type { RpcConformanceOptions } from "@/conformance/rpc-conformance.type";
 import {
@@ -13,6 +12,10 @@ import {
 	type IRpcConformanceCase,
 	runRpcConformanceCases,
 } from "@/conformance/rpc-conformance.util";
+import { RpcCallTerminalTypeEnum } from "@/enums/protocol/rpc-call-terminal-type.enum";
+import { RpcIncomingCallKindEnum } from "@/enums/protocol/rpc-incoming-call-kind.enum";
+import { RpcProtocolSessionTransitionTypeEnum } from "@/enums/protocol/rpc-protocol-session-transition-type.enum";
+import { RpcExceptionCodeEnum } from "@/enums/rpc-exception-code.enum";
 import type {
 	IRpcApplicationArgumentsSnapshot,
 	IRpcApplicationSnapshot,
@@ -149,9 +152,9 @@ export function runRpcProtocolConformance(
 					try {
 						const resultValue = { answer: 42 };
 						pair.acceptorProbe.disposition = {
-							kind: "handler",
+							kind: RpcIncomingCallKindEnum.handler,
 							outcome: {
-								type: "returned",
+								type: RpcCallTerminalTypeEnum.returned,
 								value:
 									pair.acceptorProbe.host.normalizeApplicationValue(
 										resultValue,
@@ -177,7 +180,7 @@ export function runRpcProtocolConformance(
 							"Detached argument snapshot changed.",
 						);
 						assertRpcConformance(
-							outcome.type === "returned" &&
+							outcome.type === RpcCallTerminalTypeEnum.returned &&
 								readRecordNumber(outcome.value.value, "answer") === 42 &&
 								Object.isFrozen(outcome.value.value),
 							"Returned value was not a normalized snapshot.",
@@ -193,8 +196,8 @@ export function runRpcProtocolConformance(
 					const pair = await openProtocolPair(fixture.protocol);
 					try {
 						pair.acceptorProbe.disposition = {
-							kind: "handler",
-							outcome: { type: "returned-void" },
+							kind: RpcIncomingCallKindEnum.handler,
+							outcome: { type: RpcCallTerminalTypeEnum.returnedVoid },
 						};
 						const args = pair.connectorProbe.host.normalizeApplicationArguments(
 							[],
@@ -224,7 +227,7 @@ export function runRpcProtocolConformance(
 							"Invocation outcome",
 						);
 						assertRpcConformance(
-							outcome.value?.type === "returned-void",
+							outcome.value?.type === RpcCallTerminalTypeEnum.returnedVoid,
 							"Sink did not receive the handler outcome.",
 						);
 					} finally {
@@ -416,8 +419,14 @@ function assertRoleRuntime(value: unknown): void {
 
 type IncomingDisposition =
 	| { readonly kind: "resource" }
-	| { readonly kind: "unknown"; readonly code: RpcUnknownCallFailure }
-	| { readonly kind: "handler"; readonly outcome: RpcHandlerOutcome };
+	| {
+			readonly kind: RpcIncomingCallKindEnum.unknown;
+			readonly code: RpcUnknownCallFailure;
+	  }
+	| {
+			readonly kind: RpcIncomingCallKindEnum.handler;
+			readonly outcome: RpcHandlerOutcome;
+	  };
 
 interface ProtocolHostProbe<
 	THost extends IRpcProtocolConnectorHost | IRpcProtocolAcceptorHost,
@@ -484,7 +493,8 @@ function createIncomingDispositionCases(
 					pair.acceptorProbe.disposition = { kind: "resource" };
 					const outcome = await invokeWithValues(pair, []);
 					assertRpcConformance(
-						outcome.type === "failed" && outcome.code === "unavailable",
+						outcome.type === RpcCallTerminalTypeEnum.failed &&
+							outcome.code === RpcExceptionCodeEnum.unavailable,
 						"Resource rejection did not finish unavailable.",
 					);
 					assertRpcConformance(
@@ -498,16 +508,25 @@ function createIncomingDispositionCases(
 				}
 			},
 		},
-		...(["unknown-service", "unknown-method"] as const).map(
+		...(
+			[
+				RpcExceptionCodeEnum.unknownService,
+				RpcExceptionCodeEnum.unknownMethod,
+			] as const
+		).map(
 			(code): IRpcConformanceCase => ({
 				caseId: `protocol.incoming.semantic-${code}`,
 				async run() {
 					const pair = await openProtocolPair(protocol);
 					try {
-						pair.acceptorProbe.disposition = { kind: "unknown", code };
+						pair.acceptorProbe.disposition = {
+							kind: RpcIncomingCallKindEnum.unknown,
+							code,
+						};
 						const outcome = await invokeWithValues(pair, []);
 						assertRpcConformance(
-							outcome.type === "failed" && outcome.code === code,
+							outcome.type === RpcCallTerminalTypeEnum.failed &&
+								outcome.code === code,
 							`Semantic rejection did not finish ${code}.`,
 						);
 						assertRpcConformance(
@@ -532,21 +551,33 @@ function createIncomingDispositionCases(
 						readonly caller: RpcCallOutcome;
 					}> = [
 						{
-							handler: { type: "returned-void" },
-							caller: { type: "returned-void" },
+							handler: { type: RpcCallTerminalTypeEnum.returnedVoid },
+							caller: { type: RpcCallTerminalTypeEnum.returnedVoid },
 						},
 						{
-							handler: { type: "returned", value: returned },
-							caller: { type: "returned", value: returned },
+							handler: {
+								type: RpcCallTerminalTypeEnum.returned,
+								value: returned,
+							},
+							caller: {
+								type: RpcCallTerminalTypeEnum.returned,
+								value: returned,
+							},
 						},
 						{
-							handler: { type: "failed", code: "handler-failed" },
-							caller: { type: "failed", code: "handler-failed" },
+							handler: {
+								type: RpcCallTerminalTypeEnum.failed,
+								code: RpcExceptionCodeEnum.handlerFailed,
+							},
+							caller: {
+								type: RpcCallTerminalTypeEnum.failed,
+								code: RpcExceptionCodeEnum.handlerFailed,
+							},
 						},
 					];
 					for (const expectation of expectations) {
 						pair.acceptorProbe.disposition = {
-							kind: "handler",
+							kind: RpcIncomingCallKindEnum.handler,
 							outcome: expectation.handler,
 						};
 						const outcome = await invokeWithValues(pair, []);
@@ -647,7 +678,10 @@ function createSessionHostProbe(
 	const incomingFinishes: RpcIncomingTerminal[] = [];
 	const probe = {
 		session: undefined,
-		disposition: { kind: "handler", outcome: { type: "returned-void" } },
+		disposition: {
+			kind: RpcIncomingCallKindEnum.handler,
+			outcome: { type: RpcCallTerminalTypeEnum.returnedVoid },
+		},
 		attachCount: 0,
 		reservationCount: 0,
 		commitCount: 0,
@@ -686,8 +720,12 @@ function createSessionHostProbe(
 					probe.releaseCount += 1;
 				},
 			};
-			if (disposition.kind === "unknown") {
-				return { kind: "unknown", code: disposition.code, reservation };
+			if (disposition.kind === RpcIncomingCallKindEnum.unknown) {
+				return {
+					kind: RpcIncomingCallKindEnum.unknown,
+					code: disposition.code,
+					reservation,
+				};
 			}
 			const handlerCall = Object.create(call, {
 				handlerOutcome: {
@@ -703,7 +741,7 @@ function createSessionHostProbe(
 				},
 			}) as IRpcProtocolIncomingHandlerCall;
 			return {
-				kind: "handler",
+				kind: RpcIncomingCallKindEnum.handler,
 				reservation: {
 					...reservation,
 					commit() {
@@ -938,10 +976,16 @@ function outcomesEqual(left: RpcCallOutcome, right: RpcCallOutcome): boolean {
 	if (left.type !== right.type) {
 		return false;
 	}
-	if (left.type === "returned" && right.type === "returned") {
+	if (
+		left.type === RpcCallTerminalTypeEnum.returned &&
+		right.type === RpcCallTerminalTypeEnum.returned
+	) {
 		return applicationValuesEqual(left.value.value, right.value.value);
 	}
-	if (left.type === "failed" && right.type === "failed") {
+	if (
+		left.type === RpcCallTerminalTypeEnum.failed &&
+		right.type === RpcCallTerminalTypeEnum.failed
+	) {
 		return left.code === right.code;
 	}
 	return true;
@@ -957,7 +1001,8 @@ function readRecordNumber(value: unknown, key: string): number | undefined {
 
 function isCounterDrain(transition: RpcProtocolSessionTransition): boolean {
 	return (
-		transition.type === "draining" && transition.reason === "counter-exhaustion"
+		transition.type === RpcProtocolSessionTransitionTypeEnum.draining &&
+		transition.reason === "counter-exhaustion"
 	);
 }
 

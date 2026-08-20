@@ -6,13 +6,13 @@
 
 import { CodedException } from "@husky-di/core";
 
-import type { RpcExceptionCode } from "@/types/rpc-exception.type";
+import type { RpcExceptionCodeEnum } from "@/enums/rpc-exception-code.enum";
 
 /** Safe public RPC failure with a closed branch code. */
-export class RpcException extends CodedException<RpcExceptionCode> {
+export class RpcException extends CodedException<RpcExceptionCodeEnum> {
 	readonly cause?: unknown;
 
-	public constructor(code: RpcExceptionCode, cause?: unknown) {
+	public constructor(code: RpcExceptionCodeEnum, cause?: unknown) {
 		super(code, "RPC failed.");
 		this.name = "RpcException";
 		this.cause = cause;

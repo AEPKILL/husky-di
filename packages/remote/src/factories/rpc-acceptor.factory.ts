@@ -20,15 +20,15 @@ import {
 export function createRpcAcceptor(options?: RpcAcceptorOptions): IRpcAcceptor {
 	const snapshot = snapshotRpcFactoryOptions(options);
 	const policy = createRpcAcceptorRuntimePolicy(snapshot.runtimePolicy);
-	let owner: RpcAcceptorImpl | undefined;
+	let acceptor: RpcAcceptorImpl | undefined;
 	const runtime = createRpcProtocolAcceptorRuntime(
 		resolveRpcProtocol(snapshot.protocol),
 		policy,
 		{
-			admitSession: (session) => owner?.admitProtocolSession(session),
-			fault: (reason, error) => owner?.protocolFault(reason, error),
+			admitSession: (session) => acceptor?.admitProtocolSession(session),
+			fault: (reason, error) => acceptor?.protocolFault(reason, error),
 		},
 	);
-	owner = new RpcAcceptorImpl(runtime, policy);
-	return owner;
+	acceptor = new RpcAcceptorImpl(runtime, policy);
+	return acceptor;
 }

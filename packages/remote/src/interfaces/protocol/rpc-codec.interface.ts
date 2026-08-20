@@ -4,15 +4,13 @@
  * @created 2026-08-19 00:00:00
  */
 
-import type {
-	RpcDecodedRecord,
-	RpcDecodePhase,
-} from "@/types/protocol/rpc-codec.type";
+import type { RpcDecodePhaseEnum } from "@/enums/protocol/rpc-decode-phase.enum";
+import type { RpcDecodedRecord } from "@/types/protocol/rpc-codec.type";
 import type { RpcJsonRecord } from "@/types/protocol/rpc-wire-record.type";
 
 export interface IRpcCodec {
 	encode(record: RpcJsonRecord): Uint8Array;
-	decode<TPhase extends RpcDecodePhase>(
+	decode<TPhase extends RpcDecodePhaseEnum>(
 		bytes: Uint8Array,
 		phase: TPhase,
 	): RpcDecodedRecord<TPhase>;

@@ -87,7 +87,6 @@ function listFiles(root: string, prefix = ""): string[] {
 }
 
 beforeAll(() => {
-	runPnpm(["run", "build"], packageRoot);
 	runPnpm(["pack", "--pack-destination", fixtureRoot, "--json"], packageRoot);
 	const tarballName = readdirSync(fixtureRoot).find((name) =>
 		name.endsWith(".tgz"),
@@ -167,6 +166,8 @@ describe("installed @husky-di/remote package", () => {
 			"wire",
 		]);
 		expect(readdirSync(resolve(installedRoot, "docs")).sort()).toEqual([
+			"ARCHITECTURE.drawio",
+			"ARCHITECTURE.png",
 			"PROTOCOL.md",
 			"REQUIREMENTS.md",
 			"SPECIFICATION.md",
@@ -214,12 +215,14 @@ import * as protocol from "@husky-di/remote/protocol";
 import * as transport from "@husky-di/remote/transport";
 import * as conformance from "@husky-di/remote/conformance";
 
-assert.deepEqual(Object.keys(root).sort(), ["RpcException", "createRemoteServiceDescriptor", "createRpcAcceptor", "createRpcConnector", "createRpcProtocol"]);
-assert.equal(new root.RpcException("unavailable").code, "unavailable");
-assert.deepEqual(Object.keys(protocol), ["createRpcProtocol"]);
+assert.deepEqual(Object.keys(root).sort(), ["RpcAcceptorListenerStopReasonEnum", "RpcCallDirectionEnum", "RpcCallStatusEnum", "RpcCloseOutcomeEnum", "RpcCloseReasonEnum", "RpcEventTypeEnum", "RpcException", "RpcExceptionCodeEnum", "RpcStateStatusEnum", "createRemoteServiceDescriptor", "createRpcAcceptor", "createRpcConnector", "createRpcProtocol"]);
+assert.equal(new root.RpcException(root.RpcExceptionCodeEnum.unavailable).code, "unavailable");
+assert.equal(root.RpcCallDirectionEnum.incoming, "incoming");
+assert.deepEqual(Object.keys(protocol).sort(), ["RpcCallTerminalTypeEnum", "RpcCloseReasonEnum", "RpcExceptionCodeEnum", "RpcIncomingCallKindEnum", "RpcProtocolSessionTransitionTypeEnum", "createRpcProtocol"]);
+assert.equal(protocol.RpcCloseReasonEnum.cleanupFailed, "cleanup-failed");
 assert.equal(Object.isFrozen(protocol.createRpcProtocol()), true);
 assert.deepEqual(Object.keys(transport), []);
-assert.deepEqual(Object.keys(conformance).sort(), ["runRpcAcceptorAdapterConformance", "runRpcConnectorAdapterConformance", "runRpcProtocolConformance"]);
+assert.deepEqual(Object.keys(conformance).sort(), ["RpcConformanceStatusEnum", "runRpcAcceptorAdapterConformance", "runRpcConnectorAdapterConformance", "runRpcProtocolConformance"]);
 for (const subpath of ["schema", "vectors", "transcripts", "security-vectors"]) {
   const asset = await import("@husky-di/remote/wire/husky-di-rpc-1/" + subpath, { with: { type: "json" } });
   assert.equal(typeof asset.default, "object");
@@ -244,12 +247,14 @@ const protocol = require("@husky-di/remote/protocol");
 const transport = require("@husky-di/remote/transport");
 const conformance = require("@husky-di/remote/conformance");
 
-assert.deepEqual(Object.keys(root).sort(), ["RpcException", "createRemoteServiceDescriptor", "createRpcAcceptor", "createRpcConnector", "createRpcProtocol"]);
-assert.equal(new root.RpcException("unavailable").code, "unavailable");
-assert.deepEqual(Object.keys(protocol), ["createRpcProtocol"]);
+assert.deepEqual(Object.keys(root).sort(), ["RpcAcceptorListenerStopReasonEnum", "RpcCallDirectionEnum", "RpcCallStatusEnum", "RpcCloseOutcomeEnum", "RpcCloseReasonEnum", "RpcEventTypeEnum", "RpcException", "RpcExceptionCodeEnum", "RpcStateStatusEnum", "createRemoteServiceDescriptor", "createRpcAcceptor", "createRpcConnector", "createRpcProtocol"]);
+assert.equal(new root.RpcException(root.RpcExceptionCodeEnum.unavailable).code, "unavailable");
+assert.equal(root.RpcCallDirectionEnum.incoming, "incoming");
+assert.deepEqual(Object.keys(protocol).sort(), ["RpcCallTerminalTypeEnum", "RpcCloseReasonEnum", "RpcExceptionCodeEnum", "RpcIncomingCallKindEnum", "RpcProtocolSessionTransitionTypeEnum", "createRpcProtocol"]);
+assert.equal(protocol.RpcCloseReasonEnum.cleanupFailed, "cleanup-failed");
 assert.equal(Object.isFrozen(protocol.createRpcProtocol()), true);
 assert.deepEqual(Object.keys(transport), []);
-assert.deepEqual(Object.keys(conformance).sort(), ["runRpcAcceptorAdapterConformance", "runRpcConnectorAdapterConformance", "runRpcProtocolConformance"]);
+assert.deepEqual(Object.keys(conformance).sort(), ["RpcConformanceStatusEnum", "runRpcAcceptorAdapterConformance", "runRpcConnectorAdapterConformance", "runRpcProtocolConformance"]);
 for (const subpath of ["schema", "vectors", "transcripts", "security-vectors"]) {
   assert.equal(typeof require("@husky-di/remote/wire/husky-di-rpc-1/" + subpath), "object");
 }
@@ -281,11 +286,12 @@ assert.throws(
 		);
 		writeFileSync(
 			resolve(consumerRoot, "index.ts"),
-			`import { RpcException, createRemoteServiceDescriptor, createRpcAcceptor, createRpcConnector } from "@husky-di/remote";
+			`import { RpcAcceptorListenerStopReasonEnum, RpcCallDirectionEnum, RpcCallStatusEnum, RpcCloseOutcomeEnum, RpcCloseReasonEnum, RpcEventTypeEnum, RpcException, RpcExceptionCodeEnum, RpcStateStatusEnum, createRemoteServiceDescriptor, createRpcAcceptor, createRpcConnector } from "@husky-di/remote";
+import { RpcCallTerminalTypeEnum, RpcIncomingCallKindEnum, RpcProtocolSessionTransitionTypeEnum } from "@husky-di/remote/protocol";
 import type {
   IRemoteServiceDescriptor, IRpcPeer, IRpcConnector, IRpcAcceptor, RpcPeerResult,
   RpcPeerState, RpcConnectorState, RpcAcceptorListenerState, RpcAcceptorState,
-  RpcTopologyCloseReason, RpcCallDirection, RpcEvent, RpcExceptionCode,
+  RpcEvent,
   RpcConnectorOptions, RpcAcceptorOptions, RpcConnectorRuntimePolicyOptions,
   RpcAcceptorRuntimePolicyOptions, IRpcConnection as RootConnection,
   IRpcConnectorAdapter, IRpcAcceptorAdapter, IRpcProtocol as RootProtocol,
@@ -317,6 +323,7 @@ import type {
   IRpcConnectorAdapter as TransportConnectorAdapter,
 } from "@husky-di/remote/transport";
 import {
+  RpcConformanceStatusEnum,
   runRpcAcceptorAdapterConformance, runRpcConnectorAdapterConformance,
   runRpcProtocolConformance,
 } from "@husky-di/remote/conformance";
@@ -338,17 +345,23 @@ const protocolSharedIdentity: Equal<
   IRpcApplicationRecord & IRpcProtocolRuntimePolicy & RpcApplicationValue,
   ProtocolApplicationRecord & ProtocolRuntimePolicy & ProtocolApplicationValue
 > = true;
-const callerException = new RpcException("unavailable");
+const callerException = new RpcException(RpcExceptionCodeEnum.unavailable);
+const callDirection: RpcCallDirectionEnum = RpcCallDirectionEnum.incoming;
+const closeReason: RpcCloseReasonEnum = RpcCloseReasonEnum.cleanupFailed;
 void [
-	RpcException, createRemoteServiceDescriptor, createRpcAcceptor, createRpcConnector,
-	runRpcAcceptorAdapterConformance, runRpcConnectorAdapterConformance,
+	RpcAcceptorListenerStopReasonEnum, RpcCallDirectionEnum, RpcCallStatusEnum,
+	RpcCallTerminalTypeEnum, RpcCloseOutcomeEnum, RpcCloseReasonEnum, RpcEventTypeEnum,
+	RpcException, RpcExceptionCodeEnum, RpcIncomingCallKindEnum,
+	RpcProtocolSessionTransitionTypeEnum, RpcStateStatusEnum,
+	createRemoteServiceDescriptor, createRpcAcceptor, createRpcConnector,
+	RpcConformanceStatusEnum, runRpcAcceptorAdapterConformance, runRpcConnectorAdapterConformance,
 	runRpcProtocolConformance, rootProtocolIdentity, connectionIdentity,
-	adapterIdentity, protocolSharedIdentity, callerException,
+	adapterIdentity, protocolSharedIdentity, callerException, callDirection, closeReason,
 ];
 type Inventory = [
   IRemoteServiceDescriptor<unknown, never>, IRpcPeer, IRpcConnector, IRpcAcceptor,
   RpcPeerResult<unknown>, RpcPeerState, RpcConnectorState, RpcAcceptorListenerState,
-  RpcAcceptorState, RpcTopologyCloseReason, RpcCallDirection, RpcEvent, RpcExceptionCode,
+  RpcAcceptorState, RpcCloseReasonEnum, RpcCallDirectionEnum, RpcEvent, RpcExceptionCodeEnum,
   RpcConnectorOptions, RpcAcceptorOptions, RpcConnectorRuntimePolicyOptions,
   RpcAcceptorRuntimePolicyOptions, IRpcConnectorAdapter, IRpcAcceptorAdapter,
   IRpcProtocolRuntimePolicy, IRpcApplicationRecord, RpcApplicationValue,

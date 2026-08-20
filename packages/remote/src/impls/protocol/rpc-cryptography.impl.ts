@@ -4,7 +4,7 @@
  * @created 2026-08-19 00:00:00
  */
 
-import { RPC_PROFILE_ID } from "@/constants/protocol/rpc-profile.const";
+import { RpcProfileEnum } from "@/enums/protocol/rpc-profile.enum";
 import type { IRpcCryptography } from "@/interfaces/protocol/rpc-cryptography.interface";
 import type {
 	SignRpcProofOptions,
@@ -178,7 +178,7 @@ async function hashRecord(record: RpcJsonRecord): Promise<Uint8Array> {
 }
 
 function domain(label: string): Uint8Array {
-	return textEncoder.encode(`${RPC_PROFILE_ID}\0${label}\0`);
+	return textEncoder.encode(`${RpcProfileEnum.huskyDiRpc1}\0${label}\0`);
 }
 
 async function createFreshAcceptTranscript(
@@ -292,7 +292,7 @@ async function deriveRpcProofKey(
 		sessionSecret.fill(0);
 	}
 	const context = await hashRecord({
-		profile: RPC_PROFILE_ID,
+		profile: RpcProfileEnum.huskyDiRpc1,
 		sessionId,
 	});
 	return crypto.subtle.deriveKey(

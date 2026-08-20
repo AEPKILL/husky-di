@@ -9,6 +9,8 @@ import { readFile } from "node:fs/promises";
 
 import { describe, expect, it } from "vitest";
 
+import { RpcDecodePhaseEnum } from "../../src/enums/protocol/rpc-decode-phase.enum";
+import { RpcProofOperationKindEnum } from "../../src/enums/protocol/rpc-proof-operation-kind.enum";
 import { RpcCodecImpl } from "../../src/impls/protocol/rpc-codec.impl";
 import { RpcCryptographyImpl } from "../../src/impls/protocol/rpc-cryptography.impl";
 import type {
@@ -64,17 +66,17 @@ function validateRawVector(vector: RawVector): string {
 	const bytes = renderRawVector(vector);
 	switch (vector.validator) {
 		case "fresh-request":
-			return codec.decode(bytes, "bootstrap-request").kind;
+			return codec.decode(bytes, RpcDecodePhaseEnum.bootstrapRequest).kind;
 		case "fresh-accept":
-			return codec.decode(bytes, "fresh-accept").kind;
+			return codec.decode(bytes, RpcDecodePhaseEnum.freshAccept).kind;
 		case "resume-request":
-			return codec.decode(bytes, "bootstrap-request").kind;
+			return codec.decode(bytes, RpcDecodePhaseEnum.bootstrapRequest).kind;
 		case "resume-outcome":
-			return codec.decode(bytes, "resume-outcome").kind;
+			return codec.decode(bytes, RpcDecodePhaseEnum.resumeOutcome).kind;
 		case "active":
-			return codec.decode(bytes, "active").kind;
+			return codec.decode(bytes, RpcDecodePhaseEnum.active).kind;
 		default:
-			return codec.decode(bytes, "json").kind as string;
+			return codec.decode(bytes, RpcDecodePhaseEnum.json).kind as string;
 	}
 }
 
@@ -283,7 +285,7 @@ describe("published husky-di-rpc/1 wire corpus", () => {
 		expect(proofKey.extractable).toBe(false);
 		expect(
 			await cryptography.signProof({
-				kind: "fresh-accept",
+				kind: RpcProofOperationKindEnum.freshAccept,
 				proofKey,
 				request: transcript.freshRequest,
 				record: transcript.freshAccept,
@@ -291,14 +293,14 @@ describe("published husky-di-rpc/1 wire corpus", () => {
 		).toBe(transcript.freshAcceptProof);
 		expect(
 			await cryptography.signProof({
-				kind: "resume-request",
+				kind: RpcProofOperationKindEnum.resumeRequest,
 				proofKey,
 				record: transcript.resumeRequest,
 			}),
 		).toBe(transcript.resumeRequestProof);
 		expect(
 			await cryptography.signProof({
-				kind: "resume-accept",
+				kind: RpcProofOperationKindEnum.resumeAccept,
 				proofKey,
 				request: transcript.resumeRequest as RpcResumeRequest,
 				record: transcript.resumeAccept,
@@ -306,7 +308,7 @@ describe("published husky-di-rpc/1 wire corpus", () => {
 		).toBe(transcript.resumeAcceptProof);
 		expect(
 			await cryptography.signProof({
-				kind: "resume-reject",
+				kind: RpcProofOperationKindEnum.resumeReject,
 				proofKey,
 				request: transcript.resumeRequest as RpcResumeRequest,
 				record: transcript.authenticatedReject,

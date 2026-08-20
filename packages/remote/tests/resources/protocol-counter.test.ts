@@ -6,6 +6,8 @@
 
 import { createServiceIdentifier } from "@husky-di/core";
 import { describe, expect, it, vi } from "vitest";
+import { RpcWireRecordKindEnum } from "../../src/enums/protocol/rpc-wire-record-kind.enum";
+import { RpcExceptionCodeEnum } from "../../src/enums/rpc-exception-code.enum";
 import { createRpcCounterExhaustionProtocolForTest } from "../../src/factories/rpc-protocol.factory";
 import {
 	createRemoteServiceDescriptor,
@@ -42,14 +44,17 @@ describe("Default RPC Protocol counter drain", () => {
 			createRpcDirectSessionHarness();
 		session._nextOutgoingSequence = Number.MAX_SAFE_INTEGER - 511;
 		for (let ordinal = 1; ordinal <= 256; ordinal += 1) {
-			session._queueSemantic({ kind: "cancel", callId: String(ordinal) });
+			session._queueSemantic({
+				kind: RpcWireRecordKindEnum.cancel,
+				callId: String(ordinal),
+			});
 		}
 		for (let ordinal = 257; ordinal <= 512; ordinal += 1) {
 			session._queueSemantic({
-				kind: "error",
+				kind: RpcWireRecordKindEnum.error,
 				callId: String(ordinal),
 				error: {
-					code: "unavailable",
+					code: RpcExceptionCodeEnum.unavailable,
 					message: "Remote call failed with code unavailable.",
 				},
 			});
@@ -61,7 +66,10 @@ describe("Default RPC Protocol counter drain", () => {
 		expect(session.highestSentSequence).toBe(Number.MAX_SAFE_INTEGER);
 		expect(Number.isSafeInteger(session._nextOutgoingSequence)).toBe(true);
 		session._applyAck(Number.MAX_SAFE_INTEGER);
-		session._queueSemantic({ kind: "cancel", callId: "513" });
+		session._queueSemantic({
+			kind: RpcWireRecordKindEnum.cancel,
+			callId: "513",
+		});
 		await vi.waitFor(() => {
 			expect(transitions).toContainEqual(
 				expect.objectContaining({
