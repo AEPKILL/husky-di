@@ -9,7 +9,8 @@
  * @created 2026-03-30 20:22:20
  */
 
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import * as ts from "typescript";
 import { DEFAULT_CONFIG } from "@/config/code-standard.config";
 import type { CodeStandardDiagnostic } from "@/types/code-standard-diagnostic.type";
@@ -24,7 +25,10 @@ import { validateHeaderMetadata } from "../validators/header-metadata.validator"
 import { validateImportSpecifiers } from "../validators/import-specifiers.validator";
 import { validateInterfaceNaming } from "../validators/interface-naming.validator";
 import { validateTypeFileExports } from "../validators/type-file-exports.validator";
-import { collectInScopeFiles } from "./file-collector.util";
+import {
+	collectDirectoryFiles,
+	collectInScopeFiles,
+} from "./file-collector.util";
 
 export type { CodeStandardDiagnostic } from "@/types/code-standard-diagnostic.type";
 
@@ -33,6 +37,10 @@ export function validateCodeStandard(
 	config: CodeStandardConfig = DEFAULT_CONFIG,
 ): CodeStandardDiagnostic[] {
 	const diagnostics: CodeStandardDiagnostic[] = [];
+	const publicPackageImportSpecifiers = collectPublicPackageImportSpecifiers(
+		rootDirectoryPath,
+		config,
+	);
 
 	for (const filePath of collectInScopeFiles(rootDirectoryPath, config)) {
 		const sourceText = readFileSync(filePath, "utf8");
@@ -60,7 +68,12 @@ export function validateCodeStandard(
 		diagnostics.push(...validateDefaultExports(relativeFilePath, sourceFile));
 		diagnostics.push(...validateEntrypointShape(relativeFilePath, sourceFile));
 		diagnostics.push(
-			...validateImportSpecifiers(relativeFilePath, sourceFile, config),
+			...validateImportSpecifiers(
+				relativeFilePath,
+				sourceFile,
+				config,
+				publicPackageImportSpecifiers,
+			),
 		);
 		diagnostics.push(
 			...validateBiomeIgnoreComments(relativeFilePath, sourceFile, sourceText),
@@ -75,6 +88,46 @@ export function validateCodeStandard(
 			left.ruleId.localeCompare(right.ruleId)
 		);
 	});
+}
+
+function collectPublicPackageImportSpecifiers(
+	rootDirectoryPath: string,
+	config: CodeStandardConfig,
+): ReadonlySet<string> {
+	const specifiers = new Set<string>();
+
+	for (const packageRootName of config.packageRootNames) {
+		const packageRootPath = join(rootDirectoryPath, packageRootName);
+		if (!existsSync(packageRootPath)) {
+			continue;
+		}
+
+		for (const filePath of collectDirectoryFiles(packageRootPath, config)) {
+			if (!filePath.endsWith("package.json")) {
+				continue;
+			}
+			const manifest = JSON.parse(readFileSync(filePath, "utf8")) as {
+				readonly name?: unknown;
+				readonly exports?: unknown;
+			};
+			if (
+				typeof manifest.name !== "string" ||
+				!manifest.name.startsWith(config.packageScopePrefix) ||
+				typeof manifest.exports !== "object" ||
+				manifest.exports === null
+			) {
+				continue;
+			}
+
+			for (const key of Object.keys(manifest.exports)) {
+				if (key.startsWith("./") && !key.includes("*")) {
+					specifiers.add(`${manifest.name}/${key.slice(2)}`);
+				}
+			}
+		}
+	}
+
+	return specifiers;
 }
 
 function toPortablePath(filePath: string): string {

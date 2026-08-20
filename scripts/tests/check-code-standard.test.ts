@@ -168,6 +168,31 @@ export function getContainerName(): string {
 		]);
 	});
 
+	it("allows cross-package imports from exported subpath entrypoints", () => {
+		const rootDirectoryPath = createWorkspace({
+			"packages/core/package.json": JSON.stringify({
+				name: "@husky-di/core",
+				exports: {
+					".": "./dist/index.js",
+					"./testing": "./dist/testing.js",
+				},
+			}),
+			"packages/module/src/utils/value.util.ts": `/**
+ * @overview Module utility.
+ * @author AEPKILL
+ * @created 2025-08-09 14:55:21
+ */
+import { createFixture } from "@husky-di/core/testing";
+
+export function getFixture(): unknown {
+	return createFixture();
+}
+`,
+		});
+
+		assert.deepEqual(getRuleIds(rootDirectoryPath), []);
+	});
+
 	it("reports biome-ignore directives without reasons", () => {
 		const rootDirectoryPath = createWorkspace({
 			"scripts/src/check-code-standard.ts": `/**
