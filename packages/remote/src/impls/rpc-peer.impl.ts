@@ -12,6 +12,7 @@ import { RpcCallDirectionEnum } from "@/enums/rpc-call-direction.enum";
 import { RpcCallStatusEnum } from "@/enums/rpc-call-status.enum";
 import { RpcEventTypeEnum } from "@/enums/rpc-event-type.enum";
 import { RpcExceptionCodeEnum } from "@/enums/rpc-exception-code.enum";
+import { RpcStateStatusEnum } from "@/enums/rpc-state-status.enum";
 import { getRemoteServiceDescriptorData } from "@/factories/remote-service-descriptor.factory";
 import { createRpcException } from "@/factories/rpc-exception.factory";
 import type {
@@ -275,7 +276,7 @@ export class RpcPeerImpl implements IRpcPeer {
 
 	/** Package-private state commit that defers notifications until the Owner batch is complete. */
 	stageState(state: RpcPeerState): void {
-		if (this.state.status === "closed") {
+		if (this.state.status === RpcStateStatusEnum.closed) {
 			return;
 		}
 		this.#state = Object.freeze(state);
@@ -305,8 +306,8 @@ export class RpcPeerImpl implements IRpcPeer {
 	): Cleanup {
 		if (
 			!this.#isOwnerActive() ||
-			this.state.status === "draining" ||
-			this.state.status === "closed"
+			this.state.status === RpcStateStatusEnum.draining ||
+			this.state.status === RpcStateStatusEnum.closed
 		) {
 			throw createRpcException(RpcExceptionCodeEnum.unavailable);
 		}
@@ -336,8 +337,8 @@ export class RpcPeerImpl implements IRpcPeer {
 		const prepared = prepareRpcInvocationArguments(cancelable, actualArguments);
 		if (
 			!this.#isOwnerActive() ||
-			(this.state.status !== "connected" &&
-				this.state.status !== "recovering") ||
+			(this.state.status !== RpcStateStatusEnum.connected &&
+				this.state.status !== RpcStateStatusEnum.recovering) ||
 			this.#session === undefined
 		) {
 			return Promise.reject(
@@ -397,8 +398,8 @@ export class RpcPeerImpl implements IRpcPeer {
 	): RpcPeerInvocationReservation | undefined {
 		if (
 			!this.#isOwnerActive() ||
-			(this.state.status !== "connected" &&
-				this.state.status !== "recovering") ||
+			(this.state.status !== RpcStateStatusEnum.connected &&
+				this.state.status !== RpcStateStatusEnum.recovering) ||
 			this.#session === undefined
 		) {
 			return undefined;
@@ -602,7 +603,7 @@ export class RpcPeerImpl implements IRpcPeer {
 		}
 		const charge = request.args.weight + 256;
 		if (
-			this.state.status !== "connected" ||
+			this.state.status !== RpcStateStatusEnum.connected ||
 			this.#incomingReservationCount >= 256 ||
 			charge > this.#maximumIncomingBytes - this.#incomingReservationBytes
 		) {
