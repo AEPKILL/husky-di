@@ -220,7 +220,7 @@ export async function runRpcBrowserRoundtrip(): Promise<IBrowserRoundtripResult>
 
 	await acceptor.listen(network.acceptorAdapter);
 	try {
-		await connector.connect(network.createConnectorAdapter());
+		await connector.connect({ adapter: network.createConnectorAdapter() });
 	} catch (error) {
 		const cause =
 			error instanceof Error && "cause" in error ? error.cause : undefined;
@@ -284,7 +284,7 @@ export async function runRpcBrowserRoundtrip(): Promise<IBrowserRoundtripResult>
 			acceptor.peers[0]?.state.status === "recovering",
 		"Browser roundtrip did not enter Recovery.",
 	);
-	await connector.connect(network.createConnectorAdapter());
+	await connector.connect({ adapter: network.createConnectorAdapter() });
 	const recoveredResult = await remote.add(20, 22);
 	const sameConnectorPeer = connector.peer === connectorPeer;
 	const sameAcceptorPeer = acceptor.peers[0] === acceptorPeer;

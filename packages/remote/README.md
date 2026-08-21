@@ -121,23 +121,30 @@ have already been admitted.
 
 ```typescript
 // client.ts
-import { createRpcConnector } from "@husky-di/remote";
+import {
+  createRpcConnector,
+  createRpcConnectorReconnection,
+} from "@husky-di/remote";
 import { createNodeWebSocketConnectorAdapter } from "@husky-di/remote-websocket/node";
 
 import { remoteCalculator } from "./calculator.contract";
 
 const connector = createRpcConnector();
-const calculator = connector.peer.resolve(remoteCalculator);
-
-try {
-  await connector.connect(
+const reconnection = createRpcConnectorReconnection({
+  connector,
+  adapterFactory: () =>
     createNodeWebSocketConnectorAdapter({
       url: "ws://127.0.0.1:8080",
     }),
-  );
+});
+const calculator = connector.peer.resolve(remoteCalculator);
+
+try {
+  await reconnection.connect();
 
   console.log(await calculator.add(20, 22)); // 42
 } finally {
+  await reconnection.stop();
   await connector.shutdown();
 }
 ```
@@ -152,7 +159,7 @@ Transport such as correctly validated `wss:` in production; see
 
 ## Mental Model
 
-Four concepts make up the public caller API:
+Five concepts make up the public caller API:
 
 | Concept | Responsibility |
 | --- | --- |
@@ -160,14 +167,16 @@ Four concepts make up the public caller API:
 | Peer | Represents one stable logical RPC session. It exposes local implementations and resolves remote proxies. |
 | Topology Owner | Owns peers, lifecycle, resource policy, and physical connection attempts. A Connector owns one peer; an Acceptor owns a changing set. |
 | Transport Adapter | Creates or accepts physical connections. It is supplied separately and does not define RPC semantics. |
+| Connector Reconnection | An optional supervisor that owns initial and replacement Connector attempts under one finite retry policy. |
 
 The built-in `husky-di-rpc/1` Protocol is used when `protocol` is omitted from
 `createRpcConnector()` or `createRpcAcceptor()`. Most applications should use the
 default. Protocol implementors can use the dedicated SPI described in the
 [Protocol guide](docs/PROTOCOL.md).
 
-Factories are cold: creating an owner does not start network I/O. Call
-`connector.connect(adapter)` or `acceptor.listen(adapter)` when the application is
+Factories are cold: creating an owner or Reconnection supervisor does not start
+network I/O. Call `connector.connect({ adapter })`,
+`reconnection.connect()`, or `acceptor.listen(adapter)` when the application is
 ready to transfer ownership of network resources to it.
 
 ## Bidirectional Calls And Fan-Out
@@ -263,28 +272,33 @@ does not promise that remote side effects were rolled back.
 ## Recovery, State, And Events
 
 The built-in Protocol preserves a logical session across an interrupted physical
-connection while its recovery window remains open. The application chooses how
-and when to create the replacement Adapter:
+connection while its recovery window remains open. Opt into finite automatic
+replacement attempts by supplying a fresh Adapter Factory:
 
 ```typescript
-import { filter, firstValueFrom } from "rxjs";
+const reconnection = createRpcConnectorReconnection({
+  connector,
+  adapterFactory: () =>
+    createNodeWebSocketConnectorAdapter({
+      url: "wss://rpc.example.com",
+    }),
+  policy: {
+    retryDelaysMs: [1_000, 2_000, 5_000, 10_000],
+    attemptTimeoutMs: 30_000,
+  },
+});
 
-const recoveryRequested = firstValueFrom(
-  connector.event$.pipe(
-    filter((event) => event.type === "peer-recovering"),
-  ),
-);
-
-await recoveryRequested;
-await connector.connect(
-  createNodeWebSocketConnectorAdapter({
-    url: "wss://rpc.example.com",
-  }),
-);
+await reconnection.connect();
 ```
 
 Recovery keeps the Connector's peer, resolved proxies, exposures, and eligible
-pending calls. The Adapter itself does not decide retry or backoff policy.
+pending calls. `reconnection.state/state$` describes retry orchestration;
+`reconnection.connector.peer.state/state$` remains the authoritative Session
+state. `reconnection.event$` reports payload-free background attempt failures,
+including whether another configured delay was scheduled. Call
+`await reconnection.stop()` before taking over with a direct
+`connector.connect({ adapter, signal })` attempt. Stopping Reconnection does not
+close the Connector.
 
 Use the synchronous state getters for current snapshots and Observables for
 changes:

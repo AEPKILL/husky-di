@@ -33,6 +33,11 @@ function readAborted(value: unknown): boolean {
 	}
 }
 
+/** Reads a platform AbortSignal without trusting instance properties. */
+export function readRpcAbortSignalAborted(value: unknown): boolean {
+	return readAborted(value);
+}
+
 /** Splits and validates the non-wire cancellation slot before other preflight. */
 export function prepareRpcInvocationArguments(
 	cancelable: boolean,

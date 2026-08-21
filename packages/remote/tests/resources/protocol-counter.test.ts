@@ -122,7 +122,7 @@ describe("Default RPC Protocol counter drain", () => {
 		acceptor.expose(descriptor, { run: () => 1 });
 
 		await acceptor.listen(network.acceptorAdapter);
-		await connector.connect(network.createConnectorAdapter());
+		await connector.connect({ adapter: network.createConnectorAdapter() });
 		let failureCode: unknown;
 		const call = connector.peer.resolve(descriptor).run();
 		void call.catch((error: unknown) => {
@@ -156,7 +156,7 @@ describe("Default RPC Protocol counter drain", () => {
 		acceptor.expose(descriptor, { run: () => 1 });
 
 		await acceptor.listen(network.acceptorAdapter);
-		await connector.connect(network.createConnectorAdapter());
+		await connector.connect({ adapter: network.createConnectorAdapter() });
 		void connector.peer
 			.resolve(descriptor)
 			.run()

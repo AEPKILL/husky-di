@@ -414,7 +414,10 @@ export interface IRpcConnector extends IRpcTopologyOwner {
 	 * attempt does not choose a future Adapter or end the retained Session; the caller
 	 * may retry with another Adapter while the later recovery ticket defines time bounds.
 	 */
-	connect(adapter: IRpcConnectorAdapter): Promise<void>;
+	connect(options: {
+		readonly adapter: IRpcConnectorAdapter;
+		readonly signal?: AbortSignal;
+	}): Promise<void>;
 }
 
 export interface IRpcAcceptor extends IRpcTopologyOwner {

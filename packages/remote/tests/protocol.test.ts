@@ -344,11 +344,11 @@ describe("Default RPC Protocol", () => {
 		});
 
 		await acceptor.listen(network.acceptorAdapter);
-		await connector.connect(
-			network.createConnectorAdapter((record) => ({
+		await connector.connect({
+			adapter: network.createConnectorAdapter((record) => ({
 				drop: rejectPhase && record.direction === "connector",
 			})),
-		);
+		});
 		rejectPhase = true;
 		network.emit(1, "connector", {
 			kind: "message",
@@ -434,8 +434,8 @@ describe("Default RPC Protocol", () => {
 		});
 
 		await acceptor.listen(network.acceptorAdapter);
-		await connector.connect(
-			network.createConnectorAdapter((record) => {
+		await connector.connect({
+			adapter: network.createConnectorAdapter((record) => {
 				const message = record.value.message as
 					| Readonly<Record<string, unknown>>
 					| undefined;
@@ -449,7 +449,7 @@ describe("Default RPC Protocol", () => {
 				}
 				return {};
 			}, "silent"),
-		);
+		});
 		const acceptorPeer = acceptor.peers[0];
 		if (acceptorPeer === undefined) {
 			throw new Error("Expected a connected peer.");
@@ -526,7 +526,7 @@ describe("Default RPC Protocol", () => {
 
 		await acceptor.listen(network.acceptorAdapter);
 		for (const connector of connectors) {
-			await connector.connect(network.createConnectorAdapter());
+			await connector.connect({ adapter: network.createConnectorAdapter() });
 		}
 		const firstPeer = acceptor.peers[0];
 		const secondPeer = acceptor.peers[1];
@@ -578,8 +578,8 @@ describe("Default RPC Protocol", () => {
 		const acceptor = createRpcAcceptor();
 		const connector = createRpcConnector();
 		await acceptor.listen(network.acceptorAdapter);
-		await connector.connect(
-			network.createConnectorAdapter((record) => {
+		await connector.connect({
+			adapter: network.createConnectorAdapter((record) => {
 				if (record.direction !== "connector" || record.value.kind !== "close") {
 					return {};
 				}
@@ -595,7 +595,7 @@ describe("Default RPC Protocol", () => {
 				}
 				return {};
 			}, "silent"),
-		);
+		});
 
 		await connector.shutdown();
 
@@ -629,12 +629,12 @@ describe("Default RPC Protocol", () => {
 		});
 
 		await acceptor.listen(network.acceptorAdapter);
-		await firstConnector.connect(
-			network.createConnectorAdapter(undefined, "silent"),
-		);
-		await secondConnector.connect(
-			network.createConnectorAdapter(undefined, "silent"),
-		);
+		await firstConnector.connect({
+			adapter: network.createConnectorAdapter(undefined, "silent"),
+		});
+		await secondConnector.connect({
+			adapter: network.createConnectorAdapter(undefined, "silent"),
+		});
 		const firstPeer = acceptor.peers[0];
 		const secondPeer = acceptor.peers[1];
 		if (firstPeer === undefined || secondPeer === undefined) {
@@ -645,9 +645,9 @@ describe("Default RPC Protocol", () => {
 		await vi.waitFor(() =>
 			expect(firstConnector.peer.state.status).toBe("recovering"),
 		);
-		await firstConnector.connect(
-			network.createConnectorAdapter(undefined, "silent"),
-		);
+		await firstConnector.connect({
+			adapter: network.createConnectorAdapter(undefined, "silent"),
+		});
 		expect(firstPeer.state.status).toBe("connected");
 
 		network.emit(1, "acceptor", { kind: "close" });
@@ -709,8 +709,8 @@ describe("Default RPC Protocol", () => {
 		});
 
 		await acceptor.listen(network.acceptorAdapter);
-		await connector.connect(
-			network.createConnectorAdapter((record) => {
+		await connector.connect({
+			adapter: network.createConnectorAdapter((record) => {
 				const message = record.value.message as
 					| Readonly<Record<string, unknown>>
 					| undefined;
@@ -724,7 +724,7 @@ describe("Default RPC Protocol", () => {
 				}
 				return {};
 			}, "silent"),
-		);
+		});
 		const service = connector.peer.resolve(descriptor);
 		const admitted = service.add(1, 2);
 		void admitted.catch(() => {});
@@ -777,7 +777,7 @@ describe("Default RPC Protocol", () => {
 		acceptor.expose(descriptor, { add: (left, right) => left + right });
 
 		await acceptor.listen(adapters.acceptorAdapter);
-		await connector.connect(adapters.connectorAdapter);
+		await connector.connect({ adapter: adapters.connectorAdapter });
 		const call = connector.peer.resolve(descriptor).add(1, 2);
 		void call.catch(() => {});
 		await vi.waitFor(() => {
@@ -803,7 +803,7 @@ describe("Default RPC Protocol", () => {
 		});
 
 		await acceptor.listen(adapters.acceptorAdapter);
-		await connector.connect(adapters.connectorAdapter);
+		await connector.connect({ adapter: adapters.connectorAdapter });
 		await expect(connector.peer.resolve(descriptor).add(19, 23)).resolves.toBe(
 			42,
 		);
@@ -888,7 +888,7 @@ describe("Default RPC Protocol", () => {
 
 		await acceptor.listen(adapters.acceptorAdapter);
 		await expect(
-			connector.connect(adapters.connectorAdapter),
+			connector.connect({ adapter: adapters.connectorAdapter }),
 		).rejects.toMatchObject({ code: "unavailable" });
 
 		await vi.waitFor(() => {
@@ -921,14 +921,14 @@ describe("Default RPC Protocol", () => {
 		const connectorPeer = connector.peer;
 
 		await acceptor.listen(network.acceptorAdapter);
-		await connector.connect(
-			network.createConnectorAdapter((record) => ({
+		await connector.connect({
+			adapter: network.createConnectorAdapter((record) => ({
 				drop:
 					record.direction === "connector" &&
 					record.value.kind === "message" &&
 					(record.value.message as { readonly kind?: string }).kind === "call",
 			})),
-		);
+		});
 		const acceptorPeer = acceptor.peers[0];
 		const call = connector.peer.resolve(descriptor).add(20, 22);
 		await vi.waitFor(() => {
@@ -947,7 +947,7 @@ describe("Default RPC Protocol", () => {
 			expect(connector.peer.state.status).toBe("recovering");
 			expect(acceptor.peers[0]?.state.status).toBe("recovering");
 		});
-		await connector.connect(network.createConnectorAdapter());
+		await connector.connect({ adapter: network.createConnectorAdapter() });
 
 		await expect(call).resolves.toBe(42);
 		expect(connector.peer).toBe(connectorPeer);
@@ -1023,7 +1023,7 @@ describe("Default RPC Protocol", () => {
 		});
 
 		await acceptor.listen(network.acceptorAdapter);
-		await connector.connect(network.createConnectorAdapter());
+		await connector.connect({ adapter: network.createConnectorAdapter() });
 		const call = connector.peer.resolve(descriptor).add(20, 22);
 		await vi.waitFor(() => {
 			expect(handlerCalls).toBe(1);
@@ -1034,7 +1034,7 @@ describe("Default RPC Protocol", () => {
 			expect(connector.peer.state.status).toBe("recovering");
 			expect(acceptor.peers[0]?.state.status).toBe("recovering");
 		});
-		await connector.connect(network.createConnectorAdapter());
+		await connector.connect({ adapter: network.createConnectorAdapter() });
 
 		expect(
 			network.records.find(
@@ -1077,7 +1077,7 @@ describe("Default RPC Protocol", () => {
 		const connector = createRpcConnector({ runtimePolicy: policy });
 		acceptor.expose(descriptor, { add: (left, right) => left + right });
 		await acceptor.listen(network.acceptorAdapter);
-		await connector.connect(network.createConnectorAdapter());
+		await connector.connect({ adapter: network.createConnectorAdapter() });
 		const acceptorPeer = acceptor.peers[0];
 		await expect(connector.peer.resolve(descriptor).add(1, 2)).resolves.toBe(3);
 		await vi.waitFor(() => {
@@ -1175,7 +1175,7 @@ describe("Default RPC Protocol", () => {
 		const connector = createRpcConnector({ runtimePolicy: policy });
 		acceptor.expose(descriptor, { add: (left, right) => left + right });
 		await acceptor.listen(network.acceptorAdapter);
-		await connector.connect(network.createConnectorAdapter());
+		await connector.connect({ adapter: network.createConnectorAdapter() });
 		const acceptorPeer = acceptor.peers[0];
 		network.disconnect(1);
 		await vi.waitFor(() => {
@@ -1183,21 +1183,21 @@ describe("Default RPC Protocol", () => {
 		});
 
 		await expect(
-			connector.connect(
-				network.createConnectorAdapter((record) => ({
+			connector.connect({
+				adapter: network.createConnectorAdapter((record) => ({
 					drop:
 						record.connectionId === 2 &&
 						record.direction === "acceptor" &&
 						record.value.kind === "accept",
 				})),
-			),
+			}),
 		).rejects.toMatchObject({ code: "unavailable" });
 		await vi.waitFor(() => {
 			expect(connector.peer.state.status).toBe("recovering");
 			expect(acceptorPeer?.state.status).toBe("recovering");
 		});
 
-		await connector.connect(network.createConnectorAdapter());
+		await connector.connect({ adapter: network.createConnectorAdapter() });
 
 		expect(connector.peer.state.status).toBe("connected");
 		expect(acceptorPeer?.state.status).toBe("connected");
@@ -1237,7 +1237,7 @@ describe("Default RPC Protocol", () => {
 		const acceptor = createRpcAcceptor({ runtimePolicy: policy });
 		const connector = createRpcConnector({ runtimePolicy: policy });
 		await acceptor.listen(network.acceptorAdapter);
-		await connector.connect(network.createConnectorAdapter());
+		await connector.connect({ adapter: network.createConnectorAdapter() });
 		const acceptorPeer = acceptor.peers[0];
 		network.disconnect(1);
 		await vi.waitFor(() => {
@@ -1246,8 +1246,8 @@ describe("Default RPC Protocol", () => {
 		});
 		await new Promise<void>((resolve) => setTimeout(resolve, 100));
 
-		await connector.connect(
-			network.createConnectorAdapter((record) => ({
+		await connector.connect({
+			adapter: network.createConnectorAdapter((record) => ({
 				settlement:
 					record.connectionId === 2 &&
 					record.direction === "acceptor" &&
@@ -1256,7 +1256,7 @@ describe("Default RPC Protocol", () => {
 						? acceptSettlement
 						: undefined,
 			})),
-		);
+		});
 		await new Promise<void>((resolve) => setTimeout(resolve, 70));
 
 		expect(connector.peer.state.status).toBe("connected");
@@ -1282,7 +1282,7 @@ describe("Default RPC Protocol", () => {
 		const acceptor = createRpcAcceptor({ runtimePolicy: policy });
 		const connector = createRpcConnector({ runtimePolicy: policy });
 		await acceptor.listen(network.acceptorAdapter);
-		await connector.connect(network.createConnectorAdapter());
+		await connector.connect({ adapter: network.createConnectorAdapter() });
 		const acceptorPeer = acceptor.peers[0];
 		network.disconnect(1);
 		await vi.waitFor(() => {
@@ -1290,8 +1290,8 @@ describe("Default RPC Protocol", () => {
 			expect(acceptorPeer?.state.status).toBe("recovering");
 		});
 
-		await connector.connect(
-			network.createConnectorAdapter((record) => ({
+		await connector.connect({
+			adapter: network.createConnectorAdapter((record) => ({
 				settlement:
 					record.connectionId === 2 &&
 					record.direction === "acceptor" &&
@@ -1300,12 +1300,12 @@ describe("Default RPC Protocol", () => {
 						? timedOutAccept
 						: undefined,
 			})),
-		);
+		});
 		await vi.advanceTimersByTimeAsync(50);
 		expect(connector.peer.state.status).toBe("recovering");
 		expect(acceptorPeer?.state.status).toBe("recovering");
 
-		await connector.connect(network.createConnectorAdapter());
+		await connector.connect({ adapter: network.createConnectorAdapter() });
 		expect(connector.peer.state.status).toBe("connected");
 		expect(acceptorPeer?.state.status).toBe("connected");
 		releaseTimedOutAccept();
@@ -1328,7 +1328,7 @@ describe("Default RPC Protocol", () => {
 		const acceptor = createRpcAcceptor({ runtimePolicy: policy });
 		const connector = createRpcConnector({ runtimePolicy: policy });
 		await acceptor.listen(network.acceptorAdapter);
-		await connector.connect(network.createConnectorAdapter());
+		await connector.connect({ adapter: network.createConnectorAdapter() });
 		const acceptorPeer = acceptor.peers[0];
 		const freshAccept = network.records.find(
 			(record) =>
@@ -1348,8 +1348,8 @@ describe("Default RPC Protocol", () => {
 			expect(connector.peer.state.status).toBe("recovering");
 		});
 
-		await connector.connect(
-			network.createConnectorAdapter((record) => ({
+		await connector.connect({
+			adapter: network.createConnectorAdapter((record) => ({
 				settlement:
 					record.connectionId === 2 &&
 					record.direction === "acceptor" &&
@@ -1358,7 +1358,7 @@ describe("Default RPC Protocol", () => {
 						? firstAccept
 						: undefined,
 			})),
-		);
+		});
 		const nonce = cryptography.createRandomCarrier();
 		nonce.bytes.fill(0);
 		const higherWithoutProof = {
@@ -1417,8 +1417,8 @@ describe("Default RPC Protocol", () => {
 			},
 		});
 		await acceptor.listen(network.acceptorAdapter);
-		await connector.connect(
-			network.createConnectorAdapter(
+		await connector.connect({
+			adapter: network.createConnectorAdapter(
 				(record) => ({
 					settlement:
 						record.direction === "connector" &&
@@ -1429,7 +1429,7 @@ describe("Default RPC Protocol", () => {
 				}),
 				"silent",
 			),
-		);
+		});
 		const acceptorPeer = acceptor.peers[0];
 		const freshAccept = network.records.find(
 			(record) =>
@@ -1489,10 +1489,10 @@ describe("Default RPC Protocol", () => {
 		});
 
 		await expect(
-			connector.connect(network.createConnectorAdapter()),
+			connector.connect({ adapter: network.createConnectorAdapter() }),
 		).rejects.toMatchObject({ code: "unavailable" });
 		expect(acceptorPeer?.state.status).toBe("connected");
-		await connector.connect(network.createConnectorAdapter());
+		await connector.connect({ adapter: network.createConnectorAdapter() });
 
 		await expect(call).resolves.toBe(42);
 		expect(handlerCalls).toBe(1);
@@ -1536,7 +1536,7 @@ describe("Default RPC Protocol", () => {
 		const acceptor = createRpcAcceptor({ runtimePolicy: policy });
 		const connector = createRpcConnector({ runtimePolicy: policy });
 		await acceptor.listen(network.acceptorAdapter);
-		await connector.connect(network.createConnectorAdapter());
+		await connector.connect({ adapter: network.createConnectorAdapter() });
 		const acceptorPeer = acceptor.peers[0];
 		network.disconnect(1);
 		await vi.waitFor(() => {
@@ -1549,8 +1549,8 @@ describe("Default RPC Protocol", () => {
 		const encoder = new TextEncoder();
 
 		await expect(
-			connector.connect(
-				network.createConnectorAdapter((record, message) => {
+			connector.connect({
+				adapter: network.createConnectorAdapter((record, message) => {
 					if (
 						record.direction !== "connector" ||
 						record.value.kind !== "resume"
@@ -1571,7 +1571,7 @@ describe("Default RPC Protocol", () => {
 					}
 					return { message: encoder.encode(JSON.stringify(value)) };
 				}),
-			),
+			}),
 		).rejects.toMatchObject({ code: "unavailable" });
 
 		expect(
@@ -1585,7 +1585,7 @@ describe("Default RPC Protocol", () => {
 		expect(connector.peer.state.status).toBe("recovering");
 		expect(acceptorPeer?.state.status).toBe("recovering");
 
-		await connector.connect(network.createConnectorAdapter());
+		await connector.connect({ adapter: network.createConnectorAdapter() });
 		expect(connector.peer.state.status).toBe("connected");
 		expect(acceptorPeer?.state.status).toBe("connected");
 		expect(
@@ -1617,7 +1617,9 @@ describe("Default RPC Protocol", () => {
 		});
 
 		await originalAcceptor.listen(originalNetwork.acceptorAdapter);
-		await connector.connect(originalNetwork.createConnectorAdapter());
+		await connector.connect({
+			adapter: originalNetwork.createConnectorAdapter(),
+		});
 		originalNetwork.disconnect(1);
 		await vi.waitFor(() => {
 			expect(connector.peer.state.status).toBe("recovering");
@@ -1629,7 +1631,7 @@ describe("Default RPC Protocol", () => {
 
 		await restartedAcceptor.listen(restartedNetwork.acceptorAdapter);
 		await expect(
-			connector.connect(restartedNetwork.createConnectorAdapter()),
+			connector.connect({ adapter: restartedNetwork.createConnectorAdapter() }),
 		).rejects.toMatchObject({ code: "unavailable" });
 		expect(
 			restartedNetwork.records.find(

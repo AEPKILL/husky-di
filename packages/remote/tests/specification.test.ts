@@ -21,13 +21,18 @@ import {
 	createRemoteServiceDescriptor,
 	createRpcAcceptor,
 	createRpcConnector,
+	createRpcConnectorReconnection,
 	type IRpcConnector,
+	type IRpcConnectorAdapter,
 	type IRpcProtocol,
 	RpcAcceptorListenerStopReasonEnum,
 	RpcCallDirectionEnum,
 	RpcCallStatusEnum,
 	RpcCloseOutcomeEnum,
 	RpcCloseReasonEnum,
+	RpcConnectorReconnectionAttemptFailureStageEnum,
+	RpcConnectorReconnectionEventTypeEnum,
+	RpcConnectorReconnectionStopReasonEnum,
 	type RpcConnectorRuntimePolicyOptions,
 	type RpcEvent,
 	RpcEventTypeEnum,
@@ -192,14 +197,16 @@ async function connectProtocolSession(
 	const events: RpcEvent[] = [];
 	connector.event$.subscribe((event) => events.push(event));
 	await connector.connect({
-		connection$: connectionSource.asObservable(),
-		async connect() {
-			connectionSource.next({
-				message$: messageSource.asObservable(),
-				async send() {},
-				async close() {},
-			});
-			connectionSource.complete();
+		adapter: {
+			connection$: connectionSource.asObservable(),
+			async connect() {
+				connectionSource.next({
+					message$: messageSource.asObservable(),
+					async send() {},
+					async close() {},
+				});
+				connectionSource.complete();
+			},
 		},
 	});
 	if (connectorHost === undefined) {
@@ -209,6 +216,73 @@ async function connectProtocolSession(
 		throw new Error("Expected a Connector Protocol Session host.");
 	}
 	return { connector, host: connectorHost, sessionHost, events };
+}
+
+function createReconnectionProtocolHarness(): {
+	readonly protocol: IRpcProtocol;
+	readonly sessionHost: () => IRpcProtocolSessionHost;
+} {
+	const session: IRpcProtocolSession = {
+		reserveInvocation: () => undefined,
+		forceClose() {},
+	};
+	let retainedSessionHost: IRpcProtocolSessionHost | undefined;
+	const protocol: IRpcProtocol = {
+		createConnector(host) {
+			return {
+				bind() {
+					return Promise.resolve().then(() => {
+						if (retainedSessionHost === undefined) {
+							retainedSessionHost = host.attachSession(session);
+							if (retainedSessionHost === undefined) {
+								throw new Error("The test Session was not attached.");
+							}
+							return;
+						}
+						retainedSessionHost.transition({
+							type: RpcProtocolSessionTransitionTypeEnum.recovered,
+						});
+					});
+				},
+				async shutdown() {},
+				close() {},
+				async cleanup() {},
+			};
+		},
+		createAcceptor() {
+			return {
+				async accept() {},
+				async shutdown() {},
+				close() {},
+				async cleanup() {},
+			};
+		},
+	};
+
+	return {
+		protocol,
+		sessionHost: () => {
+			if (retainedSessionHost === undefined) {
+				throw new Error("The test Session has not been attached.");
+			}
+			return retainedSessionHost;
+		},
+	};
+}
+
+function createSuccessfulConnectorAdapter(): IRpcConnectorAdapter {
+	const connectionSource = new Subject<IRpcConnection>();
+	return {
+		connection$: connectionSource.asObservable(),
+		async connect() {
+			connectionSource.next({
+				message$: new Subject<Uint8Array>().asObservable(),
+				async send() {},
+				async close() {},
+			});
+			connectionSource.complete();
+		},
+	};
 }
 
 describe("Remote Service Descriptor", () => {
@@ -978,6 +1052,244 @@ describe("exposure registries and remote facades", () => {
 });
 
 describe("Adapter startup and Protocol handoff", () => {
+	it("RPC-START-005 rejects unknown Connector attempt options without starting its Adapter", async () => {
+		const connector = createRpcConnector({
+			protocol: createProtocolHarness().protocol,
+		});
+		let adapterStarts = 0;
+		const connectionSource = new Subject<IRpcConnection>();
+		const adapter: IRpcConnectorAdapter = {
+			connection$: connectionSource.asObservable(),
+			async connect() {
+				adapterStarts += 1;
+				const error = new Error("Adapter must not start.");
+				connectionSource.error(error);
+				throw error;
+			},
+		};
+
+		await expect(
+			connector.connect({ adapter, unknown: true } as never),
+		).rejects.toBeInstanceOf(TypeError);
+
+		expect(adapterStarts).toBe(0);
+		expect(connector.peer.state).toEqual({ status: "unbound" });
+	});
+
+	it("RPC-START-005 rejects a pre-aborted Connector attempt without touching its Adapter", async () => {
+		const { protocol } = createProtocolHarness();
+		const connector = createRpcConnector({ protocol });
+		const controller = new AbortController();
+		controller.abort();
+		let adapterReads = 0;
+		let adapterStarts = 0;
+		const adapter = Object.defineProperty(
+			{
+				async connect() {
+					adapterStarts += 1;
+				},
+			},
+			"connection$",
+			{
+				get() {
+					adapterReads += 1;
+					return new Subject<IRpcConnection>().asObservable();
+				},
+			},
+		) as unknown as IRpcConnectorAdapter;
+
+		await expect(
+			connector.connect({ adapter, signal: controller.signal }),
+		).rejects.toMatchObject({ name: "AbortError" });
+
+		expect(adapterReads).toBe(0);
+		expect(adapterStarts).toBe(0);
+		expect(connector.peer.state).toEqual({ status: "unbound" });
+	});
+
+	it("RPC-START-005 aborts an unsettled fresh attempt and releases Connector authority", async () => {
+		const { protocol } = createProtocolHarness();
+		const connector = createRpcConnector({ protocol });
+		const controller = new AbortController();
+		let adapterSignal: AbortSignal | undefined;
+		const adapter: IRpcConnectorAdapter = {
+			connection$: new Subject<IRpcConnection>().asObservable(),
+			connect(signal) {
+				adapterSignal = signal;
+				return new Promise<void>((_resolve, reject) => {
+					signal.addEventListener(
+						"abort",
+						() => reject(new DOMException("Adapter aborted.", "AbortError")),
+						{ once: true },
+					);
+				});
+			},
+		};
+
+		const startup = connector.connect({ adapter, signal: controller.signal });
+		expect(connector.peer.state).toEqual({ status: "connecting" });
+		controller.abort();
+
+		await expect(startup).rejects.toMatchObject({ name: "AbortError" });
+		expect(adapterSignal?.aborted).toBe(true);
+		expect(connector.peer.state).toEqual({ status: "unbound" });
+		await expect(
+			connector.connect({ adapter: undefined as never }),
+		).rejects.toBeInstanceOf(TypeError);
+	});
+
+	it("RPC-START-005 ignores a reentrant abort after binding success", async () => {
+		const session: IRpcProtocolSession = {
+			reserveInvocation: () => undefined,
+			forceClose() {},
+		};
+		const protocol: IRpcProtocol = {
+			createConnector(host) {
+				return {
+					bind() {
+						return Promise.resolve().then(() => {
+							if (host.attachSession(session) === undefined) {
+								throw new Error("The test Session was not attached.");
+							}
+						});
+					},
+					async shutdown() {},
+					close() {},
+					async cleanup() {},
+				};
+			},
+			createAcceptor() {
+				return {
+					async accept() {},
+					async shutdown() {},
+					close() {},
+					async cleanup() {},
+				};
+			},
+		};
+		const controller = new AbortController();
+		const connectionSource = new Subject<IRpcConnection>();
+		let closeCalls = 0;
+		const connector = createRpcConnector({ protocol });
+		connector.event$.subscribe((event) => {
+			if (event.type === RpcEventTypeEnum.peerOpened) {
+				controller.abort("caller-controlled reason");
+			}
+		});
+
+		await connector.connect({
+			adapter: {
+				connection$: connectionSource.asObservable(),
+				async connect() {
+					connectionSource.next({
+						message$: new Subject<Uint8Array>().asObservable(),
+						async send() {},
+						async close() {
+							closeCalls += 1;
+						},
+					});
+					connectionSource.complete();
+				},
+			},
+			signal: controller.signal,
+		});
+
+		expect(closeCalls).toBe(0);
+		expect(connector.peer.state).toEqual({ status: "connected" });
+	});
+
+	it("RPC-START-005 keeps AbortError authoritative when abort wins an ordinary-failure race", async () => {
+		const connector = createRpcConnector({
+			protocol: createProtocolHarness().protocol,
+		});
+		const controller = new AbortController();
+		const connectionSource = new Subject<IRpcConnection>();
+		const adapterFailure = new Error("Adapter credential=secret");
+		const abortReason = new Error("Caller credential=secret");
+		const startup = connector.connect({
+			adapter: {
+				connection$: connectionSource.asObservable(),
+				async connect() {
+					queueMicrotask(() => {
+						connectionSource.error(adapterFailure);
+						queueMicrotask(() => controller.abort(abortReason));
+					});
+				},
+			},
+			signal: controller.signal,
+		});
+
+		const error = await startup.catch((cause: unknown) => cause);
+
+		expect(error).toBeInstanceOf(DOMException);
+		expect(error).toMatchObject({ name: "AbortError" });
+		expect(error).not.toBe(adapterFailure);
+		expect(error).not.toBe(abortReason);
+		expect(JSON.stringify(error)).not.toContain("secret");
+		expect(connector.peer.state).toEqual({ status: "unbound" });
+	});
+
+	it("RPC-START-005 lets reentrant Owner termination win before startup settles", async () => {
+		const session: IRpcProtocolSession = {
+			reserveInvocation: () => undefined,
+			forceClose() {},
+		};
+		const protocol: IRpcProtocol = {
+			createConnector(host) {
+				return {
+					bind() {
+						return Promise.resolve().then(() => {
+							if (host.attachSession(session) === undefined) {
+								throw new Error("The test Session was not attached.");
+							}
+						});
+					},
+					async shutdown() {},
+					close() {},
+					async cleanup() {},
+				};
+			},
+			createAcceptor() {
+				return {
+					async accept() {},
+					async shutdown() {},
+					close() {},
+					async cleanup() {},
+				};
+			},
+		};
+		const connector = createRpcConnector({ protocol });
+		const events: RpcEvent[] = [];
+		let closeTask: Promise<void> | undefined;
+		connector.event$.subscribe((event) => events.push(event));
+		connector.peer.state$.subscribe((state) => {
+			if (state.status === RpcStateStatusEnum.connected) {
+				closeTask = connector.close();
+			}
+		});
+		const connectionSource = new Subject<IRpcConnection>();
+
+		const startup = connector.connect({
+			adapter: {
+				connection$: connectionSource.asObservable(),
+				async connect() {
+					connectionSource.next({
+						message$: new Subject<Uint8Array>().asObservable(),
+						async send() {},
+						async close() {},
+					});
+					connectionSource.complete();
+				},
+			},
+		});
+
+		await expect(startup).rejects.toMatchObject({ name: "AbortError" });
+		await closeTask;
+		expect(events.map((event) => event.type)).not.toContain(
+			RpcEventTypeEnum.peerOpened,
+		);
+	});
+
 	it("RPC-START-002 RPC-TRANSPORT-008 RPC-SPI-008 subscribes and binds inside the Connector handoff barrier", async () => {
 		const connectionSubject = new Subject<IRpcConnection>();
 		const messageSubject = new Subject<Uint8Array>();
@@ -1042,7 +1354,7 @@ describe("Adapter startup and Protocol handoff", () => {
 		};
 
 		const connector = createRpcConnector({ protocol });
-		const startup = connector.connect(adapter);
+		const startup = connector.connect({ adapter });
 		expect(connector.peer.state).toEqual({ status: "connecting" });
 		expect(bindRanInsideNotification).toBe(true);
 		expect(receivedMessages).toEqual([Uint8Array.of(7)]);
@@ -1074,10 +1386,12 @@ describe("Adapter startup and Protocol handoff", () => {
 
 		await expect(
 			connector.connect({
-				connection$: connectionSubject.asObservable(),
-				async connect() {
-					connectionSubject.next(connection);
-					connectionSubject.complete();
+				adapter: {
+					connection$: connectionSubject.asObservable(),
+					async connect() {
+						connectionSubject.next(connection);
+						connectionSubject.complete();
+					},
 				},
 			}),
 		).rejects.toMatchObject({ code: "unavailable" });
@@ -1090,9 +1404,11 @@ describe("Adapter startup and Protocol handoff", () => {
 		const connectionSubject = new Subject<IRpcConnection>();
 		const connector = createRpcConnector({ protocol: harness.protocol });
 		const startup = connector.connect({
-			connection$: connectionSubject.asObservable(),
-			async connect() {
-				connectionSubject.complete();
+			adapter: {
+				connection$: connectionSubject.asObservable(),
+				async connect() {
+					connectionSubject.complete();
+				},
 			},
 		});
 
@@ -1347,6 +1663,23 @@ describe("custom Protocol outgoing invocations", () => {
 		expect(RpcEventTypeEnum.topologyClosed).toBe("topology-closed");
 		expect(RpcCloseOutcomeEnum.failed).toBe("failed");
 		expect(RpcStateStatusEnum.recovering).toBe("recovering");
+		expect(RpcStateStatusEnum.monitoring).toBe("monitoring");
+		expect(RpcStateStatusEnum.reconnecting).toBe("reconnecting");
+		expect(RpcStateStatusEnum.waiting).toBe("waiting");
+		expect(RpcConnectorReconnectionAttemptFailureStageEnum).toEqual({
+			adapterFactory: "adapter-factory",
+			connectorAttempt: "connector-attempt",
+			attemptTimeout: "attempt-timeout",
+		});
+		expect(RpcConnectorReconnectionEventTypeEnum).toEqual({
+			attemptFailed: "attempt-failed",
+		});
+		expect(RpcConnectorReconnectionStopReasonEnum).toEqual({
+			requested: "requested",
+			initialConnectionFailed: "initial-connection-failed",
+			retriesExhausted: "retries-exhausted",
+			connectorTerminated: "connector-terminated",
+		});
 		expect(RpcAcceptorListenerStopReasonEnum.resourcePressure).toBe(
 			"resource-pressure",
 		);
@@ -2445,6 +2778,949 @@ describe("Protocol Session state projection", () => {
 		]);
 		expect(ownerCompleted).toBe(true);
 		expect(eventCompleted).toBe(true);
+	});
+});
+
+describe("Connector Reconnection", () => {
+	it("RPC-RECONNECT-001 rejects malformed or unbounded Reconnection policy", () => {
+		const connector = createRpcConnector();
+		const adapterFactory = () => createSuccessfulConnectorAdapter();
+		const invalidPolicies = [
+			{ retryDelaysMs: [-1] },
+			{ retryDelaysMs: [1.5] },
+			{ retryDelaysMs: new Array<number>(1) },
+			{ retryDelaysMs: Array.from({ length: 65 }, () => 0) },
+			{ attemptTimeoutMs: 0 },
+			{ attemptTimeoutMs: Number.MAX_SAFE_INTEGER + 1 },
+		];
+
+		for (const policy of invalidPolicies) {
+			expect(() =>
+				createRpcConnectorReconnection({
+					connector,
+					adapterFactory,
+					policy,
+				}),
+			).toThrow(TypeError);
+		}
+		expect(() =>
+			createRpcConnectorReconnection({
+				connector,
+				adapterFactory,
+				policy: { unknown: true } as never,
+			}),
+		).toThrow(TypeError);
+		expect(() =>
+			createRpcConnectorReconnection({
+				connector: {} as never,
+				adapterFactory,
+			}),
+		).toThrow(TypeError);
+	});
+
+	it("RPC-RECONNECT-003 snapshots retry delays without invoking a caller iterator", () => {
+		const connector = createRpcConnector();
+		const retryDelaysMs: number[] = [];
+		let iteratorCalls = 0;
+		Object.defineProperty(retryDelaysMs, Symbol.iterator, {
+			value() {
+				iteratorCalls += 1;
+				throw new Error("The caller iterator must not run.");
+			},
+		});
+
+		expect(() =>
+			createRpcConnectorReconnection({
+				connector,
+				adapterFactory: createSuccessfulConnectorAdapter,
+				policy: { retryDelaysMs },
+			}),
+		).not.toThrow();
+		expect(iteratorCalls).toBe(0);
+	});
+
+	it("RPC-RECONNECT-001 owns one initial connection and publishes its orchestration state", async () => {
+		const session: IRpcProtocolSession = {
+			reserveInvocation: () => undefined,
+			forceClose() {},
+		};
+		const protocol: IRpcProtocol = {
+			createConnector(host) {
+				return {
+					bind() {
+						return Promise.resolve().then(() => {
+							if (host.attachSession(session) === undefined) {
+								throw new Error("The test Session was not attached.");
+							}
+						});
+					},
+					async shutdown() {},
+					close() {},
+					async cleanup() {},
+				};
+			},
+			createAcceptor() {
+				return {
+					async accept() {},
+					async shutdown() {},
+					close() {},
+					async cleanup() {},
+				};
+			},
+		};
+		const connector = createRpcConnector({ protocol });
+		let factoryCalls = 0;
+		const reconnection = createRpcConnectorReconnection({
+			connector,
+			adapterFactory: () => {
+				factoryCalls += 1;
+				const connectionSource = new Subject<IRpcConnection>();
+				return {
+					connection$: connectionSource.asObservable(),
+					async connect() {
+						connectionSource.next({
+							message$: new Subject<Uint8Array>().asObservable(),
+							async send() {},
+							async close() {},
+						});
+						connectionSource.complete();
+					},
+				};
+			},
+		});
+		const states: string[] = [];
+		reconnection.state$.subscribe((state) => states.push(state.status));
+
+		expect(reconnection.connector).toBe(connector);
+		expect(reconnection.state).toEqual({ status: "idle" });
+		await reconnection.connect();
+
+		expect(factoryCalls).toBe(1);
+		expect(reconnection.state).toEqual({ status: "monitoring" });
+		expect(states).toEqual(["idle", "connecting", "monitoring"]);
+		await expect(reconnection.connect()).rejects.toMatchObject({
+			code: "unavailable",
+		});
+	});
+
+	it("RPC-RECONNECT-001 terminates after an initial Adapter Factory failure", async () => {
+		const connector = createRpcConnector({
+			protocol: createProtocolHarness().protocol,
+		});
+		const cause = new Error("Factory failed.");
+		const reconnection = createRpcConnectorReconnection({
+			connector,
+			adapterFactory: () => {
+				throw cause;
+			},
+		});
+		let stateCompleted = false;
+		reconnection.state$.subscribe({
+			complete: () => {
+				stateCompleted = true;
+			},
+		});
+
+		await expect(reconnection.connect()).rejects.toBe(cause);
+
+		expect(reconnection.state).toEqual({
+			status: "stopped",
+			reason: "initial-connection-failed",
+		});
+		expect(stateCompleted).toBe(true);
+	});
+
+	it("RPC-RECONNECT-001 does not retry an ordinary initial Connector failure", async () => {
+		const connector = createRpcConnector({
+			protocol: createProtocolHarness().protocol,
+		});
+		let factoryCalls = 0;
+		const events: unknown[] = [];
+		const reconnection = createRpcConnectorReconnection({
+			connector,
+			adapterFactory: () => {
+				factoryCalls += 1;
+				const connectionSource = new Subject<IRpcConnection>();
+				return {
+					connection$: connectionSource.asObservable(),
+					async connect() {
+						const error = new Error("Initial attempt failed.");
+						connectionSource.error(error);
+						throw error;
+					},
+				};
+			},
+			policy: { retryDelaysMs: [0, 0], attemptTimeoutMs: 1 },
+		});
+		reconnection.event$.subscribe((event) => events.push(event));
+
+		await expect(reconnection.connect()).rejects.toMatchObject({
+			code: "unavailable",
+		});
+		await new Promise<void>((resolve) => setTimeout(resolve, 5));
+
+		expect(factoryCalls).toBe(1);
+		expect(events).toEqual([]);
+		expect(reconnection.state).toEqual({
+			status: "stopped",
+			reason: "initial-connection-failed",
+		});
+	});
+
+	it("RPC-RECONNECT-004 reports Connector termination during the initial attempt", async () => {
+		const connector = createRpcConnector({
+			protocol: createProtocolHarness().protocol,
+		});
+		let adapterSignal: AbortSignal | undefined;
+		const events: unknown[] = [];
+		let eventsCompleted = false;
+		const reconnection = createRpcConnectorReconnection({
+			connector,
+			adapterFactory: () => ({
+				connection$: new Subject<IRpcConnection>().asObservable(),
+				connect(signal) {
+					adapterSignal = signal;
+					return new Promise<void>((_resolve, reject) => {
+						signal.addEventListener(
+							"abort",
+							() => reject(new DOMException("Adapter aborted.", "AbortError")),
+							{ once: true },
+						);
+					});
+				},
+			}),
+		});
+		reconnection.event$.subscribe({
+			next: (event) => events.push(event),
+			complete: () => {
+				eventsCompleted = true;
+			},
+		});
+		const connectTask = reconnection.connect();
+
+		const closeTask = connector.close();
+		await expect(connectTask).rejects.toMatchObject({ name: "AbortError" });
+		await closeTask;
+
+		expect(adapterSignal?.aborted).toBe(true);
+		expect(events).toEqual([]);
+		expect(eventsCompleted).toBe(true);
+		expect(reconnection.state).toEqual({
+			status: "stopped",
+			reason: "connector-terminated",
+		});
+	});
+
+	it("RPC-RECONNECT-002 replays its frozen terminal state to a late subscriber", async () => {
+		const reconnection = createRpcConnectorReconnection({
+			connector: createRpcConnector({
+				protocol: createProtocolHarness().protocol,
+			}),
+			adapterFactory: () => {
+				throw new Error("Factory failed.");
+			},
+		});
+		await reconnection.connect().catch(() => {});
+		const observations: unknown[] = [];
+
+		reconnection.state$.subscribe({
+			next: (state) => observations.push(state),
+			complete: () => observations.push("complete"),
+		});
+
+		expect(Object.isFrozen(reconnection.state)).toBe(true);
+		expect(observations).toEqual([
+			{
+				status: "stopped",
+				reason: "initial-connection-failed",
+			},
+			"complete",
+		]);
+	});
+
+	it("RPC-RECONNECT-002 immediately reconnects a recovering Peer with a fresh Adapter", async () => {
+		const session: IRpcProtocolSession = {
+			reserveInvocation: () => undefined,
+			forceClose() {},
+		};
+		let sessionHost: IRpcProtocolSessionHost | undefined;
+		const protocol: IRpcProtocol = {
+			createConnector(host) {
+				return {
+					bind() {
+						return Promise.resolve().then(() => {
+							if (sessionHost === undefined) {
+								sessionHost = host.attachSession(session);
+								if (sessionHost === undefined) {
+									throw new Error("The test Session was not attached.");
+								}
+								return;
+							}
+							sessionHost.transition({
+								type: RpcProtocolSessionTransitionTypeEnum.recovered,
+							});
+						});
+					},
+					async shutdown() {},
+					close() {},
+					async cleanup() {},
+				};
+			},
+			createAcceptor() {
+				return {
+					async accept() {},
+					async shutdown() {},
+					close() {},
+					async cleanup() {},
+				};
+			},
+		};
+		const connector = createRpcConnector({ protocol });
+		const adapters: IRpcConnectorAdapter[] = [];
+		const reconnection = createRpcConnectorReconnection({
+			connector,
+			adapterFactory: () => {
+				const connectionSource = new Subject<IRpcConnection>();
+				const adapter: IRpcConnectorAdapter = {
+					connection$: connectionSource.asObservable(),
+					async connect() {
+						connectionSource.next({
+							message$: new Subject<Uint8Array>().asObservable(),
+							async send() {},
+							async close() {},
+						});
+						connectionSource.complete();
+					},
+				};
+				adapters.push(adapter);
+				return adapter;
+			},
+		});
+		await reconnection.connect();
+
+		sessionHost?.transition({
+			type: RpcProtocolSessionTransitionTypeEnum.recovering,
+		});
+
+		expect(reconnection.state).toEqual({
+			status: "reconnecting",
+			attempt: 1,
+		});
+		expect(adapters).toHaveLength(1);
+		await vi.waitFor(() => {
+			expect(reconnection.state).toEqual({ status: "monitoring" });
+		});
+		expect(adapters).toHaveLength(2);
+		expect(adapters[1]).not.toBe(adapters[0]);
+		expect(connector.peer.state).toEqual({ status: "connected" });
+
+		sessionHost?.transition({
+			type: RpcProtocolSessionTransitionTypeEnum.recovering,
+		});
+		expect(reconnection.state).toEqual({
+			status: "reconnecting",
+			attempt: 1,
+		});
+		await vi.waitFor(() => {
+			expect(reconnection.state).toEqual({ status: "monitoring" });
+		});
+		expect(adapters).toHaveLength(3);
+	});
+
+	it("RPC-RECONNECT-002 does not lose a new Recovery before replacement settlement", async () => {
+		const peerStateSource = new Subject<{
+			readonly status: RpcStateStatusEnum;
+		}>();
+		let peerState: { readonly status: RpcStateStatusEnum } = {
+			status: RpcStateStatusEnum.unbound,
+		};
+		let connectorCalls = 0;
+		const connector = {
+			state: { status: RpcStateStatusEnum.active },
+			state$: new Observable((subscriber) => {
+				subscriber.next({ status: RpcStateStatusEnum.active });
+			}),
+			peer: {
+				get state() {
+					return peerState;
+				},
+				state$: new Observable((subscriber) => {
+					subscriber.next(peerState);
+					return peerStateSource.subscribe(subscriber);
+				}),
+			},
+			connect() {
+				connectorCalls += 1;
+				peerState = { status: RpcStateStatusEnum.connected };
+				peerStateSource.next(peerState);
+				const task = Promise.resolve();
+				if (connectorCalls === 2) {
+					void task.then(() => {
+						peerState = { status: RpcStateStatusEnum.recovering };
+						peerStateSource.next(peerState);
+					});
+				}
+				return task;
+			},
+		} as unknown as IRpcConnector;
+		let factoryCalls = 0;
+		const reconnection = createRpcConnectorReconnection({
+			connector,
+			adapterFactory: () => {
+				factoryCalls += 1;
+				return createSuccessfulConnectorAdapter();
+			},
+		});
+		await reconnection.connect();
+		peerState = { status: RpcStateStatusEnum.recovering };
+		peerStateSource.next(peerState);
+
+		await vi.waitFor(() => {
+			expect(factoryCalls).toBe(3);
+			expect(reconnection.state).toEqual({ status: "monitoring" });
+		});
+	});
+
+	it("RPC-RECONNECT-003 waits the configured exact delay before a later retry", async () => {
+		vi.useFakeTimers();
+		try {
+			const session: IRpcProtocolSession = {
+				reserveInvocation: () => undefined,
+				forceClose() {},
+			};
+			let sessionHost: IRpcProtocolSessionHost | undefined;
+			const protocol: IRpcProtocol = {
+				createConnector(host) {
+					return {
+						bind() {
+							return Promise.resolve().then(() => {
+								if (sessionHost === undefined) {
+									sessionHost = host.attachSession(session);
+									if (sessionHost === undefined) {
+										throw new Error("The test Session was not attached.");
+									}
+									return;
+								}
+								sessionHost.transition({
+									type: RpcProtocolSessionTransitionTypeEnum.recovered,
+								});
+							});
+						},
+						async shutdown() {},
+						close() {},
+						async cleanup() {},
+					};
+				},
+				createAcceptor() {
+					return {
+						async accept() {},
+						async shutdown() {},
+						close() {},
+						async cleanup() {},
+					};
+				},
+			};
+			const connector = createRpcConnector({ protocol });
+			let factoryCalls = 0;
+			const retryDelaysMs = [100];
+			const reconnection = createRpcConnectorReconnection({
+				connector,
+				adapterFactory: () => {
+					factoryCalls += 1;
+					const connectionSource = new Subject<IRpcConnection>();
+					return {
+						connection$: connectionSource.asObservable(),
+						async connect() {
+							if (factoryCalls === 2) {
+								const error = new Error("Replacement failed.");
+								connectionSource.error(error);
+								throw error;
+							}
+							connectionSource.next({
+								message$: new Subject<Uint8Array>().asObservable(),
+								async send() {},
+								async close() {},
+							});
+							connectionSource.complete();
+						},
+					};
+				},
+				policy: {
+					retryDelaysMs,
+					attemptTimeoutMs: 1_000,
+				},
+			});
+			const failures: unknown[] = [];
+			reconnection.event$.subscribe((event) =>
+				failures.push({ event, state: reconnection.state }),
+			);
+			retryDelaysMs[0] = 0;
+			await reconnection.connect();
+
+			sessionHost?.transition({
+				type: RpcProtocolSessionTransitionTypeEnum.recovering,
+			});
+			await vi.advanceTimersByTimeAsync(0);
+
+			expect(factoryCalls).toBe(2);
+			expect(reconnection.state).toEqual({
+				status: "waiting",
+				nextAttempt: 2,
+				delayMs: 100,
+			});
+			expect(failures).toEqual([
+				{
+					event: {
+						type: "attempt-failed",
+						attempt: 1,
+						stage: "connector-attempt",
+						nextDelayMs: 100,
+					},
+					state: {
+						status: "waiting",
+						nextAttempt: 2,
+						delayMs: 100,
+					},
+				},
+			]);
+			await vi.advanceTimersByTimeAsync(99);
+			expect(factoryCalls).toBe(2);
+			await vi.advanceTimersByTimeAsync(1);
+			await vi.advanceTimersByTimeAsync(0);
+
+			expect(factoryCalls).toBe(3);
+			expect(reconnection.state).toEqual({ status: "monitoring" });
+			expect(connector.peer.state).toEqual({ status: "connected" });
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
+	it("RPC-RECONNECT-003 aborts a replacement attempt at its configured timeout", async () => {
+		vi.useFakeTimers();
+		try {
+			const harness = createReconnectionProtocolHarness();
+			const connector = createRpcConnector({ protocol: harness.protocol });
+			let factoryCalls = 0;
+			let replacementSignal: AbortSignal | undefined;
+			const failures: unknown[] = [];
+			const reconnection = createRpcConnectorReconnection({
+				connector,
+				adapterFactory: () => {
+					factoryCalls += 1;
+					if (factoryCalls === 1) {
+						return createSuccessfulConnectorAdapter();
+					}
+					return {
+						connection$: new Subject<IRpcConnection>().asObservable(),
+						connect(signal) {
+							replacementSignal = signal;
+							return new Promise<void>((_resolve, reject) => {
+								signal.addEventListener(
+									"abort",
+									() =>
+										reject(new DOMException("Adapter aborted.", "AbortError")),
+									{ once: true },
+								);
+							});
+						},
+					};
+				},
+				policy: { retryDelaysMs: [], attemptTimeoutMs: 50 },
+			});
+			reconnection.event$.subscribe((event) => failures.push(event));
+			await reconnection.connect();
+			harness.sessionHost().transition({
+				type: RpcProtocolSessionTransitionTypeEnum.recovering,
+			});
+			await vi.advanceTimersByTimeAsync(0);
+
+			expect(replacementSignal?.aborted).toBe(false);
+			await vi.advanceTimersByTimeAsync(49);
+			expect(reconnection.state).toEqual({
+				status: "reconnecting",
+				attempt: 1,
+			});
+			await vi.advanceTimersByTimeAsync(1);
+			await vi.advanceTimersByTimeAsync(0);
+
+			expect(replacementSignal?.aborted).toBe(true);
+			expect(reconnection.state).toEqual({
+				status: "stopped",
+				reason: "retries-exhausted",
+			});
+			expect(failures).toEqual([
+				{
+					type: "attempt-failed",
+					attempt: 1,
+					stage: "attempt-timeout",
+				},
+			]);
+			expect(connector.peer.state).toEqual({ status: "recovering" });
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
+	it("RPC-RECONNECT-003 preserves exact delays beyond one platform timer range", async () => {
+		vi.useFakeTimers();
+		try {
+			const maximumTimerDelayMs = 2_147_483_647;
+			const harness = createReconnectionProtocolHarness();
+			const connector = createRpcConnector({ protocol: harness.protocol });
+			let factoryCalls = 0;
+			const reconnection = createRpcConnectorReconnection({
+				connector,
+				adapterFactory: () => {
+					factoryCalls += 1;
+					if (factoryCalls !== 2) {
+						return createSuccessfulConnectorAdapter();
+					}
+					const connectionSource = new Subject<IRpcConnection>();
+					return {
+						connection$: connectionSource.asObservable(),
+						async connect() {
+							const error = new Error("Replacement failed.");
+							connectionSource.error(error);
+							throw error;
+						},
+					};
+				},
+				policy: {
+					retryDelaysMs: [maximumTimerDelayMs + 10],
+					attemptTimeoutMs: 1_000,
+				},
+			});
+			await reconnection.connect();
+			harness.sessionHost().transition({
+				type: RpcProtocolSessionTransitionTypeEnum.recovering,
+			});
+			await vi.advanceTimersByTimeAsync(0);
+
+			await vi.advanceTimersByTimeAsync(maximumTimerDelayMs);
+			expect(factoryCalls).toBe(2);
+			await vi.advanceTimersByTimeAsync(9);
+			expect(factoryCalls).toBe(2);
+			await vi.advanceTimersByTimeAsync(1);
+			await vi.advanceTimersByTimeAsync(0);
+
+			expect(factoryCalls).toBe(3);
+			expect(reconnection.state).toEqual({ status: "monitoring" });
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
+	it("RPC-RECONNECT-004 stops a scheduled retry without closing its Connector", async () => {
+		vi.useFakeTimers();
+		try {
+			const harness = createReconnectionProtocolHarness();
+			const connector = createRpcConnector({ protocol: harness.protocol });
+			let factoryCalls = 0;
+			const reconnection = createRpcConnectorReconnection({
+				connector,
+				adapterFactory: () => {
+					factoryCalls += 1;
+					if (factoryCalls === 1) {
+						return createSuccessfulConnectorAdapter();
+					}
+					const connectionSource = new Subject<IRpcConnection>();
+					return {
+						connection$: connectionSource.asObservable(),
+						async connect() {
+							const error = new Error("Replacement failed.");
+							connectionSource.error(error);
+							throw error;
+						},
+					};
+				},
+				policy: { retryDelaysMs: [1_000], attemptTimeoutMs: 100 },
+			});
+			await reconnection.connect();
+			harness.sessionHost().transition({
+				type: RpcProtocolSessionTransitionTypeEnum.recovering,
+			});
+			await vi.advanceTimersByTimeAsync(0);
+			expect(reconnection.state.status).toBe("waiting");
+
+			const stopTask = reconnection.stop();
+			expect(reconnection.stop()).toBe(stopTask);
+			await stopTask;
+			await vi.advanceTimersByTimeAsync(1_000);
+
+			expect(factoryCalls).toBe(2);
+			expect(reconnection.state).toEqual({
+				status: "stopped",
+				reason: "requested",
+			});
+			expect(connector.state).toEqual({ status: "active" });
+			expect(connector.peer.state).toEqual({ status: "recovering" });
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
+	it("RPC-RECONNECT-004 stops an active replacement before direct Connector takeover", async () => {
+		const harness = createReconnectionProtocolHarness();
+		const connector = createRpcConnector({ protocol: harness.protocol });
+		let factoryCalls = 0;
+		let replacementSignal: AbortSignal | undefined;
+		const events: unknown[] = [];
+		const reconnection = createRpcConnectorReconnection({
+			connector,
+			adapterFactory: () => {
+				factoryCalls += 1;
+				if (factoryCalls === 1) {
+					return createSuccessfulConnectorAdapter();
+				}
+				return {
+					connection$: new Subject<IRpcConnection>().asObservable(),
+					connect(signal) {
+						replacementSignal = signal;
+						return new Promise<void>((_resolve, reject) => {
+							signal.addEventListener(
+								"abort",
+								() =>
+									reject(new DOMException("Adapter aborted.", "AbortError")),
+								{ once: true },
+							);
+						});
+					},
+				};
+			},
+			policy: { retryDelaysMs: [], attemptTimeoutMs: 1_000 },
+		});
+		reconnection.event$.subscribe((event) => events.push(event));
+		await reconnection.connect();
+		harness.sessionHost().transition({
+			type: RpcProtocolSessionTransitionTypeEnum.recovering,
+		});
+		await Promise.resolve();
+		expect(replacementSignal?.aborted).toBe(false);
+
+		const stopTask = reconnection.stop();
+		expect(replacementSignal?.aborted).toBe(true);
+		await stopTask;
+
+		expect(events).toEqual([]);
+		expect(reconnection.state).toEqual({
+			status: "stopped",
+			reason: "requested",
+		});
+		expect(connector.peer.state).toEqual({ status: "recovering" });
+		await connector.connect({ adapter: createSuccessfulConnectorAdapter() });
+		expect(connector.peer.state).toEqual({ status: "connected" });
+	});
+
+	it("RPC-RECONNECT-004 stops and awaits an unsettled initial connection attempt", async () => {
+		const connector = createRpcConnector({
+			protocol: createProtocolHarness().protocol,
+		});
+		let adapterSignal: AbortSignal | undefined;
+		const reconnection = createRpcConnectorReconnection({
+			connector,
+			adapterFactory: () => ({
+				connection$: new Subject<IRpcConnection>().asObservable(),
+				connect(signal) {
+					adapterSignal = signal;
+					return new Promise<void>((_resolve, reject) => {
+						signal.addEventListener(
+							"abort",
+							() => reject(new DOMException("Adapter aborted.", "AbortError")),
+							{ once: true },
+						);
+					});
+				},
+			}),
+		});
+		const connectTask = reconnection.connect();
+		let reentrantStopTask: Promise<void> | undefined;
+		reconnection.state$.subscribe((state) => {
+			if (state.status === RpcStateStatusEnum.stopped) {
+				reentrantStopTask = reconnection.stop();
+			}
+		});
+
+		const stopTask = reconnection.stop();
+		try {
+			expect(reconnection.stop()).toBe(stopTask);
+			expect(reentrantStopTask).toBe(stopTask);
+			expect(adapterSignal?.aborted).toBe(true);
+			await expect(connectTask).rejects.toMatchObject({ name: "AbortError" });
+			await expect(stopTask).resolves.toBeUndefined();
+			expect(reconnection.state).toEqual({
+				status: "stopped",
+				reason: "requested",
+			});
+			expect(connector.peer.state).toEqual({ status: "unbound" });
+		} finally {
+			await connector.close();
+			await connectTask.catch(() => {});
+		}
+	});
+
+	it("RPC-RECONNECT-004 leaves no retry timer when stop wins from the waiting projection", async () => {
+		vi.useFakeTimers();
+		try {
+			const harness = createReconnectionProtocolHarness();
+			const connector = createRpcConnector({ protocol: harness.protocol });
+			let factoryCalls = 0;
+			const reconnection = createRpcConnectorReconnection({
+				connector,
+				adapterFactory: () => {
+					factoryCalls += 1;
+					if (factoryCalls === 1) {
+						return createSuccessfulConnectorAdapter();
+					}
+					const connectionSource = new Subject<IRpcConnection>();
+					return {
+						connection$: connectionSource.asObservable(),
+						async connect() {
+							const error = new Error("Replacement failed.");
+							connectionSource.error(error);
+							throw error;
+						},
+					};
+				},
+				policy: { retryDelaysMs: [60_000], attemptTimeoutMs: 1_000 },
+			});
+			let stopTask: Promise<void> | undefined;
+			reconnection.state$.subscribe((state) => {
+				if (state.status === RpcStateStatusEnum.waiting) {
+					stopTask = reconnection.stop();
+				}
+			});
+			await reconnection.connect();
+
+			harness.sessionHost().transition({
+				type: RpcProtocolSessionTransitionTypeEnum.recovering,
+			});
+			await vi.advanceTimersByTimeAsync(0);
+
+			await expect(stopTask).resolves.toBeUndefined();
+			expect(reconnection.state).toEqual({
+				status: "stopped",
+				reason: "requested",
+			});
+			expect(vi.getTimerCount()).toBe(0);
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
+	it("RPC-RECONNECT-004 observes Connector termination reentrant from monitoring", async () => {
+		const harness = createReconnectionProtocolHarness();
+		const connector = createRpcConnector({ protocol: harness.protocol });
+		const reconnection = createRpcConnectorReconnection({
+			connector,
+			adapterFactory: createSuccessfulConnectorAdapter,
+		});
+		let connectorCloseTask: Promise<void> | undefined;
+		reconnection.state$.subscribe((state) => {
+			if (state.status === RpcStateStatusEnum.monitoring) {
+				connectorCloseTask = connector.close();
+			}
+		});
+
+		await reconnection.connect();
+		await connectorCloseTask;
+
+		expect(reconnection.state).toEqual({
+			status: "stopped",
+			reason: "connector-terminated",
+		});
+	});
+
+	it("RPC-RECONNECT-005 emits payload-free failure telemetry after the resulting state", async () => {
+		const harness = createReconnectionProtocolHarness();
+		const connector = createRpcConnector({ protocol: harness.protocol });
+		let factoryCalls = 0;
+		const reconnection = createRpcConnectorReconnection({
+			connector,
+			adapterFactory: () => {
+				factoryCalls += 1;
+				if (factoryCalls === 1) {
+					return createSuccessfulConnectorAdapter();
+				}
+				const connectionSource = new Subject<IRpcConnection>();
+				return {
+					connection$: connectionSource.asObservable(),
+					async connect() {
+						const error = new Error("credential=secret");
+						connectionSource.error(error);
+						throw error;
+					},
+				};
+			},
+			policy: { retryDelaysMs: [], attemptTimeoutMs: 100 },
+		});
+		const observations: string[] = [];
+		const events: unknown[] = [];
+		reconnection.state$.subscribe((state) => {
+			if (state.status === "stopped") {
+				observations.push("state");
+			}
+		});
+		reconnection.event$.subscribe({
+			next: (event) => {
+				observations.push("event");
+				events.push(event);
+			},
+			complete: () => observations.push("event-complete"),
+		});
+		await reconnection.connect();
+		harness.sessionHost().transition({
+			type: RpcProtocolSessionTransitionTypeEnum.recovering,
+		});
+
+		await vi.waitFor(() => {
+			expect(reconnection.state.status).toBe("stopped");
+		});
+		expect(events).toEqual([
+			{
+				type: "attempt-failed",
+				attempt: 1,
+				stage: "connector-attempt",
+			},
+		]);
+		expect(observations).toEqual(["state", "event", "event-complete"]);
+		expect(JSON.stringify(events)).not.toContain("secret");
+	});
+
+	it("RPC-RECONNECT-005 classifies a background Adapter Factory failure", async () => {
+		const harness = createReconnectionProtocolHarness();
+		const connector = createRpcConnector({ protocol: harness.protocol });
+		let factoryCalls = 0;
+		const reconnection = createRpcConnectorReconnection({
+			connector,
+			adapterFactory: () => {
+				factoryCalls += 1;
+				if (factoryCalls === 1) {
+					return createSuccessfulConnectorAdapter();
+				}
+				throw new Error("endpoint=https://secret.example");
+			},
+			policy: { retryDelaysMs: [], attemptTimeoutMs: 100 },
+		});
+		const events: unknown[] = [];
+		reconnection.event$.subscribe((event) => events.push(event));
+		await reconnection.connect();
+
+		harness.sessionHost().transition({
+			type: RpcProtocolSessionTransitionTypeEnum.recovering,
+		});
+		await vi.waitFor(() => {
+			expect(reconnection.state.status).toBe("stopped");
+		});
+
+		expect(events).toEqual([
+			{
+				type: "attempt-failed",
+				attempt: 1,
+				stage: "adapter-factory",
+			},
+		]);
+		expect(JSON.stringify(events)).not.toContain("secret");
 	});
 });
 

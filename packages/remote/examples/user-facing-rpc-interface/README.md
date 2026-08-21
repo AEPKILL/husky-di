@@ -27,9 +27,11 @@ pnpm --filter @husky-di/remote typecheck
 
 - `createRpcConnector({ protocol? })` 与 `createRpcAcceptor({ protocol? })` 创建尚未启动 I/O
   的 Topology Owner；省略 `protocol` 使用包内唯一默认 Protocol。
-- Connector Adapter 只创建一次 Physical Connection。调用者决定何时及用哪个 Adapter
-  调用 `connect(adapter)`；Connector 只接管兑现的 Connection，并让 Protocol 尝试把它
-  恢复到原 Logical Session。Acceptor 通过 `listen(adapter)` 接管持续监听 Adapter。
+- Connector Adapter 只创建一次 Physical Connection。显式单次连接使用
+  `connector.connect({ adapter, signal? })`。这个历史原型仍显式提供每次恢复所需的 fresh
+  Adapter；当前生产接口另提供外置 `createRpcConnectorReconnection({ connector,
+  adapterFactory, policy? })` supervisor。Connector 只接管兑现的 Connection，并让 Protocol
+  尝试把它恢复到原 Logical Session。Acceptor 通过 `listen(adapter)` 接管持续监听 Adapter。
 - `IRpcPeer` 只负责 session-scoped `expose()` / `resolve()`；Connector 暴露一个从创建起
   稳定的 peer，Acceptor 负责集合级 `expose()` / `resolveAll()`。
 - `expose()` 返回 core `Cleanup`。实际 inbound invocation 才查询当前 exposure，因此移除
@@ -71,10 +73,11 @@ Descriptor 不能被当作公开数据结构读取。
 ### 2. 浏览器 Connector
 
 见 [`websocket-express/connector.usage.ts`](./websocket-express/connector.usage.ts)。调用者先
-创建稳定 peer、暴露反向调用、取得稳定 proxy、订阅 observation，最后才 `connect()` I/O。
-观察到 `peer-recovering` 后，调用者选择新的 Adapter 再次 `connect()`；随后继续使用原
-proxy，并等待断线前发起的 pending call，证明 Physical Connection replacement 不改变
-peer、proxy、exposure 或 call continuity。
+创建稳定 peer、暴露反向调用、取得稳定 proxy、订阅 observation，再用
+`connector.connect({ adapter })` 启动初始 I/O。Recovery 时，这个历史原型显式取得 fresh
+Adapter 并再次连接；随后继续使用原 proxy，并等待断线前发起的 pending call，证明
+Physical Connection replacement 不改变 peer、proxy、exposure 或 call continuity。当前外置
+supervisor 的生产用法见仓库的 [`examples/remote-websocket`](../../../../examples/remote-websocket/README.md)。
 
 ### 3. Node HTTP Acceptor
 
@@ -118,7 +121,8 @@ subscriber 负责脱敏。
 | `createRemoteServiceDescriptor()` | 把原始本地 service identity、显式跨语言 wire identity 与 method allowlist 封装为一个 opaque runtime descriptor。 |
 | 两个 owner factory | Connector 与 Acceptor 的 topology、Adapter role 和返回类型不同；两个命名入口比 discriminated overload 更直接。 |
 | factory `protocol?` | 默认路径零配置，同时允许完整替换 wire semantics；精确 Protocol contract 不在本 prototype scope 内。 |
-| `connector.connect(adapter)` | 调用者选择每一次 Physical Connection attempt；Connector 只接管兑现的 Connection，Protocol 保持原 Session identity。 |
+| `connector.connect({ adapter, signal? })` | 执行一次可取消的 Physical Connection attempt；Connector 只接管兑现的 Connection，Protocol 保持原 Session identity。 |
+| `createRpcConnectorReconnection()` | 外置、opt-in 的 supervisor 从 Factory 获取 fresh Adapter，并用显式 policy 编排恢复 attempt，不把重试状态混入 Connector。 |
 | `acceptor.listen(adapter)` | passive topology 需要持续拥有并终止 listener，而不是逐 Connection 调用。 |
 | `close()` | 只等待 caller 发起的幂等网络 teardown；自然终止和 fatal failure 属于 `event$`。 |
 | `connector.peer` | 一对一 topology 中稳定 Logical Session 的 caller anchor。 |
@@ -133,7 +137,7 @@ subscriber 负责脱敏。
 ## 主动删除的 Interface
 
 - 通用 `start()`：Connector 与 Acceptor 的依赖、所有权和恢复动作不同，保留领域动词
-  `connect(adapter)` / `listen(adapter)`。
+  `connect({ adapter, signal? })` / `listen(adapter)`；自动恢复由独立 Reconnection supervisor 表达。
 - `peer$`：并入 `event$`；当前 membership 由 `peers` snapshot 回答。
 - 同步 `dispose()` / `disposed`：网络 teardown 需要可等待结果；状态布尔值会诱导 TOCTOU
   检查，事件终态属于 `event$`，主动 teardown completion 属于 `close()`。

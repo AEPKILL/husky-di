@@ -25,6 +25,16 @@ Vite proxies `/api` HTTP requests and the `/rpc` WebSocket request to Hono.
 The Node diagnostics snapshot uses `GET /api/snapshot`; it is not an RPC call.
 Hono does not serve the Web build output.
 
+## Connection recovery
+
+The browser's `online` listener is only an initial bootstrap trigger. While the
+peer is still unbound, a failed initial attempt remains visible and the next
+`online` event creates a new `RpcConnectorReconnection` with a fresh WebSocket
+Adapter. After the first successful connection, the app retains that supervisor
+and lets its retry policy recover later transport loss without waiting for
+another `online` event or starting a parallel attempt. React cleanup requests
+the supervisor to stop before closing the Connector.
+
 ## Run
 
 ```bash

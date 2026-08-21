@@ -8,8 +8,10 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import {
+	type CreateRpcConnectorReconnectionOptions,
 	type IRpcConnector,
 	type IRpcConnectorAdapter,
+	type IRpcConnectorReconnection,
 	RpcStateStatusEnum,
 } from "@husky-di/remote";
 
@@ -47,10 +49,11 @@ describe("Remote WebSocket example specification", () => {
 		});
 	});
 
-	it("EXAMPLE-WS-RECOVERY-001 retries once on online with a fresh Adapter", async () => {
+	it("EXAMPLE-WS-RECOVERY-001 bootstraps one retained Reconnection supervisor", async () => {
 		const onlineEvents = new ControlledOnlineEvents();
 		const adapters: IRpcConnectorAdapter[] = [];
 		const attempts: Array<PromiseWithResolvers<void>> = [];
+		const stopCalls: number[] = [];
 		let peerStatus = RpcStateStatusEnum.unbound;
 		const connector = {
 			peer: {
@@ -58,25 +61,40 @@ describe("Remote WebSocket example specification", () => {
 					return { status: peerStatus };
 				},
 			},
-			connect(adapter: IRpcConnectorAdapter) {
-				adapters.push(adapter);
-				const attempt = Promise.withResolvers<void>();
-				attempts.push(attempt);
-				return attempt.promise;
-			},
 		} as unknown as IRpcConnector;
+		const createReconnection = (
+			options: CreateRpcConnectorReconnectionOptions,
+		): IRpcConnectorReconnection => {
+			const index = attempts.length;
+			const attempt = Promise.withResolvers<void>();
+			attempts.push(attempt);
+			return {
+				connector: options.connector,
+				state: { status: RpcStateStatusEnum.idle },
+				state$: undefined as never,
+				event$: undefined as never,
+				connect() {
+					adapters.push(options.adapterFactory());
+					return attempt.promise;
+				},
+				stop() {
+					stopCalls.push(index);
+					return Promise.resolve();
+				},
+			};
+		};
 		const errors: unknown[] = [];
 		const stop = connectRpcPeerOnOnline(
 			connector,
 			() => ({ id: adapters.length + 1 }) as unknown as IRpcConnectorAdapter,
 			(error) => errors.push(error),
 			onlineEvents,
+			createReconnection,
 		);
 
 		assert.equal(attempts.length, 1);
 		onlineEvents.emit();
 		assert.equal(attempts.length, 1);
-		peerStatus = RpcStateStatusEnum.recovering;
 		attempts[0]?.reject(new Error("offline"));
 		await Promise.resolve();
 		await Promise.resolve();
@@ -98,6 +116,7 @@ describe("Remote WebSocket example specification", () => {
 		peerStatus = RpcStateStatusEnum.recovering;
 		onlineEvents.emit();
 		assert.equal(attempts.length, 2);
+		assert.deepEqual(stopCalls, [1]);
 		assert.equal(onlineEvents.listenerCount, 0);
 	});
 });

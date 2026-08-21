@@ -5,14 +5,21 @@
  */
 
 import {
+	type CreateRpcConnectorReconnectionOptions,
 	createRpcAcceptor,
 	createRpcConnector,
+	createRpcConnectorReconnection,
 	type IRpcAcceptor,
 	type IRpcConnector,
+	type IRpcConnectorReconnection,
 	type RpcAcceptorOptions,
 	RpcCloseReasonEnum,
+	type RpcConnectorAdapterFactory,
 	type RpcConnectorOptions,
+	type RpcConnectorReconnectionState,
 } from "../../src/index";
+
+declare const adapterFactory: RpcConnectorAdapterFactory;
 
 const connector: IRpcConnector = createRpcConnector({
 	runtimePolicy: {
@@ -48,6 +55,22 @@ const acceptor: IRpcAcceptor = createRpcAcceptor({
 	},
 });
 
+const reconnectionOptions: CreateRpcConnectorReconnectionOptions = {
+	connector,
+	adapterFactory,
+	policy: { retryDelaysMs: [0, 100], attemptTimeoutMs: 1_000 },
+};
+const reconnection: IRpcConnectorReconnection =
+	createRpcConnectorReconnection(reconnectionOptions);
+const reconnectionConnector: IRpcConnector = reconnection.connector;
+const reconnectionState: RpcConnectorReconnectionState = reconnection.state;
+const reconnectTask: Promise<void> = reconnection.connect();
+const stopReconnectionTask: Promise<void> = reconnection.stop();
+const directConnectTask: Promise<void> = connector.connect({
+	adapter: adapterFactory(),
+	signal: new AbortController().signal,
+});
+
 const connectorOptions: RpcConnectorOptions = {};
 const acceptorOptions: RpcAcceptorOptions = {};
 const closeReason: RpcCloseReasonEnum = RpcCloseReasonEnum.cleanupFailed;
@@ -56,6 +79,23 @@ void acceptor;
 void connectorOptions;
 void acceptorOptions;
 void closeReason;
+void reconnectionConnector;
+void reconnectionState;
+void reconnectTask;
+void stopReconnectionTask;
+void directConnectTask;
+
+// @ts-expect-error RPC-START-005 requires the connect options record.
+connector.connect(adapterFactory());
+
+createRpcConnectorReconnection({
+	connector,
+	adapterFactory,
+	policy: {
+		// @ts-expect-error RPC-RECONNECT-001 closes the policy schema.
+		unknown: true,
+	},
+});
 
 createRpcConnector({
 	runtimePolicy: {

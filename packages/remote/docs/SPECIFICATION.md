@@ -100,14 +100,19 @@ LICENSE, and package metadata. Every public subpath
 **MUST** resolve from the installed tarball without workspace source or examples.
 
 **RPC-PKG-007 — Root inventory.** The root **MUST** export runtime values
-`createRemoteServiceDescriptor`, `createRpcConnector`, `createRpcAcceptor`, `createRpcProtocol`, `RpcException`,
-`RpcAcceptorListenerStopReasonEnum`, `RpcCallDirectionEnum`, `RpcCallStatusEnum`, `RpcCloseOutcomeEnum`,
-`RpcCloseReasonEnum`, `RpcEventTypeEnum`, `RpcExceptionCodeEnum`, and `RpcStateStatusEnum`; caller types
+`createRemoteServiceDescriptor`, `createRpcConnector`, `createRpcAcceptor`, `createRpcConnectorReconnection`,
+`createRpcProtocol`, `RpcException`, `RpcAcceptorListenerStopReasonEnum`, `RpcCallDirectionEnum`,
+`RpcCallStatusEnum`, `RpcCloseOutcomeEnum`, `RpcCloseReasonEnum`,
+`RpcConnectorReconnectionAttemptFailureStageEnum`, `RpcConnectorReconnectionEventTypeEnum`,
+`RpcConnectorReconnectionStopReasonEnum`, `RpcEventTypeEnum`, `RpcExceptionCodeEnum`, and `RpcStateStatusEnum`;
+caller types
 `IRemoteServiceDescriptor`, `IRpcPeer`, `IRpcConnector`, `IRpcAcceptor`, `RpcPeerResult`, `RpcPeerState`,
 `RpcConnectorState`, `RpcAcceptorListenerState`, `RpcAcceptorState`, `RpcCloseReasonEnum`,
 `RpcCallDirectionEnum`, `RpcEvent`, `RpcExceptionCodeEnum`, `RpcConnectorOptions`, `RpcAcceptorOptions`,
-`RpcConnectorRuntimePolicyOptions`, and `RpcAcceptorRuntimePolicyOptions`; Transport types `IRpcConnection`,
-`IRpcConnectorAdapter`, and `IRpcAcceptorAdapter`; and shared SPI types `IRpcProtocol`,
+`RpcConnectorConnectOptions`, `RpcConnectorRuntimePolicyOptions`, `RpcAcceptorRuntimePolicyOptions`,
+`IRpcConnectorReconnection`, `CreateRpcConnectorReconnectionOptions`, `RpcConnectorAdapterFactory`,
+`RpcConnectorReconnectionPolicyOptions`, `RpcConnectorReconnectionState`, and `RpcConnectorReconnectionEvent`;
+Transport types `IRpcConnection`, `IRpcConnectorAdapter`, and `IRpcAcceptorAdapter`; and shared SPI types `IRpcProtocol`,
 `IRpcProtocolRuntimePolicy`, `IRpcApplicationRecord`, `RpcApplicationValue`, `RpcCallFailure`,
 `RpcProtocolFaultReason`, and `RpcSessionCloseReason`.
 
@@ -437,7 +442,7 @@ export interface IRpcConnector {
   readonly state$: Observable<RpcConnectorState>;
   readonly event$: Observable<RpcEvent>;
   readonly peer: IRpcPeer;
-  connect(adapter: IRpcConnectorAdapter): Promise<void>;
+  connect(options: RpcConnectorConnectOptions): Promise<void>;
   shutdown(): Promise<void>;
   close(): Promise<void>;
 }
@@ -481,6 +486,11 @@ export type RpcConnectorRuntimePolicyOptions = Pick<
 export type RpcConnectorOptions = {
   readonly protocol?: IRpcProtocol;
   readonly runtimePolicy?: RpcConnectorRuntimePolicyOptions;
+};
+
+export type RpcConnectorConnectOptions = {
+  readonly adapter: IRpcConnectorAdapter;
+  readonly signal?: AbortSignal;
 };
 
 export type RpcAcceptorOptions = {
@@ -536,6 +546,9 @@ export enum RpcStateStatusEnum {
   idle = "idle",
   starting = "starting",
   listening = "listening",
+  monitoring = "monitoring",
+  reconnecting = "reconnecting",
+  waiting = "waiting",
   stopped = "stopped",
 }
 
@@ -886,6 +899,15 @@ If a source completes normally before readiness while the Owner remains active a
 resource pressure has won, Framework **MUST** record `stopped(normal, completed)` and reject the unsettled
 `listen()` Promise with `RpcException(unavailable)` without a cause; it **MUST NOT** fulfill a readiness operation
 that never reached ready.
+
+**RPC-START-005 — Connector attempt cancellation.** `connect()` **MUST** accept a closed
+`{ adapter, signal? }` options record. Its eligibility gate **MUST** run before reading that record. After the
+gate, a non-platform signal **MUST** reject `TypeError`; an already-aborted signal **MUST** reject `AbortError`
+without inspecting or starting the Adapter. A later abort **MUST** fence and cancel only the unsettled attempt,
+abort the Framework-owned signal passed to Adapter and Protocol, Direct Close any handed-off Connection, return
+a fresh peer to `unbound`, and leave a recovering peer `recovering`. Binding success, abort, ordinary failure,
+and Owner/Session terminal **MUST** select one winner. Abort after binding success **MUST** have no effect, and
+the public `AbortError` **MUST NOT** expose `signal.reason`.
 
 ## 7. Physical Connection and Adapter seam
 
@@ -1593,7 +1615,8 @@ and higher-attempt winner. Timeout, cutoff, fencing, or later winner **MUST** ma
 **RPC-RECOVERY-001 — Entering Recovery.** Unexpected current-Connection terminal, valid silence timeout, or
 send-progress timeout **MUST** atomically fence the binding, project `recovering`, preserve Pending/call/replay/
 exposure state, and then invoke Direct Close. It **MUST NOT** wait for close before fencing or automatically dial
-a new Adapter.
+a new Adapter. The separate opt-in Connector Reconnection supervisor in 10.4 **MAY** observe that projection and
+request replacement attempts without changing Protocol Recovery authority.
 
 **RPC-RECOVERY-002 — Attempt timeout.** Fresh/resume attempt **MUST** use the configured absolute non-sliding
 `bindingAttemptTimeoutMs`. Fresh timeout **MUST** return the peer to `unbound`; resume timeout **MUST** leave it
@@ -1617,6 +1640,108 @@ wrong profile, bad proof, stale attempt, or resume-specific capacity **MUST** re
 `resume-rejected` after bounded classification. It **MUST NOT** terminate the retained Session or claim the
 remote process restarted. Initiator **MUST** remain recovering until another successful attempt or its existing
 deadline.
+
+### 10.4 Optional Connector Reconnection
+
+```typescript
+export enum RpcConnectorReconnectionAttemptFailureStageEnum {
+  adapterFactory = "adapter-factory",
+  connectorAttempt = "connector-attempt",
+  attemptTimeout = "attempt-timeout",
+}
+
+export enum RpcConnectorReconnectionEventTypeEnum {
+  attemptFailed = "attempt-failed",
+}
+
+export enum RpcConnectorReconnectionStopReasonEnum {
+  requested = "requested",
+  initialConnectionFailed = "initial-connection-failed",
+  retriesExhausted = "retries-exhausted",
+  connectorTerminated = "connector-terminated",
+}
+
+export type RpcConnectorAdapterFactory = () => IRpcConnectorAdapter;
+
+export type RpcConnectorReconnectionPolicyOptions = {
+  readonly retryDelaysMs?: readonly number[];
+  readonly attemptTimeoutMs?: number;
+};
+
+export type CreateRpcConnectorReconnectionOptions = {
+  readonly connector: IRpcConnector;
+  readonly adapterFactory: RpcConnectorAdapterFactory;
+  readonly policy?: RpcConnectorReconnectionPolicyOptions;
+};
+
+export type RpcConnectorReconnectionState =
+  | { readonly status: RpcStateStatusEnum.idle }
+  | { readonly status: RpcStateStatusEnum.connecting }
+  | { readonly status: RpcStateStatusEnum.monitoring }
+  | { readonly status: RpcStateStatusEnum.reconnecting; readonly attempt: number }
+  | { readonly status: RpcStateStatusEnum.waiting; readonly nextAttempt: number; readonly delayMs: number }
+  | { readonly status: RpcStateStatusEnum.stopped; readonly reason: RpcConnectorReconnectionStopReasonEnum };
+
+export type RpcConnectorReconnectionEvent = {
+  readonly type: RpcConnectorReconnectionEventTypeEnum.attemptFailed;
+  readonly attempt: number;
+  readonly stage: RpcConnectorReconnectionAttemptFailureStageEnum;
+  readonly nextDelayMs?: number;
+};
+
+export interface IRpcConnectorReconnection {
+  readonly connector: IRpcConnector;
+  readonly state: RpcConnectorReconnectionState;
+  readonly state$: Observable<RpcConnectorReconnectionState>;
+  readonly event$: Observable<RpcConnectorReconnectionEvent>;
+  connect(): Promise<void>;
+  stop(): Promise<void>;
+}
+
+export function createRpcConnectorReconnection(
+  options: CreateRpcConnectorReconnectionOptions,
+): IRpcConnectorReconnection;
+```
+
+**RPC-RECONNECT-001 — Construction and initial attempt.** `createRpcConnectorReconnection()` **MUST** create a
+cold, opt-in, single-use supervisor from a closed `{ connector, adapterFactory, policy? }` record and expose the
+exact supplied Connector as `readonly connector`. Its synchronous, argument-free Adapter Factory **MUST** be
+called only when an attempt begins and **MUST** return a fresh cold single-use Adapter. `connect()` **MUST** be
+accepted once, call the Factory once, and settle when the initial Connector attempt settles; it **MUST NOT**
+retry initial failure. Factory throw **MUST** remain the initial rejection. Initial failure **MUST** stop with
+`initial-connection-failed`; initial success **MUST** enter `monitoring` and leave later Recovery supervision in
+the background.
+
+**RPC-RECONNECT-002 — Orchestration state.** The supervisor **MUST** expose a synchronous frozen `state` and a
+multicast replay-latest `state$` over only `idle`, `connecting`, `monitoring`, `waiting { nextAttempt, delayMs }`,
+`reconnecting { attempt }`, and terminal `stopped { reason }`. These states describe orchestration, not the
+authoritative Peer state. `state$` **MUST** never error and **MUST** complete after its terminal state. After an
+initial success, the first `recovering` projection **MUST** synchronously publish `reconnecting { attempt: 1 }`
+and defer Factory invocation until a microtask, so Peer Recovery is observable first. Successful replacement
+**MUST** return to `monitoring`; a later Recovery episode **MUST** restart numbering at one.
+
+**RPC-RECONNECT-003 — Finite policy.** Policy construction **MUST** snapshot at most 64 non-negative
+safe-integer `retryDelaysMs` values and one positive safe-integer `attemptTimeoutMs`. The default delays **MUST**
+be `[1000, 2000, 5000, 10000, 20000, 30000, 60000, 60000, 60000]` and the default timeout **MUST** be 30000 ms.
+Each Recovery episode **MUST** make one immediate replacement attempt; delay item N **MUST** authorize attempt
+N+2 exactly that many milliseconds after attempt N+1 settles. The timeout **MUST** cover only each replacement
+Adapter startup, handoff, and Protocol binding, cancel through the Connector signal, and **MUST NOT** move the
+Protocol Recovery deadline. Exhaustion **MUST** stop with `retries-exhausted` while the Peer remains governed by
+its authoritative Recovery outcome.
+
+**RPC-RECONNECT-004 — Attempt authority and stop.** While active, the supervisor **MUST** be the sole caller of
+its Connector's `connect()`; manual takeover **MUST** first await `stop()`. `stop()` **MUST** be terminal and
+idempotent, return the same Promise, synchronously cancel a scheduled or unsettled attempt, and fulfill only
+after that attempt releases Connector authority. It **MUST NOT** call Connector `shutdown()` or `close()`.
+Connector termination **MUST** cancel supervision and stop with `connector-terminated`; explicit stop **MUST**
+use `requested`. Cancellation and Connector terminal **MUST NOT** be treated as attempt failure.
+
+**RPC-RECONNECT-005 — Failure telemetry.** The supervisor **MUST** expose hot multicast non-replaying `event$`
+that never errors and completes on stop. It **MUST** emit only background `attempt-failed` records containing
+the one-based episode attempt, one of `adapter-factory | connector-attempt | attempt-timeout`, and
+`nextDelayMs` exactly when another attempt is scheduled. The resulting `waiting` or `stopped` state **MUST** be
+committed before the event. The event **MUST NOT** contain Error, Adapter/Protocol internals, endpoint data,
+payload, Session identity, credentials, or other caller-controlled values.
 
 ## 11. Recovery security and validation
 

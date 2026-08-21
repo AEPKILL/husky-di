@@ -143,18 +143,20 @@ function createConnectorHarness(options: ConnectorHarnessOptions = {}): {
 			const connectionSource = new Subject<IRpcConnection>();
 			const messageSource = new Subject<Uint8Array>();
 			await connector.connect({
-				connection$: connectionSource.asObservable(),
-				connect() {
-					connectionSource.next({
-						message$: messageSource.asObservable(),
-						async send() {},
-						async close() {
-							calls.connectionClose += 1;
-							messageSource.complete();
-						},
-					});
-					connectionSource.complete();
-					return Promise.resolve();
+				adapter: {
+					connection$: connectionSource.asObservable(),
+					connect() {
+						connectionSource.next({
+							message$: messageSource.asObservable(),
+							async send() {},
+							async close() {
+								calls.connectionClose += 1;
+								messageSource.complete();
+							},
+						});
+						connectionSource.complete();
+						return Promise.resolve();
+					},
 				},
 			});
 			if (sessionHost === undefined) {
@@ -264,6 +266,9 @@ describe("Framework requirement evidence", () => {
 			"RpcCallStatusEnum",
 			"RpcCloseOutcomeEnum",
 			"RpcCloseReasonEnum",
+			"RpcConnectorReconnectionAttemptFailureStageEnum",
+			"RpcConnectorReconnectionEventTypeEnum",
+			"RpcConnectorReconnectionStopReasonEnum",
 			"RpcEventTypeEnum",
 			"RpcException",
 			"RpcExceptionCodeEnum",
@@ -271,6 +276,7 @@ describe("Framework requirement evidence", () => {
 			"createRemoteServiceDescriptor",
 			"createRpcAcceptor",
 			"createRpcConnector",
+			"createRpcConnectorReconnection",
 			"createRpcProtocol",
 		]);
 		expect(Object.keys(protocolEntry).sort()).toEqual([
@@ -532,9 +538,9 @@ describe("Framework requirement evidence", () => {
 		});
 		let gatedConnectorTask: Promise<void> | undefined;
 		expect(() => {
-			gatedConnectorTask = closedConnector.connect(
-				gatedConnectorAdapter as never,
-			);
+			gatedConnectorTask = closedConnector.connect({
+				adapter: gatedConnectorAdapter as never,
+			});
 		}).not.toThrow();
 		await expect(gatedConnectorTask).rejects.toMatchObject({
 			code: "unavailable",
@@ -544,7 +550,7 @@ describe("Framework requirement evidence", () => {
 		const connector = createRpcConnector();
 		let invalidConnectorTask: Promise<void> | undefined;
 		expect(() => {
-			invalidConnectorTask = connector.connect({} as never);
+			invalidConnectorTask = connector.connect({ adapter: {} as never });
 		}).not.toThrow();
 		await expect(invalidConnectorTask).rejects.toBeInstanceOf(TypeError);
 		await connector.close();

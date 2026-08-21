@@ -27,7 +27,7 @@ describe("Default RPC Protocol health", () => {
 		const connector = createRpcConnector({ runtimePolicy: healthPolicy });
 
 		await acceptor.listen(network.acceptorAdapter);
-		await connector.connect(network.createConnectorAdapter());
+		await connector.connect({ adapter: network.createConnectorAdapter() });
 		const activeStart = network.records.length;
 
 		await vi.advanceTimersByTimeAsync(10);
@@ -53,7 +53,9 @@ describe("Default RPC Protocol health", () => {
 		const connector = createRpcConnector({ runtimePolicy: healthPolicy });
 
 		await acceptor.listen(network.acceptorAdapter);
-		await connector.connect(network.createConnectorAdapter("silent"));
+		await connector.connect({
+			adapter: network.createConnectorAdapter("silent"),
+		});
 		network.setInterceptor(() => ({ drop: true }));
 
 		await vi.advanceTimersByTimeAsync(30);
@@ -71,7 +73,9 @@ describe("Default RPC Protocol health", () => {
 		const connector = createRpcConnector({ runtimePolicy: healthPolicy });
 
 		await acceptor.listen(network.acceptorAdapter);
-		await connector.connect(network.createConnectorAdapter("silent"));
+		await connector.connect({
+			adapter: network.createConnectorAdapter("silent"),
+		});
 		const activeStart = network.records.length;
 		network.setInterceptor(() => ({ drop: true }));
 		vi.setSystemTime(Date.now() + 100);
@@ -127,7 +131,9 @@ describe("Default RPC Protocol health", () => {
 		const neverSettles = new Promise<void>(() => {});
 
 		await acceptor.listen(network.acceptorAdapter);
-		await connector.connect(network.createConnectorAdapter("silent"));
+		await connector.connect({
+			adapter: network.createConnectorAdapter("silent"),
+		});
 		network.setInterceptor((record) =>
 			record.direction === "acceptor" && record.value.kind === "ping"
 				? { drop: true, settlement: neverSettles }

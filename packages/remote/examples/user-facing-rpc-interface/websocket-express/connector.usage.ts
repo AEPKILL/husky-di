@@ -33,14 +33,13 @@ export async function browserConnectorUsage(
 				take(1),
 			),
 		);
-
-		await connector.connect(createExampleConnectorAdapter(url));
+		await connector.connect({ adapter: createExampleConnectorAdapter(url) });
 		const pendingPing = session.ping();
 
 		// The caller selects a fresh Adapter after observing an interruption. The
 		// original peer, proxy, exposure, and pending call survive this replacement.
 		await recoveryRequested;
-		await connector.connect(createExampleConnectorAdapter(url));
+		await connector.connect({ adapter: createExampleConnectorAdapter(url) });
 		await pendingPing;
 		await session.ping();
 	} finally {

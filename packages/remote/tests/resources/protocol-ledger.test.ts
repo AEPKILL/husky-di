@@ -83,7 +83,7 @@ describe("Default RPC Protocol retained ledger", () => {
 		});
 
 		await acceptor.listen(network.acceptorAdapter);
-		await connector.connect(network.createConnectorAdapter());
+		await connector.connect({ adapter: network.createConnectorAdapter() });
 		await expect(connector.peer.resolve(descriptor).run(1)).resolves.toBe(1);
 		await vi.waitFor(() => {
 			expect(
@@ -156,7 +156,7 @@ describe("Default RPC Protocol retained ledger", () => {
 		});
 
 		await acceptor.listen(network.acceptorAdapter);
-		await connector.connect(network.createConnectorAdapter());
+		await connector.connect({ adapter: network.createConnectorAdapter() });
 		const service = connector.peer.resolve(descriptor);
 		for (let value = 0; value < 256; value += 1) {
 			await expect(service.run(value)).resolves.toBe(value);
@@ -201,7 +201,7 @@ describe("Default RPC Protocol retained ledger", () => {
 		});
 
 		await acceptor.listen(network.acceptorAdapter);
-		await connector.connect(network.createConnectorAdapter());
+		await connector.connect({ adapter: network.createConnectorAdapter() });
 		const service = connector.peer.resolve(descriptor);
 		for (let value = 0; value < 4; value += 1) {
 			await expect(service.run(value)).resolves.toBe(value);
@@ -244,7 +244,7 @@ describe("Default RPC Protocol retained ledger", () => {
 		});
 
 		await acceptor.listen(network.acceptorAdapter);
-		await connector.connect(network.createConnectorAdapter());
+		await connector.connect({ adapter: network.createConnectorAdapter() });
 		const service = connector.peer.resolve(descriptor);
 		for (let ordinal = 0; ordinal < 3; ordinal += 1) {
 			await expect(service.run()).resolves.toBe(payload);

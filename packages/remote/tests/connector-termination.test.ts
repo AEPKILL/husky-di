@@ -73,25 +73,27 @@ describe("Connector termination cleanup", () => {
 			},
 		});
 		const startup = connector.connect({
-			connection$: connectionSource.asObservable(),
-			connect(signal) {
-				return new Promise<void>((resolve) => {
-					signal.addEventListener(
-						"abort",
-						() => {
-							connectionSource.next({
-								message$: new Subject<Uint8Array>().asObservable(),
-								async send() {},
-								async close() {
-									closeCalls += 1;
-								},
-							});
-							connectionSource.complete();
-							resolve();
-						},
-						{ once: true },
-					);
-				});
+			adapter: {
+				connection$: connectionSource.asObservable(),
+				connect(signal) {
+					return new Promise<void>((resolve) => {
+						signal.addEventListener(
+							"abort",
+							() => {
+								connectionSource.next({
+									message$: new Subject<Uint8Array>().asObservable(),
+									async send() {},
+									async close() {
+										closeCalls += 1;
+									},
+								});
+								connectionSource.complete();
+								resolve();
+							},
+							{ once: true },
+						);
+					});
+				},
 			},
 		});
 
@@ -175,14 +177,14 @@ describe("Connector termination cleanup", () => {
 		};
 
 		await expect(
-			connector.connect(createAdapter(0, failureKind)),
+			connector.connect({ adapter: createAdapter(0, failureKind) }),
 		).rejects.toMatchObject({ code: "unavailable", cause: failure });
 		expect(connector.peer.state).toEqual({ status: "unbound" });
 		expect(forceCalls[0]).toBe(1);
 		expect(closeCalls[0]).toBe(1);
 		expect(events).toEqual([]);
 
-		await connector.connect(createAdapter(1));
+		await connector.connect({ adapter: createAdapter(1) });
 		expect(connector.peer.state).toEqual({ status: "connected" });
 		expect(events).toEqual(["peer-opened"]);
 		await connector.close();
@@ -227,14 +229,16 @@ describe("Connector termination cleanup", () => {
 		const connectionSource = new Subject<IRpcConnection>();
 
 		const startup = connector.connect({
-			connection$: connectionSource.asObservable(),
-			async connect() {
-				connectionSource.next({
-					message$: new Subject<Uint8Array>().asObservable(),
-					async send() {},
-					async close() {},
-				});
-				connectionSource.complete();
+			adapter: {
+				connection$: connectionSource.asObservable(),
+				async connect() {
+					connectionSource.next({
+						message$: new Subject<Uint8Array>().asObservable(),
+						async send() {},
+						async close() {},
+					});
+					connectionSource.complete();
+				},
 			},
 		});
 
@@ -308,16 +312,18 @@ describe("Connector termination cleanup", () => {
 		const connect = (onClose?: () => void) => {
 			const connectionSource = new Subject<IRpcConnection>();
 			return connector.connect({
-				connection$: connectionSource.asObservable(),
-				async connect() {
-					connectionSource.next({
-						message$: new Subject<Uint8Array>().asObservable(),
-						async send() {},
-						async close() {
-							onClose?.();
-						},
-					});
-					connectionSource.complete();
+				adapter: {
+					connection$: connectionSource.asObservable(),
+					async connect() {
+						connectionSource.next({
+							message$: new Subject<Uint8Array>().asObservable(),
+							async send() {},
+							async close() {
+								onClose?.();
+							},
+						});
+						connectionSource.complete();
+					},
 				},
 			});
 		};
@@ -403,17 +409,19 @@ describe("Connector termination cleanup", () => {
 		};
 		const connector = createRpcConnector({ protocol });
 		const startup = connector.connect({
-			connection$: connectionSource.asObservable(),
-			async connect(signal) {
-				connectorSignal = signal;
-				connectionSource.next({
-					message$: messageSource.asObservable(),
-					async send() {},
-					async close() {
-						closeCalls += 1;
-					},
-				});
-				connectionSource.complete();
+			adapter: {
+				connection$: connectionSource.asObservable(),
+				async connect(signal) {
+					connectorSignal = signal;
+					connectionSource.next({
+						message$: messageSource.asObservable(),
+						async send() {},
+						async close() {
+							closeCalls += 1;
+						},
+					});
+					connectionSource.complete();
+				},
 			},
 		});
 		await Promise.resolve();
@@ -474,10 +482,12 @@ describe("Connector termination cleanup", () => {
 		};
 		const connector = createRpcConnector({ protocol });
 		await connector.connect({
-			connection$: connectionSource.asObservable(),
-			async connect() {
-				connectionSource.next(connection);
-				connectionSource.complete();
+			adapter: {
+				connection$: connectionSource.asObservable(),
+				async connect() {
+					connectionSource.next(connection);
+					connectionSource.complete();
+				},
 			},
 		});
 
@@ -501,14 +511,16 @@ describe("Connector termination cleanup", () => {
 
 		await expect(
 			connector.connect({
-				connection$: connectionSource.asObservable(),
-				async connect() {
-					connectionSource.next({
-						message$: new Subject<Uint8Array>().asObservable(),
-						async send() {},
-						close: () => Promise.reject(closeError),
-					});
-					connectionSource.complete();
+				adapter: {
+					connection$: connectionSource.asObservable(),
+					async connect() {
+						connectionSource.next({
+							message$: new Subject<Uint8Array>().asObservable(),
+							async send() {},
+							close: () => Promise.reject(closeError),
+						});
+						connectionSource.complete();
+					},
 				},
 			}),
 		).rejects.toMatchObject({ code: "unavailable" });
@@ -568,14 +580,16 @@ describe("Connector termination cleanup", () => {
 			const connectionSource = new Subject<IRpcConnection>();
 			const messageSource = new Subject<Uint8Array>();
 			await connector.connect({
-				connection$: connectionSource.asObservable(),
-				async connect() {
-					connectionSource.next({
-						message$: messageSource.asObservable(),
-						async send() {},
-						close: () => Promise.reject(closeErrors[index]),
-					});
-					connectionSource.complete();
+				adapter: {
+					connection$: connectionSource.asObservable(),
+					async connect() {
+						connectionSource.next({
+							message$: messageSource.asObservable(),
+							async send() {},
+							close: () => Promise.reject(closeErrors[index]),
+						});
+						connectionSource.complete();
+					},
 				},
 			});
 			sessionHost?.transition({
@@ -593,15 +607,17 @@ describe("Connector termination cleanup", () => {
 		const fourthConnectionSource = new Subject<IRpcConnection>();
 		await expect(
 			connector.connect({
-				connection$: fourthConnectionSource.asObservable(),
-				async connect() {
-					fourthStartupCalls += 1;
-					fourthConnectionSource.next({
-						message$: new Subject<Uint8Array>().asObservable(),
-						async send() {},
-						async close() {},
-					});
-					fourthConnectionSource.complete();
+				adapter: {
+					connection$: fourthConnectionSource.asObservable(),
+					async connect() {
+						fourthStartupCalls += 1;
+						fourthConnectionSource.next({
+							message$: new Subject<Uint8Array>().asObservable(),
+							async send() {},
+							async close() {},
+						});
+						fourthConnectionSource.complete();
+					},
 				},
 			}),
 		).rejects.toMatchObject({ code: "unavailable" });
@@ -620,18 +636,20 @@ describe("Connector termination cleanup", () => {
 		const connectionSource = new Subject<IRpcConnection>();
 		const connector = createRpcConnector({ protocol: createColdProtocol() });
 		const startup = connector.connect({
-			connection$: connectionSource.asObservable(),
-			connect(signal) {
-				return new Promise<void>((_resolve, reject) => {
-					signal.addEventListener(
-						"abort",
-						() => {
-							connectionSource.complete();
-							reject(startupError);
-						},
-						{ once: true },
-					);
-				});
+			adapter: {
+				connection$: connectionSource.asObservable(),
+				connect(signal) {
+					return new Promise<void>((_resolve, reject) => {
+						signal.addEventListener(
+							"abort",
+							() => {
+								connectionSource.complete();
+								reject(startupError);
+							},
+							{ once: true },
+						);
+					});
+				},
 			},
 		});
 
@@ -726,14 +744,16 @@ describe("Connector termination cleanup", () => {
 				runtimePolicy: { shutdownDeadlineMs: 10 },
 			});
 			await connector.connect({
-				connection$: connectionSource.asObservable(),
-				async connect() {
-					connectionSource.next({
-						message$: new Subject<Uint8Array>().asObservable(),
-						async send() {},
-						close: () => Promise.reject(closeError),
-					});
-					connectionSource.complete();
+				adapter: {
+					connection$: connectionSource.asObservable(),
+					async connect() {
+						connectionSource.next({
+							message$: new Subject<Uint8Array>().asObservable(),
+							async send() {},
+							close: () => Promise.reject(closeError),
+						});
+						connectionSource.complete();
+					},
 				},
 			});
 
@@ -790,14 +810,16 @@ describe("Connector termination cleanup", () => {
 			},
 		});
 		await connector.connect({
-			connection$: connectionSource.asObservable(),
-			async connect() {
-				connectionSource.next({
-					message$: new Subject<Uint8Array>().asObservable(),
-					async send() {},
-					async close() {},
-				});
-				connectionSource.complete();
+			adapter: {
+				connection$: connectionSource.asObservable(),
+				async connect() {
+					connectionSource.next({
+						message$: new Subject<Uint8Array>().asObservable(),
+						async send() {},
+						async close() {},
+					});
+					connectionSource.complete();
+				},
 			},
 		});
 		sessionHost?.transition({
@@ -854,14 +876,16 @@ describe("Connector termination cleanup", () => {
 			},
 		});
 		await connector.connect({
-			connection$: connectionSource.asObservable(),
-			async connect() {
-				connectionSource.next({
-					message$: new Subject<Uint8Array>().asObservable(),
-					async send() {},
-					async close() {},
-				});
-				connectionSource.complete();
+			adapter: {
+				connection$: connectionSource.asObservable(),
+				async connect() {
+					connectionSource.next({
+						message$: new Subject<Uint8Array>().asObservable(),
+						async send() {},
+						async close() {},
+					});
+					connectionSource.complete();
+				},
 			},
 		});
 
@@ -925,14 +949,16 @@ describe("Connector termination cleanup", () => {
 			},
 		});
 		await connector.connect({
-			connection$: connectionSource.asObservable(),
-			async connect() {
-				connectionSource.next({
-					message$: new Subject<Uint8Array>().asObservable(),
-					async send() {},
-					async close() {},
-				});
-				connectionSource.complete();
+			adapter: {
+				connection$: connectionSource.asObservable(),
+				async connect() {
+					connectionSource.next({
+						message$: new Subject<Uint8Array>().asObservable(),
+						async send() {},
+						async close() {},
+					});
+					connectionSource.complete();
+				},
 			},
 		});
 

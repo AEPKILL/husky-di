@@ -5,7 +5,17 @@
  */
 
 import { createServer } from "node:http";
-import type { IRpcConnection } from "@husky-di/remote";
+import {
+	createRpcConnector,
+	createRpcConnectorReconnection,
+	type IRpcConnection,
+	type IRpcProtocol,
+} from "@husky-di/remote";
+import {
+	type IRpcProtocolSession,
+	type IRpcProtocolSessionHost,
+	RpcProtocolSessionTransitionTypeEnum,
+} from "@husky-di/remote/protocol";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { WebSocket as RawNodeWebSocket } from "ws";
 import { NodeWebSocketAcceptorAdapterImpl } from "../src/impls/node-web-socket-acceptor-adapter.impl";
@@ -39,6 +49,116 @@ describe("Shared Adapter conformance", () => {
 
 		expect(reports).toHaveLength(24);
 		expect(reports.every((result) => result.status === "passed")).toBe(true);
+	});
+});
+
+describe("Connector Reconnection composition", () => {
+	it("WS-API-003 returns a fresh Node Connector Adapter from every factory call", () => {
+		const adapterFactory = () =>
+			createNodeWebSocketConnectorAdapter({ url: "ws://example.test" });
+
+		expect(adapterFactory()).not.toBe(adapterFactory());
+	});
+
+	it("WS-API-003 WS-CONNECT-003 keeps replacement creation and timing under the RPC Reconnection supervisor", async () => {
+		vi.useFakeTimers();
+		const networkStatus = new ControlledNetworkStatus(true);
+		installNetworkStatus(networkStatus);
+		const sockets: ControlledWebSocket[] = [];
+		class TestWebSocket extends ControlledWebSocket {
+			constructor() {
+				super();
+				sockets.push(this);
+			}
+		}
+		const session: IRpcProtocolSession = {
+			reserveInvocation: () => undefined,
+			forceClose() {},
+		};
+		let sessionHost: IRpcProtocolSessionHost | undefined;
+		const protocol: IRpcProtocol = {
+			createConnector(host) {
+				return {
+					bind() {
+						return Promise.resolve().then(() => {
+							if (sessionHost === undefined) {
+								sessionHost = host.attachSession(session);
+								if (sessionHost === undefined) {
+									throw new Error("The test Session was not attached.");
+								}
+								return;
+							}
+							sessionHost.transition({
+								type: RpcProtocolSessionTransitionTypeEnum.recovered,
+							});
+						});
+					},
+					async shutdown() {},
+					close() {},
+					async cleanup() {},
+				};
+			},
+			createAcceptor() {
+				return {
+					async accept() {},
+					async shutdown() {},
+					close() {},
+					async cleanup() {},
+				};
+			},
+		};
+		const connector = createRpcConnector({ protocol });
+		const reconnection = createRpcConnectorReconnection({
+			connector,
+			adapterFactory: () =>
+				createWebSocketConnectorAdapter({
+					url: "ws://example.test",
+					webSocket: TestWebSocket as unknown as typeof WebSocket,
+				}),
+			policy: { retryDelaysMs: [100], attemptTimeoutMs: 1_000 },
+		});
+
+		try {
+			const initial = reconnection.connect();
+			expect(sockets).toHaveLength(1);
+			sockets[0]?.open();
+			await initial;
+			sessionHost?.transition({
+				type: RpcProtocolSessionTransitionTypeEnum.recovering,
+			});
+			networkStatus.setOnline(false);
+			await vi.advanceTimersByTimeAsync(0);
+
+			expect(reconnection.state).toEqual({
+				status: "waiting",
+				nextAttempt: 2,
+				delayMs: 100,
+			});
+			expect(sockets).toHaveLength(1);
+			networkStatus.setOnline(true);
+			expect(sockets).toHaveLength(1);
+			await vi.advanceTimersByTimeAsync(99);
+			expect(sockets).toHaveLength(1);
+			await vi.advanceTimersByTimeAsync(1);
+			await vi.advanceTimersByTimeAsync(0);
+
+			expect(sockets).toHaveLength(2);
+			expect(sockets[1]).not.toBe(sockets[0]);
+			sockets[1]?.open();
+			await vi.advanceTimersByTimeAsync(0);
+			expect(reconnection.state.status).toBe("monitoring");
+			expect(connector.peer.state.status).toBe("connected");
+		} finally {
+			await reconnection.stop();
+			const closeTask = connector.close();
+			for (const socket of sockets) {
+				if (socket.readyState !== 3) {
+					socket.remoteClose(1000);
+				}
+			}
+			await closeTask;
+			vi.useRealTimers();
+		}
 	});
 });
 

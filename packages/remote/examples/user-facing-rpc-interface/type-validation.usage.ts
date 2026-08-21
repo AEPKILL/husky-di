@@ -216,9 +216,9 @@ export function typeValidationUsage(): void {
 		protocol: defaultRpcProtocol,
 	});
 	const acceptor = createRpcAcceptor();
-	const connectorConnect: Promise<void> = connector.connect(
-		typeValidationConnectorAdapter,
-	);
+	const connectorConnect: Promise<void> = connector.connect({
+		adapter: typeValidationConnectorAdapter,
+	});
 	const acceptorListen: Promise<void> = acceptor.listen(
 		typeValidationAcceptorAdapter,
 	);
@@ -288,7 +288,7 @@ export function typeValidationUsage(): void {
 	// @ts-expect-error Topology terminal state is observed through event$, not a Promise property.
 	void typeValidationConnector.closed;
 	// @ts-expect-error Connector and Acceptor Adapter roles are not interchangeable.
-	typeValidationConnector.connect(typeValidationAcceptorAdapter);
+	typeValidationConnector.connect({ adapter: typeValidationAcceptorAdapter });
 	// @ts-expect-error Connector and Acceptor Adapter roles are not interchangeable.
 	typeValidationAcceptor.listen(typeValidationConnectorAdapter);
 	// @ts-expect-error Lifecycle and call observations are unified under event$.

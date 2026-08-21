@@ -62,7 +62,7 @@ function isPlainRecord(value: unknown): value is Record<PropertyKey, unknown> {
 	return prototype === Object.prototype || prototype === null;
 }
 
-function readClosedRecord(
+export function readRpcClosedOptionsRecord(
 	value: unknown,
 	allowedKeys: ReadonlySet<string>,
 	label: string,
@@ -110,7 +110,10 @@ function addSafe(left: number, right: number, label: string): number {
 	return result;
 }
 
-function validatePositiveSafeInteger(value: unknown, key: string): number {
+export function validateRpcPositiveSafeInteger(
+	value: unknown,
+	key: string,
+): number {
 	if (!Number.isSafeInteger(value) || (value as number) <= 0) {
 		throw new TypeError(`${key} must be a positive safe integer.`);
 	}
@@ -119,7 +122,7 @@ function validatePositiveSafeInteger(value: unknown, key: string): number {
 
 function validatePolicy(policy: IRpcProtocolRuntimePolicy): void {
 	for (const key of policyKeys) {
-		validatePositiveSafeInteger(policy[key], key);
+		validateRpcPositiveSafeInteger(policy[key], key);
 	}
 
 	const threeProbeIntervals = multiplySafe(
@@ -186,13 +189,13 @@ function snapshotPolicy(
 	const record =
 		overrides === undefined
 			? Object.freeze(Object.create(null) as Record<string, unknown>)
-			: readClosedRecord(overrides, allowedKeys, "runtimePolicy");
+			: readRpcClosedOptionsRecord(overrides, allowedKeys, "runtimePolicy");
 	const mutable = { ...defaultPolicy };
 
 	for (const key of policyKeys) {
 		const override = record[key];
 		if (override !== undefined) {
-			mutable[key] = validatePositiveSafeInteger(override, key);
+			mutable[key] = validateRpcPositiveSafeInteger(override, key);
 		}
 	}
 
@@ -221,7 +224,7 @@ export function snapshotRpcFactoryOptions<
 		return Object.freeze({ protocol: undefined, runtimePolicy: undefined });
 	}
 
-	const record = readClosedRecord(
+	const record = readRpcClosedOptionsRecord(
 		options,
 		new Set(["protocol", "runtimePolicy"]),
 		"options",

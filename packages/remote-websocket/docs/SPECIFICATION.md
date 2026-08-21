@@ -75,6 +75,13 @@ structural `IRpcConnectorAdapter` or `IRpcAcceptorAdapter` without opening a soc
 `listen()` call. A later call on the same Adapter **MUST** reject. Construction and subscription alone **MUST
 NOT** create native resources.
 
+**WS-API-003 — Reconnection composition.** Repeated calls to either WebSocket Connector Adapter factory
+**MUST** return distinct cold single-use Adapters suitable for an application-supplied
+`RpcConnectorAdapterFactory`. The package **MUST NOT** duplicate `RpcConnectorReconnection`, retry policy,
+timers, or supervisor state. Applications **MAY** compose the WebSocket factory directly with
+`createRpcConnectorReconnection()`; every initial or replacement attempt then **MUST** obtain a newly created
+Adapter.
+
 **WS-LIMIT-001 — Finite policy.** Factory limit values **MUST** be safe positive integers. `maxMessageBytes`
 **MUST** be at least `1,048,576`; `maxQueuedMessages` **MUST** be at least one; and `maxQueuedBytes` **MUST** be
 at least `maxMessageBytes`. Defaults are respectively `1,048,576`, `16`, and
@@ -102,7 +109,9 @@ event before handoff **MUST** fail startup; after handoff it **MUST** immediatel
 Connection and Direct Close its socket. Network listeners **MUST** be removed when their startup or Connection
 lifetime ends. A later `online` event **MUST NOT** reuse the single-use Adapter or automatically dial a
 replacement Connection; the application owns replacement-Adapter and retry policy. A platform without the
-browser network-status surface **MUST** retain the ordinary WebSocket lifecycle behavior.
+browser network-status surface **MUST** retain the ordinary WebSocket lifecycle behavior. When an application
+uses `RpcConnectorReconnection`, a later `online` event still **MUST NOT** bypass its configured schedule; the
+supervisor's next attempt invokes the application Factory and creates the replacement Adapter.
 
 ## 4. Acceptor startup and capacity
 

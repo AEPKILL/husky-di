@@ -269,7 +269,7 @@ describe("Remote RPC requirement evidence", () => {
 			}
 		}
 
-		expect(specificationIds).toHaveLength(195);
+		expect(specificationIds).toHaveLength(201);
 		expect(diagnostics).toEqual([]);
 	});
 });

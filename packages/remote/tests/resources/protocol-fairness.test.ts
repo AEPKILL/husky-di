@@ -82,7 +82,7 @@ describe("Default RPC Protocol outbound fairness", () => {
 		});
 
 		await acceptor.listen(network.acceptorAdapter);
-		await connector.connect(network.createConnectorAdapter());
+		await connector.connect({ adapter: network.createConnectorAdapter() });
 		const connectorService = acceptor.peers[0]?.resolve(connectorDescriptor);
 		if (connectorService === undefined) {
 			throw new Error("Expected the accepted Default RPC Peer.");
@@ -144,7 +144,7 @@ describe("Default RPC Protocol outbound fairness", () => {
 		});
 
 		await acceptor.listen(network.acceptorAdapter);
-		await connector.connect(network.createConnectorAdapter());
+		await connector.connect({ adapter: network.createConnectorAdapter() });
 		const service = connector.peer.resolve(descriptor);
 		const first = service.run(1);
 		await expect(first).resolves.toBe(1);
@@ -200,7 +200,7 @@ describe("Default RPC Protocol outbound fairness", () => {
 		connector.peer.expose(descriptor, { run: (value) => value });
 
 		await acceptor.listen(network.acceptorAdapter);
-		await connector.connect(network.createConnectorAdapter());
+		await connector.connect({ adapter: network.createConnectorAdapter() });
 		const service = acceptor.peers[0]?.resolve(descriptor);
 		if (service === undefined) {
 			throw new Error("Expected the accepted Default RPC Peer.");

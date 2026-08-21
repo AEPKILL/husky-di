@@ -33,8 +33,18 @@ import type {
 	RpcEvent,
 } from "@/interfaces/rpc-caller.interface";
 import type { IRpcConnection } from "@/interfaces/rpc-connection.interface";
-import type { RpcConnectorState } from "@/types/rpc-caller.type";
+import type {
+	RpcConnectorConnectOptions,
+	RpcConnectorState,
+} from "@/types/rpc-caller.type";
+import {
+	installRpcAbortListener,
+	readRpcAbortSignalAborted,
+} from "@/utils/rpc-cancellation.util";
 import { RpcHandlerScheduler } from "@/utils/rpc-handler-scheduler.util";
+import { readRpcClosedOptionsRecord } from "@/utils/rpc-runtime-policy.util";
+
+const connectorConnectOptionKeys = new Set(["adapter", "signal"]);
 
 type RpcConnectorClosedState = Extract<
 	RpcConnectorState,
@@ -57,6 +67,7 @@ interface RpcConnectorAttempt {
 	readonly ownerAbort: Promise<never>;
 	readonly rejectOwnerAbort: (error: Error) => void;
 	readonly startupCleanup: RpcConnectorOwnedCleanup;
+	removeExternalAbortListener?: () => void;
 	subscription?: Subscription;
 	connection?: IRpcConnection;
 	provisionalSession?: IRpcProtocolSession;
@@ -64,7 +75,7 @@ interface RpcConnectorAttempt {
 	attached: boolean;
 	cleanupRequested: boolean;
 	fenced: boolean;
-	ownerAborted: boolean;
+	ownerAbortError?: Error;
 }
 
 /** Owns one stable Connector peer and one owner-scoped Protocol runtime. */
@@ -128,15 +139,15 @@ export class RpcConnectorImpl implements IRpcConnector {
 		return this.#stateSubject.value;
 	}
 
-	connect(adapter: IRpcConnectorAdapter): Promise<void> {
+	connect(options: RpcConnectorConnectOptions): Promise<void> {
 		try {
-			return this.#connect(adapter);
+			return this.#connect(options);
 		} catch (error) {
 			return Promise.reject(error);
 		}
 	}
 
-	#connect(adapter: IRpcConnectorAdapter): Promise<void> {
+	#connect(options: RpcConnectorConnectOptions): Promise<void> {
 		if (
 			this.state.status !== RpcStateStatusEnum.active ||
 			(this.peer.state.status !== RpcStateStatusEnum.unbound &&
@@ -148,6 +159,18 @@ export class RpcConnectorImpl implements IRpcConnector {
 				createRpcException(RpcExceptionCodeEnum.unavailable),
 			);
 		}
+		const optionRecord = readRpcClosedOptionsRecord(
+			options,
+			connectorConnectOptionKeys,
+			"options",
+		);
+		const signal = optionRecord.signal;
+		if (signal !== undefined && readRpcAbortSignalAborted(signal)) {
+			return Promise.reject(
+				new DOMException("The connection attempt was aborted.", "AbortError"),
+			);
+		}
+		const adapter = optionRecord.adapter as IRpcConnectorAdapter;
 		if (typeof adapter !== "object" || adapter === null) {
 			return Promise.reject(new TypeError("adapter must be an object."));
 		}
@@ -202,7 +225,6 @@ export class RpcConnectorImpl implements IRpcConnector {
 			attached: false,
 			cleanupRequested: false,
 			fenced: false,
-			ownerAborted: false,
 		};
 		this.#attempt = attempt;
 
@@ -271,12 +293,29 @@ export class RpcConnectorImpl implements IRpcConnector {
 		} catch (error) {
 			rejectAdapterStartup(error);
 		}
+		if (signal !== undefined) {
+			attempt.removeExternalAbortListener = installRpcAbortListener(
+				signal as AbortSignal,
+				() => {
+					this.#finishFailedAttempt(
+						attempt,
+						fresh,
+						new DOMException(
+							"The connection attempt was aborted.",
+							"AbortError",
+						),
+					);
+				},
+			);
+		}
 
 		return Promise.race([
 			Promise.all([adapterStartup, sourceTerminal, binding]),
 			attempt.ownerAbort,
 		])
 			.then(() => {
+				attempt.removeExternalAbortListener?.();
+				attempt.removeExternalAbortListener = undefined;
 				if (attempt.connection === undefined) {
 					throw new Error("Protocol did not attach a Connector Session.");
 				}
@@ -294,6 +333,17 @@ export class RpcConnectorImpl implements IRpcConnector {
 					attempt.provisionalSession = undefined;
 					this.#session = session;
 					this.peer.commitState({ status: RpcStateStatusEnum.connected });
+					if (attempt.ownerAbortError !== undefined) {
+						throw attempt.ownerAbortError;
+					}
+					if (
+						this.state.status !== RpcStateStatusEnum.active ||
+						!this.#isPeerConnected()
+					) {
+						throw new Error(
+							"Connector terminated before startup could settle.",
+						);
+					}
 					this.#eventSubject.next({
 						type: RpcEventTypeEnum.peerOpened,
 						peer: this.peer,
@@ -309,8 +359,8 @@ export class RpcConnectorImpl implements IRpcConnector {
 			})
 			.catch((error: unknown) => {
 				this.#finishFailedAttempt(attempt, fresh);
-				if (attempt.ownerAborted) {
-					throw error;
+				if (attempt.ownerAbortError !== undefined) {
+					throw attempt.ownerAbortError;
 				}
 				throw createRpcException(
 					RpcExceptionCodeEnum.unavailable,
@@ -318,12 +368,17 @@ export class RpcConnectorImpl implements IRpcConnector {
 				);
 			})
 			.finally(() => {
+				attempt.removeExternalAbortListener?.();
 				attempt.subscription?.unsubscribe();
 				this.#startOwnedCleanup(attempt.startupCleanup);
 				if (this.#attempt === attempt) {
 					this.#attempt = undefined;
 				}
 			});
+	}
+
+	#isPeerConnected(): boolean {
+		return this.peer.state.status === RpcStateStatusEnum.connected;
 	}
 
 	#finishFailedAttempt(
@@ -336,8 +391,8 @@ export class RpcConnectorImpl implements IRpcConnector {
 			attempt.subscription?.unsubscribe();
 			if (ownerAbort !== undefined) {
 				attempt.cleanupRequested = true;
-				attempt.ownerAborted = true;
-				attempt.rejectOwnerAbort(ownerAbort);
+				attempt.ownerAbortError = ownerAbort;
+				attempt.rejectOwnerAbort(attempt.ownerAbortError);
 			}
 			attempt.abortController.abort();
 		}

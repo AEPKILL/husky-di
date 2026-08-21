@@ -16,6 +16,7 @@ import type {
 	RpcProtocolFaultReason,
 	RpcSessionCloseReason,
 } from "@/interfaces/protocol/rpc-protocol.interface";
+import type { IRpcConnectorAdapter } from "@/interfaces/rpc-adapter.interface";
 
 type RpcNormalSessionCloseReason = Extract<
 	RpcSessionCloseReason,
@@ -172,6 +173,11 @@ export type RpcConnectorRuntimePolicyOptions = Pick<
 export type RpcConnectorOptions = {
 	readonly protocol?: IRpcProtocol;
 	readonly runtimePolicy?: RpcConnectorRuntimePolicyOptions;
+};
+
+export type RpcConnectorConnectOptions = {
+	readonly adapter: IRpcConnectorAdapter;
+	readonly signal?: AbortSignal;
 };
 
 export type RpcAcceptorOptions = {

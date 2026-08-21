@@ -16,10 +16,7 @@ import type { RpcExceptionCodeEnum } from "@/enums/rpc-exception-code.enum";
 import type { RpcException } from "@/exceptions/rpc.exception";
 import type { RpcCallFailure } from "@/interfaces/protocol/rpc-protocol.interface";
 import type { IRemoteServiceDescriptor } from "@/interfaces/remote-service-descriptor.interface";
-import type {
-	IRpcAcceptorAdapter,
-	IRpcConnectorAdapter,
-} from "@/interfaces/rpc-adapter.interface";
+import type { IRpcAcceptorAdapter } from "@/interfaces/rpc-adapter.interface";
 import type {
 	AnyMethod,
 	IsCancelableMethod,
@@ -32,6 +29,7 @@ import type {
 import type {
 	RpcAcceptorOptions,
 	RpcAcceptorState,
+	RpcConnectorConnectOptions,
 	RpcConnectorOptions,
 	RpcConnectorState,
 	RpcPeerState,
@@ -236,7 +234,7 @@ export interface IRpcConnector {
 	readonly state$: Observable<RpcConnectorState>;
 	readonly event$: Observable<RpcEvent>;
 	readonly peer: IRpcPeer;
-	connect(adapter: IRpcConnectorAdapter): Promise<void>;
+	connect(options: RpcConnectorConnectOptions): Promise<void>;
 	shutdown(): Promise<void>;
 	close(): Promise<void>;
 }

@@ -13,21 +13,28 @@ pnpm add @husky-di/remote @husky-di/remote-websocket rxjs ws
 ## Use
 
 ```ts
-import { createRpcConnector } from "@husky-di/remote";
+import {
+  createRpcConnector,
+  createRpcConnectorReconnection,
+} from "@husky-di/remote";
 import { createWebSocketConnectorAdapter } from "@husky-di/remote-websocket";
 
 const connector = createRpcConnector();
-await connector.connect(
-  createWebSocketConnectorAdapter({ url: "wss://rpc.example.test" }),
-);
+const reconnection = createRpcConnectorReconnection({
+  connector,
+  adapterFactory: () =>
+    createWebSocketConnectorAdapter({ url: "wss://rpc.example.test" }),
+});
+
+await reconnection.connect();
 ```
 
 In browsers, the Connector Adapter samples `navigator.onLine` and listens for
 the global `offline` event. Starting while offline fails without creating a
 socket; going offline after handoff immediately terminates the physical
 Connection so the RPC peer can enter Recovery. A later `online` event does not
-reuse the single-use Adapter or reconnect automatically; create a replacement
-Adapter according to the application's retry policy.
+reuse the single-use Adapter or bypass the Reconnection schedule. Each
+supervised attempt calls the closure above and receives a fresh Adapter.
 
 Node applications can import `createNodeWebSocketConnectorAdapter` and
 `createNodeWebSocketAcceptorAdapter` from `@husky-di/remote-websocket/node`.

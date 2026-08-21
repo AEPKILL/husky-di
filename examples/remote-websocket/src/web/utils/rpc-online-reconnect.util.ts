@@ -5,8 +5,11 @@
  */
 
 import {
+	type CreateRpcConnectorReconnectionOptions,
+	createRpcConnectorReconnection,
 	type IRpcConnector,
 	type IRpcConnectorAdapter,
+	type IRpcConnectorReconnection,
 	RpcStateStatusEnum,
 } from "@husky-di/remote";
 
@@ -15,43 +18,55 @@ interface IRpcOnlineEvents {
 	removeEventListener(type: "online", listener: () => void): void;
 }
 
+type RpcConnectorReconnectionFactory = (
+	options: CreateRpcConnectorReconnectionOptions,
+) => IRpcConnectorReconnection;
+
 export function connectRpcPeerOnOnline(
 	connector: IRpcConnector,
 	createAdapter: () => IRpcConnectorAdapter,
 	setConnectionError: (error: unknown | undefined) => void,
 	onlineEvents: IRpcOnlineEvents = window,
+	createReconnection: RpcConnectorReconnectionFactory = createRpcConnectorReconnection,
 ): () => void {
 	let active = true;
-	let currentAttempt: Promise<void> | undefined;
+	let reconnection: IRpcConnectorReconnection | undefined;
+	let initialAttempt: Promise<void> | undefined;
 	const connect = (): void => {
-		const status = connector.peer.state.status;
 		if (
 			!active ||
-			currentAttempt !== undefined ||
-			(status !== RpcStateStatusEnum.unbound &&
-				status !== RpcStateStatusEnum.recovering)
+			initialAttempt !== undefined ||
+			reconnection !== undefined ||
+			connector.peer.state.status !== RpcStateStatusEnum.unbound
 		) {
 			return;
 		}
 
 		setConnectionError(undefined);
+		const nextReconnection = createReconnection({
+			connector,
+			adapterFactory: createAdapter,
+		});
+		reconnection = nextReconnection;
 		let attempt: Promise<void>;
 		try {
-			attempt = connector.connect(createAdapter());
+			attempt = nextReconnection.connect();
 		} catch (error) {
+			reconnection = undefined;
 			setConnectionError(error);
 			return;
 		}
-		currentAttempt = attempt;
+		initialAttempt = attempt;
 		void attempt
 			.catch((error: unknown) => {
-				if (active) {
+				if (active && reconnection === nextReconnection) {
+					reconnection = undefined;
 					setConnectionError(error);
 				}
 			})
 			.finally(() => {
-				if (currentAttempt === attempt) {
-					currentAttempt = undefined;
+				if (initialAttempt === attempt) {
+					initialAttempt = undefined;
 				}
 			});
 	};
@@ -61,5 +76,8 @@ export function connectRpcPeerOnOnline(
 	return () => {
 		active = false;
 		onlineEvents.removeEventListener("online", connect);
+		const currentReconnection = reconnection;
+		reconnection = undefined;
+		void currentReconnection?.stop();
 	};
 }

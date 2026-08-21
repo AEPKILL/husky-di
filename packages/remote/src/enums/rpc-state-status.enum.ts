@@ -16,5 +16,8 @@ export enum RpcStateStatusEnum {
 	idle = "idle",
 	starting = "starting",
 	listening = "listening",
+	monitoring = "monitoring",
+	reconnecting = "reconnecting",
+	waiting = "waiting",
 	stopped = "stopped",
 }

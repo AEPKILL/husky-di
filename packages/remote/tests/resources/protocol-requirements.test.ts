@@ -70,7 +70,7 @@ describe("Default RPC Protocol remaining requirements", () => {
 		});
 
 		await acceptor.listen(network.acceptorAdapter);
-		await connector.connect(network.createConnectorAdapter());
+		await connector.connect({ adapter: network.createConnectorAdapter() });
 		const service = connector.peer.resolve(descriptor);
 		await expect(service.run("first")).resolves.toBe(5);
 		const maximumString = "x".repeat(512 * 1024);
@@ -121,7 +121,7 @@ describe("Default RPC Protocol remaining requirements", () => {
 		connector.peer.expose(descriptor, { run: (value) => value.length });
 
 		await acceptor.listen(network.acceptorAdapter);
-		await connector.connect(network.createConnectorAdapter());
+		await connector.connect({ adapter: network.createConnectorAdapter() });
 		const acceptedPeer = acceptor.peers[0];
 		if (acceptedPeer === undefined) {
 			throw new Error("Expected one accepted Default RPC Peer.");
@@ -173,7 +173,7 @@ describe("Default RPC Protocol remaining requirements", () => {
 		acceptor.expose(descriptor, { run: (value) => value.length });
 
 		await acceptor.listen(network.acceptorAdapter);
-		await connector.connect(connectorAdapter);
+		await connector.connect({ adapter: connectorAdapter });
 		await expect(
 			connector.peer.resolve(descriptor).run("visible"),
 		).resolves.toBe(7);
@@ -194,8 +194,10 @@ describe("Default RPC Protocol remaining requirements", () => {
 		const secondConnector = createRpcConnector();
 
 		await acceptor.listen(network.acceptorAdapter);
-		await firstConnector.connect(network.createConnectorAdapter());
-		await secondConnector.connect(network.createConnectorAdapter());
+		await firstConnector.connect({ adapter: network.createConnectorAdapter() });
+		await secondConnector.connect({
+			adapter: network.createConnectorAdapter(),
+		});
 
 		const accepts = network.records.filter(
 			(record) =>
@@ -234,10 +236,12 @@ describe("Default RPC Protocol remaining requirements", () => {
 		acceptor.expose(descriptor, { run: (value) => value.length });
 
 		await acceptor.listen(network.acceptorAdapter);
-		await retainedConnector.connect(network.createConnectorAdapter());
+		await retainedConnector.connect({
+			adapter: network.createConnectorAdapter(),
+		});
 		const retainedPeer = acceptor.peers[0];
 		await expect(
-			overflowConnector.connect(network.createConnectorAdapter()),
+			overflowConnector.connect({ adapter: network.createConnectorAdapter() }),
 		).rejects.toBeInstanceOf(Error);
 
 		expect(acceptor.peers).toEqual([retainedPeer]);
@@ -277,7 +281,7 @@ describe("Default RPC Protocol remaining requirements", () => {
 		);
 
 		await acceptor.listen(network.acceptorAdapter);
-		await connector.connect(network.createConnectorAdapter());
+		await connector.connect({ adapter: network.createConnectorAdapter() });
 		const encoder = new TextEncoder();
 		insideTransportCallback = true;
 		for (const [seq, value] of ["first", "second"].entries()) {
@@ -331,8 +335,10 @@ describe("Default RPC Protocol remaining requirements", () => {
 		});
 
 		await acceptor.listen(network.acceptorAdapter);
-		await firstConnector.connect(network.createConnectorAdapter());
-		await secondConnector.connect(network.createConnectorAdapter());
+		await firstConnector.connect({ adapter: network.createConnectorAdapter() });
+		await secondConnector.connect({
+			adapter: network.createConnectorAdapter(),
+		});
 		const firstService = firstConnector.peer.resolve(descriptor);
 		const secondService = secondConnector.peer.resolve(descriptor);
 		const first = firstService.run("first-a");
@@ -371,7 +377,9 @@ describe("Default RPC Protocol remaining requirements", () => {
 
 		await acceptor.listen(network.acceptorAdapter);
 		for (const connector of connectors) {
-			await connector.connect(network.createConnectorAdapter("silent"));
+			await connector.connect({
+				adapter: network.createConnectorAdapter("silent"),
+			});
 		}
 		expect(acceptor.peers).toHaveLength(64);
 

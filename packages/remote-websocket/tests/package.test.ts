@@ -160,6 +160,7 @@ describe("installed @husky-di/remote-websocket package", () => {
 		expect(readme).toMatch(/finite/i);
 		expect(readme).toContain("maxPayload");
 		expect(readme).toContain("wss:");
+		expect(readme).toContain("createRpcConnectorReconnection");
 		const changesets = readdirSync(resolve(workspaceRoot, ".changeset"))
 			.filter((name) => name.endsWith(".md") && name !== "README.md")
 			.map((name) =>
