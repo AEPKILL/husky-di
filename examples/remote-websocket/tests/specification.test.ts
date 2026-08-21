@@ -15,7 +15,7 @@ import {
 	RpcStateStatusEnum,
 } from "@husky-di/remote";
 
-import { connectRpcPeerOnOnline } from "@/web/utils/rpc-online-reconnect.util";
+import { startRpcConnectorReconnection } from "@/web/utils/rpc-connector-reconnection.util";
 import { getRpcPeerStatusPresentation } from "@/web/utils/rpc-peer-status-presentation.util";
 
 describe("Remote WebSocket example specification", () => {
@@ -49,96 +49,54 @@ describe("Remote WebSocket example specification", () => {
 		});
 	});
 
-	it("EXAMPLE-WS-RECOVERY-001 bootstraps one retained Reconnection supervisor", async () => {
-		const onlineEvents = new ControlledOnlineEvents();
+	it("EXAMPLE-WS-RECOVERY-001 delegates connection attempts to one Reconnection supervisor", async () => {
 		const adapters: IRpcConnectorAdapter[] = [];
-		const attempts: Array<PromiseWithResolvers<void>> = [];
-		const stopCalls: number[] = [];
-		let peerStatus = RpcStateStatusEnum.unbound;
-		const connector = {
-			peer: {
-				get state() {
-					return { status: peerStatus };
-				},
-			},
-		} as unknown as IRpcConnector;
+		const attempt = Promise.withResolvers<void>();
+		const connector = {} as IRpcConnector;
+		let createCalls = 0;
+		let connectCalls = 0;
+		let stopCalls = 0;
 		const createReconnection = (
 			options: CreateRpcConnectorReconnectionOptions,
 		): IRpcConnectorReconnection => {
-			const index = attempts.length;
-			const attempt = Promise.withResolvers<void>();
-			attempts.push(attempt);
+			createCalls += 1;
+			assert.equal(options.connector, connector);
 			return {
 				connector: options.connector,
 				state: { status: RpcStateStatusEnum.idle },
 				state$: undefined as never,
 				event$: undefined as never,
 				connect() {
+					connectCalls += 1;
 					adapters.push(options.adapterFactory());
 					return attempt.promise;
 				},
 				stop() {
-					stopCalls.push(index);
+					stopCalls += 1;
 					return Promise.resolve();
 				},
 			};
 		};
 		const errors: unknown[] = [];
-		const stop = connectRpcPeerOnOnline(
+		const stop = startRpcConnectorReconnection(
 			connector,
 			() => ({ id: adapters.length + 1 }) as unknown as IRpcConnectorAdapter,
 			(error) => errors.push(error),
-			onlineEvents,
 			createReconnection,
 		);
 
-		assert.equal(attempts.length, 1);
-		onlineEvents.emit();
-		assert.equal(attempts.length, 1);
-		attempts[0]?.reject(new Error("offline"));
+		assert.equal(createCalls, 1);
+		assert.equal(connectCalls, 1);
+		assert.equal(adapters.length, 1);
+		attempt.reject(new Error("offline"));
 		await Promise.resolve();
 		await Promise.resolve();
-		onlineEvents.emit();
-		assert.equal(attempts.length, 2);
-		assert.notEqual(adapters[0], adapters[1]);
-		peerStatus = RpcStateStatusEnum.connected;
-		attempts[1]?.resolve();
-		await Promise.resolve();
-		await Promise.resolve();
-		onlineEvents.emit();
-		assert.equal(attempts.length, 2);
 		assert.deepEqual(
 			errors.map((error) => (error instanceof Error ? error.message : error)),
-			[undefined, "offline", undefined],
+			["offline"],
 		);
 
-		stop();
-		peerStatus = RpcStateStatusEnum.recovering;
-		onlineEvents.emit();
-		assert.equal(attempts.length, 2);
-		assert.deepEqual(stopCalls, [1]);
-		assert.equal(onlineEvents.listenerCount, 0);
+		await stop();
+		assert.equal(stopCalls, 1);
 	});
 });
-
-class ControlledOnlineEvents {
-	private readonly _listeners = new Set<() => void>();
-
-	get listenerCount(): number {
-		return this._listeners.size;
-	}
-
-	addEventListener(_type: "online", listener: () => void): void {
-		this._listeners.add(listener);
-	}
-
-	removeEventListener(_type: "online", listener: () => void): void {
-		this._listeners.delete(listener);
-	}
-
-	emit(): void {
-		for (const listener of [...this._listeners]) {
-			listener();
-		}
-	}
-}

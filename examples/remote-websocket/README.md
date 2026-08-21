@@ -27,13 +27,12 @@ Hono does not serve the Web build output.
 
 ## Connection recovery
 
-The browser's `online` listener is only an initial bootstrap trigger. While the
-peer is still unbound, a failed initial attempt remains visible and the next
-`online` event creates a new `RpcConnectorReconnection` with a fresh WebSocket
-Adapter. After the first successful connection, the app retains that supervisor
-and lets its retry policy recover later transport loss without waiting for
-another `online` event or starting a parallel attempt. React cleanup requests
-the supervisor to stop before closing the Connector.
+The browser creates one `RpcConnectorReconnection` and supplies a factory that
+returns a fresh WebSocket Adapter for every connection attempt. The example does
+not maintain its own retry timers or browser `online` retry loop: after the
+initial connection succeeds, the shared Connector Reconnection Policy owns all
+later Session Recovery attempts. React cleanup stops the supervisor before
+closing the Connector.
 
 ## Run
 

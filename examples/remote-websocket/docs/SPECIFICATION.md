@@ -15,17 +15,12 @@ and **MUST NOT** be presented as an in-progress connection attempt.
 
 ## Connection recovery
 
-**EXAMPLE-WS-RECOVERY-001 — Online bootstrap and retained recovery.** The
-browser application **MUST** register one global `online` listener before its
-initial connection attempt. Initial startup and each later `online` event
-**MUST** create a single-use `RpcConnectorReconnection` when, and only when,
-the peer is `unbound` and no initial attempt or retained supervisor exists. An
-initial failure **MUST** remain observable; the next eligible `online` event
-**MUST** create a new
-supervisor, whose Adapter factory **MUST** return a fresh single-use WebSocket
-Connector Adapter. After initial success, the application **MUST** retain that
-supervisor and **MUST** delegate Recovery attempts to its configured retry
-policy without waiting for another `online` event. Later `online` events
-**MUST NOT** bypass the retained supervisor or start another attempt. Cleanup
-**MUST** remove the listener, stop the retained or pending supervisor, and
-prevent later attempts.
+**EXAMPLE-WS-RECOVERY-001 — Shared reconnection supervisor.** The browser
+application **MUST** create exactly one `RpcConnectorReconnection` for its
+mounted lifetime, start it once, and supply an Adapter factory that returns a
+fresh single-use WebSocket Connector Adapter for every attempt. Initial failure
+**MUST** remain observable and **MUST NOT** be retried by application-owned
+timers, browser `online` listeners, or replacement supervisors. After initial
+success, the application **MUST** delegate all Recovery attempts to the retained
+supervisor's Connector Reconnection Policy. Cleanup **MUST** stop the supervisor
+before closing the Connector.

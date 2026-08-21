@@ -36,7 +36,7 @@ import {
 } from "@/web/components/ui/card";
 import { Input } from "@/web/components/ui/input";
 import { useRpcObservatory } from "@/web/hooks/use-rpc-observatory";
-import { connectRpcPeerOnOnline } from "@/web/utils/rpc-online-reconnect.util";
+import { startRpcConnectorReconnection } from "@/web/utils/rpc-connector-reconnection.util";
 import { getRpcPeerStatusPresentation } from "@/web/utils/rpc-peer-status-presentation.util";
 
 const connector = createRpcConnector();
@@ -80,17 +80,13 @@ function App() {
 
 		const url = new URL("/rpc", window.location.href);
 		url.protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-		const stopConnecting = connectRpcPeerOnOnline(
+		const stopReconnection = startRpcConnectorReconnection(
 			connector,
 			() => createWebSocketConnectorAdapter({ url }),
 			(error) => {
 				if (active) {
 					setConnectionError(
-						error === undefined
-							? undefined
-							: error instanceof Error
-								? error.message
-								: String(error),
+						error instanceof Error ? error.message : String(error),
 					);
 				}
 			},
@@ -98,8 +94,7 @@ function App() {
 
 		return () => {
 			active = false;
-			stopConnecting();
-			void connector.close();
+			void stopReconnection().finally(() => connector.close());
 		};
 	}, []);
 
