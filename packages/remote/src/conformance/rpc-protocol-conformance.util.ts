@@ -15,6 +15,7 @@ import {
 import { RpcCallTerminalTypeEnum } from "@/enums/protocol/rpc-call-terminal-type.enum";
 import { RpcIncomingCallKindEnum } from "@/enums/protocol/rpc-incoming-call-kind.enum";
 import { RpcProtocolSessionTransitionTypeEnum } from "@/enums/protocol/rpc-protocol-session-transition-type.enum";
+import { RpcCloseReasonEnum } from "@/enums/rpc-close-reason.enum";
 import { RpcExceptionCodeEnum } from "@/enums/rpc-exception-code.enum";
 import type {
 	IRpcApplicationArgumentsSnapshot,
@@ -253,7 +254,8 @@ export function runRpcProtocolConformance(
 						);
 						assertRpcConformance(
 							pair.acceptorProbe.sessionFaults[0]?.reason ===
-								"protocol-fault" && pair.acceptorProbe.ownerFaults.length === 0,
+								RpcCloseReasonEnum.protocolFault &&
+								pair.acceptorProbe.ownerFaults.length === 0,
 							"Active grammar fault escaped the Session scope.",
 						);
 					} finally {
@@ -361,6 +363,8 @@ function createAcceptorHostProbe(): {
 	};
 }
 
+// Keep this selector independent of the built-in RpcProtocolRoleEnum so
+// conformance can exercise third-party Protocol implementations.
 function createHostProbe(role: "connector" | "acceptor"): {
 	readonly host: IRpcProtocolConnectorHost | IRpcProtocolAcceptorHost;
 	readonly calls: number;
@@ -657,6 +661,8 @@ async function closeProtocolPair(pair: ProtocolPair): Promise<void> {
 	);
 }
 
+// Keep this selector independent of the built-in RpcProtocolRoleEnum so
+// conformance can exercise third-party Protocol implementations.
 function createSessionHostProbe(
 	role: "connector",
 ): ProtocolHostProbe<IRpcProtocolConnectorHost>;
@@ -1002,7 +1008,7 @@ function readRecordNumber(value: unknown, key: string): number | undefined {
 function isCounterDrain(transition: RpcProtocolSessionTransition): boolean {
 	return (
 		transition.type === RpcProtocolSessionTransitionTypeEnum.draining &&
-		transition.reason === "counter-exhaustion"
+		transition.reason === RpcCloseReasonEnum.counterExhaustion
 	);
 }
 
