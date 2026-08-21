@@ -25,17 +25,6 @@ const IAcceptorFairnessService = createServiceIdentifier<IFairnessService>(
 	"IAcceptorFairnessService",
 );
 
-function createDeferred(): {
-	readonly promise: Promise<void>;
-	resolve(): void;
-} {
-	let resolve!: () => void;
-	const promise = new Promise<void>((taskResolve) => {
-		resolve = taskResolve;
-	});
-	return { promise, resolve };
-}
-
 describe("Default RPC Protocol outbound fairness", () => {
 	it("RPC-SCHEDULE-002 alternates retained control and Pending Invocation lanes starting with control RPC-CORPUS-004", async () => {
 		const network = createRpcTestNetwork();
@@ -55,7 +44,7 @@ describe("Default RPC Protocol outbound fairness", () => {
 		);
 		const acceptor = createRpcAcceptor();
 		const connector = createRpcConnector();
-		const blocked = createDeferred();
+		const blocked = Promise.withResolvers<void>();
 		let connectorDispatches = 0;
 		let blockedFirstResult = false;
 		connector.peer.expose(connectorDescriptor, {
@@ -124,7 +113,7 @@ describe("Default RPC Protocol outbound fairness", () => {
 		});
 		const acceptor = createRpcAcceptor();
 		const connector = createRpcConnector();
-		const blocked = createDeferred();
+		const blocked = Promise.withResolvers<void>();
 		let blockedFirstCall = false;
 		acceptor.expose(descriptor, { run: (value) => value });
 		network.setInterceptor((record) => {
@@ -195,7 +184,7 @@ describe("Default RPC Protocol outbound fairness", () => {
 		);
 		const acceptor = createRpcAcceptor({ runtimePolicy: { ackDelayMs: 1 } });
 		const connector = createRpcConnector({ runtimePolicy: { ackDelayMs: 1 } });
-		const blocked = createDeferred();
+		const blocked = Promise.withResolvers<void>();
 		let blockedFirstPong = false;
 		connector.peer.expose(descriptor, { run: (value) => value });
 

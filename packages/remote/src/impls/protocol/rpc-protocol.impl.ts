@@ -208,12 +208,7 @@ class RpcConnectorRuntime<TKey> implements IRpcProtocolConnectorRuntime {
 		}
 		const mode = retainedSession === undefined ? "fresh" : "resume";
 
-		let resolve!: () => void;
-		let reject!: (error: unknown) => void;
-		const task = new Promise<void>((taskResolve, taskReject) => {
-			resolve = taskResolve;
-			reject = taskReject;
-		});
+		const { promise: task, reject, resolve } = Promise.withResolvers<void>();
 		this._handshakeSlotsInUse += 1;
 		let attempt: IRpcConnectorAttempt<TKey>;
 		let endpoint: IRpcEndpoint;
@@ -644,12 +639,7 @@ class RpcAcceptorRuntime<TKey> implements IRpcProtocolAcceptorRuntime {
 		}
 		this._handshakeSlotsInUse += 1;
 
-		let resolve!: () => void;
-		let reject!: (error: unknown) => void;
-		const task = new Promise<void>((taskResolve, taskReject) => {
-			resolve = taskResolve;
-			reject = taskReject;
-		});
+		const { promise: task, reject, resolve } = Promise.withResolvers<void>();
 		let attempt: IRpcAttempt<TKey>;
 		let endpoint: IRpcEndpoint;
 		try {

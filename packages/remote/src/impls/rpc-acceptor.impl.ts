@@ -59,6 +59,7 @@ import {
 } from "@/utils/rpc-exposure.util";
 import { createRpcFacade } from "@/utils/rpc-facade.util";
 import { RpcHandlerScheduler } from "@/utils/rpc-handler-scheduler.util";
+import { isRpcSessionTransitionAllowed } from "@/utils/rpc-session-transition.util";
 
 interface RpcAcceptorListenerAttempt {
 	readonly abortController: AbortController;
@@ -95,7 +96,7 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 	readonly #sessions = new Map<IRpcProtocolSession, RpcPeerImpl>();
 	readonly #faultingSessions = new Set<IRpcProtocolSession>();
 	readonly #handlerScheduler: RpcHandlerScheduler;
-	readonly #ownedConnections: IRpcConnection[] = [];
+	readonly #ownedConnections = new Set<IRpcConnection>();
 	readonly #connectionCloseTasks = new WeakMap<IRpcConnection, Promise<void>>();
 	readonly #connectionCleanupEntries = new WeakMap<
 		IRpcConnection,
@@ -220,12 +221,11 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 			return Promise.reject(new TypeError("adapter has an invalid shape."));
 		}
 
-		let resolveStartup!: () => void;
-		let rejectStartup!: (error: unknown) => void;
-		const startup = new Promise<void>((resolve, reject) => {
-			resolveStartup = resolve;
-			rejectStartup = reject;
-		});
+		const {
+			promise: startup,
+			resolve: resolveStartup,
+			reject: rejectStartup,
+		} = Promise.withResolvers<void>();
 		let attempt!: RpcAcceptorListenerAttempt;
 		const listenerCleanup = this.#admitOwnedCleanup(() =>
 			attempt.subscription?.unsubscribe(),
@@ -377,7 +377,7 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 			return;
 		}
 		const ordinaryConnectionCount =
-			this.#ownedConnections.length -
+			this.#ownedConnections.size -
 			(this.#overflowConnection === undefined ? 0 : 1);
 		if (ordinaryConnectionCount >= this.#ordinaryConnectionLimit) {
 			this.#acceptOverflowConnection(connection);
@@ -452,12 +452,12 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 
 	#ownConnection(connection: IRpcConnection): void {
 		if (
-			this.#ownedConnections.includes(connection) ||
+			this.#ownedConnections.has(connection) ||
 			this.#connectionCloseTasks.has(connection)
 		) {
 			return;
 		}
-		this.#ownedConnections.push(connection);
+		this.#ownedConnections.add(connection);
 		const cleanup = this.#admitOwnedCleanup(() =>
 			this.#directClose(connection),
 		);
@@ -476,12 +476,11 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 		}
 		this.#ownConnection(connection);
 
-		let resolveClose!: () => void;
-		let rejectClose!: (error: unknown) => void;
-		const task = new Promise<void>((resolve, reject) => {
-			resolveClose = resolve;
-			rejectClose = reject;
-		});
+		const {
+			promise: task,
+			resolve: resolveClose,
+			reject: rejectClose,
+		} = Promise.withResolvers<void>();
 		this.#connectionCloseTasks.set(connection, task);
 		const cleanup = this.#connectionCleanupEntries.get(connection);
 		if (cleanup !== undefined) {
@@ -561,10 +560,7 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 	}
 
 	#releaseOwnedConnection(connection: IRpcConnection): void {
-		const index = this.#ownedConnections.indexOf(connection);
-		if (index >= 0) {
-			this.#ownedConnections.splice(index, 1);
-		}
+		this.#ownedConnections.delete(connection);
 		this.#connectionTerminalSubscriptions.get(connection)?.unsubscribe();
 		this.#connectionTerminalSubscriptions.delete(connection);
 	}
@@ -660,28 +656,30 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 				}
 			});
 		}
-		const results = invocations.map((invocation, index) =>
-			invocation.result.then(
-				(value) =>
-					Object.freeze<RpcPeerResult<unknown>>({
-						peer: peers[index] as RpcPeerImpl,
-						status: RpcCallStatusEnum.fulfilled,
-						value,
-					}),
-				(error) =>
-					Object.freeze<RpcPeerResult<unknown>>({
-						peer: peers[index] as RpcPeerImpl,
-						status: RpcCallStatusEnum.rejected,
-						reason: error,
-					}),
-			),
-		);
 		for (const invocation of invocations) {
 			invocation.start();
 		}
-		return Promise.all(results).then((settled) => {
+		return Promise.allSettled(
+			invocations.map((invocation) => invocation.result),
+		).then((results) => {
 			removeAbortListener?.();
-			return Object.freeze(settled);
+			return Object.freeze(
+				results.map((result, index) =>
+					Object.freeze<RpcPeerResult<unknown>>(
+						result.status === "fulfilled"
+							? {
+									peer: peers[index] as RpcPeerImpl,
+									status: RpcCallStatusEnum.fulfilled,
+									value: result.value,
+								}
+							: {
+									peer: peers[index] as RpcPeerImpl,
+									status: RpcCallStatusEnum.rejected,
+									reason: result.reason,
+								},
+					),
+				),
+			);
 		});
 	}
 
@@ -706,10 +704,10 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 	}
 
 	#createTerminationTask(): Promise<void> {
-		const task = new Promise<void>((resolve, reject) => {
-			this.#resolveTermination = resolve;
-			this.#rejectTermination = reject;
-		});
+		const termination = Promise.withResolvers<void>();
+		const task = termination.promise;
+		this.#resolveTermination = termination.resolve;
+		this.#rejectTermination = termination.reject;
 		this.#terminationTask = task;
 		void task.catch(() => {});
 		return task;
@@ -1054,7 +1052,7 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 			}
 		}
 		this.#connectionTerminalSubscriptions.clear();
-		this.#ownedConnections.splice(0);
+		this.#ownedConnections.clear();
 		this.#cleanupLedger.splice(0);
 		this.#overflowConnection = undefined;
 		this.#listenerCleanupBarrier = undefined;
@@ -1151,7 +1149,9 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 			);
 			return;
 		}
-		if (!this.#isSessionTransitionAllowed(peer, transition)) {
+		if (
+			!isRpcSessionTransitionAllowed(this.state.status, peer.state, transition)
+		) {
 			this.#faultSession(
 				session,
 				RpcCloseReasonEnum.protocolFault,
@@ -1182,48 +1182,6 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 			return;
 		}
 		this.#closePeerFromSession(session, transition.reason, transition.cause);
-	}
-
-	#isSessionTransitionAllowed(
-		peer: RpcPeerImpl,
-		transition: RpcProtocolSessionTransition,
-	): boolean {
-		const ownerStatus = this.state.status;
-		const peerState = peer.state;
-		if (ownerStatus === RpcStateStatusEnum.draining) {
-			return (
-				transition.type === RpcProtocolSessionTransitionTypeEnum.closed &&
-				peerState.status === RpcStateStatusEnum.draining &&
-				transition.reason !== RpcCloseReasonEnum.recoveryExpired &&
-				(transition.reason !== RpcCloseReasonEnum.counterExhaustion ||
-					peerState.reason === RpcCloseReasonEnum.counterExhaustion)
-			);
-		}
-		if (ownerStatus !== RpcStateStatusEnum.active) {
-			return false;
-		}
-		if (transition.type === RpcProtocolSessionTransitionTypeEnum.recovering) {
-			return peerState.status === RpcStateStatusEnum.connected;
-		}
-		if (transition.type === RpcProtocolSessionTransitionTypeEnum.recovered) {
-			return peerState.status === RpcStateStatusEnum.recovering;
-		}
-		if (transition.type === RpcProtocolSessionTransitionTypeEnum.draining) {
-			return (
-				peerState.status === RpcStateStatusEnum.connected ||
-				peerState.status === RpcStateStatusEnum.recovering
-			);
-		}
-		if (transition.reason === RpcCloseReasonEnum.recoveryExpired) {
-			return peerState.status === RpcStateStatusEnum.recovering;
-		}
-		if (transition.reason === RpcCloseReasonEnum.counterExhaustion) {
-			return (
-				peerState.status === RpcStateStatusEnum.draining &&
-				peerState.reason === RpcCloseReasonEnum.counterExhaustion
-			);
-		}
-		return transition.reason !== RpcCloseReasonEnum.gracefulShutdown;
 	}
 
 	#closePeerFromSession(

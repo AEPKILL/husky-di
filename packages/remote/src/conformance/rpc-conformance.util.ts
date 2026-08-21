@@ -10,9 +10,46 @@ import type {
 } from "@/conformance/rpc-conformance.type";
 import { RpcConformanceStatusEnum } from "@/enums/conformance/rpc-conformance-status.enum";
 
+const CASE_TIMEOUT_MS = 2_000;
+
 export interface IRpcConformanceCase {
 	readonly caseId: string;
 	run(): void | Promise<void>;
+}
+
+export async function waitFor(
+	predicate: () => boolean,
+	operation: string,
+): Promise<void> {
+	const deadline = Date.now() + CASE_TIMEOUT_MS;
+	while (!predicate()) {
+		if (Date.now() >= deadline) {
+			throw new Error(`${operation} did not settle.`);
+		}
+		await new Promise<void>((resolve) => setTimeout(resolve, 0));
+	}
+}
+
+export async function within<T>(
+	promise: Promise<T>,
+	operation: string,
+): Promise<T> {
+	let timer: ReturnType<typeof setTimeout> | undefined;
+	try {
+		return await Promise.race([
+			promise,
+			new Promise<never>((_resolve, reject) => {
+				timer = setTimeout(
+					() => reject(new Error(`${operation} did not settle.`)),
+					CASE_TIMEOUT_MS,
+				);
+			}),
+		]);
+	} finally {
+		if (timer !== undefined) {
+			clearTimeout(timer);
+		}
+	}
 }
 
 export async function runRpcConformanceCases(

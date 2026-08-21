@@ -14,10 +14,11 @@ import {
 	assertRpcConformance,
 	type IRpcConformanceCase,
 	runRpcConformanceCases,
+	waitFor,
+	within,
 } from "@/conformance/rpc-conformance.util";
 import type { IRpcConnection } from "@/interfaces/rpc-connection.interface";
 
-const CASE_TIMEOUT_MS = 2_000;
 const COMPATIBILITY_MESSAGE_BYTES = 1_048_576;
 
 type ConnectorFixture = Awaited<
@@ -828,37 +829,5 @@ function isAbortError(value: unknown): boolean {
 async function turns(count: number): Promise<void> {
 	for (let index = 0; index < count; index += 1) {
 		await Promise.resolve();
-	}
-}
-
-async function waitFor(
-	predicate: () => boolean,
-	operation: string,
-): Promise<void> {
-	const deadline = Date.now() + CASE_TIMEOUT_MS;
-	while (!predicate()) {
-		if (Date.now() >= deadline) {
-			throw new Error(`${operation} did not settle.`);
-		}
-		await new Promise<void>((resolve) => setTimeout(resolve, 0));
-	}
-}
-
-async function within<T>(promise: Promise<T>, operation: string): Promise<T> {
-	let timer: ReturnType<typeof setTimeout> | undefined;
-	try {
-		return await Promise.race([
-			promise,
-			new Promise<never>((_resolve, reject) => {
-				timer = setTimeout(
-					() => reject(new Error(`${operation} did not settle.`)),
-					CASE_TIMEOUT_MS,
-				);
-			}),
-		]);
-	} finally {
-		if (timer !== undefined) {
-			clearTimeout(timer);
-		}
 	}
 }

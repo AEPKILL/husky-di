@@ -30,21 +30,10 @@ const IScheduledRequirementsService =
 		"IScheduledRequirementsService",
 	);
 
-function createDeferred(): {
-	readonly promise: Promise<void>;
-	readonly resolve: () => void;
-} {
-	let resolve!: () => void;
-	const promise = new Promise<void>((nextResolve) => {
-		resolve = nextResolve;
-	});
-	return { promise, resolve };
-}
-
 describe("Default RPC Protocol remaining requirements", () => {
 	it("RPC-LEDGER-001 RPC-RESOURCE-005 charges Pending payload weight plus 256 bytes before assigning wire identity", async () => {
 		const network = createRpcTestNetwork();
-		const blocked = createDeferred();
+		const blocked = Promise.withResolvers<void>();
 		const descriptor = createRemoteServiceDescriptor(IRequirementsService, {
 			wireName: "example.requirements.v1",
 			methods: { run: true },
@@ -368,7 +357,7 @@ describe("Default RPC Protocol remaining requirements", () => {
 		const network = createRpcTestNetwork();
 		const acceptor = createRpcAcceptor();
 		const connectors = Array.from({ length: 64 }, () => createRpcConnector());
-		const closeSettlement = createDeferred();
+		const closeSettlement = Promise.withResolvers<void>();
 		network.setInterceptor((record) =>
 			record.direction === "acceptor" && record.value.kind === "close"
 				? { settlement: closeSettlement.promise }

@@ -38,15 +38,9 @@ import {
 	RpcProtocolSessionTransitionTypeEnum,
 } from "../../src/protocol";
 
-interface Deferred<T> {
-	readonly promise: Promise<T>;
-	resolve(value: T): void;
-	reject(error: unknown): void;
-}
-
 interface PendingSend {
 	readonly message: Uint8Array;
-	readonly deferred: Deferred<void>;
+	readonly deferred: PromiseWithResolvers<void>;
 }
 
 interface ConnectionPair {
@@ -102,7 +96,7 @@ class MemoryProtocolRuntime
 	private readonly _role: "connector" | "acceptor";
 	private readonly _host: IRpcProtocolConnectorHost | IRpcProtocolAcceptorHost;
 	private readonly _counterExhaustion: boolean;
-	private readonly _binding = createDeferred<void>();
+	private readonly _binding = Promise.withResolvers<void>();
 	private readonly _outgoing = new Map<number, IRpcProtocolInvocationSink>();
 	private readonly _incoming = new Map<
 		number,
@@ -431,8 +425,8 @@ export function createMemoryConnectorFixture(): IRpcConnectorAdapterConformanceF
 	return {
 		async create() {
 			const connectionSource = new Subject<IRpcConnection>();
-			const started = createDeferred<void>();
-			const startup = createDeferred<void>();
+			const started = Promise.withResolvers<void>();
+			const startup = Promise.withResolvers<void>();
 			let used = false;
 			let handedOff = false;
 			let terminal = false;
@@ -506,8 +500,8 @@ export function createMemoryAcceptorFixture(): IRpcAcceptorAdapterConformanceFix
 	return {
 		async create() {
 			const connectionSource = new Subject<IRpcConnection>();
-			const started = createDeferred<void>();
-			const startup = createDeferred<void>();
+			const started = Promise.withResolvers<void>();
+			const startup = Promise.withResolvers<void>();
 			let used = false;
 			let ready = false;
 			let terminal = false;
@@ -586,9 +580,9 @@ export function createMemoryAcceptorFixture(): IRpcAcceptorAdapterConformanceFix
 
 function createConnectionPair(): ConnectionPair {
 	const messageSource = new Subject<Uint8Array>();
-	const adapterClosed = createDeferred<void>();
+	const adapterClosed = Promise.withResolvers<void>();
 	const outbound: Uint8Array[] = [];
-	const outboundWaiters: Deferred<Uint8Array>[] = [];
+	const outboundWaiters: PromiseWithResolvers<Uint8Array>[] = [];
 	let blocked = false;
 	let pendingSend: PendingSend | undefined;
 	let closed = false;
@@ -617,7 +611,7 @@ function createConnectionPair(): ConnectionPair {
 			if (pendingSend !== undefined) {
 				return Promise.reject(new Error("Only one send may be unsettled."));
 			}
-			const deferred = createDeferred<void>();
+			const deferred = Promise.withResolvers<void>();
 			pendingSend = { message, deferred };
 			return deferred.promise;
 		},
@@ -648,7 +642,7 @@ function createConnectionPair(): ConnectionPair {
 			if (message !== undefined) {
 				return message;
 			}
-			const waiter = createDeferred<Uint8Array>();
+			const waiter = Promise.withResolvers<Uint8Array>();
 			outboundWaiters.push(waiter);
 			return waiter.promise;
 		},
@@ -676,22 +670,4 @@ function createConnectionPair(): ConnectionPair {
 	};
 
 	return { connection, remote };
-}
-
-function createDeferred<T>(): Deferred<T> {
-	let resolvePromise: ((value: T) => void) | undefined;
-	let rejectPromise: ((error: unknown) => void) | undefined;
-	const promise = new Promise<T>((resolve, reject) => {
-		resolvePromise = resolve;
-		rejectPromise = reject;
-	});
-	return {
-		promise,
-		resolve(value) {
-			resolvePromise?.(value);
-		},
-		reject(error) {
-			rejectPromise?.(error);
-		},
-	};
 }

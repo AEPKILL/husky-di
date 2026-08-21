@@ -348,28 +348,18 @@ export class RpcPeerImpl implements IRpcPeer {
 		const args = normalizeRpcApplicationArguments(
 			prepared.applicationArguments,
 		);
-		let reservation: RpcPeerInvocationReservation | undefined;
-		try {
-			reservation = this.reserveOutgoingProtocolInvocation(
-				service,
-				method,
-				args,
-			);
-		} catch (error) {
-			return Promise.reject(error);
-		}
+		const reservation = this.reserveOutgoingProtocolInvocation(
+			service,
+			method,
+			args,
+		);
 		if (reservation === undefined) {
 			return Promise.reject(
 				createRpcException(RpcExceptionCodeEnum.unavailable),
 			);
 		}
 
-		let invocation: RpcPeerCommittedInvocation;
-		try {
-			invocation = reservation.commit();
-		} catch (error) {
-			return Promise.reject(error);
-		}
+		const invocation = reservation.commit();
 		let removeAbortListener: (() => void) | undefined;
 		if (prepared.signal !== undefined) {
 			removeAbortListener = installRpcAbortListener(
@@ -378,16 +368,7 @@ export class RpcPeerImpl implements IRpcPeer {
 			);
 		}
 		invocation.start();
-		return invocation.result.then(
-			(value) => {
-				removeAbortListener?.();
-				return value;
-			},
-			(error: unknown) => {
-				removeAbortListener?.();
-				throw error;
-			},
-		);
+		return invocation.result.finally(removeAbortListener);
 	}
 
 	/** Package-private all-or-none group reservation seam. */
@@ -461,12 +442,7 @@ export class RpcPeerImpl implements IRpcPeer {
 		service: string,
 		method: string,
 	): RpcPeerCommittedInvocation {
-		let resolveResult!: (value: unknown) => void;
-		let rejectResult!: (error: unknown) => void;
-		const result = new Promise<unknown>((resolve, reject) => {
-			resolveResult = resolve;
-			rejectResult = reject;
-		});
+		const result = Promise.withResolvers<unknown>();
 		const observationId = createObservationId();
 		const startedAt = Date.now();
 		let published = false;
@@ -512,7 +488,7 @@ export class RpcPeerImpl implements IRpcPeer {
 					outcome: RpcCallStatusEnum.fulfilled,
 					durationMs,
 				});
-				resolveResult(
+				result.resolve(
 					outcome.type === RpcCallTerminalTypeEnum.returned
 						? outcome.value.value
 						: undefined,
@@ -531,7 +507,7 @@ export class RpcPeerImpl implements IRpcPeer {
 				code: outcome.code,
 				durationMs,
 			});
-			rejectResult(createRpcException(outcome.code));
+			result.reject(createRpcException(outcome.code));
 		};
 
 		let protocolInvocation: ReturnType<typeof reservation.commit>;
@@ -565,7 +541,7 @@ export class RpcPeerImpl implements IRpcPeer {
 		let canceled = false;
 		let started = false;
 		return Object.freeze<RpcPeerCommittedInvocation>({
-			result,
+			result: result.promise,
 			cancel: () => {
 				if (settled || canceled) {
 					return;
@@ -574,7 +550,7 @@ export class RpcPeerImpl implements IRpcPeer {
 				try {
 					protocolInvocation.cancel();
 				} catch (error) {
-					rejectResult(this.#protocolFailure(error));
+					result.reject(this.#protocolFailure(error));
 				}
 			},
 			start: () => {
@@ -585,7 +561,7 @@ export class RpcPeerImpl implements IRpcPeer {
 				try {
 					protocolInvocation.start();
 				} catch (error) {
-					rejectResult(this.#protocolFailure(error));
+					result.reject(this.#protocolFailure(error));
 				}
 			},
 		});
@@ -749,13 +725,10 @@ export class RpcPeerImpl implements IRpcPeer {
 		let observationId = "";
 		let startedAt = 0;
 		const abortController = new AbortController();
-		let resolveHandlerOutcome!: (outcome: RpcHandlerOutcome) => void;
-		const handlerOutcome = new Promise<RpcHandlerOutcome>((resolve) => {
-			resolveHandlerOutcome = resolve;
-		});
+		const handlerOutcome = Promise.withResolvers<RpcHandlerOutcome>();
 
 		const call = Object.freeze<IRpcProtocolIncomingHandlerCall>({
-			handlerOutcome,
+			handlerOutcome: handlerOutcome.promise,
 			finish: (outcome: RpcIncomingTerminal) => {
 				if (settled || state !== "committed") {
 					this.#onProtocolFault(new Error("Incoming call finished twice."));
@@ -777,7 +750,7 @@ export class RpcPeerImpl implements IRpcPeer {
 					abortController.abort();
 				}
 				if (!handlerStarted) {
-					resolveHandlerOutcome({
+					handlerOutcome.resolve({
 						type: RpcCallTerminalTypeEnum.notStarted,
 					});
 				}
@@ -809,7 +782,7 @@ export class RpcPeerImpl implements IRpcPeer {
 
 		const runHandler = (releasePermit: () => void): boolean => {
 			if (settled) {
-				resolveHandlerOutcome({ type: RpcCallTerminalTypeEnum.notStarted });
+				handlerOutcome.resolve({ type: RpcCallTerminalTypeEnum.notStarted });
 				return false;
 			}
 			handlerStarted = true;
@@ -821,7 +794,7 @@ export class RpcPeerImpl implements IRpcPeer {
 			try {
 				result = Reflect.apply(route.handler, route.implementation, args);
 			} catch {
-				resolveHandlerOutcome({
+				handlerOutcome.resolve({
 					type: RpcCallTerminalTypeEnum.failed,
 					code: RpcExceptionCodeEnum.handlerFailed,
 				});
@@ -831,7 +804,7 @@ export class RpcPeerImpl implements IRpcPeer {
 			void Promise.resolve(result).then(
 				(value) => {
 					if (settled) {
-						resolveHandlerOutcome({
+						handlerOutcome.resolve({
 							type: RpcCallTerminalTypeEnum.failed,
 							code: RpcExceptionCodeEnum.handlerFailed,
 						});
@@ -840,25 +813,25 @@ export class RpcPeerImpl implements IRpcPeer {
 					}
 					try {
 						if (value === undefined) {
-							resolveHandlerOutcome({
+							handlerOutcome.resolve({
 								type: RpcCallTerminalTypeEnum.returnedVoid,
 							});
 						} else {
 							const snapshot = normalizeRpcApplicationValue(value);
 							if (settled) {
-								resolveHandlerOutcome({
+								handlerOutcome.resolve({
 									type: RpcCallTerminalTypeEnum.failed,
 									code: RpcExceptionCodeEnum.handlerFailed,
 								});
 								return;
 							}
-							resolveHandlerOutcome({
+							handlerOutcome.resolve({
 								type: RpcCallTerminalTypeEnum.returned,
 								value: snapshot,
 							});
 						}
 					} catch {
-						resolveHandlerOutcome({
+						handlerOutcome.resolve({
 							type: RpcCallTerminalTypeEnum.failed,
 							code: RpcExceptionCodeEnum.handlerFailed,
 						});
@@ -867,7 +840,7 @@ export class RpcPeerImpl implements IRpcPeer {
 					}
 				},
 				() => {
-					resolveHandlerOutcome({
+					handlerOutcome.resolve({
 						type: RpcCallTerminalTypeEnum.failed,
 						code: RpcExceptionCodeEnum.handlerFailed,
 					});

@@ -12,7 +12,7 @@ Status: resolved
 - 权威领域词汇以根目录的 [`CONTEXT.md`](../../CONTEXT.md) 为准。
 - 每个决策会话都应使用 `grilling`、`domain-modeling`、`codebase-design` 和 `ponytail`；prototype ticket 还应使用 `prototype`，research ticket 应使用 `research`。
 - 公开 Interface 与 Module seam 必须遵从 SOLID；同时以 deep-module 与 `ponytail` 约束避免为了形式上的 SOLID 暴露没有真实变体的浅抽象。
-- [`user-facing-rpc-interface`](../../packages/remote/examples/user-facing-rpc-interface/README.md) 是历史 throwaway design input，不是生产 Interface。
+- `codex/prototype-rpc-interface@20a9e83` 是历史 throwaway design input，不是生产 Interface。
 - 本地图只完成规划与规范路线，不实施生产代码。后续代码变更必须使用 `husky-di-code-standard`，并让 normative specification 与 `specification.test.ts` 在同一变更中更新。
 - v1 只支持双向 unary 调用；本地同步结果在远端变为 Promise，不支持 notification 或 streaming。
 - `RpcPeer` 是稳定的远端对等方；`RpcConnector` 与 `RpcAcceptor` 是 Topology Owner。Logical Session 可跨瞬时 Physical Connection 断线恢复，且对调用者保持透明，但远端进程重启可以终止 Session。

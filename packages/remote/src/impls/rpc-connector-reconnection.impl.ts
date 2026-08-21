@@ -4,12 +4,7 @@
  * @created 2026-08-21 02:14:00
  */
 
-import {
-	type Observable,
-	ReplaySubject,
-	Subject,
-	type Subscription,
-} from "rxjs";
+import { type Observable, ReplaySubject, Subject, Subscription } from "rxjs";
 
 import { RpcConnectorReconnectionAttemptFailureStageEnum } from "@/enums/rpc-connector-reconnection-attempt-failure-stage.enum";
 import { RpcConnectorReconnectionEventTypeEnum } from "@/enums/rpc-connector-reconnection-event-type.enum";
@@ -40,8 +35,7 @@ export class RpcConnectorReconnectionImpl implements IRpcConnectorReconnection {
 	readonly state$: Observable<RpcConnectorReconnectionState>;
 	readonly #eventSubject = new Subject<RpcConnectorReconnectionEvent>();
 	readonly event$: Observable<RpcConnectorReconnectionEvent>;
-	#connectorSubscription: Subscription | undefined;
-	#peerSubscription: Subscription | undefined;
+	#lifecycleSubscription: Subscription | undefined;
 	#retryTimer: ReturnType<typeof setTimeout> | undefined;
 	#attemptController: AbortController | undefined;
 	#attemptTimer: ReturnType<typeof setTimeout> | undefined;
@@ -121,12 +115,7 @@ export class RpcConnectorReconnectionImpl implements IRpcConnectorReconnection {
 		if (this.#stopTask !== undefined) {
 			return this.#stopTask;
 		}
-		const attemptTask = this.#attemptTask;
-		this.#stopTask =
-			attemptTask?.then(
-				() => undefined,
-				() => undefined,
-			) ?? Promise.resolve();
+		this.#stopTask = this.#attemptTask?.catch(() => {}) ?? Promise.resolve();
 		this.#commitStopped(RpcConnectorReconnectionStopReasonEnum.requested);
 		return this.#stopTask;
 	}
@@ -302,30 +291,27 @@ export class RpcConnectorReconnectionImpl implements IRpcConnectorReconnection {
 			return;
 		}
 
-		const connectorSubscription = this.connector.state$.subscribe((state) => {
-			if (state.status !== RpcStateStatusEnum.active) {
-				this.#commitStopped(
-					RpcConnectorReconnectionStopReasonEnum.connectorTerminated,
-				);
-			}
-		});
-		this.#connectorSubscription = connectorSubscription;
+		const subscription = new Subscription();
+		this.#lifecycleSubscription = subscription;
+		subscription.add(
+			this.connector.state$.subscribe((state) => {
+				if (state.status !== RpcStateStatusEnum.active) {
+					this.#commitStopped(
+						RpcConnectorReconnectionStopReasonEnum.connectorTerminated,
+					);
+				}
+			}),
+		);
 		if (this.#readState().status === RpcStateStatusEnum.stopped) {
-			connectorSubscription.unsubscribe();
-			this.#connectorSubscription = undefined;
 			return;
 		}
 
-		const peerSubscription = this.connector.peer.state$.subscribe(() =>
-			this.#observePeerState(),
+		subscription.add(
+			this.connector.peer.state$.subscribe(() => this.#observePeerState()),
 		);
-		this.#peerSubscription = peerSubscription;
-		if (this.#readState().status === RpcStateStatusEnum.stopped) {
-			peerSubscription.unsubscribe();
-			this.#peerSubscription = undefined;
-			return;
+		if (this.#readState().status !== RpcStateStatusEnum.stopped) {
+			this.#observePeerState();
 		}
-		this.#observePeerState();
 	}
 
 	#observePeerState(): void {
@@ -357,21 +343,12 @@ export class RpcConnectorReconnectionImpl implements IRpcConnectorReconnection {
 		adapter: ReturnType<RpcConnectorAdapterFactory>,
 		controller: AbortController,
 	): Promise<void> {
-		let resolveAttempt!: () => void;
-		let rejectAttempt!: (error: unknown) => void;
-		const attemptTask = new Promise<void>((resolve, reject) => {
-			resolveAttempt = resolve;
-			rejectAttempt = reject;
-		});
-		this.#attemptTask = attemptTask;
-		try {
-			this.connector
-				.connect({ adapter, signal: controller.signal })
-				.then(resolveAttempt, rejectAttempt);
-		} catch (error) {
-			rejectAttempt(error);
-		}
-		return attemptTask;
+		const attempt = Promise.withResolvers<void>();
+		this.#attemptTask = attempt.promise;
+		Promise.try(() =>
+			this.connector.connect({ adapter, signal: controller.signal }),
+		).then(attempt.resolve, attempt.reject);
+		return attempt.promise;
 	}
 
 	#readInitialFailureReason(): RpcConnectorReconnectionStopReasonEnum {
@@ -410,10 +387,8 @@ export class RpcConnectorReconnectionImpl implements IRpcConnectorReconnection {
 		if (this.state.status === RpcStateStatusEnum.stopped) {
 			return;
 		}
-		this.#connectorSubscription?.unsubscribe();
-		this.#connectorSubscription = undefined;
-		this.#peerSubscription?.unsubscribe();
-		this.#peerSubscription = undefined;
+		this.#lifecycleSubscription?.unsubscribe();
+		this.#lifecycleSubscription = undefined;
 		if (this.#retryTimer !== undefined) {
 			clearTimeout(this.#retryTimer);
 			this.#retryTimer = undefined;

@@ -182,11 +182,7 @@ describe("installed @husky-di/remote package", () => {
 			"transcripts.json",
 		]);
 		expect(listFiles(installedRoot)).not.toEqual(
-			expect.arrayContaining([
-				"src/index.ts",
-				"tests/specification.test.ts",
-				"examples/user-facing-rpc-interface/rpc-interface.ts",
-			]),
+			expect.arrayContaining(["src/index.ts", "tests/specification.test.ts"]),
 		);
 		const artifactFiles = listFiles(installedRoot);
 		expect(artifactFiles).toEqual(

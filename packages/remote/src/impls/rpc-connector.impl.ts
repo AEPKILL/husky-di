@@ -43,6 +43,7 @@ import {
 } from "@/utils/rpc-cancellation.util";
 import { RpcHandlerScheduler } from "@/utils/rpc-handler-scheduler.util";
 import { readRpcClosedOptionsRecord } from "@/utils/rpc-runtime-policy.util";
+import { isRpcSessionTransitionAllowed } from "@/utils/rpc-session-transition.util";
 
 const connectorConnectOptionKeys = new Set(["adapter", "signal"]);
 
@@ -85,7 +86,7 @@ export class RpcConnectorImpl implements IRpcConnector {
 	readonly #stateSubject: BehaviorSubject<RpcConnectorState>;
 	readonly #eventSubject = new Subject<RpcEvent>();
 	readonly #faultingSessions = new Set<IRpcProtocolSession>();
-	readonly #ownedConnections: IRpcConnection[] = [];
+	readonly #ownedConnections = new Set<IRpcConnection>();
 	readonly #connectionCloseTasks = new WeakMap<IRpcConnection, Promise<void>>();
 	readonly #connectionCleanupEntries = new WeakMap<
 		IRpcConnection,
@@ -153,7 +154,7 @@ export class RpcConnectorImpl implements IRpcConnector {
 			(this.peer.state.status !== RpcStateStatusEnum.unbound &&
 				this.peer.state.status !== RpcStateStatusEnum.recovering) ||
 			this.#attempt !== undefined ||
-			this.#ownedConnections.length >= this.#connectionLimit
+			this.#ownedConnections.size >= this.#connectionLimit
 		) {
 			return Promise.reject(
 				createRpcException(RpcExceptionCodeEnum.unavailable),
@@ -191,17 +192,14 @@ export class RpcConnectorImpl implements IRpcConnector {
 		if (fresh) {
 			this.peer.commitState({ status: RpcStateStatusEnum.connecting });
 		}
-		let rejectOwnerAbort!: (error: Error) => void;
-		const ownerAbort = new Promise<never>((_resolve, reject) => {
-			rejectOwnerAbort = reject;
-		});
+		const { promise: ownerAbort, reject: rejectOwnerAbort } =
+			Promise.withResolvers<never>();
 		void ownerAbort.catch(() => {});
-		let resolveAdapterStartup!: (value?: unknown) => void;
-		let rejectAdapterStartup!: (error: unknown) => void;
-		const adapterStartup = new Promise<unknown>((resolve, reject) => {
-			resolveAdapterStartup = resolve;
-			rejectAdapterStartup = reject;
-		});
+		const {
+			promise: adapterStartup,
+			resolve: resolveAdapterStartup,
+			reject: rejectAdapterStartup,
+		} = Promise.withResolvers<void>();
 		let attempt!: RpcConnectorAttempt;
 		const startupCleanupTask = adapterStartup.then(
 			() => undefined,
@@ -228,18 +226,16 @@ export class RpcConnectorImpl implements IRpcConnector {
 		};
 		this.#attempt = attempt;
 
-		let resolveSource!: () => void;
-		let rejectSource!: (error: unknown) => void;
-		const sourceTerminal = new Promise<void>((resolve, reject) => {
-			resolveSource = resolve;
-			rejectSource = reject;
-		});
-		let resolveBinding!: () => void;
-		let rejectBinding!: (error: unknown) => void;
-		const binding = new Promise<void>((resolve, reject) => {
-			resolveBinding = resolve;
-			rejectBinding = reject;
-		});
+		const {
+			promise: sourceTerminal,
+			resolve: resolveSource,
+			reject: rejectSource,
+		} = Promise.withResolvers<void>();
+		const {
+			promise: binding,
+			resolve: resolveBinding,
+			reject: rejectBinding,
+		} = Promise.withResolvers<void>();
 
 		try {
 			attempt.subscription = connectionSource.subscribe({
@@ -415,12 +411,12 @@ export class RpcConnectorImpl implements IRpcConnector {
 
 	#ownConnection(connection: IRpcConnection): void {
 		if (
-			this.#ownedConnections.includes(connection) ||
+			this.#ownedConnections.has(connection) ||
 			this.#connectionCloseTasks.has(connection)
 		) {
 			return;
 		}
-		this.#ownedConnections.push(connection);
+		this.#ownedConnections.add(connection);
 		const cleanup = this.#admitOwnedCleanup(() =>
 			this.#directClose(connection),
 		);
@@ -439,12 +435,11 @@ export class RpcConnectorImpl implements IRpcConnector {
 		}
 		this.#ownConnection(connection);
 
-		let resolveClose!: () => void;
-		let rejectClose!: (error: unknown) => void;
-		const task = new Promise<void>((resolve, reject) => {
-			resolveClose = resolve;
-			rejectClose = reject;
-		});
+		const {
+			promise: task,
+			resolve: resolveClose,
+			reject: rejectClose,
+		} = Promise.withResolvers<void>();
 		this.#connectionCloseTasks.set(connection, task);
 		const cleanup = this.#connectionCleanupEntries.get(connection);
 		if (cleanup !== undefined) {
@@ -519,10 +514,7 @@ export class RpcConnectorImpl implements IRpcConnector {
 	}
 
 	#releaseOwnedConnection(connection: IRpcConnection): void {
-		const index = this.#ownedConnections.indexOf(connection);
-		if (index >= 0) {
-			this.#ownedConnections.splice(index, 1);
-		}
+		this.#ownedConnections.delete(connection);
 		this.#connectionTerminalSubscriptions.get(connection)?.unsubscribe();
 		this.#connectionTerminalSubscriptions.delete(connection);
 	}
@@ -606,7 +598,13 @@ export class RpcConnectorImpl implements IRpcConnector {
 		) {
 			return;
 		}
-		if (!this.#isSessionTransitionAllowed(transition)) {
+		if (
+			!isRpcSessionTransitionAllowed(
+				this.state.status,
+				this.peer.state,
+				transition,
+			)
+		) {
 			this.#faultSession(
 				session,
 				RpcCloseReasonEnum.protocolFault,
@@ -643,46 +641,6 @@ export class RpcConnectorImpl implements IRpcConnector {
 			return;
 		}
 		this.#closeFromSession(transition.reason, transition.cause);
-	}
-
-	#isSessionTransitionAllowed(
-		transition: RpcProtocolSessionTransition,
-	): boolean {
-		const peerState = this.peer.state;
-		if (this.state.status === RpcStateStatusEnum.draining) {
-			return (
-				transition.type === RpcProtocolSessionTransitionTypeEnum.closed &&
-				peerState.status === RpcStateStatusEnum.draining &&
-				transition.reason !== RpcCloseReasonEnum.recoveryExpired &&
-				(transition.reason !== RpcCloseReasonEnum.counterExhaustion ||
-					peerState.reason === RpcCloseReasonEnum.counterExhaustion)
-			);
-		}
-		if (this.state.status !== RpcStateStatusEnum.active) {
-			return false;
-		}
-		if (transition.type === RpcProtocolSessionTransitionTypeEnum.recovering) {
-			return peerState.status === RpcStateStatusEnum.connected;
-		}
-		if (transition.type === RpcProtocolSessionTransitionTypeEnum.recovered) {
-			return peerState.status === RpcStateStatusEnum.recovering;
-		}
-		if (transition.type === RpcProtocolSessionTransitionTypeEnum.draining) {
-			return (
-				peerState.status === RpcStateStatusEnum.connected ||
-				peerState.status === RpcStateStatusEnum.recovering
-			);
-		}
-		if (transition.reason === RpcCloseReasonEnum.recoveryExpired) {
-			return peerState.status === RpcStateStatusEnum.recovering;
-		}
-		if (transition.reason === RpcCloseReasonEnum.counterExhaustion) {
-			return (
-				peerState.status === RpcStateStatusEnum.draining &&
-				peerState.reason === RpcCloseReasonEnum.counterExhaustion
-			);
-		}
-		return transition.reason !== RpcCloseReasonEnum.gracefulShutdown;
 	}
 
 	#closeFromSession(reason: RpcSessionCloseReason, cause?: Error): void {
@@ -796,10 +754,10 @@ export class RpcConnectorImpl implements IRpcConnector {
 	}
 
 	#createTerminationTask(): Promise<void> {
-		const task = new Promise<void>((resolve, reject) => {
-			this.#resolveTermination = resolve;
-			this.#rejectTermination = reject;
-		});
+		const termination = Promise.withResolvers<void>();
+		const task = termination.promise;
+		this.#resolveTermination = termination.resolve;
+		this.#rejectTermination = termination.reject;
 		this.#terminationTask = task;
 		void task.catch(() => {});
 		return task;
@@ -1094,7 +1052,7 @@ export class RpcConnectorImpl implements IRpcConnector {
 			}
 		}
 		this.#connectionTerminalSubscriptions.clear();
-		this.#ownedConnections.splice(0);
+		this.#ownedConnections.clear();
 		this.#cleanupLedger.splice(0);
 	}
 

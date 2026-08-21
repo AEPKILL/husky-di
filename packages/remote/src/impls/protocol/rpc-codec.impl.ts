@@ -333,26 +333,13 @@ class BoundedJsonParser {
 }
 
 function validatePairedSurrogates(value: string, label: string): void {
-	for (let index = 0; index < value.length; index += 1) {
-		const code = value.charCodeAt(index);
-		if (code >= 0xd800 && code <= 0xdbff) {
-			const next = value.charCodeAt(index + 1);
-			if (Number.isNaN(next) || next < 0xdc00 || next > 0xdfff) {
-				throw new Error(`RPC JSON ${label} contains an unpaired surrogate.`);
-			}
-			index += 1;
-		} else if (code >= 0xdc00 && code <= 0xdfff) {
-			throw new Error(`RPC JSON ${label} contains an unpaired surrogate.`);
-		}
+	if (!value.isWellFormed()) {
+		throw new Error(`RPC JSON ${label} contains an unpaired surrogate.`);
 	}
 }
 
 function isJsonRecord(value: RpcJsonValue): value is RpcJsonRecord {
 	return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function own(record: RpcJsonRecord, key: string): boolean {
-	return Object.getOwnPropertyDescriptor(record, key) !== undefined;
 }
 
 function readString(record: RpcJsonRecord, key: string): string {
@@ -545,7 +532,7 @@ function validateRpcResumeOutcome(record: RpcJsonRecord): RpcResumeOutcome {
 		if (!resumeRejectCodes.has(code as RpcResumeRejectCodeEnum)) {
 			throw new Error("RPC resume reject code is outside the profile union.");
 		}
-		if (own(record, "message")) {
+		if (Object.hasOwn(record, "message")) {
 			throw new Error("RPC resume reject must not carry a message.");
 		}
 		readBase64Url32(record, "responderNonce");
@@ -560,7 +547,7 @@ function validateRpcActiveRecord(record: RpcJsonRecord): RpcActiveRecord {
 	switch (kind) {
 		case RpcWireRecordKindEnum.message:
 			readSequence(record, "seq");
-			if (own(record, "ackThrough")) {
+			if (Object.hasOwn(record, "ackThrough")) {
 				readAckCursor(record, "ackThrough");
 			}
 			validateSemanticMessage(record.message);

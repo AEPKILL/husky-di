@@ -52,7 +52,7 @@
 		"dev": "rslib build --watch",
 		"test": "pnpm run typecheck && vitest run && pnpm run test:browser",
 		"test:browser": "playwright test --config playwright.config.ts",
-		"typecheck": "tsc -p tsconfig.json && tsc -p tests/tsconfig.json && tsc -p examples/user-facing-rpc-interface/tsconfig.json"
+		"typecheck": "tsc -p tsconfig.json && tsc -p tests/tsconfig.json"
 	},
 	"devDependencies": {
 		"@husky-di/config": "workspace:*",

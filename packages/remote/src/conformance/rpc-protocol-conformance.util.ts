@@ -11,6 +11,8 @@ import {
 	assertRpcConformance,
 	type IRpcConformanceCase,
 	runRpcConformanceCases,
+	waitFor,
+	within,
 } from "@/conformance/rpc-conformance.util";
 import { RpcCallTerminalTypeEnum } from "@/enums/protocol/rpc-call-terminal-type.enum";
 import { RpcIncomingCallKindEnum } from "@/enums/protocol/rpc-incoming-call-kind.enum";
@@ -40,8 +42,11 @@ import type {
 	RpcUnknownCallFailure,
 } from "@/interfaces/protocol/rpc-protocol.interface";
 import type { IRpcConnection } from "@/interfaces/rpc-connection.interface";
-
-const CASE_TIMEOUT_MS = 2_000;
+import {
+	normalizeRpcApplicationArguments,
+	normalizeRpcApplicationValue,
+	rpcApplicationValuesEqual,
+} from "@/utils/rpc-application-value.util";
 
 const CONFORMANCE_POLICY: IRpcProtocolRuntimePolicy = Object.freeze({
 	maxSessions: 4,
@@ -765,11 +770,9 @@ function createSessionHostProbe(
 	};
 	const common: IRpcProtocolHost = {
 		policy: CONFORMANCE_POLICY,
-		normalizeApplicationValue: (value) => normalizeSnapshot(value),
-		normalizeApplicationArguments: (value) =>
-			normalizeSnapshot(value) as IRpcApplicationArgumentsSnapshot,
-		applicationValuesEqual: (left, right) =>
-			applicationValuesEqual(left.value, right.value),
+		normalizeApplicationValue: normalizeRpcApplicationValue,
+		normalizeApplicationArguments: normalizeRpcApplicationArguments,
+		applicationValuesEqual: rpcApplicationValuesEqual,
 		fault: (reason, error) => ownerFaults.push({ reason, error }),
 	};
 	const attach = (session: IRpcProtocolSession): IRpcProtocolSessionHost => {
@@ -886,98 +889,6 @@ async function invoke(
 	return within(outcome, "Invocation sink");
 }
 
-function normalizeSnapshot(value: unknown): IRpcApplicationSnapshot {
-	const normalized = normalizeApplicationValue(value);
-	return Object.freeze({
-		value: normalized,
-		weight: applicationValueWeight(normalized),
-	}) as IRpcApplicationSnapshot;
-}
-
-function normalizeApplicationValue(value: unknown): RpcApplicationValue {
-	if (
-		value === null ||
-		typeof value === "boolean" ||
-		typeof value === "string" ||
-		(typeof value === "number" &&
-			Number.isFinite(value) &&
-			!Object.is(value, -0))
-	) {
-		return value;
-	}
-	if (Array.isArray(value)) {
-		return Object.freeze(value.map(normalizeApplicationValue));
-	}
-	if (typeof value === "object" && value !== null) {
-		const record: Record<string, RpcApplicationValue> = {};
-		for (const key of Object.keys(value).sort()) {
-			record[key] = normalizeApplicationValue(Reflect.get(value, key));
-		}
-		return Object.freeze(record);
-	}
-	throw new TypeError(
-		"Conformance value is outside the Application Value domain.",
-	);
-}
-
-function applicationValuesEqual(left: unknown, right: unknown): boolean {
-	if (Object.is(left, right)) {
-		return true;
-	}
-	if (Array.isArray(left) && Array.isArray(right)) {
-		return (
-			left.length === right.length &&
-			left.every((value, index) => applicationValuesEqual(value, right[index]))
-		);
-	}
-	if (
-		typeof left === "object" &&
-		left !== null &&
-		typeof right === "object" &&
-		right !== null
-	) {
-		const leftKeys = Object.keys(left).sort();
-		const rightKeys = Object.keys(right).sort();
-		return (
-			leftKeys.length === rightKeys.length &&
-			leftKeys.every(
-				(key, index) =>
-					key === rightKeys[index] &&
-					applicationValuesEqual(
-						Reflect.get(left, key),
-						Reflect.get(right, key),
-					),
-			)
-		);
-	}
-	return false;
-}
-
-function applicationValueWeight(value: RpcApplicationValue): number {
-	if (
-		value === null ||
-		typeof value === "boolean" ||
-		typeof value === "number"
-	) {
-		return 1;
-	}
-	if (typeof value === "string") {
-		return 1 + value.length;
-	}
-	if (Array.isArray(value)) {
-		return (
-			1 + value.reduce((total, item) => total + applicationValueWeight(item), 0)
-		);
-	}
-	return (
-		1 +
-		Object.entries(value).reduce(
-			(total, [key, item]) => total + key.length + applicationValueWeight(item),
-			0,
-		)
-	);
-}
-
 function outcomesEqual(left: RpcCallOutcome, right: RpcCallOutcome): boolean {
 	if (left.type !== right.type) {
 		return false;
@@ -986,7 +897,7 @@ function outcomesEqual(left: RpcCallOutcome, right: RpcCallOutcome): boolean {
 		left.type === RpcCallTerminalTypeEnum.returned &&
 		right.type === RpcCallTerminalTypeEnum.returned
 	) {
-		return applicationValuesEqual(left.value.value, right.value.value);
+		return rpcApplicationValuesEqual(left.value, right.value);
 	}
 	if (
 		left.type === RpcCallTerminalTypeEnum.failed &&
@@ -1010,36 +921,4 @@ function isCounterDrain(transition: RpcProtocolSessionTransition): boolean {
 		transition.type === RpcProtocolSessionTransitionTypeEnum.draining &&
 		transition.reason === RpcCloseReasonEnum.counterExhaustion
 	);
-}
-
-async function waitFor(
-	predicate: () => boolean,
-	operation: string,
-): Promise<void> {
-	const deadline = Date.now() + CASE_TIMEOUT_MS;
-	while (!predicate()) {
-		if (Date.now() >= deadline) {
-			throw new Error(`${operation} did not settle.`);
-		}
-		await new Promise<void>((resolve) => setTimeout(resolve, 0));
-	}
-}
-
-async function within<T>(promise: Promise<T>, operation: string): Promise<T> {
-	let timer: ReturnType<typeof setTimeout> | undefined;
-	try {
-		return await Promise.race([
-			promise,
-			new Promise<never>((_resolve, reject) => {
-				timer = setTimeout(
-					() => reject(new Error(`${operation} did not settle.`)),
-					CASE_TIMEOUT_MS,
-				);
-			}),
-		]);
-	} finally {
-		if (timer !== undefined) {
-			clearTimeout(timer);
-		}
-	}
 }

@@ -85,10 +85,6 @@ interface IRpcQueuedSemantic {
 	readonly replay: IRpcReplayEntry;
 }
 
-function hasOwn(record: RpcJsonRecord, key: string): boolean {
-	return Object.getOwnPropertyDescriptor(record, key) !== undefined;
-}
-
 /** Retains one Session Incarnation independently from its current Connection. */
 export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 	readonly _role: RpcProtocolRoleEnum;
@@ -485,9 +481,9 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 		if (this._shutdownTask !== undefined) {
 			return this._shutdownTask;
 		}
-		this._shutdownTask = new Promise<void>((resolve) => {
-			this._resolveShutdown = resolve;
-		});
+		const { promise, resolve } = Promise.withResolvers<void>();
+		this._shutdownTask = promise;
+		this._resolveShutdown = resolve;
 		this._draining = true;
 		this._checkGracefulShutdown();
 		return this._shutdownTask;
@@ -499,29 +495,7 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 		}
 		this._closed = true;
 		this._clearTimers();
-		for (const entry of [...this._invocations]) {
-			this._finishInvocation(
-				entry,
-				entry.admitted
-					? {
-							type: RpcCallTerminalTypeEnum.failed,
-							code: RpcExceptionCodeEnum.outcomeUnknown,
-						}
-					: {
-							type: RpcCallTerminalTypeEnum.failed,
-							code: RpcExceptionCodeEnum.unavailable,
-						},
-			);
-			this._retireInvocation(entry);
-		}
-		for (const incoming of this._incomingCalls.values()) {
-			if (!incoming.terminalSelected && incoming.call !== undefined) {
-				incoming.terminalSelected = true;
-				incoming.call.finish({
-					type: RpcCallTerminalTypeEnum.sessionTerminated,
-				});
-			}
-		}
+		this._terminateOpenCalls();
 		this._binding?.endpoint.fenceAndClose();
 		this._binding = undefined;
 		this._proofKey = undefined;
@@ -674,7 +648,7 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 			throw new Error("Default RPC result has no matching Logical Call.");
 		}
 		let outcome: RpcCallOutcome;
-		if (hasOwn(message, "value")) {
+		if (Object.hasOwn(message, "value")) {
 			outcome = {
 				type: RpcCallTerminalTypeEnum.returned,
 				value: this._host.normalizeApplicationValue(message.value),
@@ -691,7 +665,7 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 		if (invocation === undefined) {
 			throw new Error("Default RPC error has no matching Logical Call.");
 		}
-		if (hasOwn(message.error as RpcJsonRecord, "details")) {
+		if (Object.hasOwn(message.error as RpcJsonRecord, "details")) {
 			this._host.normalizeApplicationValue(message.error.details);
 		}
 		this._finishInvocation(invocation, {
@@ -1253,6 +1227,32 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 		entry.sink.finish(outcome);
 	}
 
+	_terminateOpenCalls(): void {
+		for (const entry of [...this._invocations]) {
+			this._finishInvocation(
+				entry,
+				entry.admitted
+					? {
+							type: RpcCallTerminalTypeEnum.failed,
+							code: RpcExceptionCodeEnum.outcomeUnknown,
+						}
+					: {
+							type: RpcCallTerminalTypeEnum.failed,
+							code: RpcExceptionCodeEnum.unavailable,
+						},
+			);
+			this._retireInvocation(entry);
+		}
+		for (const incoming of this._incomingCalls.values()) {
+			if (!incoming.terminalSelected && incoming.call !== undefined) {
+				incoming.terminalSelected = true;
+				incoming.call.finish({
+					type: RpcCallTerminalTypeEnum.sessionTerminated,
+				});
+			}
+		}
+	}
+
 	_retireInvocation(entry: IRpcInvocationEntry): void {
 		if (entry.retired) {
 			return;
@@ -1354,29 +1354,7 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 		if (this._closed || !this._recovering) {
 			return;
 		}
-		for (const entry of [...this._invocations]) {
-			this._finishInvocation(
-				entry,
-				entry.admitted
-					? {
-							type: RpcCallTerminalTypeEnum.failed,
-							code: RpcExceptionCodeEnum.outcomeUnknown,
-						}
-					: {
-							type: RpcCallTerminalTypeEnum.failed,
-							code: RpcExceptionCodeEnum.unavailable,
-						},
-			);
-			this._retireInvocation(entry);
-		}
-		for (const incoming of this._incomingCalls.values()) {
-			if (!incoming.terminalSelected && incoming.call !== undefined) {
-				incoming.terminalSelected = true;
-				incoming.call.finish({
-					type: RpcCallTerminalTypeEnum.sessionTerminated,
-				});
-			}
-		}
+		this._terminateOpenCalls();
 		this._closed = true;
 		this._clearTimers();
 		this._proofKey = undefined;
@@ -1398,29 +1376,7 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 		if (this._closed) {
 			return;
 		}
-		for (const entry of [...this._invocations]) {
-			this._finishInvocation(
-				entry,
-				entry.admitted
-					? {
-							type: RpcCallTerminalTypeEnum.failed,
-							code: RpcExceptionCodeEnum.outcomeUnknown,
-						}
-					: {
-							type: RpcCallTerminalTypeEnum.failed,
-							code: RpcExceptionCodeEnum.unavailable,
-						},
-			);
-			this._retireInvocation(entry);
-		}
-		for (const incoming of this._incomingCalls.values()) {
-			if (!incoming.terminalSelected && incoming.call !== undefined) {
-				incoming.terminalSelected = true;
-				incoming.call.finish({
-					type: RpcCallTerminalTypeEnum.sessionTerminated,
-				});
-			}
-		}
+		this._terminateOpenCalls();
 		this._closed = true;
 		this._clearTimers();
 		this._binding?.endpoint.fenceAndClose();
@@ -1440,29 +1396,7 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 		if (this._closed) {
 			return;
 		}
-		for (const entry of [...this._invocations]) {
-			this._finishInvocation(
-				entry,
-				entry.admitted
-					? {
-							type: RpcCallTerminalTypeEnum.failed,
-							code: RpcExceptionCodeEnum.outcomeUnknown,
-						}
-					: {
-							type: RpcCallTerminalTypeEnum.failed,
-							code: RpcExceptionCodeEnum.unavailable,
-						},
-			);
-			this._retireInvocation(entry);
-		}
-		for (const incoming of this._incomingCalls.values()) {
-			if (!incoming.terminalSelected && incoming.call !== undefined) {
-				incoming.terminalSelected = true;
-				incoming.call.finish({
-					type: RpcCallTerminalTypeEnum.sessionTerminated,
-				});
-			}
-		}
+		this._terminateOpenCalls();
 		this._closed = true;
 		this._clearTimers();
 		this._binding?.endpoint.fenceAndClose();

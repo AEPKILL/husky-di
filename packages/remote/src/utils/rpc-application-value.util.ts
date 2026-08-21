@@ -40,17 +40,8 @@ function utf8Length(value: string): number {
 }
 
 function assertPairedSurrogates(value: string, label: string): void {
-	for (let index = 0; index < value.length; index += 1) {
-		const code = value.charCodeAt(index);
-		if (code >= 0xd800 && code <= 0xdbff) {
-			const next = value.charCodeAt(index + 1);
-			if (!(next >= 0xdc00 && next <= 0xdfff)) {
-				invalidValue(`${label} contains an unpaired surrogate.`);
-			}
-			index += 1;
-		} else if (code >= 0xdc00 && code <= 0xdfff) {
-			invalidValue(`${label} contains an unpaired surrogate.`);
-		}
+	if (!value.isWellFormed()) {
+		invalidValue(`${label} contains an unpaired surrogate.`);
 	}
 }
 
@@ -356,8 +347,7 @@ function valuesEqual(
 	}
 	return leftKeys.every(
 		(key) =>
-			// biome-ignore lint/suspicious/noPrototypeBuiltins: the package target predates Object.hasOwn.
-			Object.prototype.hasOwnProperty.call(rightRecord, key) &&
+			Object.hasOwn(rightRecord, key) &&
 			valuesEqual(leftRecord[key], rightRecord[key]),
 	);
 }
