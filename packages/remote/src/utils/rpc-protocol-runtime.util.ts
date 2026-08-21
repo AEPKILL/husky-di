@@ -19,6 +19,7 @@ import type {
 	IRpcProtocolRuntimePolicy,
 	IRpcProtocolSession,
 	IRpcProtocolSessionHost,
+	IRpcRetainedBytesReservation,
 	RpcProtocolFaultReason,
 } from "@/interfaces/protocol/rpc-protocol.interface";
 import {
@@ -33,6 +34,7 @@ interface ConstructionGuard {
 }
 
 export interface RpcProtocolConnectorHostPorts {
+	reserveRetainedBytes(bytes: number): IRpcRetainedBytesReservation | undefined;
 	attachSession(
 		session: IRpcProtocolSession,
 	): IRpcProtocolSessionHost | undefined;
@@ -40,6 +42,7 @@ export interface RpcProtocolConnectorHostPorts {
 }
 
 export interface RpcProtocolAcceptorHostPorts {
+	reserveRetainedBytes(bytes: number): IRpcRetainedBytesReservation | undefined;
 	admitSession(
 		session: IRpcProtocolSession,
 	): IRpcProtocolSessionHost | undefined;
@@ -62,9 +65,13 @@ function constructionViolation(guard: ConstructionGuard): never {
 function createHostBase(
 	policy: IRpcProtocolRuntimePolicy,
 	guard: ConstructionGuard,
+	reserveRetainedBytes: (
+		bytes: number,
+	) => IRpcRetainedBytesReservation | undefined,
 	fault: (reason: RpcProtocolFaultReason, error: Error) => void,
 ): {
 	readonly policy: IRpcProtocolRuntimePolicy;
+	reserveRetainedBytes(bytes: number): IRpcRetainedBytesReservation | undefined;
 	normalizeApplicationValue(value: unknown): IRpcApplicationSnapshot;
 	normalizeApplicationArguments(
 		value: unknown,
@@ -77,6 +84,14 @@ function createHostBase(
 } {
 	return {
 		policy,
+		reserveRetainedBytes(
+			bytes: number,
+		): IRpcRetainedBytesReservation | undefined {
+			if (guard.active) {
+				return constructionViolation(guard);
+			}
+			return reserveRetainedBytes(bytes);
+		},
 		normalizeApplicationValue(value: unknown): IRpcApplicationSnapshot {
 			if (guard.active) {
 				return constructionViolation(guard);
@@ -174,7 +189,7 @@ export function createRpcProtocolConnectorRuntime(
 		validateProtocol(protocol, "createAcceptor");
 		const guard: ConstructionGuard = { active: true, violated: false };
 		const host = Object.freeze<IRpcProtocolConnectorHost>({
-			...createHostBase(policy, guard, ports.fault),
+			...createHostBase(policy, guard, ports.reserveRetainedBytes, ports.fault),
 			attachSession(
 				session: IRpcProtocolSession,
 			): IRpcProtocolSessionHost | undefined {
@@ -205,7 +220,7 @@ export function createRpcProtocolAcceptorRuntime(
 		validateProtocol(protocol, "createAcceptor");
 		const guard: ConstructionGuard = { active: true, violated: false };
 		const host = Object.freeze<IRpcProtocolAcceptorHost>({
-			...createHostBase(policy, guard, ports.fault),
+			...createHostBase(policy, guard, ports.reserveRetainedBytes, ports.fault),
 			admitSession(
 				session: IRpcProtocolSession,
 			): IRpcProtocolSessionHost | undefined {

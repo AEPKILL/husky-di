@@ -193,14 +193,30 @@
       "source": {
         "segments": [
           { "utf8": "{\"kind\":\"ping\",\"future\":" },
-          { "repeatUtf8": "[", "count": 62 },
+          { "repeatUtf8": "[", "count": 65 },
           { "utf8": "null" },
-          { "repeatUtf8": "]", "count": 62 },
+          { "repeatUtf8": "]", "count": 65 },
           { "utf8": "}" }
         ]
       },
       "expectedKind": "ping",
       "covers": ["RPC-WIRE-003", "limit"]
+    },
+    {
+      "id": "valid-application-args-depth-limit",
+      "validity": "valid",
+      "validator": "active",
+      "source": {
+        "segments": [
+          { "utf8": "{\"kind\":\"message\",\"seq\":1,\"message\":{\"kind\":\"call\",\"callId\":\"1\",\"service\":\"s\",\"method\":\"m\",\"args\":" },
+          { "repeatUtf8": "[", "count": 63 },
+          { "utf8": "null" },
+          { "repeatUtf8": "]", "count": 63 },
+          { "utf8": "}}" }
+        ]
+      },
+      "expectedKind": "message",
+      "covers": ["RPC-VALUE-004", "RPC-WIRE-003", "limit"]
     },
     {
       "id": "valid-string-byte-limit",
@@ -432,13 +448,28 @@
       "source": {
         "segments": [
           { "utf8": "{\"kind\":\"ping\",\"future\":" },
-          { "repeatUtf8": "[", "count": 63 },
+          { "repeatUtf8": "[", "count": 66 },
           { "utf8": "null" },
-          { "repeatUtf8": "]", "count": 63 },
+          { "repeatUtf8": "]", "count": 66 },
           { "utf8": "}" }
         ]
       },
       "covers": ["RPC-WIRE-003", "RPC-VALID-001", "RPC-VALID-005", "limit"]
+    },
+    {
+      "id": "invalid-application-args-depth-limit-plus-one",
+      "validity": "invalid",
+      "validator": "active",
+      "source": {
+        "segments": [
+          { "utf8": "{\"kind\":\"message\",\"seq\":1,\"message\":{\"kind\":\"call\",\"callId\":\"1\",\"service\":\"s\",\"method\":\"m\",\"args\":" },
+          { "repeatUtf8": "[", "count": 64 },
+          { "utf8": "null" },
+          { "repeatUtf8": "]", "count": 64 },
+          { "utf8": "}}" }
+        ]
+      },
+      "covers": ["RPC-VALUE-004", "RPC-WIRE-003", "RPC-VALID-001", "RPC-VALID-005", "limit"]
     },
     {
       "id": "invalid-string-byte-limit-plus-one",

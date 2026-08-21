@@ -25,6 +25,7 @@ export function createRpcAcceptor(options?: RpcAcceptorOptions): IRpcAcceptor {
 		resolveRpcProtocol(snapshot.protocol),
 		policy,
 		{
+			reserveRetainedBytes: (bytes) => acceptor?.reserveRetainedBytes(bytes),
 			admitSession: (session) => acceptor?.admitProtocolSession(session),
 			fault: (reason, error) => acceptor?.protocolFault(reason, error),
 		},

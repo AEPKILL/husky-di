@@ -22,6 +22,7 @@ import type {
 	IRpcProtocolIncomingCallRequest,
 	IRpcProtocolIncomingHandlerCall,
 	IRpcProtocolSession,
+	IRpcRetainedBytesReservation,
 	RpcCallOutcome,
 	RpcHandlerOutcome,
 	RpcIncomingTerminal,
@@ -79,6 +80,22 @@ function observationDuration(startedAt: number): number {
 	);
 }
 
+function invokeRpcHandler(
+	route: RpcHandlerRoute,
+	argumentsSnapshot: IRpcApplicationArgumentsSnapshot,
+	abortSignal: AbortSignal,
+): unknown {
+	const invocationArguments: unknown[] = [...argumentsSnapshot.value];
+	if (route.cancelable) {
+		invocationArguments.push(abortSignal);
+	}
+	return Reflect.apply(
+		route.handler,
+		route.implementation,
+		invocationArguments,
+	);
+}
+
 const outgoingFailureCodes = new Set([
 	RpcExceptionCodeEnum.canceled,
 	RpcExceptionCodeEnum.unavailable,
@@ -87,6 +104,10 @@ const outgoingFailureCodes = new Set([
 	RpcExceptionCodeEnum.unknownService,
 	RpcExceptionCodeEnum.unknownMethod,
 ]);
+
+const noRetainedBytesReservation = Object.freeze<IRpcRetainedBytesReservation>({
+	release() {},
+});
 
 function readProtocolFields(
 	value: unknown,
@@ -232,6 +253,9 @@ export class RpcPeerImpl implements IRpcPeer {
 	readonly #onProtocolFault: (error: Error) => void;
 	readonly #handlerScheduler: RpcHandlerScheduler;
 	readonly #maximumIncomingBytes: number;
+	readonly #reserveRetainedBytes: (
+		bytes: number,
+	) => IRpcRetainedBytesReservation | undefined;
 	#state: RpcPeerState;
 	#stateDirty = false;
 	#session: IRpcProtocolSession | undefined;
@@ -247,6 +271,10 @@ export class RpcPeerImpl implements IRpcPeer {
 		onProtocolFault: (error: Error) => void = () => {},
 		handlerScheduler: RpcHandlerScheduler = new RpcHandlerScheduler(16, 16),
 		maximumIncomingBytes = 8 * 1024 * 1024,
+		reserveRetainedBytes: (
+			bytes: number,
+		) => IRpcRetainedBytesReservation | undefined = () =>
+			noRetainedBytesReservation,
 	) {
 		this.#state = Object.freeze(initialState);
 		this.#ownerExposureRegistry = ownerExposureRegistry;
@@ -255,6 +283,7 @@ export class RpcPeerImpl implements IRpcPeer {
 		this.#onProtocolFault = onProtocolFault;
 		this.#handlerScheduler = handlerScheduler;
 		this.#maximumIncomingBytes = maximumIncomingBytes;
+		this.#reserveRetainedBytes = reserveRetainedBytes;
 		this.state$ = new Observable((subscriber) => {
 			const subscription = this.#stateSubject.subscribe(subscriber);
 			if (!subscriber.closed) {
@@ -585,6 +614,10 @@ export class RpcPeerImpl implements IRpcPeer {
 		) {
 			return undefined;
 		}
+		const retainedBytesReservation = this.#reserveRetainedBytes(charge);
+		if (retainedBytesReservation === undefined) {
+			return undefined;
+		}
 		this.#incomingReservationCount += 1;
 		this.#incomingReservationBytes += charge;
 		const exposure =
@@ -594,6 +627,7 @@ export class RpcPeerImpl implements IRpcPeer {
 			return this.#reserveUnknownIncoming(
 				RpcExceptionCodeEnum.unknownService,
 				charge,
+				retainedBytesReservation,
 			);
 		}
 		const route = exposure.methods.get(request.method);
@@ -601,6 +635,7 @@ export class RpcPeerImpl implements IRpcPeer {
 			return this.#reserveUnknownIncoming(
 				RpcExceptionCodeEnum.unknownMethod,
 				charge,
+				retainedBytesReservation,
 				exposure.wireName,
 			);
 		}
@@ -609,10 +644,15 @@ export class RpcPeerImpl implements IRpcPeer {
 			exposure.wireName,
 			route,
 			charge,
+			retainedBytesReservation,
 		);
 	}
 
-	#releaseIncomingCapacity(charge: number): void {
+	#releaseIncomingCapacity(
+		charge: number,
+		retainedBytesReservation: IRpcRetainedBytesReservation,
+	): void {
+		retainedBytesReservation.release();
 		this.#incomingReservationCount = Math.max(
 			0,
 			this.#incomingReservationCount - 1,
@@ -626,6 +666,7 @@ export class RpcPeerImpl implements IRpcPeer {
 	#reserveUnknownIncoming(
 		code: RpcUnknownCallFailure,
 		charge: number,
+		retainedBytesReservation: IRpcRetainedBytesReservation,
 		service?: string,
 	): RpcProtocolIncomingCallReservation {
 		let state: "pending" | "committed" | "released" = "pending";
@@ -645,7 +686,7 @@ export class RpcPeerImpl implements IRpcPeer {
 					return;
 				}
 				settled = true;
-				this.#releaseIncomingCapacity(charge);
+				this.#releaseIncomingCapacity(charge, retainedBytesReservation);
 				const durationMs = observationDuration(startedAt);
 				if (code === RpcExceptionCodeEnum.unknownService) {
 					this.#emitEvent({
@@ -707,23 +748,26 @@ export class RpcPeerImpl implements IRpcPeer {
 						return;
 					}
 					state = "released";
-					this.#releaseIncomingCapacity(charge);
+					this.#releaseIncomingCapacity(charge, retainedBytesReservation);
 				},
 			}),
 		};
 	}
 
 	#reserveHandlerIncoming(
-		request: IRpcProtocolIncomingCallRequest,
+		{ args, method }: IRpcProtocolIncomingCallRequest,
 		service: string,
 		route: RpcHandlerRoute,
 		charge: number,
+		retainedBytesReservation: IRpcRetainedBytesReservation,
 	): RpcProtocolIncomingCallReservation {
 		let state: "pending" | "committed" | "released" = "pending";
 		let settled = false;
 		let handlerStarted = false;
 		let observationId = "";
 		let startedAt = 0;
+		let argumentsSnapshot: IRpcApplicationArgumentsSnapshot | undefined = args;
+		let removeQueuedJob: (() => void) | undefined;
 		const abortController = new AbortController();
 		const handlerOutcome = Promise.withResolvers<RpcHandlerOutcome>();
 
@@ -741,7 +785,10 @@ export class RpcPeerImpl implements IRpcPeer {
 					return;
 				}
 				settled = true;
-				this.#releaseIncomingCapacity(charge);
+				argumentsSnapshot = undefined;
+				removeQueuedJob?.();
+				removeQueuedJob = undefined;
+				this.#releaseIncomingCapacity(charge, retainedBytesReservation);
 				if (
 					outcome.type === RpcCallTerminalTypeEnum.sessionTerminated ||
 					(outcome.type === RpcCallTerminalTypeEnum.failed &&
@@ -760,7 +807,7 @@ export class RpcPeerImpl implements IRpcPeer {
 					peer: this,
 					direction: RpcCallDirectionEnum.incoming as const,
 					service,
-					method: request.method,
+					method,
 					durationMs: observationDuration(startedAt),
 				};
 				if (outcome.type === RpcCallTerminalTypeEnum.sessionTerminated) {
@@ -780,27 +827,10 @@ export class RpcPeerImpl implements IRpcPeer {
 			},
 		});
 
-		const runHandler = (releasePermit: () => void): boolean => {
-			if (settled) {
-				handlerOutcome.resolve({ type: RpcCallTerminalTypeEnum.notStarted });
-				return false;
-			}
-			handlerStarted = true;
-			const args: unknown[] = [...request.args.value];
-			if (route.cancelable) {
-				args.push(abortController.signal);
-			}
-			let result: unknown;
-			try {
-				result = Reflect.apply(route.handler, route.implementation, args);
-			} catch {
-				handlerOutcome.resolve({
-					type: RpcCallTerminalTypeEnum.failed,
-					code: RpcExceptionCodeEnum.handlerFailed,
-				});
-				releasePermit();
-				return true;
-			}
+		const observeHandlerResult = (
+			result: unknown,
+			releasePermit: () => void,
+		): void => {
 			void Promise.resolve(result).then(
 				(value) => {
 					if (settled) {
@@ -847,6 +877,39 @@ export class RpcPeerImpl implements IRpcPeer {
 					releasePermit();
 				},
 			);
+		};
+
+		const runHandler = (releasePermit: () => void): boolean => {
+			removeQueuedJob = undefined;
+			if (settled) {
+				handlerOutcome.resolve({ type: RpcCallTerminalTypeEnum.notStarted });
+				return false;
+			}
+			handlerStarted = true;
+			const retainedArguments = argumentsSnapshot;
+			argumentsSnapshot = undefined;
+			if (retainedArguments === undefined) {
+				handlerOutcome.resolve({
+					type: RpcCallTerminalTypeEnum.notStarted,
+				});
+				return false;
+			}
+			let result: unknown;
+			try {
+				result = invokeRpcHandler(
+					route,
+					retainedArguments,
+					abortController.signal,
+				);
+			} catch {
+				handlerOutcome.resolve({
+					type: RpcCallTerminalTypeEnum.failed,
+					code: RpcExceptionCodeEnum.handlerFailed,
+				});
+				releasePermit();
+				return true;
+			}
+			observeHandlerResult(result, releasePermit);
 			return true;
 		};
 
@@ -869,9 +932,9 @@ export class RpcPeerImpl implements IRpcPeer {
 						peer: this,
 						direction: RpcCallDirectionEnum.incoming,
 						service,
-						method: request.method,
+						method,
 					});
-					this.#handlerScheduler.enqueue(this, runHandler);
+					removeQueuedJob = this.#handlerScheduler.enqueue(this, runHandler);
 					return call;
 				},
 				release: () => {
@@ -882,7 +945,8 @@ export class RpcPeerImpl implements IRpcPeer {
 						return;
 					}
 					state = "released";
-					this.#releaseIncomingCapacity(charge);
+					argumentsSnapshot = undefined;
+					this.#releaseIncomingCapacity(charge, retainedBytesReservation);
 				},
 			}),
 		};

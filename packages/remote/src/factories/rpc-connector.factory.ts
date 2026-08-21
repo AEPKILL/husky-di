@@ -27,6 +27,7 @@ export function createRpcConnector(
 		resolveRpcProtocol(snapshot.protocol),
 		policy,
 		{
+			reserveRetainedBytes: (bytes) => connector?.reserveRetainedBytes(bytes),
 			attachSession: (session) => connector?.attachProtocolSession(session),
 			fault: (reason, error) => connector?.protocolFault(reason, error),
 		},

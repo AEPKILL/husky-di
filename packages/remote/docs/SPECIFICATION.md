@@ -121,9 +121,10 @@ Transport types `IRpcConnection`, `IRpcConnectorAdapter`, and `IRpcAcceptorAdapt
 `RpcProtocolSessionTransitionTypeEnum` plus the complete issue-17 SPI vocabulary:
 `IRpcConnection`, `RpcApplicationValue`, `IRpcApplicationRecord`, `IRpcApplicationSnapshot`,
 `IRpcApplicationArgumentsSnapshot`, `RpcCallFailure`, `RpcUnknownCallFailure`, `RpcIncomingFailure`,
-`RpcCallOutcome`, `RpcHandlerOutcome`, `RpcIncomingTerminal`, `IRpcProtocolRuntimePolicy`, `IRpcProtocolHost`,
-all outgoing invocation request/sink/reservation/invocation/session types, all incoming request/call/handler/
-reservation types, `RpcCloseReasonEnum`, `RpcProtocolFaultReason`, `RpcSessionCloseReason`,
+`RpcCallOutcome`, `RpcHandlerOutcome`, `RpcIncomingTerminal`, `IRpcProtocolRuntimePolicy`,
+`IRpcRetainedBytesReservation`, `IRpcProtocolHost`, all outgoing invocation
+request/sink/reservation/invocation/session types, all incoming request/call/handler/reservation types,
+`RpcCloseReasonEnum`, `RpcProtocolFaultReason`, `RpcSessionCloseReason`,
 `RpcProtocolSessionTransitionCloseReason`, `RpcProtocolSessionTransition`, all Session/role host and runtime
 interfaces, and `IRpcProtocol`.
 
@@ -169,19 +170,23 @@ surface as `TypeError`. The retained snapshot **MUST** be detached and immutable
 value domain. TypeScript types **MUST NOT** claim that an arbitrary domain interface statically proves runtime
 wire validity.
 
-**RPC-VALUE-004 — Fixed limits.** Normalized values and decoded input **MUST** satisfy all of these profile
-limits; bytes mean UTF-8 bytes and root depth is one:
+**RPC-VALUE-004 — Fixed limits.** Normalized values and decoded input **MUST** satisfy the applicable profile
+limits below; bytes mean UTF-8 bytes and root depth is one. The complete wire-tree allowance includes only the
+fixed Protocol wrapper above one maximum Application Value and **MUST NOT** enlarge the Application Value
+allowance:
 
 | Dimension | Hard limit |
 | --- | ---: |
 | Complete Transport message | `1,048,576 B` |
-| One arguments/result compact-JSON budget weight | `1,000,000 B` |
-| JSON depth | `64` |
+| One arguments/result/error-details compact-JSON budget weight | `1,000,000 B` |
+| Complete decoded wire-tree depth | `67` |
+| One Application Value depth | `64` |
 | One decoded string | `524,288 B` |
 | One Protocol identifier or object member name | `256 B` |
 | Members in one object | `1,024` |
 | Elements in one array | `8,192` |
-| JSON nodes in one record | `65,536` |
+| JSON nodes in one complete decoded record | `65,546` |
+| JSON nodes in one Application Value | `65,536` |
 
 Every primitive, array, and record counts as one node; member names do not. Root depth is one. A shared but
 acyclic object reference **MAY** appear more than once and **MUST** be expanded into an independent detached
@@ -677,8 +682,8 @@ aborted **MUST** reject `RpcException(canceled)`; unavailable state/capacity **M
 **RPC-CALL-005 — Pending and admission.** A valid invocation **MUST** first become a retractable Pending
 Invocation without `callId` or `seq`. Outgoing Admission **MUST** atomically allocate identity, retain the
 semantic replay entry, and call `send()` for the first time in one non-awaiting step. Cancellation before that
-point **MUST** prove non-execution; cancellation afterward **MUST** be cooperative and **MUST NOT** rewrite a
-terminal winner.
+point **MUST** prove non-execution and immediately unlink its Pending entry and payload storage; cancellation
+afterward **MUST** be cooperative and **MUST NOT** rewrite a terminal winner.
 
 **RPC-CALL-006 — Terminal winner.** Caller cancel, handler settlement, Protocol terminal, Session loss, and
 Owner force **MUST** compete through one first-terminal-wins slot. Late messages **MAY** complete ACK/GC work but
@@ -1090,8 +1095,13 @@ export type RpcProtocolFaultReason = Extract<
   | RpcCloseReasonEnum.resourceFault
 >;
 
+export interface IRpcRetainedBytesReservation {
+  release(): void;
+}
+
 export interface IRpcProtocolHost {
   readonly policy: IRpcProtocolRuntimePolicy;
+  reserveRetainedBytes(bytes: number): IRpcRetainedBytesReservation | undefined;
   normalizeApplicationValue(value: unknown): IRpcApplicationSnapshot;
   normalizeApplicationArguments(value: unknown): IRpcApplicationArgumentsSnapshot;
   applicationValuesEqual(
@@ -1114,7 +1124,9 @@ their brand. Protocol **MUST NOT** retain the original caller value or make Code
 **MUST** be synchronous, total, and non-throwing for contract-valid calls except the specified normalization
 `TypeError`. They **MUST** stage durable state without directly reentering user code. Duplicate, late, or invalid
 Protocol calls and unexpected Protocol-owned member throws/rejections **MUST** fault the smallest known scope and
-**MUST NOT** roll back already durable state.
+**MUST NOT** roll back already durable state. `reserveRetainedBytes()` **MUST** atomically charge the Owner
+ledger or return `undefined`; its successful frozen reservation **MUST** release exactly once and make repeated
+`release()` calls no-ops.
 
 ### 8.2 Outgoing and incoming calls
 
@@ -1535,9 +1547,10 @@ the body is equal. Recovery **MUST NOT** manufacture a new identity for an exist
 
 **RPC-LEDGER-003 — Incoming order.** For an expected fresh call, receiver **MUST** decide in this order: fixed
 validation; seq/ordinal; ordinary handler-work capacity without route lookup; then exact route. Capacity failure
-with protected reserve **MUST** atomically record terminal `unavailable` and advance receipt without args,
-handler, or event. Capacity success plus known route **MUST** record in-progress Remote Request Admission;
-unknown route **MUST** record the corresponding non-dispatch semantic terminal and safe event pair.
+with protected reserve **MUST** atomically record terminal `unavailable` and advance receipt without retaining
+the validated args, handler, or event. Capacity success plus known route **MUST** record in-progress Remote
+Request Admission; unknown route **MUST** record the corresponding non-dispatch semantic terminal and safe
+event pair.
 
 **RPC-LEDGER-004 — Handler terminal.** Each admitted handler **MUST** have a reserved minimum terminal slot.
 Framework **MUST** normalize a successful result before committing it. Invalid result, over-limit envelope, or
@@ -1547,8 +1560,12 @@ entry **MUST** become immutable before its unique result/error message is schedu
 **RPC-LEDGER-005 — GC.** Unacknowledged terminal **MUST** be retained and replayed with its original message
 identity. Terminal ACK **MAY** release payload and per-call entry only after the direction's
 `highestAdmittedCallOrdinal` remains sufficient to reject old identity reuse. Receipt and ordinal high-watermarks
-**MUST** survive until Session terminal. Ordinary pressure **MUST NOT** evict replay, call, terminal, or dedupe
-evidence.
+**MUST** survive until Session terminal. Once a terminal wins, the incoming ledger **MUST** immediately release
+the Framework call handle, handler closure, and request arguments; only the terminal/replay identity and bounded
+dedupe metadata may remain until ACK. Once an outgoing Call is admitted and its immutable replay entry owns the
+request payload, the outgoing call ledger **MUST** release its originating request snapshot; ACK release of that
+replay entry **MUST NOT** leave request arguments retained while the call awaits a terminal. Ordinary pressure
+**MUST NOT** evict replay, call, terminal, or dedupe evidence required by this paragraph.
 
 ## 10. Session establishment and Recovery
 
@@ -1757,7 +1774,10 @@ payload, Session identity, credentials, or other caller-controlled values.
 Connection over a Transport deployment providing confidentiality, ordered integrity/anti-replay, and expected
 responder endpoint authentication. The Framework **MUST NOT** infer this from an Adapter boolean. Plaintext or
 unauthenticated deployment **MAY** exercise functional grammar but **MUST NOT** claim secure Recovery or ACK
-authority.
+authority. The Session proof establishes continuity, not a user, tenant, or initiating-application identity;
+ordinary server-authenticated TLS likewise authenticates only the responder. A deployment accepting untrusted
+inbound Connections **MUST** authenticate and admit the initiator before Acceptor handoff and enforce
+per-principal connection, Session, request-rate, and handler-duration limits outside this Protocol.
 
 **RPC-SEC-002 — Algorithms.** The profile **MUST** use a CSPRNG, SHA-256, HKDF-SHA-256, HMAC-SHA-256, and RFC
 8785 JCS without negotiation. Changing any algorithm **MUST** require a new profile. Verification **MUST** use
@@ -1897,6 +1917,12 @@ before settlement.
 | Protected control/terminal reserve | `512 KiB`, inside Session cap |
 | Proof/key/nonce state | `64 KiB`, inside protected reserve |
 
+Each built-in Session **MUST** initialize one aggregate child ledger with its `512 KiB` protected reserve.
+Every Session-attributable ordinary charge **MUST** atomically acquire both that child ledger and the Owner
+ledger; failure of either side **MUST** roll back the other without a callback or observable admission. A later
+Endpoint record queued before bootstrap classification **MUST** transfer its existing Owner-only charge into the
+resolved Session child ledger in one non-awaiting step before active processing.
+
 **RPC-RESOURCE-005 — Entry charge.** Each pending, ledger, handler-job, and replay entry **MUST** charge at least
 `256 B` in addition to payload weight. Within one entry shared immutable payload need not be double charged;
 every group child **MUST** reserve its own entry and full value weight.
@@ -1919,6 +1945,14 @@ security state. Thus the fixed worst case
 | Running handlers | `64` |
 | Aggregate retained state including reserves | `64 MiB` |
 
+One Owner ledger **MUST** atomically charge every protected Session reservation, queued Endpoint ingress after
+the transient-covered first record, Pending/replay ordinary entry, and incoming handler payload against
+`maxRetainedBytesTotal`. A retained representation shared across a synchronous Pending-to-replay transfer
+**MUST NOT** be double charged; replacing that charge **MUST** be one non-awaiting step with no reentrant
+callback or observable admission between release and replacement. Capacity failure **MUST** remain attempt- or
+call-scoped when the protected reserve is intact. Every ACK, call terminal, cancellation, failed admission,
+Endpoint close, and Session terminal **MUST** release its unique charge exactly once.
+
 **RPC-RESOURCE-006 — Retained ownership.** A Connection whose Direct Close has not settled **MUST** continue
 occupying its ordinary/overflow slot. Fresh admission pressure **MUST NOT** evict an existing connected Session.
 When retained Sessions plus provisional fresh reservations reach `maxSessions`, an Acceptor fresh attempt
@@ -1935,7 +1969,10 @@ subpool. Each slot **MUST** charge exactly `4 MiB` transient weight: up to `1 Mi
 Codec/tree, `1 MiB` JCS/crypto input, and `1 MiB` accept/reject output plus fixed bookkeeping. The reservation
 **MUST** stay until any started crypto actually settles. Policy validation **MUST** safely derive
 `maxHandshakes * 4 MiB`; default 16 slots therefore have a distinct `64 MiB` transient budget.
-Representational reuse **MUST NOT** reduce the admission charge.
+Representational reuse **MUST NOT** reduce the admission charge. The first Endpoint record being processed is
+covered by this fixed transient reservation; every later record retained or processed by that Endpoint **MUST**
+instead hold its Owner retained-ledger charge until processing settles or the Endpoint closes. One representation
+**MUST NOT** be charged to both budgets.
 
 ### 12.2 Runtime policy
 
@@ -1967,8 +2004,8 @@ maxRetainedBytesPerSession`, and `maxHandlersTotal = maxHandlersPerSession`. The
 **RPC-POLICY-002 — Derived subcaps.** Replay-entry count **MUST** be `4 * maxPendingInvocationsPerSession` and
 ingress count **MUST** remain `64`. Ingress, Pending, incoming-args, and terminal-payload byte subcaps **MUST** be
 floor(`maxRetainedBytesPerSession / 4`); replay subcap **MUST** be floor(`/ 2`), while total Session/Owner caps
-always apply first. Ordinary Connection cap **MUST** be `maxSessions + 2*maxHandshakes` plus the one overflow
-slot for Acceptor.
+always apply first through the Session aggregate ledger and shared Owner ledger. Ordinary Connection cap
+**MUST** be `maxSessions + 2*maxHandshakes` plus the one overflow slot for Acceptor.
 
 **RPC-POLICY-003 — Validation.** Factory **MUST** reject any policy that violates positive finite safe-integer
 shape, safe derived arithmetic, `silenceTimeoutMs >= 3*activityProbeIntervalMs`,
@@ -1977,7 +2014,8 @@ shape, safe derived arithmetic, `silenceTimeoutMs >= 3*activityProbeIntervalMs`,
 message plus reserve, `maxRetainedBytesPerSession >= 4,194,304` so each `/4` ingress/Pending/args/terminal
 subcap can admit the `1 MiB` compatibility floor, or
 `maxRetainedBytesTotal >= (maxSessions-1)*512 KiB + maxRetainedBytesPerSession`. Policy **MUST NOT** have a
-runtime setter, per-peer override, `Infinity`, private bag, or wire negotiation.
+runtime setter, per-peer override, `Infinity`, private bag, or wire negotiation. Each of the seven timing fields
+**MUST NOT** exceed the platform timer delay ceiling of `2,147,483,647 ms`.
 
 **RPC-POLICY-004 — No public internal capacity.** Framework **MUST NOT** expose internal queue/lane/permit/
 priority/pause/resume/scheduler surfaces or a Connection capacity getter. Adapter-specific finite native queue
@@ -2008,12 +2046,14 @@ implementation.
 **RPC-SCHEDULE-005 — Ingress serialization.** A Connection driver **MUST** complete validation, durable
 disposition, state/event staging, and queue publication in Transport emission order. Handler code **MUST NOT**
 run inline in the ingress callback. Synchronous reentrant input **MUST** enter the bounded ingress backlog and be
-fully charged; overflow **MUST** fault rather than drop, skip, or ACK an undisposed expected record.
+fully charged through processing settlement; overflow **MUST** fault rather than drop, skip, or ACK an
+undisposed expected record.
 
 **RPC-SCHEDULE-006 — Handler fairness.** Handler start order **MUST** be FIFO per Session and round-robin among
 ready Sessions while acquiring both Session and Owner permits. Cross-Session or completion order need not be
-global. A queued job removed by a winning terminal **MUST NOT** start; a running job **MUST** retain its permit
-until real settlement. Framework **MUST NOT** impose a normal handler execution timeout.
+global. A winning terminal for a queued job **MUST** immediately unlink its scheduler closure and payload, and
+that job **MUST NOT** start; a running job **MUST** retain its permit until real settlement. Framework **MUST NOT**
+impose a normal handler execution timeout.
 
 ### 12.4 Activity and scheduler stalls
 

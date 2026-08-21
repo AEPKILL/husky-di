@@ -12,12 +12,14 @@ import { RpcWireRecordKindEnum } from "../../src/enums/protocol/rpc-wire-record-
 import { getRpcProtocol } from "../../src/factories/rpc-protocol.factory";
 import { RpcCodecImpl } from "../../src/impls/protocol/rpc-codec.impl";
 import { RpcCryptographyImpl } from "../../src/impls/protocol/rpc-cryptography.impl";
+import { RpcRetainedBytesLedgerImpl } from "../../src/impls/protocol/rpc-retained-bytes-ledger.impl";
 import type {
 	IRpcProtocolAcceptorHost,
 	IRpcProtocolAcceptorRuntime,
 	IRpcProtocolConnectorHost,
 	IRpcProtocolConnectorRuntime,
 	IRpcProtocolRuntimePolicy,
+	RpcProtocolSessionTransition,
 } from "../../src/interfaces/protocol/rpc-protocol.interface";
 import type { IRpcConnection } from "../../src/interfaces/rpc-connection.interface";
 import type {
@@ -39,6 +41,7 @@ interface IBootstrapConnectionHarness {
 	readonly subscriptionCount: number;
 	readonly closeCount: number;
 	emit(record: RpcJsonRecord): void;
+	complete(): void;
 }
 
 function createPolicy(
@@ -63,15 +66,23 @@ function createPolicy(
 	};
 }
 
-function createAcceptorRuntime(policy: IRpcProtocolRuntimePolicy): {
+function createAcceptorRuntime(
+	policy: IRpcProtocolRuntimePolicy,
+	onTransition: (transition: RpcProtocolSessionTransition) => void = () => {},
+): {
 	readonly runtime: IRpcProtocolAcceptorRuntime;
 	readonly ownerFaults: string[];
 	readonly admittedSessions: number[];
+	readonly retainedBytes: RpcRetainedBytesLedgerImpl;
 } {
 	const ownerFaults: string[] = [];
 	const admittedSessions: number[] = [];
+	const retainedBytes = new RpcRetainedBytesLedgerImpl(
+		policy.maxRetainedBytesTotal,
+	);
 	const host: IRpcProtocolAcceptorHost = {
 		policy,
+		reserveRetainedBytes: (bytes) => retainedBytes.reserve(bytes),
 		normalizeApplicationValue: normalizeRpcApplicationValue,
 		normalizeApplicationArguments: normalizeRpcApplicationArguments,
 		applicationValuesEqual: rpcApplicationValuesEqual,
@@ -80,7 +91,7 @@ function createAcceptorRuntime(policy: IRpcProtocolRuntimePolicy): {
 			admittedSessions.push(1);
 			return {
 				reserveIncomingCall: () => undefined,
-				transition() {},
+				transition: onTransition,
 				fault: (reason) => ownerFaults.push(reason),
 			};
 		},
@@ -89,6 +100,7 @@ function createAcceptorRuntime(policy: IRpcProtocolRuntimePolicy): {
 		runtime: getRpcProtocol().createAcceptor(host),
 		ownerFaults,
 		admittedSessions,
+		retainedBytes,
 	};
 }
 
@@ -99,8 +111,12 @@ function createConnectorRuntime(policy: IRpcProtocolRuntimePolicy): {
 } {
 	const ownerFaults: string[] = [];
 	const attachedSessions: number[] = [];
+	const retainedBytes = new RpcRetainedBytesLedgerImpl(
+		policy.maxRetainedBytesTotal,
+	);
 	const host: IRpcProtocolConnectorHost = {
 		policy,
+		reserveRetainedBytes: (bytes) => retainedBytes.reserve(bytes),
 		normalizeApplicationValue: normalizeRpcApplicationValue,
 		normalizeApplicationArguments: normalizeRpcApplicationArguments,
 		applicationValuesEqual: rpcApplicationValuesEqual,
@@ -153,6 +169,9 @@ function createBootstrapConnection(): IBootstrapConnectionHarness {
 		},
 		emit(record) {
 			source.next(codec.encode(record));
+		},
+		complete() {
+			source.complete();
 		},
 	};
 }
@@ -304,6 +323,94 @@ describe("Default RPC Protocol bootstrap resources", () => {
 		expect(ownerFaults).toEqual([]);
 
 		runtime.close();
+	});
+
+	it("RPC-RESOURCE-003 protects Session bytes before proof while the first ingress frame remains transient", async () => {
+		vi.spyOn(globalThis.crypto.subtle, "digest").mockImplementation(
+			() => new Promise<ArrayBuffer>(() => {}),
+		);
+		const protectedBytes = 512 * 1024;
+		const totalBytes = 4 * 1024 * 1024;
+		const { runtime, retainedBytes } = createAcceptorRuntime(
+			createPolicy({
+				maxSessions: 1,
+				maxRetainedBytesPerSession: totalBytes,
+				maxRetainedBytesTotal: totalBytes,
+				bindingAttemptTimeoutMs: 1_000,
+			}),
+		);
+		const occupied = retainedBytes.reserve(totalBytes - protectedBytes);
+		if (occupied === undefined) {
+			throw new Error(
+				"Expected the legal policy's ordinary retained capacity.",
+			);
+		}
+		const connection = createBootstrapConnection();
+		accept(runtime, connection);
+		connection.emit(createFreshRequest());
+		await vi.waitFor(() =>
+			expect(globalThis.crypto.subtle.digest).toHaveBeenCalledTimes(1),
+		);
+
+		expect(retainedBytes.reserve(1)).toBeUndefined();
+		runtime.close();
+		const released = retainedBytes.reserve(protectedBytes);
+		expect(released).toBeDefined();
+		released?.release();
+		occupied.release();
+	});
+
+	it("RPC-RESOURCE-006 holds Fresh capacity across reentrant victim termination", async () => {
+		const totalBytes = 4 * 1024 * 1024;
+		const policy = createPolicy({
+			maxSessions: 1,
+			maxHandshakes: 3,
+			maxRetainedBytesPerSession: totalBytes,
+			maxRetainedBytesTotal: totalBytes,
+			bindingAttemptTimeoutMs: 1_000,
+		});
+		let runtime: IRpcProtocolAcceptorRuntime;
+		let replacementStarted = false;
+		const reentrant = createBootstrapConnection();
+		const created = createAcceptorRuntime(policy, (transition) => {
+			if (transition.type !== "closed" || replacementStarted) {
+				return;
+			}
+			replacementStarted = true;
+			accept(runtime, reentrant);
+			reentrant.emit(createFreshRequest());
+		});
+		runtime = created.runtime;
+		const retained = createBootstrapConnection();
+		await Promise.all([
+			accept(runtime, retained),
+			(async () => {
+				retained.emit(createFreshRequest());
+				await vi.waitFor(() =>
+					expect(retained.responses.at(-1)?.kind).toBe("accept"),
+				);
+			})(),
+		]);
+		const occupied = created.retainedBytes.reserve(totalBytes - 512 * 1024);
+		if (occupied === undefined) {
+			throw new Error("Expected ordinary bytes beside the protected Session.");
+		}
+		retained.complete();
+
+		const fresh = createBootstrapConnection();
+		accept(runtime, fresh);
+		fresh.emit(createFreshRequest());
+		await vi.waitFor(() => expect(fresh.responses.at(-1)?.kind).toBe("accept"));
+		await vi.waitFor(() => expect(reentrant.closeCount).toBe(1));
+
+		expect(reentrant.responses).toEqual([
+			{ kind: "reject", code: "admission-rejected" },
+		]);
+		expect(created.admittedSessions).toEqual([1, 1]);
+		expect(created.ownerFaults).toEqual([]);
+
+		runtime.close();
+		occupied.release();
 	});
 
 	it("RPC-SESSION-002 reserves a provisional ID and faults after exactly eight CSPRNG collisions", async () => {

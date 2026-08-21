@@ -110,8 +110,13 @@ export type RpcProtocolFaultReason = Extract<
 	RpcCloseReasonEnum.protocolFault | RpcCloseReasonEnum.resourceFault
 >;
 
+export interface IRpcRetainedBytesReservation {
+	release(): void;
+}
+
 export interface IRpcProtocolHost {
 	readonly policy: IRpcProtocolRuntimePolicy;
+	reserveRetainedBytes(bytes: number): IRpcRetainedBytesReservation | undefined;
 	normalizeApplicationValue(value: unknown): IRpcApplicationSnapshot;
 	normalizeApplicationArguments(
 		value: unknown,

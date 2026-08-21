@@ -392,9 +392,18 @@ active-session authority comes from the protected physical binding. The
 Transport must provide confidentiality, ordered integrity and anti-replay, and
 authentication of the intended endpoint.
 
+The built-in Protocol does not authenticate the initiating application or
+authorize services and methods. A Session proof establishes continuity with an
+existing Session; it is not a user or tenant identity. Before handing an
+untrusted inbound Connection to an Acceptor, deployments must authenticate and
+admit the initiator at the transport or gateway boundary and enforce
+per-principal connection, Session, request-rate, and handler-duration limits.
+
 Do not deploy over an untrusted plaintext channel. For WebSockets, `ws:` is
 plaintext. A `wss:` deployment is suitable only when the application correctly
-validates the intended TLS endpoint and trust policy.
+validates the intended TLS endpoint and trust policy. Ordinary
+server-authenticated TLS authenticates the responder to the initiator; it does
+not by itself authenticate the initiator to the responder.
 
 Call telemetry deliberately excludes raw arguments, results, remote errors,
 credentials, and wire data. Applications that record payloads at their own

@@ -200,6 +200,24 @@ describe("installed @husky-di/remote package", () => {
 		}
 	});
 
+	it("RPC-SEC-001 packages the initiator authentication and admission boundary", () => {
+		const consumerRoot = createConsumer("security-documentation");
+		const installedRoot = resolve(
+			consumerRoot,
+			"node_modules/@husky-di/remote",
+		);
+		const documentation = [
+			readFileSync(resolve(installedRoot, "README.md"), "utf8"),
+			readFileSync(resolve(installedRoot, "docs/SPECIFICATION.md"), "utf8"),
+		].join("\n");
+
+		expect(documentation).toContain(
+			"does not authenticate the initiating application",
+		);
+		expect(documentation).toContain("before Acceptor handoff");
+		expect(documentation).toContain("per-principal connection");
+	});
+
 	it("RPC-PKG-001 RPC-PKG-004 RPC-PKG-007 RPC-PKG-009 RPC-RELEASE-003 resolve every public subpath in Node ESM", () => {
 		const consumerRoot = createConsumer("node-esm");
 		const entryPath = resolve(consumerRoot, "index.mjs");
@@ -310,7 +328,7 @@ import type {
   IRpcProtocolInvocationRequest, IRpcProtocolInvocationReservation,
   IRpcProtocolInvocationSink, IRpcProtocolRoleRuntime,
   IRpcProtocolRuntimePolicy as ProtocolRuntimePolicy, IRpcProtocolSession,
-  IRpcProtocolSessionHost, RpcCallOutcome, RpcHandlerOutcome,
+  IRpcProtocolSessionHost, IRpcRetainedBytesReservation, RpcCallOutcome, RpcHandlerOutcome,
   RpcApplicationValue as ProtocolApplicationValue,
   RpcCallFailure as ProtocolCallFailure, RpcIncomingFailure,
   RpcIncomingTerminal, RpcProtocolFaultReason as ProtocolFaultReason,
@@ -410,7 +428,8 @@ type Inventory = [
   IRpcProtocolIncomingHandlerCall, IRpcProtocolInvocation,
   IRpcProtocolInvocationRequest, IRpcProtocolInvocationReservation,
   IRpcProtocolInvocationSink, IRpcProtocolRoleRuntime, IRpcProtocolSession,
-  IRpcProtocolSessionHost, RpcCallOutcome, RpcHandlerOutcome, RpcIncomingFailure,
+  IRpcProtocolSessionHost, IRpcRetainedBytesReservation, RpcCallOutcome,
+  RpcHandlerOutcome, RpcIncomingFailure,
   RpcIncomingTerminal, RpcProtocolIncomingCallReservation,
   RpcProtocolSessionTransition, RpcProtocolSessionTransitionCloseReason,
   RpcUnknownCallFailure, IRpcAcceptorAdapterConformanceFixture,

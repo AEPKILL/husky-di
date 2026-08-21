@@ -377,6 +377,10 @@ function createHostProbe(role: "connector" | "acceptor"): {
 	let calls = 0;
 	const common: IRpcProtocolHost = {
 		policy: CONFORMANCE_POLICY,
+		reserveRetainedBytes: () => {
+			calls += 1;
+			return Object.freeze({ release() {} });
+		},
 		normalizeApplicationValue: (value) => {
 			calls += 1;
 			return createSnapshot(value) as IRpcApplicationSnapshot;
@@ -770,6 +774,7 @@ function createSessionHostProbe(
 	};
 	const common: IRpcProtocolHost = {
 		policy: CONFORMANCE_POLICY,
+		reserveRetainedBytes: () => Object.freeze({ release() {} }),
 		normalizeApplicationValue: normalizeRpcApplicationValue,
 		normalizeApplicationArguments: normalizeRpcApplicationArguments,
 		applicationValuesEqual: rpcApplicationValuesEqual,

@@ -6,13 +6,23 @@
 
 import { createServiceIdentifier } from "@husky-di/core";
 import { describe, expect, it, vi } from "vitest";
+import { RpcCallTerminalTypeEnum } from "../../src/enums/protocol/rpc-call-terminal-type.enum";
+import { RpcIncomingCallKindEnum } from "../../src/enums/protocol/rpc-incoming-call-kind.enum";
 import { RpcWireRecordKindEnum } from "../../src/enums/protocol/rpc-wire-record-kind.enum";
+import { RpcCallDirectionEnum } from "../../src/enums/rpc-call-direction.enum";
+import { RpcEventTypeEnum } from "../../src/enums/rpc-event-type.enum";
+import { getRpcProtocol } from "../../src/factories/rpc-protocol.factory";
 import { RpcCodecImpl } from "../../src/impls/protocol/rpc-codec.impl";
 import {
 	createRemoteServiceDescriptor,
 	createRpcAcceptor,
 	createRpcConnector,
 } from "../../src/index";
+import type {
+	IRpcProtocol,
+	IRpcProtocolHost,
+} from "../../src/interfaces/protocol/rpc-protocol.interface";
+import { normalizeRpcApplicationArguments } from "../../src/utils/rpc-application-value.util";
 import {
 	createRpcDirectSessionHarness,
 	createRpcTestNetwork,
@@ -35,6 +45,211 @@ const ILargeLedgerService = createServiceIdentifier<ILargeLedgerService>(
 );
 
 describe("Default RPC Protocol retained ledger", () => {
+	it("RPC-CALL-005 RPC-RESOURCE-003 guards replay-rejected payload through reentrant terminal cleanup", async () => {
+		const harness = createRpcDirectSessionHarness({
+			maxPendingInvocationsPerSession: 1,
+		});
+		const { session } = harness;
+		for (let ordinal = 1; ordinal <= 4; ordinal += 1) {
+			const reservation = session.reserveInvocation({
+				service: "example.replay-guard.v1",
+				method: "run",
+				args: normalizeRpcApplicationArguments([ordinal]),
+			});
+			if (reservation === undefined) {
+				throw new Error("Expected replay-filling Invocation capacity.");
+			}
+			const invocation = reservation.commit({ finish() {} });
+			invocation.start();
+			await vi.waitFor(() => expect(harness.sent).toHaveLength(ordinal));
+			session._receiveResult({
+				kind: RpcWireRecordKindEnum.result,
+				callId: String(ordinal),
+			});
+		}
+
+		const args = normalizeRpcApplicationArguments(["retained"]);
+		const pendingCharge = args.weight + 256;
+		const retainedBeforePending = session._retainedBytesLedger._retainedBytes;
+		const occupied = session.reserveRetainedBytes(
+			session._host.policy.maxRetainedBytesPerSession -
+				retainedBeforePending -
+				pendingCharge,
+		);
+		if (occupied === undefined) {
+			throw new Error("Expected capacity beside the replay-filled Session.");
+		}
+		const reservation = session.reserveInvocation({
+			service: "example.replay-guard.v1",
+			method: "run",
+			args,
+		});
+		if (reservation === undefined) {
+			throw new Error("Expected the final Pending Invocation capacity.");
+		}
+		let reentrantOwnerReservation:
+			| ReturnType<typeof session._host.reserveRetainedBytes>
+			| undefined;
+		const invocation = reservation.commit({
+			finish: () => {
+				session.forceClose();
+				reentrantOwnerReservation = session._host.reserveRetainedBytes(
+					retainedBeforePending + 1,
+				);
+			},
+		});
+
+		invocation.start();
+
+		expect(reentrantOwnerReservation).toBeUndefined();
+		const afterTerminal = session._host.reserveRetainedBytes(
+			retainedBeforePending + 1,
+		);
+		expect(afterTerminal).toBeDefined();
+		afterTerminal?.release();
+		occupied.release();
+	});
+
+	it("RPC-CALL-008 RPC-RESOURCE-003 releases committed incoming storage when reentrant Owner close wins", async () => {
+		const maximumBytes = 4 * 1024 * 1024;
+		const builtIn = getRpcProtocol();
+		let capturedHost: IRpcProtocolHost | undefined;
+		const protocol = Object.freeze<IRpcProtocol>({
+			createAcceptor: (host) => {
+				capturedHost = host;
+				return builtIn.createAcceptor(host);
+			},
+			createConnector: (host) => builtIn.createConnector(host),
+		});
+		const network = createRpcTestNetwork();
+		const descriptor = createRemoteServiceDescriptor(ILedgerService, {
+			wireName: "example.reentrant-incoming-ledger.v1",
+			methods: { run: true },
+		});
+		const handler = vi.fn((value: number) => value);
+		const acceptor = createRpcAcceptor({
+			protocol,
+			runtimePolicy: {
+				maxSessions: 1,
+				maxHandshakes: 1,
+				maxRetainedBytesPerSession: maximumBytes,
+				maxRetainedBytesTotal: maximumBytes,
+			},
+		});
+		const connector = createRpcConnector({
+			runtimePolicy: { maxRetainedBytesPerSession: maximumBytes },
+		});
+		acceptor.expose(descriptor, { run: handler });
+		let closeTask: Promise<void> | undefined;
+		const eventSubscription = acceptor.event$.subscribe((event) => {
+			if (
+				event.type === RpcEventTypeEnum.callStarted &&
+				event.direction === RpcCallDirectionEnum.incoming
+			) {
+				closeTask ??= acceptor.close();
+			}
+		});
+
+		try {
+			await acceptor.listen(network.acceptorAdapter);
+			await connector.connect({ adapter: network.createConnectorAdapter() });
+			void connector.peer
+				.resolve(descriptor)
+				.run(1)
+				.catch(() => {});
+			await vi.waitFor(() => expect(closeTask).toBeDefined());
+			await closeTask;
+			await Promise.resolve();
+			await Promise.resolve();
+
+			expect(handler).not.toHaveBeenCalled();
+			if (capturedHost === undefined) {
+				throw new Error("Expected the Acceptor Protocol host to be captured.");
+			}
+			const replacement = capturedHost.reserveRetainedBytes(maximumBytes);
+			expect(replacement).toBeDefined();
+			replacement?.release();
+		} finally {
+			eventSubscription.unsubscribe();
+			await Promise.allSettled([connector.close(), acceptor.close()]);
+		}
+	});
+
+	it("RPC-LEDGER-005 RPC-RESOURCE-003 releases an admitted outgoing request payload from the call ledger", async () => {
+		const harness = createRpcDirectSessionHarness();
+		const reservation = harness.session.reserveInvocation({
+			service: "example.outgoing-ledger.v1",
+			method: "run",
+			args: normalizeRpcApplicationArguments(["x".repeat(512 * 1024)]),
+		});
+		if (reservation === undefined) {
+			throw new Error("Expected outgoing Invocation capacity.");
+		}
+		const invocation = reservation.commit({ finish() {} });
+
+		invocation.start();
+		await vi.waitFor(() => expect(harness.sent).toHaveLength(1));
+
+		const entry = harness.session._outgoingCalls.get("1");
+		expect(entry).toBeDefined();
+		expect(entry?.request).toBeUndefined();
+		expect(harness.session._replay.has(1)).toBe(true);
+		const endpoint = harness.session._binding?.endpoint;
+		if (endpoint === undefined) {
+			throw new Error("Expected an active direct Session binding.");
+		}
+		harness.session.receive(
+			endpoint,
+			codec.encode({ kind: RpcWireRecordKindEnum.ack, ackThrough: 1 }),
+		);
+		expect(harness.session._replay.has(1)).toBe(false);
+		expect(harness.session._outgoingCalls.get("1")).toBe(entry);
+		expect(entry?.request).toBeUndefined();
+
+		harness.session.forceClose();
+	});
+
+	it("RPC-LEDGER-005 retains terminal identity without the finished Framework call handle", async () => {
+		const harness = createRpcDirectSessionHarness();
+		const finishes: unknown[] = [];
+		harness.session._sessionHost = {
+			reserveIncomingCall: () => ({
+				kind: RpcIncomingCallKindEnum.handler,
+				reservation: {
+					commit: () => ({
+						handlerOutcome: Promise.resolve({
+							type: RpcCallTerminalTypeEnum.returnedVoid,
+						}),
+						finish: (outcome) => finishes.push(outcome),
+					}),
+					release() {},
+				},
+			}),
+			transition() {},
+			fault() {},
+		};
+
+		harness.session._receiveCall({
+			kind: RpcWireRecordKindEnum.call,
+			callId: "1",
+			service: "example.finished-call.v1",
+			method: "run",
+			args: [1],
+		});
+		await vi.waitFor(() => expect(harness.sent).toHaveLength(1));
+
+		const entry = harness.session._incomingCalls.get("1");
+		expect(entry).toMatchObject({
+			callId: "1",
+			terminalSelected: true,
+			terminalSequence: 1,
+			call: undefined,
+		});
+		expect(entry).not.toHaveProperty("handlerCall");
+		expect(finishes).toEqual([{ type: RpcCallTerminalTypeEnum.returnedVoid }]);
+		harness.session.forceClose();
+	});
+
 	it("RPC-ACK-007 removes newly acknowledged entries from an in-progress replay barrier", async () => {
 		const harness = createRpcDirectSessionHarness();
 		const { session } = harness;
@@ -119,6 +334,24 @@ describe("Default RPC Protocol retained ledger", () => {
 		expect(acceptor.peers[0]?.state).toEqual({ status: "connected" });
 
 		await Promise.all([connector.close(), acceptor.close()]);
+	});
+
+	it("RPC-LEDGER-003 RPC-VALUE-004 validates call arguments before draining capacity rejection", () => {
+		const harness = createRpcDirectSessionHarness();
+		harness.session._draining = true;
+
+		expect(() =>
+			harness.session._receiveCall({
+				kind: RpcWireRecordKindEnum.call,
+				callId: "1",
+				service: "example.invalid-capacity.v1",
+				method: "run",
+				args: ["x".repeat(524_289)],
+			}),
+		).toThrow(TypeError);
+		expect(harness.session._highestIncomingCallOrdinal).toBe(0);
+		expect(harness.sent).toEqual([]);
+		harness.session.forceClose();
 	});
 
 	it("RPC-LEDGER-003 RPC-LEDGER-005 RPC-VALID-006 rejects capacity before route lookup at 256 unacknowledged incoming ledgers RPC-CORPUS-004", async () => {

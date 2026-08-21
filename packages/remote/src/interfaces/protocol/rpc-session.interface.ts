@@ -8,6 +8,7 @@ import type { IRpcEndpoint } from "@/interfaces/protocol/rpc-endpoint.interface"
 import type {
 	IRpcProtocolSession,
 	IRpcProtocolSessionHost,
+	IRpcRetainedBytesReservation,
 } from "@/interfaces/protocol/rpc-protocol.interface";
 
 export interface IRpcSession<TKey> extends IRpcProtocolSession {
@@ -21,6 +22,7 @@ export interface IRpcSession<TKey> extends IRpcProtocolSession {
 	readonly recoveryReclaimDeadline: number | undefined;
 	readonly isClosed: boolean;
 	readonly highestAcceptedResumeAttempt: number;
+	reserveRetainedBytes(bytes: number): IRpcRetainedBytesReservation | undefined;
 	ownsEndpoint(endpoint: IRpcEndpoint): boolean;
 	consumeResumeAttempt(): number;
 	classifyPeerCursor(cursor: number): RpcPeerCursorClassificationEnum;

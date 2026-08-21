@@ -4,6 +4,7 @@
  * @created 2026-08-19 00:00:00
  */
 
+import { RPC_PROTECTED_SESSION_BYTES } from "@/constants/protocol/rpc-profile.const";
 import { RpcCallTerminalTypeEnum } from "@/enums/protocol/rpc-call-terminal-type.enum";
 import { RpcDecodePhaseEnum } from "@/enums/protocol/rpc-decode-phase.enum";
 import { RpcEndpointFailureEnum } from "@/enums/protocol/rpc-endpoint-failure.enum";
@@ -14,17 +15,22 @@ import { RpcProtocolSessionTransitionTypeEnum } from "@/enums/protocol/rpc-proto
 import { RpcWireRecordKindEnum } from "@/enums/protocol/rpc-wire-record-kind.enum";
 import { RpcCloseReasonEnum } from "@/enums/rpc-close-reason.enum";
 import { RpcExceptionCodeEnum } from "@/enums/rpc-exception-code.enum";
+import {
+	RpcRetainedBytesLedgerImpl,
+	registerRpcSessionRetainedBytes,
+	unregisterRpcSessionRetainedBytes,
+} from "@/impls/protocol/rpc-retained-bytes-ledger.impl";
 import type { IRpcCodec } from "@/interfaces/protocol/rpc-codec.interface";
 import type { IRpcEndpoint } from "@/interfaces/protocol/rpc-endpoint.interface";
 import type {
 	IRpcProtocolHost,
 	IRpcProtocolIncomingCall,
-	IRpcProtocolIncomingHandlerCall,
 	IRpcProtocolInvocation,
 	IRpcProtocolInvocationRequest,
 	IRpcProtocolInvocationReservation,
 	IRpcProtocolInvocationSink,
 	IRpcProtocolSessionHost,
+	IRpcRetainedBytesReservation,
 	RpcCallOutcome,
 	RpcHandlerOutcome,
 	RpcIncomingTerminal,
@@ -53,9 +59,10 @@ interface IRpcBinding {
 }
 
 interface IRpcInvocationEntry {
-	readonly request: IRpcProtocolInvocationRequest;
+	request?: IRpcProtocolInvocationRequest;
 	readonly sink: IRpcProtocolInvocationSink;
 	readonly pendingCharge: number;
+	retainedBytesReservation?: IRpcRetainedBytesReservation;
 	pendingCharged: boolean;
 	started: boolean;
 	admitted: boolean;
@@ -68,7 +75,6 @@ interface IRpcInvocationEntry {
 interface IRpcIncomingEntry {
 	readonly callId: string;
 	call?: IRpcProtocolIncomingCall;
-	handlerCall?: IRpcProtocolIncomingHandlerCall;
 	terminalSequence?: number;
 	terminalSelected: boolean;
 }
@@ -76,6 +82,7 @@ interface IRpcIncomingEntry {
 interface IRpcReplayEntry {
 	readonly message: RpcSemanticMessage;
 	readonly charge: number;
+	readonly retainedBytesReservation?: IRpcRetainedBytesReservation;
 	readonly resourceClass: "ordinary" | "terminal" | "cancel";
 	released: boolean;
 }
@@ -92,6 +99,8 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 	readonly _sessionId: string;
 	readonly _codec: IRpcCodec;
 	readonly _onTerminal: (session: IRpcSession<TKey>) => void;
+	readonly _retainedBytesLedger: RpcRetainedBytesLedgerImpl;
+	readonly _protectedRetainedBytesReservation: IRpcRetainedBytesReservation;
 	_proofKey: TKey | undefined;
 	_sessionHost: IRpcProtocolSessionHost | undefined;
 	_binding: IRpcBinding | undefined;
@@ -156,6 +165,21 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 		} = options;
 		this._role = role;
 		this._host = host;
+		this._retainedBytesLedger = new RpcRetainedBytesLedgerImpl(
+			host.policy.maxRetainedBytesPerSession,
+		);
+		const protectedRetainedBytesReservation = this._retainedBytesLedger.reserve(
+			RPC_PROTECTED_SESSION_BYTES,
+		);
+		if (protectedRetainedBytesReservation === undefined) {
+			throw new Error(
+				"Default RPC Session cannot protect retained control state.",
+			);
+		}
+		this._protectedRetainedBytesReservation = protectedRetainedBytesReservation;
+		registerRpcSessionRetainedBytes(this, (bytes) =>
+			this.reserveRetainedBytes(bytes),
+		);
 		this._sessionId = sessionId;
 		this._codec = codec;
 		this._proofKey = proofKey;
@@ -205,6 +229,41 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 
 	get highestAcceptedResumeAttempt(): number {
 		return this._highestAcceptedResumeAttempt;
+	}
+
+	reserveRetainedBytes(
+		bytes: number,
+	): IRpcRetainedBytesReservation | undefined {
+		if (this._closed) {
+			return undefined;
+		}
+		const sessionReservation = this._retainedBytesLedger.reserve(bytes);
+		if (sessionReservation === undefined) {
+			return undefined;
+		}
+		let ownerReservationCandidate: IRpcRetainedBytesReservation | undefined;
+		try {
+			ownerReservationCandidate = this._host.reserveRetainedBytes(bytes);
+		} catch (error) {
+			sessionReservation.release();
+			throw error;
+		}
+		if (ownerReservationCandidate === undefined) {
+			sessionReservation.release();
+			return undefined;
+		}
+		const ownerReservation = ownerReservationCandidate;
+		let released = false;
+		return Object.freeze<IRpcRetainedBytesReservation>({
+			release: () => {
+				if (released) {
+					return;
+				}
+				released = true;
+				sessionReservation.release();
+				ownerReservation.release();
+			},
+		});
 	}
 
 	ownsEndpoint(endpoint: IRpcEndpoint): boolean {
@@ -435,6 +494,10 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 		) {
 			return undefined;
 		}
+		const retainedBytesReservation = this.reserveRetainedBytes(pendingCharge);
+		if (retainedBytesReservation === undefined) {
+			return undefined;
+		}
 		this._invocationCount += 1;
 		this._pendingInvocationBytes += pendingCharge;
 		let reservationState: "reserved" | "committed" | "released" = "reserved";
@@ -455,6 +518,7 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 					request,
 					sink,
 					pendingCharge,
+					retainedBytesReservation,
 					pendingCharged: true,
 					started: false,
 					admitted: false,
@@ -480,6 +544,7 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 				reservationState = "released";
 				this._invocationCount -= 1;
 				this._pendingInvocationBytes -= pendingCharge;
+				retainedBytesReservation.release();
 			},
 		});
 	}
@@ -506,7 +571,10 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 		this._closed = true;
 		this._clearTimers();
 		this._terminateOpenCalls();
+		this._releaseReplayState();
 		this._binding?.endpoint.fenceAndClose();
+		this._protectedRetainedBytesReservation.release();
+		unregisterRpcSessionRetainedBytes(this);
 		this._binding = undefined;
 		this._proofKey = undefined;
 		this._onTerminal(this);
@@ -570,6 +638,7 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 	}
 
 	_receiveCall(message: RpcCallMessage): void {
+		const args = this._host.normalizeApplicationArguments(message.args);
 		const ordinal = Number(message.callId);
 		if (ordinal !== this._highestIncomingCallOrdinal + 1) {
 			throw new Error("Default RPC Call Ordinal is not contiguous.");
@@ -583,7 +652,6 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 			this._queueError(message.callId, RpcExceptionCodeEnum.unavailable);
 			return;
 		}
-		const args = this._host.normalizeApplicationArguments(message.args);
 		const reservation = sessionHost.reserveIncomingCall({
 			service: message.service,
 			method: message.method,
@@ -601,13 +669,20 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 
 		if (reservation.kind === RpcIncomingCallKindEnum.unknown) {
 			const incoming = reservation.reservation.commit();
+			if (this._closed) {
+				incoming.finish({
+					type: RpcCallTerminalTypeEnum.failed,
+					code: reservation.code,
+				});
+				return;
+			}
 			const entry: IRpcIncomingEntry = {
 				callId: message.callId,
 				call: incoming,
 				terminalSelected: true,
 			};
 			this._incomingCalls.set(message.callId, entry);
-			incoming.finish({
+			this._finishIncomingCall(entry, {
 				type: RpcCallTerminalTypeEnum.failed,
 				code: reservation.code,
 			});
@@ -616,10 +691,15 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 		}
 
 		const incoming = reservation.reservation.commit();
+		if (this._closed) {
+			incoming.finish({
+				type: RpcCallTerminalTypeEnum.sessionTerminated,
+			});
+			return;
+		}
 		const entry: IRpcIncomingEntry = {
 			callId: message.callId,
 			call: incoming,
-			handlerCall: incoming,
 			terminalSelected: false,
 		};
 		this._incomingCalls.set(message.callId, entry);
@@ -645,7 +725,7 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 			return;
 		}
 		incoming.terminalSelected = true;
-		incoming.call.finish({
+		this._finishIncomingCall(incoming, {
 			type: RpcCallTerminalTypeEnum.failed,
 			code: RpcExceptionCodeEnum.canceled,
 		});
@@ -734,7 +814,16 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 			};
 			this._queueError(entry.callId, RpcExceptionCodeEnum.handlerFailed);
 		}
-		entry.call.finish(terminal);
+		this._finishIncomingCall(entry, terminal);
+	}
+
+	_finishIncomingCall(
+		entry: IRpcIncomingEntry,
+		terminal: RpcIncomingTerminal,
+	): void {
+		const call = entry.call;
+		entry.call = undefined;
+		call?.finish(terminal);
 	}
 
 	_queueError(callId: string, code: RpcWireErrorCode): boolean {
@@ -904,23 +993,57 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 			this._beginCounterDrain();
 			return;
 		}
+		let request = entry.request;
+		if (request === undefined) {
+			this._fault(
+				RpcCloseReasonEnum.protocolFault,
+				new Error("Default RPC Pending Invocation lost its request."),
+			);
+			return;
+		}
 		const callId = String(this._nextOutgoingCallOrdinal);
-		const message = Object.freeze({
+		let message: RpcCallMessage | undefined = Object.freeze({
 			kind: RpcWireRecordKindEnum.call,
 			callId,
-			service: entry.request.service,
-			method: entry.request.method,
-			args: entry.request.args.value,
+			service: request.service,
+			method: request.method,
+			args: request.args.value,
 		}) as RpcCallMessage;
 		const sequence = this._nextOutgoingSequence;
-		const replay = this._reserveReplayEntry(message);
+		this._releasePendingRetainedBytes(entry);
+		let replay = this._reserveReplayEntry(message);
 		if (replay === undefined) {
+			// Keep the payload charged outside the entry so reentrant terminal cleanup
+			// cannot release its guard before this admission frame returns.
+			let retainedBytesGuard = this.reserveRetainedBytes(entry.pendingCharge);
+			if (retainedBytesGuard === undefined) {
+				entry.request = undefined;
+				request = undefined;
+				message = undefined;
+				this._fault(
+					RpcCloseReasonEnum.resourceFault,
+					new Error("Default RPC Pending retained-byte charge was lost."),
+				);
+				return;
+			}
+			entry.request = undefined;
+			request = undefined;
+			message = undefined;
 			this._pendingInvocations.shift();
-			this._finishInvocation(entry, {
-				type: RpcCallTerminalTypeEnum.failed,
-				code: RpcExceptionCodeEnum.unavailable,
-			});
-			this._retireInvocation(entry);
+			this._releasePendingInvocationCharge(entry);
+			try {
+				this._finishInvocation(entry, {
+					type: RpcCallTerminalTypeEnum.failed,
+					code: RpcExceptionCodeEnum.unavailable,
+				});
+			} finally {
+				try {
+					this._retireInvocation(entry);
+				} finally {
+					retainedBytesGuard.release();
+					retainedBytesGuard = undefined;
+				}
+			}
 			this._pump();
 			return;
 		}
@@ -928,13 +1051,26 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 		try {
 			encoded = this._codec.encode(this._createEnvelope(sequence, message));
 		} catch {
-			this._releaseReplayEntry(replay);
+			let guardedReplay: IRpcReplayEntry | undefined = replay;
+			replay = undefined;
+			entry.request = undefined;
+			request = undefined;
+			message = undefined;
 			this._pendingInvocations.shift();
-			this._finishInvocation(entry, {
-				type: RpcCallTerminalTypeEnum.failed,
-				code: RpcExceptionCodeEnum.unavailable,
-			});
-			this._retireInvocation(entry);
+			this._releasePendingInvocationCharge(entry);
+			try {
+				this._finishInvocation(entry, {
+					type: RpcCallTerminalTypeEnum.failed,
+					code: RpcExceptionCodeEnum.unavailable,
+				});
+			} finally {
+				try {
+					this._retireInvocation(entry);
+				} finally {
+					this._releaseReplayEntry(guardedReplay);
+					guardedReplay = undefined;
+				}
+			}
 			this._pump();
 			return;
 		}
@@ -953,6 +1089,7 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 		this._releasePendingInvocationCharge(entry);
 		this._outgoingCalls.set(callId, entry);
 		this._retainReplayEntry(sequence, replay);
+		entry.request = undefined;
 		this._consumePiggybackAck();
 		this._sendEncoded(binding, encoded);
 		if (this._outgoingCallOrdinalExhausted) {
@@ -1064,6 +1201,7 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 			this._host.policy.maxRetainedBytesPerSession / 4,
 		);
 		const isTerminalPayload = message.kind === RpcWireRecordKindEnum.result;
+		let retainedBytesReservation: IRpcRetainedBytesReservation | undefined;
 		if (resourceClass === "terminal") {
 			if (ordinaryCharge > charge || this._terminalReplayCount >= 256) {
 				return undefined;
@@ -1083,6 +1221,10 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 		) {
 			return undefined;
 		} else {
+			retainedBytesReservation = this.reserveRetainedBytes(charge);
+			if (retainedBytesReservation === undefined) {
+				return undefined;
+			}
 			this._ordinaryReplayCount += 1;
 			this._replayBytes += charge;
 			if (isTerminalPayload) {
@@ -1090,7 +1232,13 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 				this._terminalReplayBytes += charge;
 			}
 		}
-		return { message, charge, resourceClass, released: false };
+		return {
+			message,
+			charge,
+			retainedBytesReservation,
+			resourceClass,
+			released: false,
+		};
 	}
 
 	_retainReplayEntry(sequence: number, replay: IRpcReplayEntry): void {
@@ -1102,6 +1250,7 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 			return;
 		}
 		replay.released = true;
+		replay.retainedBytesReservation?.release();
 		if (replay.resourceClass === "terminal") {
 			this._terminalReplayCount -= 1;
 			return;
@@ -1256,7 +1405,7 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 		for (const incoming of this._incomingCalls.values()) {
 			if (!incoming.terminalSelected && incoming.call !== undefined) {
 				incoming.terminalSelected = true;
-				incoming.call.finish({
+				this._finishIncomingCall(incoming, {
 					type: RpcCallTerminalTypeEnum.sessionTerminated,
 				});
 			}
@@ -1268,6 +1417,11 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 			return;
 		}
 		entry.retired = true;
+		const pendingIndex = this._pendingInvocations.indexOf(entry);
+		if (pendingIndex !== -1) {
+			this._pendingInvocations.splice(pendingIndex, 1);
+		}
+		entry.request = undefined;
 		this._releasePendingInvocationCharge(entry);
 		this._invocations.delete(entry);
 		if (entry.callId !== undefined) {
@@ -1283,6 +1437,25 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 		}
 		entry.pendingCharged = false;
 		this._pendingInvocationBytes -= entry.pendingCharge;
+		this._releasePendingRetainedBytes(entry);
+	}
+
+	_releasePendingRetainedBytes(entry: IRpcInvocationEntry): void {
+		const reservation = entry.retainedBytesReservation;
+		entry.retainedBytesReservation = undefined;
+		reservation?.release();
+	}
+
+	_releaseReplayState(): void {
+		for (const replay of this._replay.values()) {
+			this._releaseReplayEntry(replay);
+		}
+		for (const queued of this._controlQueue) {
+			this._releaseReplayEntry(queued.replay);
+		}
+		this._replay.clear();
+		this._replayBarrier.length = 0;
+		this._controlQueue.length = 0;
 	}
 
 	_beginCounterDrain(): void {
@@ -1377,6 +1550,9 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 		this._closed = true;
 		this._clearTimers();
 		this._terminateOpenCalls();
+		this._releaseReplayState();
+		this._protectedRetainedBytesReservation.release();
+		unregisterRpcSessionRetainedBytes(this);
 		this._proofKey = undefined;
 		this._sessionHost?.transition({
 			type: RpcProtocolSessionTransitionTypeEnum.closed,
@@ -1399,7 +1575,10 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 		this._closed = true;
 		this._clearTimers();
 		this._terminateOpenCalls();
+		this._releaseReplayState();
 		this._binding?.endpoint.fenceAndClose();
+		this._protectedRetainedBytesReservation.release();
+		unregisterRpcSessionRetainedBytes(this);
 		this._binding = undefined;
 		this._proofKey = undefined;
 		this._sessionHost?.transition({
@@ -1419,7 +1598,10 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 		this._closed = true;
 		this._clearTimers();
 		this._terminateOpenCalls();
+		this._releaseReplayState();
 		this._binding?.endpoint.fenceAndClose();
+		this._protectedRetainedBytesReservation.release();
+		unregisterRpcSessionRetainedBytes(this);
 		this._binding = undefined;
 		this._proofKey = undefined;
 		this._sessionHost?.transition({

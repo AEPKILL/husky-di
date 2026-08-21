@@ -13,17 +13,28 @@ import {
 } from "@/constants/protocol/rpc-profile.const";
 import { RpcEndpointFailureEnum } from "@/enums/protocol/rpc-endpoint-failure.enum";
 import type { IRpcEndpoint } from "@/interfaces/protocol/rpc-endpoint.interface";
+import type { IRpcRetainedBytesReservation } from "@/interfaces/protocol/rpc-protocol.interface";
 import type { IRpcConnection } from "@/interfaces/rpc-connection.interface";
 import type { CreateRpcEndpointOptions } from "@/types/protocol/rpc-endpoint.type";
+
+interface IRpcIngressEntry {
+	readonly message: Uint8Array;
+	reservation?: IRpcRetainedBytesReservation;
+}
 
 /** Owns one exact Physical Connection endpoint and its bounded local work. */
 export class RpcEndpointImpl implements IRpcEndpoint {
 	readonly _connection: IRpcConnection;
+	readonly _reserveRetainedBytes:
+		| ((bytes: number) => IRpcRetainedBytesReservation | undefined)
+		| undefined;
 	readonly _onMessage: (message: Uint8Array) => Promise<void> | void;
 	readonly _onFailure: (reason: RpcEndpointFailureEnum, error?: Error) => void;
-	readonly _ingress: Uint8Array[] = [];
+	readonly _ingress: IRpcIngressEntry[] = [];
 	_subscription: Subscription | undefined;
 	_ingressBytes = 0;
+	_receivedFirstIngressMessage = false;
+	_activeIngress: IRpcIngressEntry | undefined;
 	_processing = false;
 	_sendBusy = false;
 	_sendGeneration = 0;
@@ -35,8 +46,9 @@ export class RpcEndpointImpl implements IRpcEndpoint {
 	_failed = false;
 
 	public constructor(options: CreateRpcEndpointOptions) {
-		const { connection, onFailure, onMessage } = options;
+		const { connection, onFailure, onMessage, reserveRetainedBytes } = options;
 		this._connection = connection;
+		this._reserveRetainedBytes = reserveRetainedBytes;
 		this._onMessage = onMessage;
 		this._onFailure = onFailure;
 		this._subscription = connection.message$.subscribe({
@@ -104,6 +116,10 @@ export class RpcEndpointImpl implements IRpcEndpoint {
 		this._closed = true;
 		this._clearSendProgressTimer();
 		this._subscription?.unsubscribe();
+		this._activeIngress?.reservation?.release();
+		for (const entry of this._ingress) {
+			entry.reservation?.release();
+		}
 		this._ingress.length = 0;
 		this._ingressBytes = 0;
 		try {
@@ -141,8 +157,35 @@ export class RpcEndpointImpl implements IRpcEndpoint {
 			);
 			return;
 		}
-		const snapshot = message.slice();
-		this._ingress.push(snapshot);
+		let reservation: IRpcRetainedBytesReservation | undefined;
+		if (
+			this._receivedFirstIngressMessage &&
+			this._reserveRetainedBytes !== undefined
+		) {
+			reservation = this._reserveRetainedBytes(message.byteLength);
+			if (reservation === undefined) {
+				this._fail(
+					RpcEndpointFailureEnum.resource,
+					new Error("RPC retained-byte allowance is full."),
+				);
+				return;
+			}
+		}
+		let snapshot: Uint8Array;
+		try {
+			snapshot = message.slice();
+		} catch (error) {
+			reservation?.release();
+			this._fail(
+				RpcEndpointFailureEnum.resource,
+				error instanceof Error
+					? error
+					: new Error("RPC ingress snapshot allocation failed."),
+			);
+			return;
+		}
+		this._receivedFirstIngressMessage = true;
+		this._ingress.push({ message: snapshot, reservation });
 		this._ingressBytes += snapshot.byteLength;
 		if (!this._processing) {
 			this._processing = true;
@@ -152,15 +195,32 @@ export class RpcEndpointImpl implements IRpcEndpoint {
 
 	async _drain(): Promise<void> {
 		while (!this._closed && !this._failed) {
-			const message = this._ingress.shift();
-			if (message === undefined) {
+			const entry = this._ingress.shift();
+			if (entry === undefined) {
 				this._processing = false;
 				this._ingressIdleObserver?.();
 				return;
 			}
-			this._ingressBytes -= message.byteLength;
+			this._ingressBytes -= entry.message.byteLength;
+			if (
+				entry.reservation !== undefined &&
+				this._reserveRetainedBytes !== undefined
+			) {
+				entry.reservation.release();
+				entry.reservation = this._reserveRetainedBytes(
+					entry.message.byteLength,
+				);
+				if (entry.reservation === undefined) {
+					this._fail(
+						RpcEndpointFailureEnum.resource,
+						new Error("RPC retained-byte allowance changed before processing."),
+					);
+					return;
+				}
+			}
+			this._activeIngress = entry;
 			try {
-				await this._onMessage(message);
+				await this._onMessage(entry.message);
 			} catch (error) {
 				this._fail(
 					RpcEndpointFailureEnum.protocol,
@@ -169,6 +229,12 @@ export class RpcEndpointImpl implements IRpcEndpoint {
 						: new Error("RPC endpoint ingress processing failed."),
 				);
 				return;
+			} finally {
+				entry.reservation?.release();
+				entry.reservation = undefined;
+				if (this._activeIngress === entry) {
+					this._activeIngress = undefined;
+				}
 			}
 		}
 	}

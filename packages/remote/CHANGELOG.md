@@ -10,3 +10,11 @@
 - Add framework-neutral Protocol and Adapter conformance runners.
 - Export enums for the stable caller, Protocol, and conformance vocabularies.
 - Publish normative specification, requirement matrix, and wire corpus.
+- Enforce Session and Owner aggregate retained-byte budgets across protected
+  reserves, Protocol replay, handler arguments, and Endpoint ingress.
+- Release completed incoming request arguments and call handles, duplicate
+  outgoing request snapshots, canceled Pending entries, and canceled queued
+  handler jobs immediately; validate platform timer and wrapped Application
+  Value boundaries.
+- Clarify that Session continuity is not initiator authentication and document
+  the required deployment admission boundary.

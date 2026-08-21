@@ -213,6 +213,8 @@
           "type": "array",
           "maxItems": 8192,
           "items": { "$ref": "#/$defs/applicationValue" },
+          "x-maxDepth": 64,
+          "x-maxNodes": 65536,
           "x-maxCompactJsonWeight": 1000000
         }
       },
@@ -337,8 +339,8 @@
   },
   "x-profile": "husky-di-rpc/1",
   "x-maxTransportMessageBytes": 1048576,
-  "x-maxDepth": 64,
-  "x-maxNodes": 65536,
+  "x-maxDepth": 67,
+  "x-maxNodes": 65546,
   "x-maxObjectMembers": 1024,
   "x-maxArrayElements": 8192
 }

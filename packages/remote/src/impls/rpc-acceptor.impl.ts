@@ -17,6 +17,10 @@ import { RpcStateStatusEnum } from "@/enums/rpc-state-status.enum";
 import { getRemoteServiceDescriptorData } from "@/factories/remote-service-descriptor.factory";
 import { createRpcException } from "@/factories/rpc-exception.factory";
 import {
+	RpcRetainedBytesLedgerImpl,
+	reserveRpcSessionRetainedBytes,
+} from "@/impls/protocol/rpc-retained-bytes-ledger.impl";
+import {
 	type RpcPeerCommittedInvocation,
 	RpcPeerImpl,
 	type RpcPeerInvocationReservation,
@@ -26,6 +30,7 @@ import type {
 	IRpcProtocolRuntimePolicy,
 	IRpcProtocolSession,
 	IRpcProtocolSessionHost,
+	IRpcRetainedBytesReservation,
 	RpcProtocolFaultReason,
 	RpcProtocolSessionTransition,
 	RpcSessionCloseReason,
@@ -89,6 +94,7 @@ type RpcAcceptorClosedState = Extract<
 export class RpcAcceptorImpl implements IRpcAcceptor {
 	readonly #runtime: IRpcProtocolAcceptorRuntime;
 	readonly #policy: IRpcProtocolRuntimePolicy;
+	readonly #retainedBytesLedger: RpcRetainedBytesLedgerImpl;
 	readonly #ownerExposureRegistry: RpcExposureRegistry = new Map();
 	readonly #stateSubject = new Subject<RpcAcceptorState>();
 	readonly #peersSubject = new Subject<readonly IRpcPeer[]>();
@@ -129,6 +135,9 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 	) {
 		this.#runtime = runtime;
 		this.#policy = policy;
+		this.#retainedBytesLedger = new RpcRetainedBytesLedgerImpl(
+			policy.maxRetainedBytesTotal,
+		);
 		this.#handlerScheduler = new RpcHandlerScheduler(
 			policy.maxHandlersTotal,
 			policy.maxHandlersPerSession,
@@ -166,6 +175,13 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 
 	get peers(): readonly IRpcPeer[] {
 		return this.#peers;
+	}
+
+	/** Package-private Protocol retained-byte reservation port. */
+	reserveRetainedBytes(
+		bytes: number,
+	): IRpcRetainedBytesReservation | undefined {
+		return this.#retainedBytesLedger.reserve(bytes);
 	}
 
 	expose<T, Definitions extends RpcMethodDefinitions<T>>(
@@ -1091,6 +1107,12 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 				this.#faultSession(session, RpcCloseReasonEnum.protocolFault, error),
 			this.#handlerScheduler,
 			Math.floor(this.#policy.maxRetainedBytesPerSession / 4),
+			(bytes) =>
+				reserveRpcSessionRetainedBytes(
+					session,
+					(ownerBytes) => this.reserveRetainedBytes(ownerBytes),
+					bytes,
+				),
 		);
 		peer.attachProtocolSession(session);
 		this.#sessions.set(session, peer);

@@ -7,12 +7,19 @@
 import { createServiceIdentifier } from "@husky-di/core";
 import { describe, expect, it } from "vitest";
 
+import { RpcCallTerminalTypeEnum } from "../../src/enums/protocol/rpc-call-terminal-type.enum";
+import { RpcPeerImpl } from "../../src/impls/rpc-peer.impl";
 import {
 	createRemoteServiceDescriptor,
 	createRpcAcceptor,
 	createRpcConnector,
+	RpcStateStatusEnum,
 } from "../../src/index";
 import { normalizeRpcApplicationArguments } from "../../src/utils/rpc-application-value.util";
+import {
+	type RpcHandlerJob,
+	RpcHandlerScheduler,
+} from "../../src/utils/rpc-handler-scheduler.util";
 import {
 	createRpcDirectSessionHarness,
 	createRpcTestNetwork,
@@ -33,6 +40,20 @@ const IScheduledRequirementsService =
 	createServiceIdentifier<IScheduledRequirementsService>(
 		"IScheduledRequirementsService",
 	);
+
+class ObservedRpcHandlerScheduler extends RpcHandlerScheduler {
+	jobStarts = 0;
+
+	override enqueue(
+		session: object,
+		job: RpcHandlerJob,
+	): ReturnType<RpcHandlerScheduler["enqueue"]> {
+		return super.enqueue(session, (releasePermit) => {
+			this.jobStarts += 1;
+			return job(releasePermit);
+		});
+	}
+}
 
 describe("Default RPC Protocol remaining requirements", () => {
 	it("RPC-LEDGER-001 RPC-RESOURCE-005 charges Pending payload weight plus 256 bytes before assigning wire identity", async () => {
@@ -396,6 +417,51 @@ describe("Default RPC Protocol remaining requirements", () => {
 			secondConnector.close(),
 			acceptor.close(),
 		]);
+	});
+
+	it("RPC-CALL-008 RPC-SCHEDULE-006 removes a terminal queued handler before its Owner permit becomes available", async () => {
+		const scheduler = new ObservedRpcHandlerScheduler(1, 1);
+		let releaseBlocker!: () => void;
+		scheduler.enqueue({}, (releasePermit) => {
+			releaseBlocker = releasePermit;
+			return true;
+		});
+		await Promise.resolve();
+		expect(scheduler.jobStarts).toBe(1);
+
+		const peer = new RpcPeerImpl(
+			{ status: RpcStateStatusEnum.connected },
+			new Map(),
+			() => true,
+			() => {},
+			() => {},
+			scheduler,
+			1024 * 1024,
+		);
+		const descriptor = createRemoteServiceDescriptor(
+			IScheduledRequirementsService,
+			{
+				wireName: "example.terminal-queued-handler.v1",
+				methods: { run: true },
+			},
+		);
+		peer.expose(descriptor, { run: async (value) => value });
+		const reservation = peer.reserveIncomingProtocolCall({
+			service: "example.terminal-queued-handler.v1",
+			method: "run",
+			args: normalizeRpcApplicationArguments(["payload"]),
+		});
+		if (reservation?.kind !== "handler") {
+			throw new Error("Expected a queued handler reservation.");
+		}
+		const call = reservation.reservation.commit();
+
+		call.finish({ type: RpcCallTerminalTypeEnum.sessionTerminated });
+		releaseBlocker();
+		await Promise.resolve();
+		await Promise.resolve();
+
+		expect(scheduler.jobStarts).toBe(1);
 	});
 
 	it("RPC-CORPUS-004 RPC-SHUTDOWN-008 gracefully converges the default 64-Session boundary in parallel", async () => {

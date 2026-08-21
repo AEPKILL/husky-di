@@ -4,6 +4,7 @@
  * @created 2026-08-19 00:00:00
  */
 
+import { RPC_PROTECTED_SESSION_BYTES } from "@/constants/protocol/rpc-profile.const";
 import { RpcDecodePhaseEnum } from "@/enums/protocol/rpc-decode-phase.enum";
 import { RpcEndpointFailureEnum } from "@/enums/protocol/rpc-endpoint-failure.enum";
 import { RpcPeerCursorClassificationEnum } from "@/enums/protocol/rpc-peer-cursor-classification.enum";
@@ -20,6 +21,7 @@ import type {
 	IRpcProtocolAcceptorRuntime,
 	IRpcProtocolConnectorHost,
 	IRpcProtocolConnectorRuntime,
+	IRpcRetainedBytesReservation,
 } from "@/interfaces/protocol/rpc-protocol.interface";
 import type { IRpcSession } from "@/interfaces/protocol/rpc-session.interface";
 import type { IRpcConnection } from "@/interfaces/rpc-connection.interface";
@@ -63,6 +65,7 @@ interface IRpcAttempt<TKey> {
 	resourcesFinished: boolean;
 	releaseHandshakeSlot?: () => void;
 	freshSessionReserved?: boolean;
+	protectedSessionReservation?: IRpcRetainedBytesReservation;
 	provisionalSessionId?: string;
 	timer?: ReturnType<typeof setTimeout>;
 	removeAbortListener?: () => void;
@@ -88,6 +91,9 @@ function createEndpoint<TKey>(
 		reason: RpcEndpointFailureEnum,
 		error?: Error,
 	) => void,
+	reserveRetainedBytes: (
+		bytes: number,
+	) => IRpcRetainedBytesReservation | undefined,
 ): IRpcEndpoint {
 	let endpoint: IRpcEndpoint | undefined;
 	let earlyFailure:
@@ -95,6 +101,7 @@ function createEndpoint<TKey>(
 		| undefined;
 	endpoint = factory({
 		connection,
+		reserveRetainedBytes,
 		onMessage: (message) => onMessage(endpoint as IRpcEndpoint, message),
 		onFailure: (reason, error) => {
 			if (endpoint === undefined) {
@@ -159,6 +166,24 @@ function finishAttemptResources<TKey>(attempt: IRpcAttempt<TKey>): void {
 	releaseAttemptResources(attempt);
 }
 
+function releaseProtectedSessionReservation<TKey>(
+	attempt: IRpcAttempt<TKey>,
+): void {
+	const reservation = attempt.protectedSessionReservation;
+	attempt.protectedSessionReservation = undefined;
+	reservation?.release();
+}
+
+function reserveAttemptRetainedBytes<TKey>(
+	attempt: IRpcAttempt<TKey>,
+	host: IRpcProtocolConnectorHost | IRpcProtocolAcceptorHost,
+	bytes: number,
+): IRpcRetainedBytesReservation | undefined {
+	return attempt.session === undefined
+		? host.reserveRetainedBytes(bytes)
+		: attempt.session.reserveRetainedBytes(bytes);
+}
+
 async function runAttemptCrypto<TKey, T>(
 	attempt: IRpcAttempt<TKey>,
 	operation: () => Promise<T>,
@@ -219,6 +244,7 @@ class RpcConnectorRuntime<TKey> implements IRpcProtocolConnectorRuntime {
 				(_endpoint, message) => this._receiveConnectorRecord(attempt, message),
 				(_endpoint, reason, error) =>
 					this._connectorEndpointFailed(attempt, reason, error),
+				(bytes) => reserveAttemptRetainedBytes(attempt, this._host, bytes),
 			);
 		} catch (error) {
 			this._handshakeSlotsInUse -= 1;
@@ -429,6 +455,15 @@ class RpcConnectorRuntime<TKey> implements IRpcProtocolConnectorRuntime {
 			if (!valid || !this._isCurrent(attempt)) {
 				throw new Error("Default RPC fresh accept proof is invalid or stale.");
 			}
+			const protectedSessionReservation = this._host.reserveRetainedBytes(
+				RPC_PROTECTED_SESSION_BYTES,
+			);
+			if (protectedSessionReservation === undefined) {
+				throw new Error(
+					"Default RPC owner retained-byte allowance cannot protect a Session.",
+				);
+			}
+			attempt.protectedSessionReservation = protectedSessionReservation;
 
 			const session = this._options.createSession({
 				role: RpcProtocolRoleEnum.connector,
@@ -437,6 +472,7 @@ class RpcConnectorRuntime<TKey> implements IRpcProtocolConnectorRuntime {
 				proofKey,
 				codec: this._options.codec,
 				onTerminal: (terminal) => {
+					protectedSessionReservation.release();
 					if (this._session === terminal) {
 						this._session = undefined;
 					}
@@ -454,6 +490,7 @@ class RpcConnectorRuntime<TKey> implements IRpcProtocolConnectorRuntime {
 			session.installHost(sessionHost);
 			attempt.session = session;
 			this._session = session;
+			attempt.protectedSessionReservation = undefined;
 			session.activateBinding();
 			this._succeedAttempt(attempt);
 		} catch (error) {
@@ -598,6 +635,7 @@ class RpcConnectorRuntime<TKey> implements IRpcProtocolConnectorRuntime {
 			this._attempt = undefined;
 		}
 		finishAttemptResources(attempt);
+		releaseProtectedSessionReservation(attempt);
 		attempt.endpoint.fenceAndClose();
 		attempt.reject(
 			error instanceof Error
@@ -649,6 +687,7 @@ class RpcAcceptorRuntime<TKey> implements IRpcProtocolAcceptorRuntime {
 				(_endpoint, message) => this._receiveBootstrap(attempt, message),
 				(_endpoint, reason, error) =>
 					this._acceptorEndpointFailed(attempt, reason, error),
+				(bytes) => reserveAttemptRetainedBytes(attempt, this._host, bytes),
 			);
 		} catch (error) {
 			this._handshakeSlotsInUse -= 1;
@@ -810,6 +849,10 @@ class RpcAcceptorRuntime<TKey> implements IRpcProtocolAcceptorRuntime {
 				...acceptWithoutProof,
 				proof,
 			}) as RpcFreshAccept;
+			const protectedSessionReservation = attempt.protectedSessionReservation;
+			if (protectedSessionReservation === undefined) {
+				throw new Error("Default RPC protected Session reservation was lost.");
+			}
 			const session = this._options.createSession({
 				role: RpcProtocolRoleEnum.acceptor,
 				host: this._host,
@@ -817,6 +860,7 @@ class RpcAcceptorRuntime<TKey> implements IRpcProtocolAcceptorRuntime {
 				proofKey,
 				codec: this._options.codec,
 				onTerminal: (terminal) => {
+					protectedSessionReservation.release();
 					if (this._sessions.get(terminal.sessionId) === terminal) {
 						this._sessions.delete(terminal.sessionId);
 					}
@@ -833,6 +877,7 @@ class RpcAcceptorRuntime<TKey> implements IRpcProtocolAcceptorRuntime {
 			session.installBinding(attempt.endpoint, 1, 0);
 			attempt.session = session;
 			this._sessions.set(sessionId, session);
+			attempt.protectedSessionReservation = undefined;
 			this._releaseProvisionalSessionId(attempt);
 			this._releaseFreshSession(attempt);
 			try {
@@ -1144,12 +1189,35 @@ class RpcAcceptorRuntime<TKey> implements IRpcProtocolAcceptorRuntime {
 		}
 		this._freshSessionReservations += 1;
 		attempt.freshSessionReserved = true;
-		if (reclaimedSession === undefined) {
-			return true;
+		let protectedSessionReservation = this._host.reserveRetainedBytes(
+			RPC_PROTECTED_SESSION_BYTES,
+		);
+		if (
+			protectedSessionReservation === undefined &&
+			reclaimedSession !== undefined
+		) {
+			this._sessions.delete(reclaimedSession.sessionId);
+			reclaimedSession.terminateForced();
+			reclaimedSession = undefined;
+			protectedSessionReservation = this._host.reserveRetainedBytes(
+				RPC_PROTECTED_SESSION_BYTES,
+			);
 		}
-		this._sessions.delete(reclaimedSession.sessionId);
-		reclaimedSession.terminateForced();
-		return this._isCurrent(attempt) && attempt.freshSessionReserved === true;
+		if (protectedSessionReservation === undefined) {
+			this._releaseFreshSession(attempt);
+			return false;
+		}
+		attempt.protectedSessionReservation = protectedSessionReservation;
+		if (reclaimedSession !== undefined) {
+			this._sessions.delete(reclaimedSession.sessionId);
+			reclaimedSession.terminateForced();
+		}
+		if (!this._isCurrent(attempt)) {
+			releaseProtectedSessionReservation(attempt);
+			this._releaseFreshSession(attempt);
+			return false;
+		}
+		return true;
 	}
 
 	_releaseFreshSession(attempt: IRpcAttempt<TKey>): void {
@@ -1216,6 +1284,7 @@ class RpcAcceptorRuntime<TKey> implements IRpcProtocolAcceptorRuntime {
 		this._attempts.delete(attempt);
 		this._releaseProvisionalSessionId(attempt);
 		this._releaseFreshSession(attempt);
+		releaseProtectedSessionReservation(attempt);
 		finishAttemptResources(attempt);
 		attempt.resolve();
 	}
@@ -1233,6 +1302,7 @@ class RpcAcceptorRuntime<TKey> implements IRpcProtocolAcceptorRuntime {
 		this._attempts.delete(attempt);
 		this._releaseProvisionalSessionId(attempt);
 		this._releaseFreshSession(attempt);
+		releaseProtectedSessionReservation(attempt);
 		finishAttemptResources(attempt);
 		if (!retainSession) {
 			attempt.endpoint.fenceAndClose();

@@ -26,7 +26,7 @@ export class RpcHandlerScheduler {
 		this.#maximumSessionHandlers = maximumSessionHandlers;
 	}
 
-	enqueue(session: object, job: RpcHandlerJob): void {
+	enqueue(session: object, job: RpcHandlerJob): () => void {
 		let queue = this.#sessions.get(session);
 		if (queue === undefined) {
 			queue = { jobs: [], running: 0, ready: false };
@@ -35,6 +35,28 @@ export class RpcHandlerScheduler {
 		queue.jobs.push(job);
 		this.#markReady(session, queue);
 		this.#scheduleDrain();
+		let queued = true;
+		return () => {
+			if (!queued) {
+				return;
+			}
+			queued = false;
+			const jobIndex = queue.jobs.indexOf(job);
+			if (jobIndex === -1) {
+				return;
+			}
+			queue.jobs.splice(jobIndex, 1);
+			if (queue.ready && queue.jobs.length === 0) {
+				queue.ready = false;
+				const readyIndex = this.#readySessions.indexOf(session);
+				if (readyIndex !== -1) {
+					this.#readySessions.splice(readyIndex, 1);
+				}
+			}
+			if (this.#sessions.get(session) === queue) {
+				this.#removeIdleSession(session, queue);
+			}
+		};
 	}
 
 	#markReady(session: object, queue: RpcHandlerSessionQueue): void {

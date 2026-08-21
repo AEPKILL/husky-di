@@ -4,7 +4,10 @@ Import the complete implementor surface from `@husky-di/remote/protocol`. A
 Protocol creates separate Connector and Acceptor runtimes and retains its own
 Session state. Framework-owned host ports provide normalized Application Value
 snapshots, outgoing and incoming call transactions, lifecycle projection, and
-fault scoping.
+fault scoping. `reserveRetainedBytes()` atomically charges the Topology Owner's
+aggregate retained-byte budget, returning `undefined` when it is full or a
+frozen idempotent release token on success; custom Protocols must hold one for
+every retained representation covered by `maxRetainedBytesTotal`.
 
 The seam is deliberately semantic. A custom Protocol owns its encoding,
 handshake, continuity proof, ordering, replay, ACK, and wire scheduler; none of
@@ -40,6 +43,8 @@ total for contract-valid input, and must not re-enter user code.
 Only snapshots returned by the host normalization methods may cross the SPI.
 Forged snapshots, impossible terminal outcomes, double winners, or unexpected
 throws are Protocol faults at the narrowest known owner or Session scope.
+Release each retained-byte reservation on its unique ACK, call terminal,
+cancellation, failed admission, Endpoint close, or Session terminal winner.
 
 ## Verification
 

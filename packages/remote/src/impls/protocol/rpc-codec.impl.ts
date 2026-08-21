@@ -4,7 +4,11 @@
  * @created 2026-08-19 00:00:00
  */
 
-import { RPC_MAX_MESSAGE_BYTES } from "@/constants/protocol/rpc-profile.const";
+import {
+	RPC_MAX_MESSAGE_BYTES,
+	RPC_MAX_WIRE_DEPTH,
+	RPC_MAX_WIRE_NODES,
+} from "@/constants/protocol/rpc-profile.const";
 import { RpcDecodePhaseEnum } from "@/enums/protocol/rpc-decode-phase.enum";
 import { RpcProfileEnum } from "@/enums/protocol/rpc-profile.enum";
 import { RpcResumeRejectCodeEnum } from "@/enums/protocol/rpc-resume-reject-code.enum";
@@ -32,6 +36,10 @@ import type {
 	RpcSemanticMessage,
 	RpcWireErrorCode,
 } from "@/types/protocol/rpc-wire-record.type";
+import {
+	normalizeRpcApplicationArguments,
+	normalizeRpcApplicationValue,
+} from "@/utils/rpc-application-value.util";
 
 export class RpcCodecImpl implements IRpcCodec {
 	public encode(record: RpcJsonRecord): Uint8Array {
@@ -151,11 +159,11 @@ class BoundedJsonParser {
 	}
 
 	_parseValue(depth: number): RpcJsonValue {
-		if (depth > 64) {
+		if (depth > RPC_MAX_WIRE_DEPTH) {
 			throw new Error("RPC JSON exceeds the depth limit.");
 		}
 		this._nodes += 1;
-		if (this._nodes > 65_536) {
+		if (this._nodes > RPC_MAX_WIRE_NODES) {
 			throw new Error("RPC JSON exceeds the node limit.");
 		}
 
@@ -411,12 +419,16 @@ function validateSemanticMessage(
 		if (!Array.isArray(value.args)) {
 			throw new Error("RPC call args must be an array.");
 		}
+		normalizeRpcApplicationArguments(value.args);
 		return value as RpcCallMessage;
 	}
 	if (kind === RpcWireRecordKindEnum.cancel) {
 		return value as RpcCancelMessage;
 	}
 	if (kind === RpcWireRecordKindEnum.result) {
+		if (Object.hasOwn(value, "value")) {
+			normalizeRpcApplicationValue(value.value);
+		}
 		return value as RpcResultMessage;
 	}
 	if (kind === RpcWireRecordKindEnum.error) {
@@ -433,6 +445,9 @@ function validateSemanticMessage(
 			throw new Error("RPC error code is outside the profile union.");
 		}
 		readString(value.error, "message");
+		if (Object.hasOwn(value.error, "details")) {
+			normalizeRpcApplicationValue(value.error.details);
+		}
 		return value as RpcErrorMessage;
 	}
 	throw new Error("RPC semantic message kind is unknown.");

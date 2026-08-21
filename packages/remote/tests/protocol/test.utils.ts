@@ -8,9 +8,11 @@ import { Subject } from "rxjs";
 import { RpcProtocolRoleEnum } from "../../src/enums/protocol/rpc-protocol-role.enum";
 import { RpcCodecImpl } from "../../src/impls/protocol/rpc-codec.impl";
 import { RpcEndpointImpl } from "../../src/impls/protocol/rpc-endpoint.impl";
+import { RpcRetainedBytesLedgerImpl } from "../../src/impls/protocol/rpc-retained-bytes-ledger.impl";
 import { RpcSessionImpl } from "../../src/impls/protocol/rpc-session.impl";
 import type {
 	IRpcProtocolHost,
+	IRpcProtocolRuntimePolicy,
 	RpcProtocolFaultReason,
 	RpcProtocolSessionTransition,
 } from "../../src/interfaces/protocol/rpc-protocol.interface";
@@ -74,30 +76,38 @@ export interface IRpcDirectSessionHarness {
 	installReplacement(peerReceivedThrough?: number): RpcEndpointImpl;
 }
 
-export function createRpcDirectSessionHarness(): IRpcDirectSessionHarness {
+export function createRpcDirectSessionHarness(
+	policyOverrides: Partial<IRpcProtocolRuntimePolicy> = {},
+): IRpcDirectSessionHarness {
 	const sent: Readonly<Record<string, unknown>>[] = [];
 	const transitions: RpcProtocolSessionTransition[] = [];
 	const faults: RpcProtocolFaultReason[] = [];
 	const decoder = new TextDecoder();
 	let sendSettlement: Promise<void> | undefined;
 	let session: RpcSessionImpl | undefined;
+	const policy: IRpcProtocolRuntimePolicy = {
+		maxSessions: 1,
+		maxHandshakes: 1,
+		maxPendingInvocationsPerSession: 256,
+		maxRetainedBytesPerSession: 32 * 1024 * 1024,
+		maxRetainedBytesTotal: 32 * 1024 * 1024,
+		maxHandlersPerSession: 16,
+		maxHandlersTotal: 16,
+		ackDelayMs: 50,
+		activityProbeIntervalMs: 30_000,
+		silenceTimeoutMs: 120_000,
+		sendProgressTimeoutMs: 30_000,
+		bindingAttemptTimeoutMs: 30_000,
+		recoveryGraceMs: 300_000,
+		shutdownDeadlineMs: 5_000,
+		...policyOverrides,
+	};
+	const retainedBytes = new RpcRetainedBytesLedgerImpl(
+		policy.maxRetainedBytesTotal,
+	);
 	const host: IRpcProtocolHost = {
-		policy: {
-			maxSessions: 1,
-			maxHandshakes: 1,
-			maxPendingInvocationsPerSession: 256,
-			maxRetainedBytesPerSession: 32 * 1024 * 1024,
-			maxRetainedBytesTotal: 32 * 1024 * 1024,
-			maxHandlersPerSession: 16,
-			maxHandlersTotal: 16,
-			ackDelayMs: 50,
-			activityProbeIntervalMs: 30_000,
-			silenceTimeoutMs: 120_000,
-			sendProgressTimeoutMs: 30_000,
-			bindingAttemptTimeoutMs: 30_000,
-			recoveryGraceMs: 300_000,
-			shutdownDeadlineMs: 5_000,
-		},
+		policy,
+		reserveRetainedBytes: (bytes) => retainedBytes.reserve(bytes),
 		normalizeApplicationValue: normalizeRpcApplicationValue,
 		normalizeApplicationArguments: normalizeRpcApplicationArguments,
 		applicationValuesEqual: rpcApplicationValuesEqual,

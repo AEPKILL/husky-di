@@ -6,6 +6,10 @@
 
 import { Subject } from "rxjs";
 import { describe, expect, it, vi } from "vitest";
+import {
+	RPC_MAX_WIRE_DEPTH,
+	RPC_MAX_WIRE_NODES,
+} from "../../src/constants/protocol/rpc-profile.const";
 import { RpcDecodePhaseEnum } from "../../src/enums/protocol/rpc-decode-phase.enum";
 import type { RpcEndpointFailureEnum } from "../../src/enums/protocol/rpc-endpoint-failure.enum";
 import { RpcProtocolRoleEnum } from "../../src/enums/protocol/rpc-protocol-role.enum";
@@ -13,12 +17,17 @@ import { RpcWireRecordKindEnum } from "../../src/enums/protocol/rpc-wire-record-
 import { RpcExceptionCodeEnum } from "../../src/enums/rpc-exception-code.enum";
 import { RpcCodecImpl } from "../../src/impls/protocol/rpc-codec.impl";
 import { RpcEndpointImpl } from "../../src/impls/protocol/rpc-endpoint.impl";
+import { RpcRetainedBytesLedgerImpl } from "../../src/impls/protocol/rpc-retained-bytes-ledger.impl";
 import { RpcSessionImpl } from "../../src/impls/protocol/rpc-session.impl";
 import type {
 	IRpcProtocolHost,
 	IRpcProtocolRuntimePolicy,
 } from "../../src/interfaces/protocol/rpc-protocol.interface";
 import type { IRpcConnection } from "../../src/interfaces/rpc-connection.interface";
+import type {
+	RpcJsonRecord,
+	RpcJsonValue,
+} from "../../src/types/protocol/rpc-wire-record.type";
 import {
 	normalizeRpcApplicationArguments,
 	normalizeRpcApplicationValue,
@@ -61,6 +70,64 @@ function createNodeBoundaryJson(totalNodes: number): string {
 	return `{"kind":"ping","future":[${chunks.join(",")}]}`;
 }
 
+function createNestedApplicationValue(depth: number): RpcJsonValue {
+	let value: RpcJsonValue = null;
+	for (let index = 1; index < depth; index += 1) {
+		value = [value];
+	}
+	return value;
+}
+
+function createApplicationArgumentsWithNodes(
+	totalNodes: number,
+): readonly RpcJsonValue[] {
+	const innerArrays = 8;
+	let remainingLeaves = totalNodes - 1 - innerArrays;
+	const chunks: RpcJsonValue[][] = [];
+	for (let index = 0; index < innerArrays; index += 1) {
+		const leaves = Math.min(8192, remainingLeaves);
+		chunks.push(Array.from({ length: leaves }, () => null));
+		remainingLeaves -= leaves;
+	}
+	return chunks;
+}
+
+function createApplicationRecordWithNodes(totalNodes: number): RpcJsonRecord {
+	const value = Object.create(null) as Record<string, RpcJsonValue>;
+	let remainingLeaves = totalNodes - 1 - 1024;
+	for (let index = 0; index < 1024; index += 1) {
+		const leaves = Math.min(63, remainingLeaves);
+		value[`key${index}`] = Array.from({ length: leaves }, () => null);
+		remainingLeaves -= leaves;
+	}
+	return value;
+}
+
+function createApplicationMessages(
+	args: readonly RpcJsonValue[],
+	value: RpcJsonValue,
+): readonly RpcJsonRecord[] {
+	return [
+		{
+			kind: RpcWireRecordKindEnum.call,
+			callId: "1",
+			service: "example.boundary.v1",
+			method: "run",
+			args,
+		},
+		{ kind: RpcWireRecordKindEnum.result, callId: "1", value },
+		{
+			kind: RpcWireRecordKindEnum.error,
+			callId: "1",
+			error: {
+				code: RpcExceptionCodeEnum.unavailable,
+				message: "Remote call failed.",
+				details: value,
+			},
+		},
+	];
+}
+
 function createEndpoint(messages: readonly Uint8Array[]): {
 	readonly endpoint: RpcEndpointImpl;
 	readonly failures: RpcEndpointFailureEnum[];
@@ -86,8 +153,13 @@ function createEndpoint(messages: readonly Uint8Array[]): {
 function createSession(
 	policy: Partial<IRpcProtocolRuntimePolicy> = {},
 ): RpcSessionImpl {
+	const runtimePolicy = { ...defaultPolicy, ...policy };
+	const retainedBytes = new RpcRetainedBytesLedgerImpl(
+		runtimePolicy.maxRetainedBytesTotal,
+	);
 	const host: IRpcProtocolHost = {
-		policy: { ...defaultPolicy, ...policy },
+		policy: runtimePolicy,
+		reserveRetainedBytes: (bytes) => retainedBytes.reserve(bytes),
 		normalizeApplicationValue: normalizeRpcApplicationValue,
 		normalizeApplicationArguments: normalizeRpcApplicationArguments,
 		applicationValuesEqual: rpcApplicationValuesEqual,
@@ -104,6 +176,80 @@ function createSession(
 }
 
 describe("Default RPC Protocol resource boundaries", () => {
+	it("RPC-VALUE-004 RPC-WIRE-003 round-trips Application Value depth and node boundaries through active envelopes", () => {
+		const boundaryCases = [
+			{
+				name: "depth 64",
+				args: normalizeRpcApplicationArguments(createNestedApplicationValue(64))
+					.value,
+				value: normalizeRpcApplicationValue(createNestedApplicationValue(64))
+					.value,
+			},
+			{
+				name: "nodes 65536",
+				args: normalizeRpcApplicationArguments(
+					createApplicationArgumentsWithNodes(65_536),
+				).value,
+				value: normalizeRpcApplicationValue(
+					createApplicationRecordWithNodes(65_536),
+				).value,
+			},
+		];
+
+		for (const boundary of boundaryCases) {
+			for (const message of createApplicationMessages(
+				boundary.args,
+				boundary.value,
+			)) {
+				const envelope = {
+					kind: RpcWireRecordKindEnum.message,
+					seq: 1,
+					ackThrough: 0,
+					message,
+				};
+				expect(
+					() => codec.decode(codec.encode(envelope), RpcDecodePhaseEnum.active),
+					`${boundary.name} ${String(message.kind)}`,
+				).not.toThrow();
+			}
+		}
+	});
+
+	it("RPC-VALUE-004 RPC-WIRE-003 rejects Application Values beyond their local depth and node boundaries", () => {
+		const beyondBoundaryCases = [
+			{
+				name: "depth 65",
+				args: createNestedApplicationValue(65) as readonly RpcJsonValue[],
+				value: createNestedApplicationValue(65),
+			},
+			{
+				name: "nodes 65537",
+				args: createApplicationArgumentsWithNodes(65_537),
+				value: createApplicationRecordWithNodes(65_537),
+			},
+		];
+
+		for (const boundary of beyondBoundaryCases) {
+			for (const message of createApplicationMessages(
+				boundary.args,
+				boundary.value,
+			)) {
+				expect(
+					() =>
+						codec.decode(
+							codec.encode({
+								kind: RpcWireRecordKindEnum.message,
+								seq: 1,
+								message,
+							}),
+							RpcDecodePhaseEnum.active,
+						),
+					`${boundary.name} ${String(message.kind)}`,
+				).toThrow();
+			}
+		}
+	});
+
 	it("RPC-CORPUS-004 executes limit-1, limit, and limit+1 for every fixed Codec allocation boundary", () => {
 		const objectWithMembers = (members: number) =>
 			`{"kind":"ping","future":{${Array.from(
@@ -114,10 +260,10 @@ describe("Default RPC Protocol resource boundaries", () => {
 			`{"kind":"ping","future":[${"null,".repeat(elements - 1)}null]}`;
 		const boundaries = [
 			{
-				name: "depth 64",
+				name: `wire depth ${RPC_MAX_WIRE_DEPTH}`,
 				create: (value: number) =>
 					`{"kind":"ping","future":${"[".repeat(value - 2)}null${"]".repeat(value - 2)}}`,
-				limit: 64,
+				limit: RPC_MAX_WIRE_DEPTH,
 			},
 			{
 				name: "string UTF-8 bytes 524288",
@@ -142,9 +288,9 @@ describe("Default RPC Protocol resource boundaries", () => {
 				limit: 8192,
 			},
 			{
-				name: "JSON nodes 65536",
+				name: `wire JSON nodes ${RPC_MAX_WIRE_NODES}`,
 				create: createNodeBoundaryJson,
-				limit: 65_536,
+				limit: RPC_MAX_WIRE_NODES,
 			},
 		];
 
@@ -297,6 +443,45 @@ describe("Default RPC Protocol resource boundaries", () => {
 		expect(limitPlusOne, "Pending entries limit+1").toBeUndefined();
 		limitMinusOne?.release();
 		limit?.release();
+		session.forceClose();
+	});
+
+	it("RPC-CALL-005 RPC-RESOURCE-001 retracts canceled Pending storage without a send slot", () => {
+		const session = createSession({ maxPendingInvocationsPerSession: 1 });
+		const finishes: unknown[] = [];
+		for (let index = 0; index < 3; index += 1) {
+			const reservation = session.reserveInvocation({
+				service: "example.pending-cancel.v1",
+				method: "run",
+				args: normalizeRpcApplicationArguments(["x".repeat(1024)]),
+			});
+			if (reservation === undefined) {
+				throw new Error(
+					"Expected Pending Invocation capacity after cancellation.",
+				);
+			}
+			const invocation = reservation.commit({
+				finish: (outcome) => finishes.push(outcome),
+			});
+			const [entry] = session._invocations;
+			if (entry === undefined) {
+				throw new Error("Expected the committed Pending Invocation entry.");
+			}
+
+			invocation.start();
+			invocation.cancel();
+
+			expect(session._pendingInvocations).toHaveLength(0);
+			expect(entry.request).toBeUndefined();
+		}
+		expect(finishes).toEqual([
+			{ type: "failed", code: "canceled" },
+			{ type: "failed", code: "canceled" },
+			{ type: "failed", code: "canceled" },
+		]);
+		expect(session._invocations.size).toBe(0);
+		expect(session._invocationCount).toBe(0);
+		expect(session._pendingInvocationBytes).toBe(0);
 		session.forceClose();
 	});
 

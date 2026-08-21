@@ -33,6 +33,7 @@ export type {
 	IRpcProtocolRuntimePolicy,
 	IRpcProtocolSession,
 	IRpcProtocolSessionHost,
+	IRpcRetainedBytesReservation,
 	RpcApplicationValue,
 	RpcCallFailure,
 	RpcCallOutcome,

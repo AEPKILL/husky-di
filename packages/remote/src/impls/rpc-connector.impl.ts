@@ -17,12 +17,17 @@ import { RpcEventTypeEnum } from "@/enums/rpc-event-type.enum";
 import { RpcExceptionCodeEnum } from "@/enums/rpc-exception-code.enum";
 import { RpcStateStatusEnum } from "@/enums/rpc-state-status.enum";
 import { createRpcException } from "@/factories/rpc-exception.factory";
+import {
+	RpcRetainedBytesLedgerImpl,
+	reserveRpcSessionRetainedBytes,
+} from "@/impls/protocol/rpc-retained-bytes-ledger.impl";
 import { RpcPeerImpl } from "@/impls/rpc-peer.impl";
 import type {
 	IRpcProtocolConnectorRuntime,
 	IRpcProtocolRuntimePolicy,
 	IRpcProtocolSession,
 	IRpcProtocolSessionHost,
+	IRpcRetainedBytesReservation,
 	RpcProtocolFaultReason,
 	RpcProtocolSessionTransition,
 	RpcSessionCloseReason,
@@ -83,6 +88,7 @@ interface RpcConnectorAttempt {
 export class RpcConnectorImpl implements IRpcConnector {
 	readonly #runtime: IRpcProtocolConnectorRuntime;
 	readonly #policy: IRpcProtocolRuntimePolicy;
+	readonly #retainedBytesLedger: RpcRetainedBytesLedgerImpl;
 	readonly #stateSubject: BehaviorSubject<RpcConnectorState>;
 	readonly #eventSubject = new Subject<RpcEvent>();
 	readonly #faultingSessions = new Set<IRpcProtocolSession>();
@@ -115,6 +121,9 @@ export class RpcConnectorImpl implements IRpcConnector {
 	) {
 		this.#runtime = runtime;
 		this.#policy = policy;
+		this.#retainedBytesLedger = new RpcRetainedBytesLedgerImpl(
+			policy.maxRetainedBytesTotal,
+		);
 		this.#connectionLimit = policy.maxSessions + 2 * policy.maxHandshakes;
 		this.#stateSubject = new BehaviorSubject(
 			Object.freeze<RpcConnectorState>({ status: RpcStateStatusEnum.active }),
@@ -133,11 +142,24 @@ export class RpcConnectorImpl implements IRpcConnector {
 			(error) => this.protocolFault(RpcCloseReasonEnum.protocolFault, error),
 			handlerScheduler,
 			Math.floor(policy.maxRetainedBytesPerSession / 4),
+			(bytes) =>
+				reserveRpcSessionRetainedBytes(
+					this.#session ?? this.#attempt?.provisionalSession,
+					(ownerBytes) => this.reserveRetainedBytes(ownerBytes),
+					bytes,
+				),
 		);
 	}
 
 	get state(): RpcConnectorState {
 		return this.#stateSubject.value;
+	}
+
+	/** Package-private Protocol retained-byte reservation port. */
+	reserveRetainedBytes(
+		bytes: number,
+	): IRpcRetainedBytesReservation | undefined {
+		return this.#retainedBytesLedger.reserve(bytes);
 	}
 
 	connect(options: RpcConnectorConnectOptions): Promise<void> {

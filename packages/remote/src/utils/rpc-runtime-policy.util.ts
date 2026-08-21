@@ -4,6 +4,7 @@
  * @created 2026-08-19 00:00:00
  */
 
+import { RPC_PROTECTED_SESSION_BYTES } from "@/constants/protocol/rpc-profile.const";
 import type {
 	IRpcProtocol,
 	IRpcProtocolRuntimePolicy,
@@ -16,8 +17,8 @@ import type {
 } from "@/types/rpc-caller.type";
 
 const mebibyte = 1024 * 1024;
-const protectedReserveBytes = 512 * 1024;
 const handshakeTransientBytes = 4 * mebibyte;
+const maximumPlatformTimerDelayMs = 2_147_483_647;
 
 const defaultPolicy: IRpcProtocolRuntimePolicy = Object.freeze({
 	maxSessions: 64,
@@ -44,6 +45,16 @@ const connectorPolicyKeys = new Set<keyof IRpcProtocolRuntimePolicy>([
 	"maxPendingInvocationsPerSession",
 	"maxRetainedBytesPerSession",
 	"maxHandlersPerSession",
+	"ackDelayMs",
+	"activityProbeIntervalMs",
+	"silenceTimeoutMs",
+	"sendProgressTimeoutMs",
+	"bindingAttemptTimeoutMs",
+	"recoveryGraceMs",
+	"shutdownDeadlineMs",
+]);
+
+const timingPolicyKeys = new Set<keyof IRpcProtocolRuntimePolicy>([
 	"ackDelayMs",
 	"activityProbeIntervalMs",
 	"silenceTimeoutMs",
@@ -122,7 +133,12 @@ export function validateRpcPositiveSafeInteger(
 
 function validatePolicy(policy: IRpcProtocolRuntimePolicy): void {
 	for (const key of policyKeys) {
-		validateRpcPositiveSafeInteger(policy[key], key);
+		const value = validateRpcPositiveSafeInteger(policy[key], key);
+		if (timingPolicyKeys.has(key) && value > maximumPlatformTimerDelayMs) {
+			throw new TypeError(
+				`${key} must not exceed the platform timer delay limit.`,
+			);
+		}
 	}
 
 	const threeProbeIntervals = multiplySafe(
@@ -166,7 +182,7 @@ function validatePolicy(policy: IRpcProtocolRuntimePolicy): void {
 
 	const otherSessionReserves = multiplySafe(
 		policy.maxSessions - 1,
-		protectedReserveBytes,
+		RPC_PROTECTED_SESSION_BYTES,
 		"aggregate retained-state minimum",
 	);
 	const aggregateMinimum = addSafe(

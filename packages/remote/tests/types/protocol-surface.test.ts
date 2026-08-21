@@ -12,6 +12,7 @@ import type {
 	IRpcProtocolRuntimePolicy,
 } from "../../src/index";
 import type {
+	IRpcRetainedBytesReservation,
 	IRpcConnection as ProtocolConnection,
 	IRpcProtocol as ProtocolEntryProtocol,
 } from "../../src/protocol";
@@ -79,6 +80,9 @@ const acceptorAdapter = {
 
 const sameProtocolDeclaration: ProtocolEntryProtocol = protocol;
 const sameProtocolConnection: ProtocolConnection = connection;
+const retainedBytesReservation: IRpcRetainedBytesReservation = {
+	release() {},
+};
 const sameTransportConnection: TransportConnection = connection;
 
 void policy;
@@ -86,6 +90,7 @@ void connectorAdapter;
 void acceptorAdapter;
 void sameProtocolDeclaration;
 void sameProtocolConnection;
+void retainedBytesReservation;
 void sameTransportConnection;
 
 // @ts-expect-error RPC-PKG-003 keeps the built-in Protocol private.
