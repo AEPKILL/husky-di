@@ -107,9 +107,9 @@ function expectModuleException(
 
 /**
  * Comprehensive test suite for the Module System
- * Based on SPECIFICATION.md v1.1.0
+ * Based on SPECIFICATION.md v1.1.1
  */
-describe("Module System - SPECIFICATION.md v1.1.0", () => {
+describe("Module System - SPECIFICATION.md v1.1.1", () => {
 	describe("Import Scope", () => {
 		it("should treat aliases as renames while preserving unaliased exports", () => {
 			const SharedModule = createModule({
@@ -1163,6 +1163,33 @@ describe("Module System - SPECIFICATION.md v1.1.0", () => {
 			);
 		});
 
+		it("should reject undeclared classes before they can resolve private services", () => {
+			const PrivateService = createServiceIdentifier<object>(
+				"PrivateAutoInstantiationService",
+			);
+			const privateService = {};
+			class UndeclaredService {
+				readonly privateService = resolve(PrivateService);
+			}
+			const TestModule = createModule({
+				name: "TestModule",
+				declarations: [
+					{ serviceIdentifier: PrivateService, useValue: privateService },
+				],
+			});
+
+			for (const resolveUndeclaredService of [
+				() => TestModule.resolve(UndeclaredService),
+				() => TestModule.container.resolve(UndeclaredService),
+			]) {
+				expectModuleException(
+					resolveUndeclaredService,
+					ModuleErrorCodeEnum.E_EXPORT_NOT_FOUND,
+					/Service identifier "UndeclaredService" is not exported/,
+				);
+			}
+		});
+
 		it("should enforce exports before a global middleware can short-circuit resolution", () => {
 			const PrivateService = createServiceIdentifier<object>("GuardedPrivate");
 			const TestModule = createModule({
@@ -1205,15 +1232,22 @@ describe("Module System - SPECIFICATION.md v1.1.0", () => {
 
 		it("should allow a module container to fall back to the root container", () => {
 			const RootService = createServiceIdentifier<string>("RootService");
-			const cleanup = rootContainer.register(RootService, {
+			class RootClassService {}
+			const rootClassService = new RootClassService();
+			const cleanupRootService = rootContainer.register(RootService, {
 				useValue: "from-root",
+			});
+			const cleanupRootClassService = rootContainer.register(RootClassService, {
+				useValue: rootClassService,
 			});
 			const TestModule = createModule({ name: "TestModule" });
 
 			try {
 				expect(TestModule.resolve(RootService)).toBe("from-root");
+				expect(TestModule.resolve(RootClassService)).toBe(rootClassService);
 			} finally {
-				cleanup();
+				cleanupRootClassService();
+				cleanupRootService();
 			}
 		});
 	});

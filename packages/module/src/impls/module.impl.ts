@@ -126,9 +126,13 @@ export class ModuleImpl implements IModule {
 			serviceIdentifier: ServiceIdentifier<unknown>,
 			options?: ResolveOptions<unknown>,
 		) => {
+			// Core auto-instantiates unregistered classes in the active container.
+			// Reject caller-supplied classes before they enter this module's private context.
 			if (
 				!exported.has(serviceIdentifier) &&
-				container.isRegistered(serviceIdentifier)
+				(container.isRegistered(serviceIdentifier) ||
+					(typeof serviceIdentifier === "function" &&
+						!container.isRegistered(serviceIdentifier, { recursive: true })))
 			) {
 				throw new ModuleException(
 					ModuleErrorCodeEnum.E_EXPORT_NOT_FOUND,

@@ -1,6 +1,6 @@
 # Dependency Injection Module Specification
 
-**Version:** 1.1.0
+**Version:** 1.1.1
 **Status:** Proposal
 **Context:** ES Module-style Dependency Injection System
 
@@ -187,8 +187,9 @@ The public facade **MUST** apply these rules on every resolution:
 1. A service registered directly in a module container **MUST NOT** be resolved from outside that module unless its identifier is listed in the module's `exports`.
 2. Internal providers **MUST** resolve through the internal container and **MUST** be allowed to access that module's declarations and imports.
 3. A service that is not registered directly in the module container **MUST** continue through normal core resolution, including parent or root-container fallback.
-4. An imported alias **MUST** resolve through the source module's guarded facade, so the source service must be exported by that source module.
-5. `module.resolve()` and `module.container.resolve()` **MUST** enforce the same boundary before application middleware runs.
+4. A class constructor that is not registered anywhere in the module container hierarchy **MUST NOT** be auto-instantiated through the public facade unless its identifier is exported. The facade **MUST** reject it before its constructor can run in the module's internal resolution context.
+5. An imported alias **MUST** resolve through the source module's guarded facade, so the source service must be exported by that source module.
+6. `module.resolve()` and `module.container.resolve()` **MUST** enforce the same boundary before application middleware runs.
 
 Rejecting a non-exported service **MUST** throw `ModuleException` with error code `E_EXPORT_NOT_FOUND`.
 
