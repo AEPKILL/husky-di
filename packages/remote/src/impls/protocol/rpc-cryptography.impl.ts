@@ -5,6 +5,7 @@
  */
 
 import { RpcProfileEnum } from "@/enums/protocol/rpc-profile.enum";
+import { RpcProofOperationKindEnum } from "@/enums/protocol/rpc-proof-operation-kind.enum";
 import type { IRpcCryptography } from "@/interfaces/protocol/rpc-cryptography.interface";
 import type {
 	SignRpcProofOptions,
@@ -41,21 +42,21 @@ export class RpcCryptographyImpl implements IRpcCryptography<CryptoKey> {
 
 	public signProof(options: SignRpcProofOptions<CryptoKey>): Promise<string> {
 		switch (options.kind) {
-			case "fresh-accept":
+			case RpcProofOperationKindEnum.freshAccept:
 				return signRpcFreshAccept(
 					options.proofKey,
 					options.request,
 					options.record,
 				);
-			case "resume-request":
+			case RpcProofOperationKindEnum.resumeRequest:
 				return signRpcResumeRequest(options.proofKey, options.record);
-			case "resume-accept":
+			case RpcProofOperationKindEnum.resumeAccept:
 				return signRpcResumeAccept(
 					options.proofKey,
 					options.request,
 					options.record,
 				);
-			case "resume-reject":
+			case RpcProofOperationKindEnum.resumeReject:
 				return signRpcAuthenticatedReject(
 					options.proofKey,
 					options.request,
@@ -70,15 +71,15 @@ export class RpcCryptographyImpl implements IRpcCryptography<CryptoKey> {
 		options: VerifyRpcProofOptions<CryptoKey>,
 	): Promise<boolean> {
 		switch (options.kind) {
-			case "fresh-accept":
+			case RpcProofOperationKindEnum.freshAccept:
 				return verifyRpcFreshAccept(
 					options.proofKey,
 					options.request,
 					options.record,
 				);
-			case "resume-request":
+			case RpcProofOperationKindEnum.resumeRequest:
 				return verifyRpcResumeRequest(options.proofKey, options.request);
-			case "resume-accept":
+			case RpcProofOperationKindEnum.resumeAccept:
 				return verifyRpcResumeAccept(
 					options.proofKey,
 					options.request,
@@ -187,20 +188,26 @@ async function createFreshAcceptTranscript(
 ): Promise<Uint8Array> {
 	const requestHash = await hashRecord(request);
 	const acceptHash = await hashRecord(withoutTopLevelProof(accept));
-	return concatenate(domain("fresh-accept"), requestHash, acceptHash);
+	return concatenate(
+		domain(RpcProofOperationKindEnum.freshAccept),
+		requestHash,
+		acceptHash,
+	);
 }
 
 async function createResumeRequestTranscript(
 	request: RpcJsonRecord,
 ): Promise<Uint8Array> {
 	return concatenate(
-		domain("resume-request"),
+		domain(RpcProofOperationKindEnum.resumeRequest),
 		await hashRecord(withoutTopLevelProof(request)),
 	);
 }
 
 async function createResumeOutcomeTranscript(
-	label: "resume-accept" | "resume-reject",
+	label:
+		| RpcProofOperationKindEnum.resumeAccept
+		| RpcProofOperationKindEnum.resumeReject,
 	request: RpcResumeRequest,
 	outcome: RpcJsonRecord,
 ): Promise<Uint8Array> {
@@ -354,7 +361,11 @@ async function signRpcResumeAccept(
 ): Promise<string> {
 	return signHmac(
 		proofKey,
-		await createResumeOutcomeTranscript("resume-accept", request, accept),
+		await createResumeOutcomeTranscript(
+			RpcProofOperationKindEnum.resumeAccept,
+			request,
+			accept,
+		),
 	);
 }
 
@@ -366,7 +377,11 @@ async function verifyRpcResumeAccept(
 	return verifyHmac(
 		proofKey,
 		accept.proof,
-		await createResumeOutcomeTranscript("resume-accept", request, accept),
+		await createResumeOutcomeTranscript(
+			RpcProofOperationKindEnum.resumeAccept,
+			request,
+			accept,
+		),
 	);
 }
 
@@ -377,7 +392,11 @@ async function signRpcAuthenticatedReject(
 ): Promise<string> {
 	return signHmac(
 		proofKey,
-		await createResumeOutcomeTranscript("resume-reject", request, reject),
+		await createResumeOutcomeTranscript(
+			RpcProofOperationKindEnum.resumeReject,
+			request,
+			reject,
+		),
 	);
 }
 
@@ -389,7 +408,11 @@ async function verifyRpcAuthenticatedReject(
 	return verifyHmac(
 		proofKey,
 		reject.proof,
-		await createResumeOutcomeTranscript("resume-reject", request, reject),
+		await createResumeOutcomeTranscript(
+			RpcProofOperationKindEnum.resumeReject,
+			request,
+			reject,
+		),
 	);
 }
 
@@ -400,6 +423,10 @@ async function createRpcGenericRejectProof(
 	const dummyKey = await importHmacKey(createRpcRandomCarrier().bytes);
 	return signHmac(
 		dummyKey,
-		await createResumeOutcomeTranscript("resume-reject", request, reject),
+		await createResumeOutcomeTranscript(
+			RpcProofOperationKindEnum.resumeReject,
+			request,
+			reject,
+		),
 	);
 }

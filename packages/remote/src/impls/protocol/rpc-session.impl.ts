@@ -11,6 +11,7 @@ import { RpcIncomingCallKindEnum } from "@/enums/protocol/rpc-incoming-call-kind
 import { RpcPeerCursorClassificationEnum } from "@/enums/protocol/rpc-peer-cursor-classification.enum";
 import type { RpcProtocolRoleEnum } from "@/enums/protocol/rpc-protocol-role.enum";
 import { RpcProtocolSessionTransitionTypeEnum } from "@/enums/protocol/rpc-protocol-session-transition-type.enum";
+import { RpcWireRecordKindEnum } from "@/enums/protocol/rpc-wire-record-kind.enum";
 import { RpcCloseReasonEnum } from "@/enums/rpc-close-reason.enum";
 import { RpcExceptionCodeEnum } from "@/enums/rpc-exception-code.enum";
 import type { IRpcCodec } from "@/interfaces/protocol/rpc-codec.interface";
@@ -356,27 +357,27 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 			return;
 		}
 
-		if (record.kind === "ack") {
+		if (record.kind === RpcWireRecordKindEnum.ack) {
 			if (this._applyAck(record.ackThrough)) {
 				this._recordInboundActivity(binding);
 			}
 			return;
 		}
-		if (record.kind === "ping") {
+		if (record.kind === RpcWireRecordKindEnum.ping) {
 			this._recordInboundActivity(binding);
 			this._pongDue = true;
 			this._pump();
 			return;
 		}
-		if (record.kind === "pong") {
+		if (record.kind === RpcWireRecordKindEnum.pong) {
 			this._recordInboundActivity(binding);
 			return;
 		}
-		if (record.kind === "close") {
+		if (record.kind === RpcWireRecordKindEnum.close) {
 			this._terminalFromPeer();
 			return;
 		}
-		if (record.kind !== "message") {
+		if (record.kind !== RpcWireRecordKindEnum.message) {
 			this._fault(
 				RpcCloseReasonEnum.protocolFault,
 				new Error("Default RPC active phase produced an invalid record kind."),
@@ -569,15 +570,15 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 	}
 
 	_dispatchSemantic(message: RpcSemanticMessage): void {
-		if (message.kind === "call") {
+		if (message.kind === RpcWireRecordKindEnum.call) {
 			this._receiveCall(message);
 			return;
 		}
-		if (message.kind === "cancel") {
+		if (message.kind === RpcWireRecordKindEnum.cancel) {
 			this._receiveCancel(message.callId);
 			return;
 		}
-		if (message.kind === "result") {
+		if (message.kind === RpcWireRecordKindEnum.result) {
 			this._receiveResult(message);
 			return;
 		}
@@ -712,7 +713,7 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 		if (outcome.type === RpcCallTerminalTypeEnum.returned) {
 			const queued = this._queueSemantic(
 				Object.freeze({
-					kind: "result",
+					kind: RpcWireRecordKindEnum.result,
 					callId: entry.callId,
 					value: outcome.value.value,
 				}) as RpcResultMessage,
@@ -729,7 +730,7 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 		} else if (outcome.type === RpcCallTerminalTypeEnum.returnedVoid) {
 			const queued = this._queueSemantic(
 				Object.freeze({
-					kind: "result",
+					kind: RpcWireRecordKindEnum.result,
 					callId: entry.callId,
 				}) as RpcResultMessage,
 			);
@@ -755,7 +756,7 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 	_queueError(callId: string, code: RpcWireErrorCode): boolean {
 		const queued = this._queueSemantic(
 			Object.freeze({
-				kind: "error",
+				kind: RpcWireRecordKindEnum.error,
 				callId,
 				error: Object.freeze({
 					code,
@@ -820,7 +821,7 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 		}
 		this._queueSemantic(
 			Object.freeze({
-				kind: "cancel",
+				kind: RpcWireRecordKindEnum.cancel,
 				callId: entry.callId as string,
 			}) as RpcSemanticMessage,
 		);
@@ -854,10 +855,14 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 			this._probeSentLast = true;
 			if (this._pongDue) {
 				this._pongDue = false;
-				this._sendUnsequenced(binding, { kind: "pong" });
+				this._sendUnsequenced(binding, {
+					kind: RpcWireRecordKindEnum.pong,
+				});
 			} else {
 				this._pingDue = false;
-				this._sendUnsequenced(binding, { kind: "ping" });
+				this._sendUnsequenced(binding, {
+					kind: RpcWireRecordKindEnum.ping,
+				});
 			}
 			return;
 		}
@@ -899,7 +904,7 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 			this._ackDirty = false;
 			this._probeSentLast = false;
 			this._sendUnsequenced(binding, {
-				kind: "ack",
+				kind: RpcWireRecordKindEnum.ack,
 				ackThrough: this._receivedThrough,
 			});
 		}
@@ -917,7 +922,7 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 		}
 		const callId = String(this._nextOutgoingCallOrdinal);
 		const message = Object.freeze({
-			kind: "call",
+			kind: RpcWireRecordKindEnum.call,
 			callId,
 			service: entry.request.service,
 			method: entry.request.method,
@@ -1005,7 +1010,10 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 		}
 		this._highestSentSequence = sequence;
 		this._retainReplayEntry(sequence, replay);
-		if (message.kind === "result" || message.kind === "error") {
+		if (
+			message.kind === RpcWireRecordKindEnum.result ||
+			message.kind === RpcWireRecordKindEnum.error
+		) {
 			const incoming = this._incomingCalls.get(message.callId);
 			if (incoming?.terminalSelected) {
 				incoming.terminalSequence = sequence;
@@ -1042,7 +1050,7 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 		let maximumEnvelope: Uint8Array;
 		try {
 			maximumEnvelope = this._codec.encode({
-				kind: "message",
+				kind: RpcWireRecordKindEnum.message,
 				seq: Number.MAX_SAFE_INTEGER,
 				ackThrough: Number.MAX_SAFE_INTEGER,
 				message,
@@ -1052,9 +1060,9 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 		}
 		const ordinaryCharge = maximumEnvelope.byteLength + 256;
 		const resourceClass =
-			message.kind === "error"
+			message.kind === RpcWireRecordKindEnum.error
 				? "terminal"
-				: message.kind === "cancel"
+				: message.kind === RpcWireRecordKindEnum.cancel
 					? "cancel"
 					: "ordinary";
 		const charge =
@@ -1071,7 +1079,7 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 		const maximumTerminalBytes = Math.floor(
 			this._host.policy.maxRetainedBytesPerSession / 4,
 		);
-		const isTerminalPayload = message.kind === "result";
+		const isTerminalPayload = message.kind === RpcWireRecordKindEnum.result;
 		if (resourceClass === "terminal") {
 			if (ordinaryCharge > charge || this._terminalReplayCount >= 256) {
 				return undefined;
@@ -1120,7 +1128,7 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 		}
 		this._ordinaryReplayCount -= 1;
 		this._replayBytes -= replay.charge;
-		if (replay.message.kind === "result") {
+		if (replay.message.kind === RpcWireRecordKindEnum.result) {
 			this._terminalPayloadCount -= 1;
 			this._terminalReplayBytes -= replay.charge;
 		}
@@ -1133,12 +1141,12 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 		return (
 			this._ackDirty
 				? {
-						kind: "message",
+						kind: RpcWireRecordKindEnum.message,
 						seq: sequence,
 						ackThrough: this._receivedThrough,
 						message,
 					}
-				: { kind: "message", seq: sequence, message }
+				: { kind: RpcWireRecordKindEnum.message, seq: sequence, message }
 		) as RpcMessageEnvelope;
 	}
 
@@ -1615,7 +1623,7 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 		this._gracefulCloseStarted = true;
 		let encoded: Uint8Array;
 		try {
-			encoded = this._codec.encode({ kind: "close" });
+			encoded = this._codec.encode({ kind: RpcWireRecordKindEnum.close });
 		} catch {
 			this.forceClose();
 			return;

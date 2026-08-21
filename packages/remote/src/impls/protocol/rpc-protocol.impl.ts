@@ -6,9 +6,12 @@
 
 import { RpcDecodePhaseEnum } from "@/enums/protocol/rpc-decode-phase.enum";
 import { RpcEndpointFailureEnum } from "@/enums/protocol/rpc-endpoint-failure.enum";
+import { RpcPeerCursorClassificationEnum } from "@/enums/protocol/rpc-peer-cursor-classification.enum";
 import { RpcProfileEnum } from "@/enums/protocol/rpc-profile.enum";
 import { RpcProofOperationKindEnum } from "@/enums/protocol/rpc-proof-operation-kind.enum";
 import { RpcProtocolRoleEnum } from "@/enums/protocol/rpc-protocol-role.enum";
+import { RpcResumeRejectCodeEnum } from "@/enums/protocol/rpc-resume-reject-code.enum";
+import { RpcWireRecordKindEnum } from "@/enums/protocol/rpc-wire-record-kind.enum";
 import { RpcCloseReasonEnum } from "@/enums/rpc-close-reason.enum";
 import type { IRpcEndpoint } from "@/interfaces/protocol/rpc-endpoint.interface";
 import type {
@@ -303,7 +306,7 @@ class RpcConnectorRuntime<TKey> implements IRpcProtocolConnectorRuntime {
 			const initiatorNonce = this._options.cryptography.createRandomCarrier();
 			initiatorNonce.bytes.fill(0);
 			request = Object.freeze({
-				kind: "fresh",
+				kind: RpcWireRecordKindEnum.fresh,
 				profiles: Object.freeze([RpcProfileEnum.huskyDiRpc1]),
 				initiatorNonce: initiatorNonce.value,
 			}) as RpcFreshRequest;
@@ -334,7 +337,7 @@ class RpcConnectorRuntime<TKey> implements IRpcProtocolConnectorRuntime {
 			const initiatorNonce = this._options.cryptography.createRandomCarrier();
 			initiatorNonce.bytes.fill(0);
 			const requestWithoutProof = Object.freeze({
-				kind: "resume",
+				kind: RpcWireRecordKindEnum.resume,
 				profile: RpcProfileEnum.huskyDiRpc1,
 				sessionId: session.sessionId,
 				receivedThrough: session.receivedThrough,
@@ -396,7 +399,7 @@ class RpcConnectorRuntime<TKey> implements IRpcProtocolConnectorRuntime {
 		const requestAdmission = attempt.requestAdmission;
 		if (
 			request === undefined ||
-			request.kind !== "fresh" ||
+			request.kind !== RpcWireRecordKindEnum.fresh ||
 			requestAdmission === undefined
 		) {
 			this._failAttempt(
@@ -478,7 +481,7 @@ class RpcConnectorRuntime<TKey> implements IRpcProtocolConnectorRuntime {
 			session === undefined ||
 			proofKey === undefined ||
 			request === undefined ||
-			request.kind !== "resume" ||
+			request.kind !== RpcWireRecordKindEnum.resume ||
 			requestAdmission === undefined
 		) {
 			this._failAttempt(
@@ -494,8 +497,8 @@ class RpcConnectorRuntime<TKey> implements IRpcProtocolConnectorRuntime {
 				bytes,
 				RpcDecodePhaseEnum.resumeOutcome,
 			);
-			if (outcome.kind === "reject") {
-				if (outcome.code === "resume-rejected") {
+			if (outcome.kind === RpcWireRecordKindEnum.reject) {
+				if (outcome.code === RpcResumeRejectCodeEnum.resumeRejected) {
 					throw new Error("Default RPC resume was generically rejected.");
 				}
 				const valid = await runAttemptCrypto(attempt, () =>
@@ -511,7 +514,7 @@ class RpcConnectorRuntime<TKey> implements IRpcProtocolConnectorRuntime {
 						"Default RPC authenticated resume reject is invalid.",
 					);
 				}
-				if (outcome.code === "continuity-failure") {
+				if (outcome.code === RpcResumeRejectCodeEnum.continuityFailure) {
 					session.terminateContinuityFailure();
 				} else {
 					session.terminateAuthenticatedRemote();
@@ -534,7 +537,8 @@ class RpcConnectorRuntime<TKey> implements IRpcProtocolConnectorRuntime {
 				outcome.profile !== RpcProfileEnum.huskyDiRpc1 ||
 				outcome.sessionId !== session.sessionId ||
 				outcome.bindingEpoch <= session.bindingEpoch ||
-				session.classifyPeerCursor(outcome.receivedThrough) !== "valid" ||
+				session.classifyPeerCursor(outcome.receivedThrough) !==
+					RpcPeerCursorClassificationEnum.valid ||
 				!session.isRecovering ||
 				session.proofKey !== proofKey;
 			if (contradictory) {
@@ -744,7 +748,7 @@ class RpcAcceptorRuntime<TKey> implements IRpcProtocolAcceptorRuntime {
 			this._failAttempt(attempt, error);
 			return;
 		}
-		if (record.kind === "fresh") {
+		if (record.kind === RpcWireRecordKindEnum.fresh) {
 			return this._receiveFreshRequest(attempt, record);
 		}
 		return this._receiveResumeRequest(attempt, record);
@@ -789,7 +793,7 @@ class RpcAcceptorRuntime<TKey> implements IRpcProtocolAcceptorRuntime {
 				return;
 			}
 			const acceptWithoutProof = Object.freeze({
-				kind: "accept",
+				kind: RpcWireRecordKindEnum.accept,
 				profile: RpcProfileEnum.huskyDiRpc1,
 				sessionId,
 				bindingEpoch: 1,
@@ -901,7 +905,10 @@ class RpcAcceptorRuntime<TKey> implements IRpcProtocolAcceptorRuntime {
 			await this._rejectResumeGeneric(attempt, request);
 			return;
 		}
-		if (session.classifyPeerCursor(request.receivedThrough) !== "valid") {
+		if (
+			session.classifyPeerCursor(request.receivedThrough) !==
+			RpcPeerCursorClassificationEnum.valid
+		) {
 			await this._rejectResumeContinuity(attempt, request, session, proofKey);
 			return;
 		}
@@ -926,7 +933,10 @@ class RpcAcceptorRuntime<TKey> implements IRpcProtocolAcceptorRuntime {
 				await this._rejectResumeGeneric(attempt, request);
 				return;
 			}
-			if (session.classifyPeerCursor(request.receivedThrough) !== "valid") {
+			if (
+				session.classifyPeerCursor(request.receivedThrough) !==
+				RpcPeerCursorClassificationEnum.valid
+			) {
 				await this._rejectResumeContinuity(attempt, request, session, proofKey);
 				return;
 			}
@@ -935,7 +945,7 @@ class RpcAcceptorRuntime<TKey> implements IRpcProtocolAcceptorRuntime {
 			const responderNonce = this._options.cryptography.createRandomCarrier();
 			responderNonce.bytes.fill(0);
 			const acceptWithoutProof = Object.freeze({
-				kind: "accept",
+				kind: RpcWireRecordKindEnum.accept,
 				profile: RpcProfileEnum.huskyDiRpc1,
 				sessionId: session.sessionId,
 				bindingEpoch,
@@ -961,7 +971,10 @@ class RpcAcceptorRuntime<TKey> implements IRpcProtocolAcceptorRuntime {
 				await this._rejectResumeGeneric(attempt, request);
 				return;
 			}
-			if (session.classifyPeerCursor(request.receivedThrough) !== "valid") {
+			if (
+				session.classifyPeerCursor(request.receivedThrough) !==
+				RpcPeerCursorClassificationEnum.valid
+			) {
 				await this._rejectResumeContinuity(attempt, request, session, proofKey);
 				return;
 			}
@@ -1019,8 +1032,8 @@ class RpcAcceptorRuntime<TKey> implements IRpcProtocolAcceptorRuntime {
 			const responderNonce = this._options.cryptography.createRandomCarrier();
 			responderNonce.bytes.fill(0);
 			const rejectWithoutProof = Object.freeze({
-				kind: "reject",
-				code: "resume-rejected",
+				kind: RpcWireRecordKindEnum.reject,
+				code: RpcResumeRejectCodeEnum.resumeRejected,
 				responderNonce: responderNonce.value,
 			}) as RpcJsonRecord;
 			const proof = await runAttemptCrypto(attempt, () =>
@@ -1058,8 +1071,8 @@ class RpcAcceptorRuntime<TKey> implements IRpcProtocolAcceptorRuntime {
 			const responderNonce = this._options.cryptography.createRandomCarrier();
 			responderNonce.bytes.fill(0);
 			const rejectWithoutProof = Object.freeze({
-				kind: "reject",
-				code: "continuity-failure",
+				kind: RpcWireRecordKindEnum.reject,
+				code: RpcResumeRejectCodeEnum.continuityFailure,
 				responderNonce: responderNonce.value,
 			}) as RpcJsonRecord;
 			const proof = await runAttemptCrypto(attempt, () =>
@@ -1075,7 +1088,8 @@ class RpcAcceptorRuntime<TKey> implements IRpcProtocolAcceptorRuntime {
 				this._sessions.get(request.sessionId) !== session ||
 				session.proofKey !== proofKey ||
 				!session.canAcceptResumeAttempt(request.resumeAttempt) ||
-				session.classifyPeerCursor(request.receivedThrough) === "valid"
+				session.classifyPeerCursor(request.receivedThrough) ===
+					RpcPeerCursorClassificationEnum.valid
 			) {
 				return;
 			}
@@ -1101,7 +1115,10 @@ class RpcAcceptorRuntime<TKey> implements IRpcProtocolAcceptorRuntime {
 	): Promise<void> {
 		try {
 			await attempt.endpoint.sendNow(
-				this._options.codec.encode({ kind: "reject", code }),
+				this._options.codec.encode({
+					kind: RpcWireRecordKindEnum.reject,
+					code,
+				}),
 			);
 		} finally {
 			this._failAttempt(attempt, new Error(`Default RPC fresh ${code}.`));

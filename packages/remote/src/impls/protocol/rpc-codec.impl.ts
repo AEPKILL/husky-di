@@ -5,9 +5,10 @@
  */
 
 import { RPC_MAX_MESSAGE_BYTES } from "@/constants/protocol/rpc-profile.const";
-import type { RpcDecodePhaseEnum } from "@/enums/protocol/rpc-decode-phase.enum";
+import { RpcDecodePhaseEnum } from "@/enums/protocol/rpc-decode-phase.enum";
 import { RpcProfileEnum } from "@/enums/protocol/rpc-profile.enum";
 import { RpcResumeRejectCodeEnum } from "@/enums/protocol/rpc-resume-reject-code.enum";
+import { RpcWireRecordKindEnum } from "@/enums/protocol/rpc-wire-record-kind.enum";
 import { RpcExceptionCodeEnum } from "@/enums/rpc-exception-code.enum";
 import type { IRpcCodec } from "@/interfaces/protocol/rpc-codec.interface";
 import type { RpcDecodedRecord } from "@/types/protocol/rpc-codec.type";
@@ -50,25 +51,25 @@ export class RpcCodecImpl implements IRpcCodec {
 			| RpcResumeOutcome
 			| RpcActiveRecord;
 		switch (phase) {
-			case "bootstrap-request": {
+			case RpcDecodePhaseEnum.bootstrapRequest: {
 				const kind = readRpcRecordKind(record);
-				if (kind === "fresh") {
+				if (kind === RpcWireRecordKindEnum.fresh) {
 					decoded = validateRpcFreshRequest(record);
 					break;
 				}
-				if (kind === "resume") {
+				if (kind === RpcWireRecordKindEnum.resume) {
 					decoded = validateRpcResumeRequest(record);
 					break;
 				}
 				throw new Error("The first initiator record must be fresh or resume.");
 			}
-			case "fresh-accept":
+			case RpcDecodePhaseEnum.freshAccept:
 				decoded = validateRpcFreshAccept(record);
 				break;
-			case "resume-outcome":
+			case RpcDecodePhaseEnum.resumeOutcome:
 				decoded = validateRpcResumeOutcome(record);
 				break;
-			case "active":
+			case RpcDecodePhaseEnum.active:
 				decoded = validateRpcActiveRecord(record);
 				break;
 			default:
@@ -414,7 +415,7 @@ function validateSemanticMessage(
 	}
 	const kind = readString(value, "kind");
 	readCallId(value);
-	if (kind === "call") {
+	if (kind === RpcWireRecordKindEnum.call) {
 		readIdentifier(value, "service");
 		const method = readIdentifier(value, "method");
 		if (method === "then") {
@@ -425,13 +426,13 @@ function validateSemanticMessage(
 		}
 		return value as RpcCallMessage;
 	}
-	if (kind === "cancel") {
+	if (kind === RpcWireRecordKindEnum.cancel) {
 		return value as RpcCancelMessage;
 	}
-	if (kind === "result") {
+	if (kind === RpcWireRecordKindEnum.result) {
 		return value as RpcResultMessage;
 	}
-	if (kind === "error") {
+	if (kind === RpcWireRecordKindEnum.error) {
 		if (!isJsonRecord(value.error)) {
 			throw new Error("RPC error payload must be an object.");
 		}
@@ -476,7 +477,7 @@ function readRpcRecordKind(record: RpcJsonRecord): string {
 }
 
 function validateRpcFreshRequest(record: RpcJsonRecord): RpcFreshRequest {
-	if (readRpcRecordKind(record) !== "fresh") {
+	if (readRpcRecordKind(record) !== RpcWireRecordKindEnum.fresh) {
 		throw new Error("The first initiator record must be fresh or resume.");
 	}
 	if (!Array.isArray(record.profiles) || record.profiles.length === 0) {
@@ -499,7 +500,7 @@ function validateRpcFreshRequest(record: RpcJsonRecord): RpcFreshRequest {
 }
 
 function validateRpcFreshAccept(record: RpcJsonRecord): RpcFreshAccept {
-	if (readRpcRecordKind(record) !== "accept") {
+	if (readRpcRecordKind(record) !== RpcWireRecordKindEnum.accept) {
 		throw new Error("RPC fresh attempt did not receive accept.");
 	}
 	if (readIdentifier(record, "profile") !== RpcProfileEnum.huskyDiRpc1) {
@@ -516,7 +517,7 @@ function validateRpcFreshAccept(record: RpcJsonRecord): RpcFreshAccept {
 }
 
 function validateRpcResumeRequest(record: RpcJsonRecord): RpcResumeRequest {
-	if (readRpcRecordKind(record) !== "resume") {
+	if (readRpcRecordKind(record) !== RpcWireRecordKindEnum.resume) {
 		throw new Error("The first initiator record must be fresh or resume.");
 	}
 	readIdentifier(record, "profile");
@@ -530,7 +531,7 @@ function validateRpcResumeRequest(record: RpcJsonRecord): RpcResumeRequest {
 
 function validateRpcResumeOutcome(record: RpcJsonRecord): RpcResumeOutcome {
 	const kind = readRpcRecordKind(record);
-	if (kind === "accept") {
+	if (kind === RpcWireRecordKindEnum.accept) {
 		readIdentifier(record, "profile");
 		readBase64Url32(record, "sessionId");
 		readSequence(record, "bindingEpoch");
@@ -539,7 +540,7 @@ function validateRpcResumeOutcome(record: RpcJsonRecord): RpcResumeOutcome {
 		readBase64Url32(record, "proof");
 		return record as RpcResumeAccept;
 	}
-	if (kind === "reject") {
+	if (kind === RpcWireRecordKindEnum.reject) {
 		const code = readString(record, "code");
 		if (!resumeRejectCodes.has(code as RpcResumeRejectCodeEnum)) {
 			throw new Error("RPC resume reject code is outside the profile union.");
@@ -556,26 +557,28 @@ function validateRpcResumeOutcome(record: RpcJsonRecord): RpcResumeOutcome {
 
 function validateRpcActiveRecord(record: RpcJsonRecord): RpcActiveRecord {
 	const kind = readRpcRecordKind(record);
-	if (kind === "message") {
-		readSequence(record, "seq");
-		if (own(record, "ackThrough")) {
+	switch (kind) {
+		case RpcWireRecordKindEnum.message:
+			readSequence(record, "seq");
+			if (own(record, "ackThrough")) {
+				readAckCursor(record, "ackThrough");
+			}
+			validateSemanticMessage(record.message);
+			return record as RpcMessageEnvelope;
+		case RpcWireRecordKindEnum.ack:
 			readAckCursor(record, "ackThrough");
-		}
-		validateSemanticMessage(record.message);
-		return record as RpcMessageEnvelope;
+			return record as RpcAckRecord;
+		case RpcWireRecordKindEnum.ping:
+		case RpcWireRecordKindEnum.pong:
+		case RpcWireRecordKindEnum.close:
+			if (
+				kind === RpcWireRecordKindEnum.close &&
+				Object.keys(record).some((key) => closeForbiddenMembers.has(key))
+			) {
+				throw new Error("RPC close contains a forbidden control member.");
+			}
+			return record as RpcControlRecord;
+		default:
+			throw new Error("RPC active record kind is unknown.");
 	}
-	if (kind === "ack") {
-		readAckCursor(record, "ackThrough");
-		return record as RpcAckRecord;
-	}
-	if (kind === "ping" || kind === "pong" || kind === "close") {
-		if (
-			kind === "close" &&
-			Object.keys(record).some((key) => closeForbiddenMembers.has(key))
-		) {
-			throw new Error("RPC close contains a forbidden control member.");
-		}
-		return record as RpcControlRecord;
-	}
-	throw new Error("RPC active record kind is unknown.");
 }
