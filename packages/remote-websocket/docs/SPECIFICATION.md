@@ -171,7 +171,10 @@ unsettled send, then invoke native `terminate()` when available or WebSocket `cl
 Adapter shape. `ws:` is plaintext. A `wss:` deployment may satisfy confidentiality, ordered
 integrity/anti-replay, and authentication of the expected responder endpoint only when the application
 independently validates its TLS endpoint and trust policy. The Adapter exposes no `isSecure` flag or credentials
-through the core Transport seam.
+through the core Transport seam. Ordinary server-authenticated `wss:` authenticates the responder, not the
+initiating application. A deployment accepting untrusted inbound sockets **MUST** authenticate and admit the
+initiator before handing the resulting Connection to an RPC Acceptor and enforce per-principal connection,
+Session, request-rate, and handler-duration limits outside this Adapter.
 
 ## 8. Stable package compatibility
 

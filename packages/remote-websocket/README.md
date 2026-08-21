@@ -60,6 +60,12 @@ integrity/anti-replay, and authentication of the expected responder endpoint.
 The structural Transport Adapter contract does not prove network security or
 expose an `isSecure` claim.
 
+Server-authenticated `wss:` does not authenticate the initiating application.
+Before passing an untrusted inbound WebSocket to an RPC Acceptor, authenticate
+and admit the initiator at the TLS, HTTP-upgrade, or gateway boundary, then
+enforce per-principal connection, Session, request-rate, and handler-duration
+limits. The RPC Session proof provides continuity, not user or tenant identity.
+
 See the [normative specification](docs/SPECIFICATION.md) for the complete
 admission, framing, lifecycle, and security contract.
 

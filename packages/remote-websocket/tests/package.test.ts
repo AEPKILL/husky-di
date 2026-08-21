@@ -173,7 +173,7 @@ describe("installed @husky-di/remote-websocket package", () => {
 		).toBe(true);
 	});
 
-	it("RPC-TRANSPORT-012 documents the packaged secure-deployment boundary", () => {
+	it("RPC-TRANSPORT-012 WS-SEC-001 documents the packaged secure-deployment boundary", () => {
 		const documentation = [
 			readFileSync(resolve(installedRoot, "README.md"), "utf8"),
 			readFileSync(resolve(installedRoot, "docs/SPECIFICATION.md"), "utf8"),
@@ -183,6 +183,11 @@ describe("installed @husky-di/remote-websocket package", () => {
 		expect(documentation).toContain("authentication of the expected responder");
 		expect(documentation).toContain("wss:");
 		expect(documentation).toContain("does not prove network security");
+		expect(documentation).toContain(
+			"does not authenticate the initiating application",
+		);
+		expect(documentation).toContain("before handing");
+		expect(documentation).toContain("per-principal connection");
 	});
 
 	it("RPC-RELEASE-005 resolves packed ESM and CJS while rejecting private deep imports", () => {

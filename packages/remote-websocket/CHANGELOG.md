@@ -7,3 +7,5 @@
 - Add shared Adapter conformance and platform-specific framing/security evidence.
 - Detect browser offline state before and during Connector connections.
 - Publish the normative specification and secure-deployment guidance.
+- Require `ws` 8.21 or newer for the upstream memory-disclosure and
+  memory-exhaustion fixes.
