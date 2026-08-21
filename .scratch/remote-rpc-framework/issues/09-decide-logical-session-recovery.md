@@ -137,8 +137,12 @@ terminal 原因包括 configured Recovery retention（默认 `5 min`）到期、
 exhaustion drain、owner shutdown，以及 protected current binding上已验证的 remote Session-close；
 abrupt remote restart会丢失 key且只能 generic reject，因此本地只能等待 Recovery deadline，不能把
 restart本身“证明”为 terminal。错误路由、临时 admission failure 或未验证的 unknown Session 不足以
-结束本地 retained Session。v1 不为 fresh admission 或 aggregate pressure 做 LRU/idle/silent
-eviction；容量满时拒绝新 work，保留 existing Session 到明确 terminal。
+结束本地 retained Session。v1 不做 LRU/idle/silent eviction；唯一的 pressure reclamation 是
+Acceptor fresh admission 在 Session 容量满时，先原子预留当前 fresh slot，再以 `forced-close` 结束
+active absolute Recovery deadline 最早、尚未安装 replacement binding、且 deadline 尚未获胜的
+responder-side recovering Session；同 deadline 按 retained Session order 选取。Connected Session
+与已经线性化 replacement binding 的 Session 均受保护；没有可回收 Session 时仍拒绝 fresh work。
+该回收不携带 remote Session authority，initiator 继续 recovering 到自己的成功 resume 或原 deadline。
 
 `continuity-failure` 与 `session-terminated` 只有在 exact resume request 已先通过 proof、且 reject
 自身的 proof 也验证成功时才有 Session authority。Unknown/expired Session、wrong profile、bad proof、
@@ -204,10 +208,14 @@ first-terminal-wins选择最终 `forced-close | shutdown-deadline | counter-exha
 Recovery grace 与 retained Session TTL 是同一个从 binding loss/fence 起算的 configured
 `recoveryGraceMs`（默认 `300,000 ms`）absolute deadline。失败/stale/timeout resume、攻击 bytes
 或普通 attempt activity都不重置；成功
-resume 取消，下一次 binding loss 重新开始。Deadline 与 resume accept 竞争同一 state transition，
-deadline 先赢则 late accept 被 fence。Runtime 冻结时只承诺重新获得调度后收敛，但 wall-clock TTL
-不延长，因此已经 recovering 的 Session 在冻结超过该期限后可以 terminal；仍为 connected 的
-Session 尚未启动该 TTL，先按 resource ticket 的 scheduler-stall confirmation window 判断 binding。
+resume 取消，下一次 binding loss 重新开始。Deadline、resume accept 与上述 responder-side fresh
+capacity reclamation 竞争同一 state transition：deadline 先赢则 late accept 被 fence；binding
+linearization 先赢则 Session 不再可回收；reclamation 先赢则以 `forced-close` 终结 retained calls并使
+late resume candidate失效；多个候选按 active absolute Recovery deadline 从早到晚回收，同 deadline
+按 retained Session order 选取，而不是按 Session 创建时间。Runtime 冻结时只承诺重新获得调度后
+收敛，但 wall-clock TTL不延长，因此已经 recovering 的 Session 在冻结超过该期限后可以 terminal；
+仍为 connected 的 Session 尚未启动该 TTL，先按 resource ticket 的 scheduler-stall confirmation
+window 判断 binding。
 
 ### Stable objects 与 exposure lifetime
 
@@ -233,3 +241,13 @@ peer recovery/terminal 不改变 owner exposure。Cleanup 原子移除注册，�
 本决议不增加生产 Interface 或代码，不定义 call ledger GC、owner shutdown choreography 或 private
 Module 文件切分。现有 security、resource、call、
 shutdown 与 Protocol Interface tickets 已覆盖这些后续问题，因此无需新增 child ticket。
+
+## Comments
+
+### 2026-08-21 — Fresh capacity reclamation revision
+
+连续 fresh/refresh 可以让 responder 的 recovering Sessions 占满 `maxSessions` 直到五分钟 deadline，
+造成新 Session admission 饥饿。本次把 issue 13 的有限资源策略修订为只回收 deadline 尚未获胜、
+且没有 current 或 linearized replacement binding 的 responder-side recovering Session，并保留
+connected、已线性化 replacement binding 与 initiator authority 边界；多个候选按 active Recovery
+deadline 从早到晚回收，同 deadline 视为同时掉线。

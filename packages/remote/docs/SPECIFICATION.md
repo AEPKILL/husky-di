@@ -1567,7 +1567,9 @@ historical uniqueness is probabilistic and authority remains the independent sec
 
 **RPC-SESSION-003 — Fresh install.** Before Session-ID generation, secret/nonces, or proof work, responder
 **MUST** reserve Session capacity and protected control state in one non-awaiting step that counts retained
-Sessions plus all provisional fresh reservations. It **MUST** generate independent `sessionSecret` and nonces,
+Sessions plus all provisional fresh reservations. When that capacity is full, the reservation **MUST** first
+claim the eligible Recovery with the earliest active absolute deadline under `RPC-RESOURCE-006`, or fail without
+evicting a connected or replacement-bound Session. It **MUST** generate independent `sessionSecret` and nonces,
 and install the Session only if Owner, endpoint, provisional identity, profile, and reservations remain current
 after proof preparation. Initiator **MUST** derive a non-extractable proof key and verify the fresh transcript
 before attaching the Session to its stable peer.
@@ -1624,8 +1626,12 @@ request replacement attempts without changing Protocol Recovery authority.
 
 **RPC-RECOVERY-003 — Retention.** Recovery retention **MUST** start at actual binding loss/fence and use one
 absolute non-sliding `recoveryGraceMs`. Successful resume **MUST** cancel it; attack input, failed attempts, and
-attempt activity **MUST NOT** reset it. Deadline and accept **MUST** compete for one winner. Expiry **MUST**
-terminal Pending work as `unavailable` and admitted work without authoritative terminal as `outcome-unknown`.
+attempt activity **MUST NOT** reset it. Deadline, accept, and Acceptor fresh-capacity reclamation **MUST** compete
+for one winner. Expiry or reclamation **MUST** terminal Pending work as `unavailable` and admitted work without
+authoritative terminal as `outcome-unknown`; reclamation **MUST** project `forced-close`, not
+`recovery-expired`. Reclamation order **MUST** follow the active absolute Recovery deadline under
+`RPC-RESOURCE-006`, not Session creation time. The initiator of a reclaimed responder Session remains recovering
+until a later successful resume or its own deadline because fresh pressure carries no remote Session authority.
 
 **RPC-RECOVERY-004 — Stable state.** Recovery **MUST** preserve the peer object, resolved facades, exposures,
 Call Identities, replay entries, handler-dispatch evidence, and membership position. Connection replacement
@@ -1914,8 +1920,14 @@ security state. Thus the fixed worst case
 | Aggregate retained state including reserves | `64 MiB` |
 
 **RPC-RESOURCE-006 — Retained ownership.** A Connection whose Direct Close has not settled **MUST** continue
-occupying its ordinary/overflow slot. No pressure policy **MAY** evict an existing connected or recovering
-Session.
+occupying its ordinary/overflow slot. Fresh admission pressure **MUST NOT** evict an existing connected Session.
+When retained Sessions plus provisional fresh reservations reach `maxSessions`, an Acceptor fresh attempt
+**MUST** reserve against and synchronously force one recovering Session with no current or linearized replacement
+binding whose absolute Recovery deadline has not won, before Session-ID generation or proof work. The reservation
+**MUST** precede the victim's public terminal notification so reentrant admission cannot overcommit capacity. If
+multiple Sessions are reclaimable, the victim **MUST** have the earliest active absolute Recovery deadline;
+equal deadlines **MAY** be resolved in retained Session order. If no reclaimable recovering Session exists, the
+fresh attempt **MUST** be rejected.
 
 **RPC-RESOURCE-004 — Bootstrap transient.** Before endpoint subscription or first-record parsing, each admitted
 handshake **MUST** acquire one Owner-global generic slot that is shared by fresh and resume without a role

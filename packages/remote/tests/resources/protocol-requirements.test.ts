@@ -12,7 +12,11 @@ import {
 	createRpcAcceptor,
 	createRpcConnector,
 } from "../../src/index";
-import { createRpcTestNetwork } from "../protocol/test.utils";
+import { normalizeRpcApplicationArguments } from "../../src/utils/rpc-application-value.util";
+import {
+	createRpcDirectSessionHarness,
+	createRpcTestNetwork,
+} from "../protocol/test.utils";
 
 interface IRequirementsService {
 	run(value: string): number;
@@ -244,6 +248,47 @@ describe("Default RPC Protocol remaining requirements", () => {
 			overflowConnector.close(),
 			acceptor.close(),
 		]);
+	});
+
+	it("RPC-RECOVERY-003 RPC-RESOURCE-006 closes reclaimed Session admission before settling retained calls", () => {
+		const { session } = createRpcDirectSessionHarness();
+		const request = {
+			service: "example.reentrant-reclamation.v1",
+			method: "run",
+			args: normalizeRpcApplicationArguments([]),
+		};
+		const outcomes: unknown[] = [];
+		const admittedReservation = session.reserveInvocation(request);
+		if (admittedReservation === undefined) {
+			throw new Error("Expected one admitted invocation reservation.");
+		}
+		const observation: {
+			reentrantReservation?: ReturnType<typeof session.reserveInvocation>;
+		} = {};
+		const admittedInvocation = admittedReservation.commit({
+			finish(outcome) {
+				outcomes.push(outcome);
+				observation.reentrantReservation = session.reserveInvocation(request);
+			},
+		});
+		admittedInvocation.start();
+		session._enterRecovery();
+		const pendingReservation = session.reserveInvocation(request);
+		if (pendingReservation === undefined) {
+			throw new Error("Expected one Pending invocation reservation.");
+		}
+		pendingReservation.commit({
+			finish: (outcome) => outcomes.push(outcome),
+		});
+
+		session.terminateForced();
+
+		expect(observation.reentrantReservation).toBeUndefined();
+		expect(outcomes).toEqual([
+			{ type: "failed", code: "outcome-unknown" },
+			{ type: "failed", code: "unavailable" },
+		]);
+		expect(session.isClosed).toBe(true);
 	});
 
 	it("RPC-SCHEDULE-005 serializes synchronous ingress emissions and never runs handlers in the Transport callback", async () => {

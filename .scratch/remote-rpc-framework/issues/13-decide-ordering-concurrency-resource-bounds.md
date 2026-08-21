@@ -26,7 +26,8 @@ v1 采用一组分层的 finite budget，加一个只存在于 Framework/Protoco
 scheduler。公开 Interface 不暴露 queue、lane、permit、priority、pause/resume 或 scheduler
 plugin；调用者只配置少量 owner-wide policy，所有 Protocol 与 Adapter 则必须满足一个固定的
 `1 MiB` message compatibility invariant。资源不足必须在仍有 Definite Non-Execution evidence
-时变成 `unavailable`，已经 admission 的 replay、terminal 或去重 evidence 绝不为腾空间而逐出。
+时变成 `unavailable`；单条 replay、terminal 或去重 evidence 不得静默逐出。Fresh capacity
+reclamation 只能显式 terminal 整个符合条件的 recovering Session，并按 force outcomes 收敛其 calls。
 
 ### 跨 Protocol/Adapter 的固定 compatibility profile
 
@@ -129,11 +130,17 @@ Connector没有 push listener或 overflow slot，Session上限固定为 `1`。Ow
 bootstrap handshake slots 在
 first-record parse 前已满时，Owner 不能分配 bounded `1 MiB` work set、分类 fresh/resume 或生成
 Protocol reject，因此只 Direct Close该 attempt。已取得 handshake slot并完成 bounded classification
-后，fresh Session/aggregate cap不足才发送 `admission-rejected`；resume-specific binding/Session
-capacity不足才发送同形 `resume-rejected`。Fresh Session admission 必须先原子预留 control reserve；
-任何 admission failure 都不驱逐 existing connected/recovering Session。v1 没有 LRU、idle 或
-pressure-based Session eviction；成功 Session只因明确 terminal、owner shutdown 或下述 Recovery
-deadline 回收。
+后，retained Sessions 与 provisional fresh reservations 达到 `maxSessions` 时，先尝试回收一个符合
+下述条件且 active absolute Recovery deadline 最早的 recovering Session；同 deadline 按 retained
+Session order 选取，没有候选才发送 `admission-rejected`。Resume-specific binding/Session
+capacity不足仍发送同形
+`resume-rejected`。Fresh Session admission 必须在任何公开 terminal notification 前，先把一个
+deadline 尚未获胜、且没有 current 或 linearized replacement binding 的 responder-side recovering
+Session slot 原子转换为当前 fresh reservation，再以 `forced-close` 终结 victim。Connected Session、
+已线性化 replacement binding 与 deadline 已获胜的 Session 均不可回收。v1 不增加 LRU、idle 或
+silent eviction；多个候选按 earliest active Recovery deadline 排序，同 deadline 按 retained Session
+order 选取，而不按 Session 创建顺序。该 responder-local terminal 不授予 initiator remote authority，
+initiator继续 recovering到成功 resume或原 deadline。
 
 Owner factory 在 cold construction 时 snapshot 一份 immutable runtime policy。最终 TypeScript
 shape 由 issue 17/19 验证，但语义 knobs 只包含：
@@ -275,8 +282,9 @@ Fresh/resume attempt 使用 configured `bindingAttemptTimeoutMs`（默认 `30 s`
 deadline；fresh timeout 回到 unbound，resume timeout 保持 recovering，且失败 attempt 不延长
 Session deadline。Recovery grace 与 retention 合并为从真正 loss/fence current binding 起算的
 configured `recoveryGraceMs`（默认 `5 min`）absolute deadline：成功 resume 取消，攻击
-bytes、失败 attempt 与局部 activity 不重置。Deadline 和 resume accept 竞争同一 state slot；到期
-不做 silent eviction，而是明确 Session terminal。尚未 Outgoing Admission 的 draft 变
+bytes、失败 attempt 与局部 activity 不重置。Deadline、resume accept 与 fresh capacity
+reclamation 竞争同一 state slot；到期不是 silent eviction，而是明确 `recovery-expired` Session
+terminal，capacity reclamation则明确投影 `forced-close`。尚未 Outgoing Admission 的 draft 变
 `unavailable`，已 admission 且没有 authoritative terminal 的 call 变 `outcome-unknown`，既有
 terminal winner 不改判。
 
@@ -319,7 +327,7 @@ resource/protocol fault；不能断线后让同一 record无限 Recovery。
 | bootstrap malformed/oversized Protocol input | Connection/attempt fault；尚无 Session 时不得扩大 scope |
 | protected current endpoint input 已进入 Codec后违反 fixed profile、fresh sequence gap 或 reserve 本身失效 | Session-scoped Protocol/resource fault；不伪装成 call error |
 | pre-bootstrap owned-Connection/handshake slot不足 | 不 parse、不生成 Protocol record，Direct Close attempt；不影响 siblings |
-| 已取得 handshake slot后的 fresh Session/aggregate cap不足 | attempt-scoped `admission-rejected`；不影响 siblings |
+| 已取得 handshake slot后 retained Sessions 与 provisional fresh reservations 达到 `maxSessions` | 原子回收 active absolute Recovery deadline 最早、deadline 尚未获胜、且没有 current 或 linearized replacement binding 的 recovering Session；同 deadline 按 retained order，无候选才 attempt-scoped `admission-rejected` |
 | 已取得 handshake slot后的 resume-specific binding/Session capacity不足 | 同形 `resume-rejected`；原 Session 保持 recovering 到既有 deadline |
 | Adapter temporary pressure | 当前 send pending；形成 backpressure |
 | send 已调用后 reject/timeout | binding failure/Recovery；不能恢复 pre-send guarantee |
@@ -353,3 +361,12 @@ memory，不计入 Framework budget；Framework 能承诺的是自身不做第�
 本票不增加 production code、不实现 Transport Adapter，也不决定 issue 14 的 proof/authentication
 机制、issue 18 的精确 shutdown record choreography 或 issue 17/19 的最终 TypeScript property
 placement。
+
+## Comments
+
+### 2026-08-21 — Recovering Session pressure policy revision
+
+连续 fresh/refresh 暴露了旧“全部 retained Session 等到 deadline”策略的 admission 饥饿窗口。本次
+把 `maxSessions` 满载行为收敛为一换一的 responder-side reclamation，同时用 reservation-before-
+notification、binding/deadline winner、earliest active Recovery deadline（同 deadline 按 retained
+order）与 connected protection 保持 bounded resource invariants。

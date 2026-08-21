@@ -193,6 +193,12 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 		return this._recovering && !this._closed;
 	}
 
+	get recoveryReclaimDeadline(): number | undefined {
+		return this.isRecovering && this._binding === undefined
+			? this._recoveryDeadline
+			: undefined;
+	}
+
 	get isClosed(): boolean {
 		return this._closed;
 	}
@@ -237,6 +243,10 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 					Date.now() < this._recoveryDeadline)) &&
 			this._bindingEpoch < Number.MAX_SAFE_INTEGER
 		);
+	}
+
+	terminateForced(): void {
+		this._terminateRetainedSession(RpcCloseReasonEnum.forcedClose);
 	}
 
 	acceptResumeBinding(
@@ -1310,11 +1320,18 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 		}
 		const binding = this._binding;
 		this._binding = undefined;
+		const recoveryDeadlineAtLoss =
+			this._recoveryTimer === undefined
+				? Date.now() + this._host.policy.recoveryGraceMs
+				: undefined;
 		this._stopHealthTimer();
 		this._healthStallGraceUntil = 0;
 		this._pingDue = false;
 		this._pongDue = false;
 		binding?.endpoint.fenceAndClose();
+		if (this._closed) {
+			return;
+		}
 		if (this._counterDraining) {
 			this._terminateRetainedSession(
 				RpcCloseReasonEnum.counterExhaustion,
@@ -1326,19 +1343,22 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 			this._terminateRetainedSession(RpcCloseReasonEnum.forcedClose, cause);
 			return;
 		}
+		if (this._recoveryTimer === undefined) {
+			const recoveryDeadline =
+				recoveryDeadlineAtLoss ??
+				Date.now() + this._host.policy.recoveryGraceMs;
+			this._recoveryDeadline = recoveryDeadline;
+			this._recoveryTimer = setTimeout(
+				() => this._expireRecovery(),
+				Math.max(0, recoveryDeadline - Date.now()),
+			);
+		}
 		if (!this._recovering) {
 			this._recovering = true;
 			this._sessionHost?.transition({
 				type: RpcProtocolSessionTransitionTypeEnum.recovering,
 				cause,
 			});
-		}
-		if (this._recoveryTimer === undefined) {
-			this._recoveryDeadline = Date.now() + this._host.policy.recoveryGraceMs;
-			this._recoveryTimer = setTimeout(
-				() => this._expireRecovery(),
-				this._host.policy.recoveryGraceMs,
-			);
 		}
 	}
 
@@ -1354,9 +1374,9 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 		if (this._closed || !this._recovering) {
 			return;
 		}
-		this._terminateOpenCalls();
 		this._closed = true;
 		this._clearTimers();
+		this._terminateOpenCalls();
 		this._proofKey = undefined;
 		this._sessionHost?.transition({
 			type: RpcProtocolSessionTransitionTypeEnum.closed,
@@ -1376,9 +1396,9 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 		if (this._closed) {
 			return;
 		}
-		this._terminateOpenCalls();
 		this._closed = true;
 		this._clearTimers();
+		this._terminateOpenCalls();
 		this._binding?.endpoint.fenceAndClose();
 		this._binding = undefined;
 		this._proofKey = undefined;
@@ -1396,9 +1416,9 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 		if (this._closed) {
 			return;
 		}
-		this._terminateOpenCalls();
 		this._closed = true;
 		this._clearTimers();
+		this._terminateOpenCalls();
 		this._binding?.endpoint.fenceAndClose();
 		this._binding = undefined;
 		this._proofKey = undefined;

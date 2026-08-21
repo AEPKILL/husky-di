@@ -757,7 +757,9 @@ class RpcAcceptorRuntime<TKey> implements IRpcProtocolAcceptorRuntime {
 				return;
 			}
 			if (!this._reserveFreshSession(attempt)) {
-				await this._rejectFresh(attempt, "admission-rejected");
+				if (this._isCurrent(attempt)) {
+					await this._rejectFresh(attempt, "admission-rejected");
+				}
 				return;
 			}
 
@@ -1116,15 +1118,38 @@ class RpcAcceptorRuntime<TKey> implements IRpcProtocolAcceptorRuntime {
 	}
 
 	_reserveFreshSession(attempt: IRpcAttempt<TKey>): boolean {
-		if (
-			this._sessions.size + this._freshSessionReservations >=
-			this._host.policy.maxSessions
-		) {
+		let reclaimedSession: IRpcSession<TKey> | undefined;
+		let earliestRecoveryDeadline = Number.POSITIVE_INFINITY;
+		const reclaimAt = Date.now();
+		const retainedAndReserved =
+			this._sessions.size + this._freshSessionReservations;
+		if (retainedAndReserved > this._host.policy.maxSessions) {
 			return false;
+		}
+		if (retainedAndReserved === this._host.policy.maxSessions) {
+			for (const session of this._sessions.values()) {
+				const recoveryDeadline = session.recoveryReclaimDeadline;
+				if (
+					recoveryDeadline !== undefined &&
+					recoveryDeadline > reclaimAt &&
+					recoveryDeadline < earliestRecoveryDeadline
+				) {
+					reclaimedSession = session;
+					earliestRecoveryDeadline = recoveryDeadline;
+				}
+			}
+			if (reclaimedSession === undefined) {
+				return false;
+			}
 		}
 		this._freshSessionReservations += 1;
 		attempt.freshSessionReserved = true;
-		return true;
+		if (reclaimedSession === undefined) {
+			return true;
+		}
+		this._sessions.delete(reclaimedSession.sessionId);
+		reclaimedSession.terminateForced();
+		return this._isCurrent(attempt) && attempt.freshSessionReserved === true;
 	}
 
 	_releaseFreshSession(attempt: IRpcAttempt<TKey>): void {

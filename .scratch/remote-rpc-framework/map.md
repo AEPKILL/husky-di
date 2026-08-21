@@ -91,8 +91,11 @@ Status: resolved
   lost accept 后用更高 attempt 恢复，并阻止旧 attempt 重放；低于 authenticated retained receipt 的 cursor 明确 continuity failure，
   不再静默取最大值。Attempt/Session-scoped reject、六态 peer projection 与稳定
   object/exposure lifetime 明确了 retry、terminal 和 caller observation 边界；silence/send timeout
-  先 fence 再进入 recovering，单次 attempt 为 30 秒、retained Recovery deadline 为 5 分钟且不做
-  pressure eviction；Protocol counter exhaustion可让单一 peer进入 draining而不关闭 Acceptor siblings。
+  先 fence 再进入 recovering，单次 attempt 为 30 秒、retained Recovery deadline 为 5 分钟；fresh
+  `maxSessions` 满载时优先回收 active absolute Recovery deadline 最早、deadline 尚未获胜、且没有
+  current 或 linearized replacement binding 的 responder-side recovering Session，同 deadline 按
+  retained order；connected 与已线性化 replacement binding 受保护。Protocol counter exhaustion可让
+  单一 peer进入 draining而不关闭 Acceptor siblings。
 - [决定 Call value model、identity、重放与去重](issues/10-decide-call-delivery-state-machine.md)：
   所有 Protocol 共享 normalized JSON data-tree value model；默认以 direction-local Call Ordinal
   区分 Logical Call、以独立 `seq` 精确重放 message，在原子 Remote Request Admission 后提供
@@ -126,8 +129,9 @@ Status: resolved
   `32 MiB`、每 owner `64 MiB`、256 calls、16/64 handler permits，以 replay barrier、control/data
   交替、per-Session FIFO 和 owner round-robin 提供有界公平性。累计 ACK 50 ms 合并，Ping/Pong
   承担 30 秒 probe；120 秒 silence/30 秒 send timeout先 fence后 Recovery，5分钟 retention与每个
-  grace/cleanup phase各 5 秒（优雅最坏 10 秒）的 deadline保证有限生命周期；ordinary overload使用 protected definite-non-execution
-  terminal，既有 evidence 不逐出，所有 counter never-wrap。
+  grace/cleanup phase各 5 秒（优雅最坏 10 秒）的 deadline保证有限生命周期；ordinary overload使用
+  protected definite-non-execution terminal，单条 evidence 不静默逐出，fresh 满载以一换一
+  `forced-close` 回收符合条件的 recovering Session，所有 counter never-wrap。
 - [决定 trust-boundary validation 与 Session Recovery 安全](issues/14-decide-validation-recovery-security.md)：
   默认 v1 以受保护 Transport 提供 confidentiality、ordered integrity 与 responder endpoint identity，
   再用每 Session 独立 secret、固定 JCS/HKDF/HMAC transcript proof、单调 `resumeAttempt` 和 signed

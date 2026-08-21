@@ -18,12 +18,14 @@ export interface IRpcSession<TKey> extends IRpcProtocolSession {
 	readonly bindingEpoch: number;
 	readonly proofKey: TKey | undefined;
 	readonly isRecovering: boolean;
+	readonly recoveryReclaimDeadline: number | undefined;
 	readonly isClosed: boolean;
 	readonly highestAcceptedResumeAttempt: number;
 	ownsEndpoint(endpoint: IRpcEndpoint): boolean;
 	consumeResumeAttempt(): number;
 	classifyPeerCursor(cursor: number): RpcPeerCursorClassificationEnum;
 	canAcceptResumeAttempt(resumeAttempt: number): boolean;
+	terminateForced(): void;
 	acceptResumeBinding(
 		endpoint: IRpcEndpoint,
 		resumeAttempt: number,
