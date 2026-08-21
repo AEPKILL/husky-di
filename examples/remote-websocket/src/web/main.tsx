@@ -5,7 +5,6 @@
  */
 
 import { createRpcConnector, RpcStateStatusEnum } from "@husky-di/remote";
-import { createWebSocketConnectorAdapter } from "@husky-di/remote-websocket";
 import {
 	QueryClient,
 	QueryClientProvider,
@@ -35,8 +34,8 @@ import {
 	CardTitle,
 } from "@/web/components/ui/card";
 import { Input } from "@/web/components/ui/input";
+import { useRpcConnectorReconnection } from "@/web/hooks/use-rpc-connector-reconnection";
 import { useRpcObservatory } from "@/web/hooks/use-rpc-observatory";
-import { startRpcConnectorReconnection } from "@/web/utils/rpc-connector-reconnection.util";
 import { getRpcPeerStatusPresentation } from "@/web/utils/rpc-peer-status-presentation.util";
 
 const connector = createRpcConnector();
@@ -53,7 +52,6 @@ connector.peer.expose(REMOTE_BROWSER_DISPLAY_SERVICE, {
 function App() {
 	const [name, setName] = useState("Web browser");
 	const [delayMs, setDelayMs] = useState(2_000);
-	const [connectionError, setConnectionError] = useState<string>();
 	const [nodeMessage, setNodeMessage] = useState("Waiting for Node…");
 	const { connectorState, peerState, pendingCalls, events } =
 		useRpcObservatory(connector);
@@ -68,6 +66,7 @@ function App() {
 		mutationFn: ({ value, delay }: { value: string; delay: number }) =>
 			greetingService.greet(value, delay),
 	});
+	const connectionError = useRpcConnectorReconnection(connector);
 
 	useEffect(() => {
 		let active = true;
@@ -78,23 +77,8 @@ function App() {
 			return document.title;
 		};
 
-		const url = new URL("/rpc", window.location.href);
-		url.protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-		const stopReconnection = startRpcConnectorReconnection(
-			connector,
-			() => createWebSocketConnectorAdapter({ url }),
-			(error) => {
-				if (active) {
-					setConnectionError(
-						error instanceof Error ? error.message : String(error),
-					);
-				}
-			},
-		);
-
 		return () => {
 			active = false;
-			void stopReconnection().finally(() => connector.close());
 		};
 	}, []);
 

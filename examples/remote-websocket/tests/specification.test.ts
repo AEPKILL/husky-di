@@ -15,7 +15,7 @@ import {
 	RpcStateStatusEnum,
 } from "@husky-di/remote";
 
-import { startRpcConnectorReconnection } from "@/web/utils/rpc-connector-reconnection.util";
+import { startRpcConnectorReconnection } from "@/web/hooks/use-rpc-connector-reconnection";
 import { getRpcPeerStatusPresentation } from "@/web/utils/rpc-peer-status-presentation.util";
 
 describe("Remote WebSocket example specification", () => {
@@ -52,7 +52,14 @@ describe("Remote WebSocket example specification", () => {
 	it("EXAMPLE-WS-RECOVERY-001 delegates connection attempts to one Reconnection supervisor", async () => {
 		const adapters: IRpcConnectorAdapter[] = [];
 		const attempt = Promise.withResolvers<void>();
-		const connector = {} as IRpcConnector;
+		const stopped = Promise.withResolvers<void>();
+		const lifecycleCalls: string[] = [];
+		const connector = {
+			close() {
+				lifecycleCalls.push("close");
+				return Promise.resolve();
+			},
+		} as IRpcConnector;
 		let createCalls = 0;
 		let connectCalls = 0;
 		let stopCalls = 0;
@@ -73,7 +80,8 @@ describe("Remote WebSocket example specification", () => {
 				},
 				stop() {
 					stopCalls += 1;
-					return Promise.resolve();
+					lifecycleCalls.push("stop");
+					return stopped.promise;
 				},
 			};
 		};
@@ -96,7 +104,11 @@ describe("Remote WebSocket example specification", () => {
 			["offline"],
 		);
 
-		await stop();
+		const cleanup = stop();
 		assert.equal(stopCalls, 1);
+		assert.deepEqual(lifecycleCalls, ["stop"]);
+		stopped.resolve();
+		await cleanup;
+		assert.deepEqual(lifecycleCalls, ["stop", "close"]);
 	});
 });
