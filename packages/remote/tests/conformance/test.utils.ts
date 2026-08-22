@@ -93,12 +93,12 @@ function createMemoryProtocol(counterExhaustion: boolean): IRpcProtocol {
 class MemoryProtocolRuntime
 	implements IRpcProtocolConnectorRuntime, IRpcProtocolAcceptorRuntime
 {
-	private readonly _role: "connector" | "acceptor";
-	private readonly _host: IRpcProtocolConnectorHost | IRpcProtocolAcceptorHost;
-	private readonly _counterExhaustion: boolean;
-	private readonly _binding = Promise.withResolvers<void>();
-	private readonly _outgoing = new Map<number, IRpcProtocolInvocationSink>();
-	private readonly _incoming = new Map<
+	readonly #role: "connector" | "acceptor";
+	readonly #host: IRpcProtocolConnectorHost | IRpcProtocolAcceptorHost;
+	readonly #counterExhaustion: boolean;
+	readonly #binding = Promise.withResolvers<void>();
+	readonly #outgoing = new Map<number, IRpcProtocolInvocationSink>();
+	readonly #incoming = new Map<
 		number,
 		{
 			finish(outcome: {
@@ -107,76 +107,76 @@ class MemoryProtocolRuntime
 			}): void;
 		}
 	>();
-	private _connection: IRpcConnection | undefined;
-	private _session: MemoryProtocolSession | undefined;
-	private _sessionHost: IRpcProtocolSessionHost | undefined;
-	private _nextCallId = 1;
-	private _closing = false;
-	private _cleanupTask: Promise<void> | undefined;
+	#connection: IRpcConnection | undefined;
+	#session: MemoryProtocolSession | undefined;
+	#sessionHost: IRpcProtocolSessionHost | undefined;
+	#nextCallId = 1;
+	#closing = false;
+	#cleanupTask: Promise<void> | undefined;
 
 	public constructor(
 		role: "connector" | "acceptor",
 		host: IRpcProtocolConnectorHost | IRpcProtocolAcceptorHost,
 		counterExhaustion: boolean,
 	) {
-		this._role = role;
-		this._host = host;
-		this._counterExhaustion = counterExhaustion;
+		this.#role = role;
+		this.#host = host;
+		this.#counterExhaustion = counterExhaustion;
 	}
 
 	public bind(connection: IRpcConnection, _signal: AbortSignal): Promise<void> {
-		if (this._role !== "connector") {
+		if (this.#role !== "connector") {
 			return Promise.reject(new Error("Only the Connector runtime can bind."));
 		}
-		this._subscribe(connection);
-		void Promise.resolve().then(() => this._send({ kind: "hello" }));
-		return this._binding.promise;
+		this.#subscribe(connection);
+		void Promise.resolve().then(() => this.#send({ kind: "hello" }));
+		return this.#binding.promise;
 	}
 
 	public accept(
 		connection: IRpcConnection,
 		_signal: AbortSignal,
 	): Promise<void> {
-		if (this._role !== "acceptor") {
+		if (this.#role !== "acceptor") {
 			return Promise.reject(new Error("Only the Acceptor runtime can accept."));
 		}
-		this._subscribe(connection);
-		return this._binding.promise;
+		this.#subscribe(connection);
+		return this.#binding.promise;
 	}
 
 	public async shutdown(): Promise<void> {
-		this._closing = true;
-		if (this._connection !== undefined) {
-			await this._send({ kind: "close" });
-			await this._connection.close();
+		this.#closing = true;
+		if (this.#connection !== undefined) {
+			await this.#send({ kind: "close" });
+			await this.#connection.close();
 		}
 	}
 
 	public close(): void {
-		this._closing = true;
-		for (const sink of this._outgoing.values()) {
+		this.#closing = true;
+		for (const sink of this.#outgoing.values()) {
 			sink.finish({
 				type: RpcCallTerminalTypeEnum.failed,
 				code: RpcExceptionCodeEnum.outcomeUnknown,
 			});
 		}
-		this._outgoing.clear();
-		void this._connection?.close();
+		this.#outgoing.clear();
+		void this.#connection?.close();
 	}
 
 	public cleanup(): Promise<void> {
-		this._cleanupTask ??= Promise.resolve();
-		return this._cleanupTask;
+		this.#cleanupTask ??= Promise.resolve();
+		return this.#cleanupTask;
 	}
 
 	public reserveInvocation(
 		request: IRpcProtocolInvocationRequest,
 	): IRpcProtocolInvocationReservation | undefined {
-		if (this._closing || this._sessionHost === undefined) {
+		if (this.#closing || this.#sessionHost === undefined) {
 			return undefined;
 		}
-		if (this._counterExhaustion && this._nextCallId === 1) {
-			this._sessionHost.transition({
+		if (this.#counterExhaustion && this.#nextCallId === 1) {
+			this.#sessionHost.transition({
 				type: RpcProtocolSessionTransitionTypeEnum.draining,
 				reason: RpcCloseReasonEnum.counterExhaustion,
 			});
@@ -189,12 +189,12 @@ class MemoryProtocolRuntime
 					throw new Error("Invocation reservation already settled.");
 				}
 				settled = true;
-				const id = this._nextCallId;
-				this._nextCallId += 1;
+				const id = this.#nextCallId;
+				this.#nextCallId += 1;
 				return {
 					start: () => {
-						this._outgoing.set(id, sink);
-						void this._send({
+						this.#outgoing.set(id, sink);
+						void this.#send({
 							kind: "call",
 							id,
 							service: request.service,
@@ -202,7 +202,7 @@ class MemoryProtocolRuntime
 							args: request.args.value,
 						});
 					},
-					cancel: () => void this._send({ kind: "cancel", id }),
+					cancel: () => void this.#send({ kind: "cancel", id }),
 				};
 			},
 			release() {
@@ -218,46 +218,46 @@ class MemoryProtocolRuntime
 		this.close();
 	}
 
-	private _subscribe(connection: IRpcConnection): void {
-		this._connection = connection;
+	#subscribe(connection: IRpcConnection): void {
+		this.#connection = connection;
 		connection.message$.subscribe({
 			next: (message) => {
-				void this._receive(message).catch((error: unknown) => {
+				void this.#receive(message).catch((error: unknown) => {
 					const cause =
 						error instanceof Error ? error : new Error(String(error));
-					if (this._sessionHost === undefined) {
-						this._host.fault(RpcCloseReasonEnum.protocolFault, cause);
+					if (this.#sessionHost === undefined) {
+						this.#host.fault(RpcCloseReasonEnum.protocolFault, cause);
 					} else {
-						this._sessionHost.fault(RpcCloseReasonEnum.protocolFault, cause);
+						this.#sessionHost.fault(RpcCloseReasonEnum.protocolFault, cause);
 					}
 				});
 			},
 		});
 	}
 
-	private async _receive(message: Uint8Array): Promise<void> {
+	async #receive(message: Uint8Array): Promise<void> {
 		const record = decodeMemoryRecord(message);
 		switch (record.kind) {
 			case "hello":
-				this._installSession();
-				await this._send({ kind: "welcome" });
-				this._binding.resolve(undefined);
+				this.#installSession();
+				await this.#send({ kind: "welcome" });
+				this.#binding.resolve(undefined);
 				break;
 			case "welcome":
-				this._installSession();
-				this._binding.resolve(undefined);
+				this.#installSession();
+				this.#binding.resolve(undefined);
 				break;
 			case "call":
-				await this._receiveCall(record);
+				await this.#receiveCall(record);
 				break;
 			case "cancel": {
-				const call = this._incoming.get(record.id);
+				const call = this.#incoming.get(record.id);
 				call?.finish({
 					type: RpcCallTerminalTypeEnum.failed,
 					code: RpcExceptionCodeEnum.canceled,
 				});
-				this._incoming.delete(record.id);
-				await this._send({
+				this.#incoming.delete(record.id);
+				await this.#send({
 					kind: "result",
 					id: record.id,
 					outcome: "failed",
@@ -266,52 +266,52 @@ class MemoryProtocolRuntime
 				break;
 			}
 			case "result":
-				this._receiveResult(record);
+				this.#receiveResult(record);
 				break;
 			case "fault":
-				this._sessionHost?.fault(
+				this.#sessionHost?.fault(
 					RpcCloseReasonEnum.protocolFault,
 					new Error("Active Protocol fault fixture."),
 				);
 				break;
 			case "close":
-				this._sessionHost?.transition({
+				this.#sessionHost?.transition({
 					type: RpcProtocolSessionTransitionTypeEnum.closed,
 					reason: RpcCloseReasonEnum.remoteTerminated,
 				});
-				this._closing = true;
-				await this._connection?.close();
+				this.#closing = true;
+				await this.#connection?.close();
 				break;
 		}
 	}
 
-	private _installSession(): void {
-		if (this._session !== undefined) {
+	#installSession(): void {
+		if (this.#session !== undefined) {
 			return;
 		}
 		const session = new MemoryProtocolSession(this);
 		const sessionHost =
-			this._role === "connector"
-				? (this._host as IRpcProtocolConnectorHost).attachSession(session)
-				: (this._host as IRpcProtocolAcceptorHost).admitSession(session);
+			this.#role === "connector"
+				? (this.#host as IRpcProtocolConnectorHost).attachSession(session)
+				: (this.#host as IRpcProtocolAcceptorHost).admitSession(session);
 		if (sessionHost === undefined) {
 			throw new Error("Session admission rejected.");
 		}
-		this._session = session;
-		this._sessionHost = sessionHost;
+		this.#session = session;
+		this.#sessionHost = sessionHost;
 	}
 
-	private async _receiveCall(
+	async #receiveCall(
 		record: Extract<MemoryProtocolRecord, { readonly kind: "call" }>,
 	): Promise<void> {
-		const args = this._host.normalizeApplicationArguments(record.args);
-		const reserved = this._sessionHost?.reserveIncomingCall({
+		const args = this.#host.normalizeApplicationArguments(record.args);
+		const reserved = this.#sessionHost?.reserveIncomingCall({
 			service: record.service,
 			method: record.method,
 			args,
 		});
 		if (reserved === undefined) {
-			await this._send({
+			await this.#send({
 				kind: "result",
 				id: record.id,
 				outcome: "failed",
@@ -321,7 +321,7 @@ class MemoryProtocolRuntime
 		}
 		if (reserved.kind === "unknown") {
 			reserved.reservation.commit();
-			await this._send({
+			await this.#send({
 				kind: "result",
 				id: record.id,
 				outcome: "failed",
@@ -330,26 +330,26 @@ class MemoryProtocolRuntime
 			return;
 		}
 		const call = reserved.reservation.commit();
-		this._incoming.set(record.id, call);
+		this.#incoming.set(record.id, call);
 		const outcome = await call.handlerOutcome;
-		this._incoming.delete(record.id);
-		await this._send(handlerOutcomeRecord(record.id, outcome));
+		this.#incoming.delete(record.id);
+		await this.#send(handlerOutcomeRecord(record.id, outcome));
 	}
 
-	private _receiveResult(
+	#receiveResult(
 		record: Extract<MemoryProtocolRecord, { readonly kind: "result" }>,
 	): void {
-		const sink = this._outgoing.get(record.id);
+		const sink = this.#outgoing.get(record.id);
 		if (sink === undefined) {
 			return;
 		}
-		this._outgoing.delete(record.id);
+		this.#outgoing.delete(record.id);
 		if (record.outcome === "void") {
 			sink.finish({ type: RpcCallTerminalTypeEnum.returnedVoid });
 		} else if (record.outcome === "returned" && record.value !== undefined) {
 			sink.finish({
 				type: RpcCallTerminalTypeEnum.returned,
-				value: this._host.normalizeApplicationValue(record.value),
+				value: this.#host.normalizeApplicationValue(record.value),
 			});
 		} else {
 			sink.finish({
@@ -359,29 +359,29 @@ class MemoryProtocolRuntime
 		}
 	}
 
-	private _send(record: MemoryProtocolRecord): Promise<void> {
-		if (this._connection === undefined) {
+	#send(record: MemoryProtocolRecord): Promise<void> {
+		if (this.#connection === undefined) {
 			return Promise.reject(new Error("Protocol is not bound."));
 		}
-		return this._connection.send(encodeMemoryRecord(record));
+		return this.#connection.send(encodeMemoryRecord(record));
 	}
 }
 
 class MemoryProtocolSession implements IRpcProtocolSession {
-	private readonly _runtime: MemoryProtocolRuntime;
+	readonly #runtime: MemoryProtocolRuntime;
 
 	public constructor(runtime: MemoryProtocolRuntime) {
-		this._runtime = runtime;
+		this.#runtime = runtime;
 	}
 
 	public reserveInvocation(
 		request: IRpcProtocolInvocationRequest,
 	): IRpcProtocolInvocationReservation | undefined {
-		return this._runtime.reserveInvocation(request);
+		return this.#runtime.reserveInvocation(request);
 	}
 
 	public forceClose(): void {
-		this._runtime.forceSession();
+		this.#runtime.forceSession();
 	}
 }
 
