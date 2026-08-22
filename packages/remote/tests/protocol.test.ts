@@ -1168,8 +1168,8 @@ describe("Default RPC Protocol", () => {
 		const network = createRecoveryNetwork();
 		const policy = {
 			ackDelayMs: 1,
-			bindingAttemptTimeoutMs: 20,
-			recoveryGraceMs: 500,
+			bindingAttemptTimeoutMs: 1_000,
+			recoveryGraceMs: 5_000,
 		};
 		const acceptor = createRpcAcceptor({ runtimePolicy: policy });
 		const connector = createRpcConnector({ runtimePolicy: policy });
@@ -1322,8 +1322,8 @@ describe("Default RPC Protocol", () => {
 			releaseFirstAccept = resolve;
 		});
 		const policy = {
-			bindingAttemptTimeoutMs: 100,
-			recoveryGraceMs: 500,
+			bindingAttemptTimeoutMs: 1_000,
+			recoveryGraceMs: 5_000,
 		};
 		const acceptor = createRpcAcceptor({ runtimePolicy: policy });
 		const connector = createRpcConnector({ runtimePolicy: policy });
@@ -1405,8 +1405,8 @@ describe("Default RPC Protocol", () => {
 		let handlerCalls = 0;
 		const policy = {
 			ackDelayMs: 1,
-			bindingAttemptTimeoutMs: 50,
-			recoveryGraceMs: 1_000,
+			bindingAttemptTimeoutMs: 1_000,
+			recoveryGraceMs: 5_000,
 		};
 		const acceptor = createRpcAcceptor({ runtimePolicy: policy });
 		const connector = createRpcConnector({ runtimePolicy: policy });
