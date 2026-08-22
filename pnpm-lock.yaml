@@ -219,6 +219,9 @@ importers:
       rxjs:
         specifier: ^7.8.2
         version: 7.8.2
+      zod:
+        specifier: ^4.4.3
+        version: 4.4.3
     devDependencies:
       '@husky-di/config':
         specifier: workspace:*
@@ -253,6 +256,9 @@ importers:
       ws:
         specifier: ^8.21.0
         version: 8.21.3
+      zod:
+        specifier: ^4.4.3
+        version: 4.4.3
     devDependencies:
       '@husky-di/config':
         specifier: workspace:*

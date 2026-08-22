@@ -91,8 +91,8 @@ wildcard that can expose future private files.
 
 **RPC-PKG-005 — Manifest.** The published manifest **MUST** declare `type: "module"`, public access,
 `engines.node: ">=23.6"`, source maps, and `sideEffects: false`. Runtime dependencies **MUST** be limited to
-`@husky-di/core` and `rxjs`; the packed manifest **MUST NOT** contain `workspace:*`, a test framework, `ws`, or a
-Node-only polyfill.
+`@husky-di/core`, `rxjs`, and `zod`; the packed manifest **MUST NOT** contain `workspace:*`, a test framework,
+`ws`, or a Node-only polyfill.
 
 **RPC-PKG-006 — Artifact.** The packed tarball **MUST** contain only declared build output, normative wire
 assets, the architecture source and rendered diagram, declared package documentation, README, CHANGELOG,

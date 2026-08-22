@@ -134,6 +134,7 @@ describe("installed @husky-di/remote package", () => {
 		expect(Object.keys(manifest.dependencies).sort()).toEqual([
 			"@husky-di/core",
 			"rxjs",
+			"zod",
 		]);
 		expect(manifest).not.toHaveProperty("devDependencies");
 		const publishedDependencyNames = [
