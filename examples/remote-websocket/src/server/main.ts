@@ -21,6 +21,7 @@ import {
 	REMOTE_GREETING_SERVICE,
 } from "@/consts/remote-services.const";
 import type { NodeDiagnosticsSnapshot } from "@/types/rpc-diagnostics.type";
+import { greet, greetCancelable } from "@/utils/greeting.util";
 
 const SERVER_HOST = "127.0.0.1";
 const SERVER_PORT = 3_000;
@@ -41,13 +42,7 @@ async function main(): Promise<void> {
 		}
 	});
 
-	acceptor.expose(REMOTE_GREETING_SERVICE, {
-		async greet(name, delayMs) {
-			assertDelay(delayMs);
-			await new Promise<void>((resolve) => setTimeout(resolve, delayMs));
-			return `Hello, ${name}!`;
-		},
-	});
+	acceptor.expose(REMOTE_GREETING_SERVICE, { greet, greetCancelable });
 
 	const app = new Hono();
 	app.get("/health", (context) => context.json({ status: "ok" }));
@@ -84,12 +79,6 @@ async function main(): Promise<void> {
 		} finally {
 			await close(httpServer);
 		}
-	}
-}
-
-function assertDelay(value: number): void {
-	if (!Number.isSafeInteger(value) || value < 0 || value > 10_000) {
-		throw new RangeError("delayMs must be a safe integer from 0 to 10000.");
 	}
 }
 

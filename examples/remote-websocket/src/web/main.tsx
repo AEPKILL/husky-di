@@ -4,7 +4,11 @@
  * @created 2026-08-20 23:34:16
  */
 
-import { createRpcConnector, RpcStateStatusEnum } from "@husky-di/remote";
+import {
+	createRpcConnector,
+	RpcException,
+	RpcStateStatusEnum,
+} from "@husky-di/remote";
 import {
 	QueryClient,
 	QueryClientProvider,
@@ -36,6 +40,7 @@ import {
 import { Input } from "@/web/components/ui/input";
 import { useRpcConnectorReconnection } from "@/web/hooks/use-rpc-connector-reconnection";
 import { useRpcObservatory } from "@/web/hooks/use-rpc-observatory";
+import { getRpcControlAvailability } from "@/web/utils/rpc-control-availability.util";
 import { getRpcPeerStatusPresentation } from "@/web/utils/rpc-peer-status-presentation.util";
 
 const connector = createRpcConnector();
@@ -52,6 +57,8 @@ connector.peer.expose(REMOTE_BROWSER_DISPLAY_SERVICE, {
 function App() {
 	const [name, setName] = useState("Web browser");
 	const [delayMs, setDelayMs] = useState(2_000);
+	const [greetingController, setGreetingController] =
+		useState<AbortController>();
 	const [nodeMessage, setNodeMessage] = useState("Waiting for Node…");
 	const { connectorState, peerState, pendingCalls, events } =
 		useRpcObservatory(connector);
@@ -63,10 +70,39 @@ function App() {
 		refetchInterval: 1_000,
 	});
 	const greeting = useMutation({
-		mutationFn: ({ value, delay }: { value: string; delay: number }) =>
-			greetingService.greet(value, delay),
+		mutationFn: ({
+			value,
+			delay,
+			signal,
+		}: {
+			value: string;
+			delay: number;
+			signal: AbortSignal | undefined;
+		}) =>
+			signal === undefined
+				? greetingService.greet(value, delay)
+				: greetingService.greetCancelable(value, delay, signal),
+		onSettled: (_data, _error, variables) => {
+			if (variables.signal === undefined) {
+				return;
+			}
+			setGreetingController((current) =>
+				current?.signal === variables.signal ? undefined : current,
+			);
+		},
 	});
-	const connectionError = useRpcConnectorReconnection(connector);
+	const {
+		connectionError,
+		disconnectTransport,
+		manualRecoveryReady,
+		recoverTransport,
+		transportOperationPending,
+	} = useRpcConnectorReconnection(connector);
+	const rpcControls = getRpcControlAvailability(
+		peerState.status,
+		manualRecoveryReady,
+		transportOperationPending,
+	);
 
 	useEffect(() => {
 		let active = true;
@@ -84,12 +120,32 @@ function App() {
 
 	function submitGreeting(event: FormEvent<HTMLFormElement>): void {
 		event.preventDefault();
-		greeting.mutate({ value: name, delay: delayMs });
+		if (greetingController !== undefined) {
+			return;
+		}
+		greeting.mutate({ value: name, delay: delayMs, signal: undefined });
+	}
+
+	function launchCancelableGreeting(): void {
+		if (greetingController !== undefined) {
+			return;
+		}
+		const controller = new AbortController();
+		setGreetingController(controller);
+		greeting.mutate({
+			value: name,
+			delay: delayMs,
+			signal: controller.signal,
+		});
 	}
 
 	function launchBurst(): void {
 		for (let index = 1; index <= 3; index += 1) {
-			greeting.mutate({ value: `${name} #${index}`, delay: delayMs });
+			greeting.mutate({
+				value: `${name} #${index}`,
+				delay: delayMs,
+				signal: undefined,
+			});
 		}
 	}
 
@@ -112,8 +168,28 @@ function App() {
 							streams on a bidirectional WebSocket session.
 						</p>
 					</div>
-					<div className="font-mono text-xs text-muted-foreground">
-						profile: husky-di-rpc/1 · transport: websocket
+					<div className="flex flex-col items-start gap-3 md:items-end">
+						<div className="font-mono text-xs text-muted-foreground">
+							profile: husky-di-rpc/1 · transport: websocket
+						</div>
+						<div className="flex gap-2">
+							<Button
+								disabled={!rpcControls.disconnect}
+								onClick={disconnectTransport}
+								type="button"
+								variant="outline"
+							>
+								Disconnect
+							</Button>
+							<Button
+								disabled={!rpcControls.recover}
+								onClick={recoverTransport}
+								type="button"
+								variant="outline"
+							>
+								Recover
+							</Button>
+						</div>
 					</div>
 				</header>
 
@@ -210,11 +286,36 @@ function App() {
 										/>
 									</div>
 									<div className="flex flex-wrap gap-3">
-										<Button disabled={!connected} type="submit">
+										<Button
+											disabled={
+												!rpcControls.call || greetingController !== undefined
+											}
+											type="submit"
+										>
 											Launch RPC
 										</Button>
 										<Button
-											disabled={!connected}
+											disabled={
+												!rpcControls.call || greetingController !== undefined
+											}
+											onClick={launchCancelableGreeting}
+											type="button"
+											variant="outline"
+										>
+											Launch cancellable RPC
+										</Button>
+										<Button
+											disabled={greetingController === undefined}
+											onClick={() => greetingController?.abort()}
+											type="button"
+											variant="outline"
+										>
+											Abort RPC
+										</Button>
+										<Button
+											disabled={
+												!rpcControls.call || greetingController !== undefined
+											}
 											onClick={launchBurst}
 											type="button"
 											variant="outline"
@@ -227,7 +328,11 @@ function App() {
 									className="mt-5 rounded-lg border border-border bg-muted/40 p-4 font-mono text-sm"
 									data-testid="greeting-result"
 								>
-									{greeting.error?.message ?? greeting.data ?? "No result yet"}
+									{greeting.error instanceof RpcException
+										? `RPC ${greeting.error.code}`
+										: (greeting.error?.message ??
+											greeting.data ??
+											"No result yet")}
 								</div>
 							</CardContent>
 						</Card>
@@ -396,9 +501,7 @@ function EventStream({
 										? "topology"
 										: `${event.direction} · ${event.service ?? "unknown"}.${event.method ?? "unknown"}`}
 								</p>
-								<p className="text-muted-foreground">
-									{event.outcome ?? event.code ?? "observed"}
-								</p>
+								<p className="text-muted-foreground">{getEventDetail(event)}</p>
 							</div>
 							<time className="font-mono text-[0.68rem] text-muted-foreground">
 								{new Date(event.timestamp).toLocaleTimeString()}
@@ -473,6 +576,10 @@ function eventVariant(
 	if (event.type === "call-finished" || event.type === "peer-opened")
 		return "default";
 	return "muted";
+}
+
+function getEventDetail(event: RpcEventDiagnostic): string {
+	return [event.outcome, event.code].filter(Boolean).join(" · ") || "observed";
 }
 
 const rootElement = document.getElementById("root");

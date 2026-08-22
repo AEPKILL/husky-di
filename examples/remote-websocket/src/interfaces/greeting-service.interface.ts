@@ -8,6 +8,11 @@ import { createServiceIdentifier } from "@husky-di/core";
 
 export interface IGreetingService {
 	greet(name: string, delayMs: number): Promise<string>;
+	greetCancelable(
+		name: string,
+		delayMs: number,
+		signal: AbortSignal,
+	): Promise<string>;
 }
 
 export const IGreetingService =

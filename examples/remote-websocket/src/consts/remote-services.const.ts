@@ -21,6 +21,9 @@ export const REMOTE_GREETING_SERVICE = createRemoteServiceDescriptor(
 	IGreetingService,
 	{
 		wireName: "example.greeting.v1",
-		methods: { greet: true },
+		methods: {
+			greet: true,
+			greetCancelable: { cancelable: true },
+		},
 	},
 );
