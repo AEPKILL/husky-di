@@ -4,6 +4,7 @@
  * @created 2026-08-19 00:00:00
  */
 
+import { once } from "node:events";
 import { mkdtempSync, rmSync } from "node:fs";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
@@ -34,27 +35,14 @@ test.beforeAll(async () => {
 		sourcemap: "inline",
 		target: "es2022",
 	});
-	await new Promise<void>((resolveListen, rejectListen) => {
-		server.once("error", rejectListen);
-		server.listen(0, "127.0.0.1", () => {
-			server.off("error", rejectListen);
-			resolveListen();
-		});
-	});
+	server.listen(0, "127.0.0.1");
+	await once(server, "listening");
 	const address = server.address() as AddressInfo;
 	browserOrigin = `http://127.0.0.1:${address.port}`;
 });
 
 test.afterAll(async () => {
-	await new Promise<void>((resolveClose, rejectClose) => {
-		server.close((error) => {
-			if (error === undefined) {
-				resolveClose();
-			} else {
-				rejectClose(error);
-			}
-		});
-	});
+	await server[Symbol.asyncDispose]();
 	if (basename(outputRoot).startsWith("husky-di-remote-browser-")) {
 		rmSync(outputRoot, { recursive: true, force: true });
 	}

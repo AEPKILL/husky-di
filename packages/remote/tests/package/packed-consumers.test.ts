@@ -4,7 +4,7 @@
  * @created 2026-08-19 00:00:00
  */
 
-import { spawnSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import {
 	existsSync,
 	mkdirSync,
@@ -25,22 +25,21 @@ const tscPath = resolve(packageRoot, "node_modules/typescript/bin/tsc");
 const esbuildPath = resolve(packageRoot, "node_modules/.bin/esbuild");
 let tarballPath = "";
 
+const nodeRuntimeExportAssertions = `assert.deepEqual(Object.keys(root).sort(), ["RpcAcceptorListenerStopReasonEnum", "RpcCallDirectionEnum", "RpcCallStatusEnum", "RpcCloseOutcomeEnum", "RpcCloseReasonEnum", "RpcConnectorReconnectionAttemptFailureStageEnum", "RpcConnectorReconnectionEventTypeEnum", "RpcConnectorReconnectionStopReasonEnum", "RpcEventTypeEnum", "RpcException", "RpcExceptionCodeEnum", "RpcStateStatusEnum", "createRemoteServiceDescriptor", "createRpcAcceptor", "createRpcConnector", "createRpcConnectorReconnection", "createRpcProtocol"]);
+assert.equal(new root.RpcException(root.RpcExceptionCodeEnum.unavailable).code, "unavailable");
+assert.equal(root.RpcCallDirectionEnum.incoming, "incoming");
+assert.deepEqual(Object.keys(protocol).sort(), ["RpcCallTerminalTypeEnum", "RpcCloseReasonEnum", "RpcExceptionCodeEnum", "RpcIncomingCallKindEnum", "RpcProtocolSessionTransitionTypeEnum", "createRpcProtocol"]);
+assert.equal(protocol.RpcCloseReasonEnum.cleanupFailed, "cleanup-failed");
+assert.equal(Object.isFrozen(protocol.createRpcProtocol()), true);
+assert.deepEqual(Object.keys(transport), []);
+assert.deepEqual(Object.keys(conformance).sort(), ["RpcConformanceStatusEnum", "runRpcAcceptorAdapterConformance", "runRpcConnectorAdapterConformance", "runRpcProtocolConformance"]);`;
+
 function run(command: string, args: readonly string[], cwd: string): string {
-	const result = spawnSync(command, args, {
+	return execFileSync(command, args, {
 		cwd,
 		encoding: "utf8",
 		env: { ...process.env, CI: "1" },
 	});
-	if (result.status !== 0) {
-		throw new Error(
-			[
-				`Command failed: ${command} ${args.join(" ")}`,
-				result.stdout,
-				result.stderr,
-			].join("\n"),
-		);
-	}
-	return result.stdout;
 }
 
 function runPnpm(args: readonly string[], cwd: string): string {
@@ -229,14 +228,7 @@ import * as protocol from "@husky-di/remote/protocol";
 import * as transport from "@husky-di/remote/transport";
 import * as conformance from "@husky-di/remote/conformance";
 
-assert.deepEqual(Object.keys(root).sort(), ["RpcAcceptorListenerStopReasonEnum", "RpcCallDirectionEnum", "RpcCallStatusEnum", "RpcCloseOutcomeEnum", "RpcCloseReasonEnum", "RpcConnectorReconnectionAttemptFailureStageEnum", "RpcConnectorReconnectionEventTypeEnum", "RpcConnectorReconnectionStopReasonEnum", "RpcEventTypeEnum", "RpcException", "RpcExceptionCodeEnum", "RpcStateStatusEnum", "createRemoteServiceDescriptor", "createRpcAcceptor", "createRpcConnector", "createRpcConnectorReconnection", "createRpcProtocol"]);
-assert.equal(new root.RpcException(root.RpcExceptionCodeEnum.unavailable).code, "unavailable");
-assert.equal(root.RpcCallDirectionEnum.incoming, "incoming");
-assert.deepEqual(Object.keys(protocol).sort(), ["RpcCallTerminalTypeEnum", "RpcCloseReasonEnum", "RpcExceptionCodeEnum", "RpcIncomingCallKindEnum", "RpcProtocolSessionTransitionTypeEnum", "createRpcProtocol"]);
-assert.equal(protocol.RpcCloseReasonEnum.cleanupFailed, "cleanup-failed");
-assert.equal(Object.isFrozen(protocol.createRpcProtocol()), true);
-assert.deepEqual(Object.keys(transport), []);
-assert.deepEqual(Object.keys(conformance).sort(), ["RpcConformanceStatusEnum", "runRpcAcceptorAdapterConformance", "runRpcConnectorAdapterConformance", "runRpcProtocolConformance"]);
+${nodeRuntimeExportAssertions}
 for (const subpath of ["schema", "vectors", "transcripts", "security-vectors"]) {
   const asset = await import("@husky-di/remote/wire/husky-di-rpc-1/" + subpath, { with: { type: "json" } });
   assert.equal(typeof asset.default, "object");
@@ -261,14 +253,7 @@ const protocol = require("@husky-di/remote/protocol");
 const transport = require("@husky-di/remote/transport");
 const conformance = require("@husky-di/remote/conformance");
 
-assert.deepEqual(Object.keys(root).sort(), ["RpcAcceptorListenerStopReasonEnum", "RpcCallDirectionEnum", "RpcCallStatusEnum", "RpcCloseOutcomeEnum", "RpcCloseReasonEnum", "RpcConnectorReconnectionAttemptFailureStageEnum", "RpcConnectorReconnectionEventTypeEnum", "RpcConnectorReconnectionStopReasonEnum", "RpcEventTypeEnum", "RpcException", "RpcExceptionCodeEnum", "RpcStateStatusEnum", "createRemoteServiceDescriptor", "createRpcAcceptor", "createRpcConnector", "createRpcConnectorReconnection", "createRpcProtocol"]);
-assert.equal(new root.RpcException(root.RpcExceptionCodeEnum.unavailable).code, "unavailable");
-assert.equal(root.RpcCallDirectionEnum.incoming, "incoming");
-assert.deepEqual(Object.keys(protocol).sort(), ["RpcCallTerminalTypeEnum", "RpcCloseReasonEnum", "RpcExceptionCodeEnum", "RpcIncomingCallKindEnum", "RpcProtocolSessionTransitionTypeEnum", "createRpcProtocol"]);
-assert.equal(protocol.RpcCloseReasonEnum.cleanupFailed, "cleanup-failed");
-assert.equal(Object.isFrozen(protocol.createRpcProtocol()), true);
-assert.deepEqual(Object.keys(transport), []);
-assert.deepEqual(Object.keys(conformance).sort(), ["RpcConformanceStatusEnum", "runRpcAcceptorAdapterConformance", "runRpcConnectorAdapterConformance", "runRpcProtocolConformance"]);
+${nodeRuntimeExportAssertions}
 for (const subpath of ["schema", "vectors", "transcripts", "security-vectors"]) {
   assert.equal(typeof require("@husky-di/remote/wire/husky-di-rpc-1/" + subpath), "object");
 }
@@ -399,7 +384,8 @@ void [
 	RpcException, RpcExceptionCodeEnum, RpcIncomingCallKindEnum,
 	RpcProtocolSessionTransitionTypeEnum, RpcStateStatusEnum,
 	RpcConnectorReconnectionAttemptFailureStageEnum,
-	RpcConnectorReconnectionEventTypeEnum, RpcConnectorReconnectionStopReasonEnum,
+	RpcConnectorReconnectionEventTypeEnum,
+	RpcConnectorReconnectionStopReasonEnum,
 	createRemoteServiceDescriptor, createRpcAcceptor, createRpcConnector,
 	createRpcConnectorReconnection,
 	RpcConformanceStatusEnum, runRpcAcceptorAdapterConformance, runRpcConnectorAdapterConformance,

@@ -202,10 +202,8 @@ export async function runRpcBrowserRoundtrip(): Promise<IBrowserRoundtripResult>
 			recoveryGraceMs: 10_000,
 		},
 	});
-	let resolveHandlerStarted!: () => void;
-	const handlerStarted = new Promise<void>((resolve) => {
-		resolveHandlerStarted = resolve;
-	});
+	const { promise: handlerStarted, resolve: resolveHandlerStarted } =
+		Promise.withResolvers<void>();
 	acceptor.expose(descriptor, {
 		add: (left, right) => left + right,
 		wait(signal) {

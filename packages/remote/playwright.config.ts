@@ -8,11 +8,8 @@ import { defineConfig, devices } from "@playwright/test";
 
 export default defineConfig({
 	testDir: "./tests/browser",
-	fullyParallel: false,
 	forbidOnly: Boolean(process.env.CI),
-	retries: 0,
 	reporter: "line",
-	timeout: 30_000,
 	outputDir: "../../temp/remote-playwright",
 	projects: [
 		{

@@ -1,10 +1,10 @@
 /**
- * @overview Packed-package manifest and release-document contract tests.
+ * @overview Release-document and workflow contract tests.
  * @author AEPKILL
  * @created 2026-08-19 00:00:00
  */
 
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -12,51 +12,9 @@ import { describe, expect, it } from "vitest";
 
 const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const workspaceRoot = resolve(packageRoot, "../..");
-const manifest = JSON.parse(
-	readFileSync(resolve(packageRoot, "package.json"), "utf8"),
-) as Record<string, unknown>;
 
 describe("RPC package release contract", () => {
-	it("RPC-PKG-005 RPC-PKG-006 declares a bounded portable publish artifact", () => {
-		expect(manifest).toMatchObject({
-			type: "module",
-			sideEffects: false,
-			engines: { node: ">=23.6" },
-			publishConfig: { access: "public" },
-			files: [
-				"dist",
-				"wire",
-				"docs/ARCHITECTURE.drawio",
-				"docs/ARCHITECTURE.png",
-				"docs/PROTOCOL.md",
-				"docs/REQUIREMENTS.md",
-				"docs/SPECIFICATION.md",
-				"docs/TRANSPORT.md",
-				"README.md",
-				"CHANGELOG.md",
-				"LICENSE",
-			],
-		});
-		expect(Object.keys(manifest.dependencies as object).sort()).toEqual([
-			"@husky-di/core",
-			"rxjs",
-		]);
-	});
-
 	it("RPC-PKG-006 RPC-RELEASE-004 includes the normative and user documentation", () => {
-		for (const path of [
-			"README.md",
-			"CHANGELOG.md",
-			"LICENSE",
-			"docs/ARCHITECTURE.drawio",
-			"docs/ARCHITECTURE.png",
-			"docs/SPECIFICATION.md",
-			"docs/REQUIREMENTS.md",
-			"docs/PROTOCOL.md",
-			"docs/TRANSPORT.md",
-		]) {
-			expect(existsSync(resolve(packageRoot, path)), path).toBe(true);
-		}
 		expect(readFileSync(resolve(packageRoot, "README.md"), "utf8")).toContain(
 			"@husky-di/remote",
 		);

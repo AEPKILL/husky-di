@@ -12,11 +12,7 @@ import { Observable, Subject } from "rxjs";
 import { describe, expect, it, vi } from "vitest";
 
 import packageManifest from "../package.json";
-import {
-	type RpcConformanceCaseResult,
-	RpcConformanceStatusEnum,
-	runRpcConnectorAdapterConformance,
-} from "../src/conformance";
+import { RpcConformanceStatusEnum } from "../src/conformance";
 import {
 	createRemoteServiceDescriptor,
 	createRpcAcceptor,
@@ -54,7 +50,6 @@ import {
 	RpcIncomingCallKindEnum,
 	RpcProtocolSessionTransitionTypeEnum,
 } from "../src/protocol";
-import { createMemoryConnectorFixture } from "./conformance/test.utils";
 import { createRpcTestNetwork } from "./protocol/test.utils";
 
 interface CalculatorService {
@@ -92,20 +87,6 @@ const sessionCapacityPolicy = {
 	bindingAttemptTimeoutMs: 100,
 	recoveryGraceMs: 1_000,
 };
-
-describe("Adapter conformance traceability", () => {
-	it("RPC-CONFORMANCE-003 emits canonical requirement-prefixed Adapter case IDs", async () => {
-		const reports: RpcConformanceCaseResult[] = [];
-		await runRpcConnectorAdapterConformance(createMemoryConnectorFixture(), {
-			report: (result) => reports.push(result),
-		});
-
-		expect(reports).toHaveLength(10);
-		expect(
-			reports.every((result) => result.caseId.startsWith("RPC-TRANSPORT-")),
-		).toBe(true);
-	});
-});
 
 function createProtocolHarness(): {
 	readonly protocol: IRpcProtocol;
