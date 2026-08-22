@@ -17,12 +17,6 @@ import { RpcEventTypeEnum } from "@/enums/rpc-event-type.enum";
 import { RpcExceptionCodeEnum } from "@/enums/rpc-exception-code.enum";
 import { RpcStateStatusEnum } from "@/enums/rpc-state-status.enum";
 import { createRpcException } from "@/factories/rpc-exception.factory";
-import {
-	RpcRetainedBytesLedgerImpl,
-	reserveRpcSessionRetainedBytes,
-} from "@/impls/protocol/rpc-retained-bytes-ledger.impl";
-import { RpcOwnerCustodyImpl } from "@/impls/rpc-owner-custody.impl";
-import { RpcPeerImpl } from "@/impls/rpc-peer.impl";
 import type {
 	IRpcProtocolConnectorRuntime,
 	IRpcProtocolRuntimePolicy,
@@ -33,16 +27,20 @@ import type {
 	RpcProtocolSessionTransition,
 	RpcSessionCloseReason,
 } from "@/interfaces/protocol/rpc-protocol.interface";
+import type { IRpcRetainedBytesLedger } from "@/interfaces/protocol/rpc-retained-bytes-ledger.interface";
 import type { IRpcConnectorAdapter } from "@/interfaces/rpc-adapter.interface";
 import type {
 	IRpcConnector,
 	RpcEvent,
 } from "@/interfaces/rpc-caller.interface";
 import type { IRpcConnection } from "@/interfaces/rpc-connection.interface";
+import type { IRpcOwnerCustody } from "@/interfaces/rpc-owner-custody.interface";
+import type { IRpcPeerRuntime } from "@/interfaces/rpc-peer.interface";
 import type {
 	RpcConnectorConnectOptions,
 	RpcConnectorState,
 } from "@/types/rpc-caller.type";
+import type { CreateRpcConnectorImplOptions } from "@/types/rpc-owner.type";
 import type {
 	RpcOwnedCleanup,
 	RpcOwnedConnection,
@@ -51,8 +49,8 @@ import {
 	installRpcAbortListener,
 	readRpcAbortSignalAborted,
 } from "@/utils/rpc-cancellation.util";
-import { RpcHandlerScheduler } from "@/utils/rpc-handler-scheduler.util";
 import { readRpcClosedOptionsRecord } from "@/utils/rpc-runtime-policy.util";
+import { reserveRpcSessionRetainedBytes } from "@/utils/rpc-session-retained-bytes.util";
 import { isRpcSessionTransitionAllowed } from "@/utils/rpc-session-transition.util";
 
 const connectorConnectOptionKeys = new Set(["adapter", "signal"]);
@@ -87,11 +85,11 @@ interface RpcConnectorAttempt {
 export class RpcConnectorImpl implements IRpcConnector {
 	readonly #runtime: IRpcProtocolConnectorRuntime;
 	readonly #policy: IRpcProtocolRuntimePolicy;
-	readonly #retainedBytesLedger: RpcRetainedBytesLedgerImpl;
+	readonly #retainedBytesLedger: IRpcRetainedBytesLedger;
 	readonly #stateSubject: BehaviorSubject<RpcConnectorState>;
 	readonly #eventSubject = new Subject<RpcEvent>();
 	readonly #faultingSessions = new Set<IRpcProtocolSession>();
-	readonly #custody: RpcOwnerCustodyImpl;
+	readonly #custody: IRpcOwnerCustody;
 	readonly #connectionLimit: number;
 	#attempt: RpcConnectorAttempt | undefined;
 	#session: IRpcProtocolSession | undefined;
@@ -101,45 +99,43 @@ export class RpcConnectorImpl implements IRpcConnector {
 	#graceTimer: ReturnType<typeof setTimeout> | undefined;
 	readonly state$: Observable<RpcConnectorState>;
 	readonly event$: Observable<RpcEvent>;
-	readonly peer: RpcPeerImpl;
+	readonly peer: IRpcPeerRuntime;
 
-	constructor(
-		runtime: IRpcProtocolConnectorRuntime,
-		policy: IRpcProtocolRuntimePolicy,
-	) {
+	constructor(options: CreateRpcConnectorImplOptions) {
+		const {
+			createPeer,
+			custody,
+			handlerScheduler,
+			policy,
+			retainedBytesLedger,
+			runtime,
+		} = options;
 		this.#runtime = runtime;
 		this.#policy = policy;
-		this.#custody = new RpcOwnerCustodyImpl(policy.shutdownDeadlineMs, () =>
-			this.#runtime.cleanup(),
-		);
-		this.#retainedBytesLedger = new RpcRetainedBytesLedgerImpl(
-			policy.maxRetainedBytesTotal,
-		);
+		this.#custody = custody;
+		this.#retainedBytesLedger = retainedBytesLedger;
 		this.#connectionLimit = policy.maxSessions + 2 * policy.maxHandshakes;
 		this.#stateSubject = new BehaviorSubject(
 			Object.freeze<RpcConnectorState>({ status: RpcStateStatusEnum.active }),
 		);
 		this.state$ = this.#stateSubject.asObservable();
 		this.event$ = this.#eventSubject.asObservable();
-		const handlerScheduler = new RpcHandlerScheduler(
-			policy.maxHandlersTotal,
-			policy.maxHandlersPerSession,
-		);
-		this.peer = new RpcPeerImpl(
-			{ status: RpcStateStatusEnum.unbound },
-			new Map(),
-			() => this.state.status === RpcStateStatusEnum.active,
-			(event) => this.#eventSubject.next(event),
-			(error) => this.protocolFault(RpcCloseReasonEnum.protocolFault, error),
+		this.peer = createPeer({
+			initialState: { status: RpcStateStatusEnum.unbound },
+			ownerExposureRegistry: new Map(),
+			isOwnerActive: () => this.state.status === RpcStateStatusEnum.active,
+			emitEvent: (event) => this.#eventSubject.next(event),
+			onProtocolFault: (error) =>
+				this.protocolFault(RpcCloseReasonEnum.protocolFault, error),
 			handlerScheduler,
-			Math.floor(policy.maxRetainedBytesPerSession / 4),
-			(bytes) =>
+			maximumIncomingBytes: Math.floor(policy.maxRetainedBytesPerSession / 4),
+			reserveRetainedBytes: (bytes) =>
 				reserveRpcSessionRetainedBytes(
 					this.#session ?? this.#attempt?.provisionalSession,
 					(ownerBytes) => this.reserveRetainedBytes(ownerBytes),
 					bytes,
 				),
-		);
+		});
 	}
 
 	get state(): RpcConnectorState {

@@ -170,6 +170,9 @@ function createSession(
 		proofKey: {} as CryptoKey,
 		codec,
 		onTerminal: () => {},
+		retainedBytesLedger: new RpcRetainedBytesLedgerImpl(
+			runtimePolicy.maxRetainedBytesPerSession,
+		),
 	});
 }
 

@@ -30,13 +30,24 @@ import type {
 	RpcUnknownCallFailure,
 } from "@/interfaces/protocol/rpc-protocol.interface";
 import type { IRemoteServiceDescriptor } from "@/interfaces/remote-service-descriptor.interface";
-import type { IRpcPeer, RpcEvent } from "@/interfaces/rpc-caller.interface";
+import type { RpcEvent } from "@/interfaces/rpc-caller.interface";
+import type { IRpcHandlerScheduler } from "@/interfaces/rpc-handler-scheduler.interface";
+import type {
+	IRpcPeerCommittedInvocation,
+	IRpcPeerInvocationReservation,
+	IRpcPeerRuntime,
+} from "@/interfaces/rpc-peer.interface";
 import type {
 	RemoteService,
 	RemoteServiceImplementation,
 	RpcMethodDefinitions,
 } from "@/types/remote-service-descriptor.type";
 import type { RpcPeerState } from "@/types/rpc-caller.type";
+import type {
+	RpcExposureRegistry,
+	RpcHandlerRoute,
+} from "@/types/rpc-exposure.type";
+import type { CreateRpcPeerOptions } from "@/types/rpc-peer.type";
 import {
 	isRpcApplicationArgumentsSnapshot,
 	isRpcApplicationSnapshot,
@@ -47,24 +58,8 @@ import {
 	installRpcAbortListener,
 	prepareRpcInvocationArguments,
 } from "@/utils/rpc-cancellation.util";
-import {
-	installRpcExposure,
-	type RpcExposureRegistry,
-	type RpcHandlerRoute,
-} from "@/utils/rpc-exposure.util";
+import { installRpcExposure } from "@/utils/rpc-exposure.util";
 import { createRpcFacade } from "@/utils/rpc-facade.util";
-import { RpcHandlerScheduler } from "@/utils/rpc-handler-scheduler.util";
-
-export interface RpcPeerCommittedInvocation {
-	readonly result: Promise<unknown>;
-	start(): void;
-	cancel(): void;
-}
-
-export interface RpcPeerInvocationReservation {
-	commit(): RpcPeerCommittedInvocation;
-	release(): void;
-}
 
 let nextObservationOrdinal = 0;
 
@@ -104,10 +99,6 @@ const outgoingFailureCodes = new Set([
 	RpcExceptionCodeEnum.unknownService,
 	RpcExceptionCodeEnum.unknownMethod,
 ]);
-
-const noRetainedBytesReservation = Object.freeze<IRpcRetainedBytesReservation>({
-	release() {},
-});
 
 function readProtocolFields(
 	value: unknown,
@@ -244,14 +235,14 @@ function isIncomingCallRequest(
 }
 
 /** Retains one stable Peer identity and its replay-latest state snapshot. */
-export class RpcPeerImpl implements IRpcPeer {
+export class RpcPeerImpl implements IRpcPeerRuntime {
 	readonly #stateSubject = new Subject<RpcPeerState>();
 	readonly #localExposureRegistry: RpcExposureRegistry = new Map();
 	readonly #ownerExposureRegistry: RpcExposureRegistry;
 	readonly #isOwnerActive: () => boolean;
 	readonly #emitEvent: (event: RpcEvent) => void;
 	readonly #onProtocolFault: (error: Error) => void;
-	readonly #handlerScheduler: RpcHandlerScheduler;
+	readonly #handlerScheduler: IRpcHandlerScheduler;
 	readonly #maximumIncomingBytes: number;
 	readonly #reserveRetainedBytes: (
 		bytes: number,
@@ -263,19 +254,17 @@ export class RpcPeerImpl implements IRpcPeer {
 	#incomingReservationBytes = 0;
 	readonly state$: Observable<RpcPeerState>;
 
-	constructor(
-		initialState: RpcPeerState,
-		ownerExposureRegistry: RpcExposureRegistry = new Map(),
-		isOwnerActive: () => boolean = () => true,
-		emitEvent: (event: RpcEvent) => void = () => {},
-		onProtocolFault: (error: Error) => void = () => {},
-		handlerScheduler: RpcHandlerScheduler = new RpcHandlerScheduler(16, 16),
-		maximumIncomingBytes = 8 * 1024 * 1024,
-		reserveRetainedBytes: (
-			bytes: number,
-		) => IRpcRetainedBytesReservation | undefined = () =>
-			noRetainedBytesReservation,
-	) {
+	constructor(options: CreateRpcPeerOptions) {
+		const {
+			emitEvent,
+			handlerScheduler,
+			initialState,
+			isOwnerActive,
+			maximumIncomingBytes,
+			onProtocolFault,
+			ownerExposureRegistry,
+			reserveRetainedBytes,
+		} = options;
 		this.#state = Object.freeze(initialState);
 		this.#ownerExposureRegistry = ownerExposureRegistry;
 		this.#isOwnerActive = isOwnerActive;
@@ -405,7 +394,7 @@ export class RpcPeerImpl implements IRpcPeer {
 		service: string,
 		method: string,
 		args: IRpcApplicationArgumentsSnapshot,
-	): RpcPeerInvocationReservation | undefined {
+	): IRpcPeerInvocationReservation | undefined {
 		if (
 			!this.#isOwnerActive() ||
 			(this.state.status !== RpcStateStatusEnum.connected &&
@@ -434,7 +423,7 @@ export class RpcPeerImpl implements IRpcPeer {
 		}
 
 		let state: "pending" | "committed" | "released" = "pending";
-		return Object.freeze<RpcPeerInvocationReservation>({
+		return Object.freeze<IRpcPeerInvocationReservation>({
 			commit: () => {
 				if (state !== "pending") {
 					throw this.#protocolFailure(
@@ -470,7 +459,7 @@ export class RpcPeerImpl implements IRpcPeer {
 		>,
 		service: string,
 		method: string,
-	): RpcPeerCommittedInvocation {
+	): IRpcPeerCommittedInvocation {
 		const result = Promise.withResolvers<unknown>();
 		const observationId = createObservationId();
 		const startedAt = Date.now();
@@ -569,7 +558,7 @@ export class RpcPeerImpl implements IRpcPeer {
 
 		let canceled = false;
 		let started = false;
-		return Object.freeze<RpcPeerCommittedInvocation>({
+		return Object.freeze<IRpcPeerCommittedInvocation>({
 			result: result.promise,
 			cancel: () => {
 				if (settled || canceled) {

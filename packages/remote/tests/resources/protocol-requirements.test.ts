@@ -8,6 +8,7 @@ import { createServiceIdentifier } from "@husky-di/core";
 import { describe, expect, it } from "vitest";
 
 import { RpcCallTerminalTypeEnum } from "../../src/enums/protocol/rpc-call-terminal-type.enum";
+import { RpcHandlerSchedulerImpl } from "../../src/impls/rpc-handler-scheduler.impl";
 import { RpcPeerImpl } from "../../src/impls/rpc-peer.impl";
 import {
 	createRemoteServiceDescriptor,
@@ -15,11 +16,8 @@ import {
 	createRpcConnector,
 	RpcStateStatusEnum,
 } from "../../src/index";
+import type { RpcHandlerJob } from "../../src/types/rpc-handler-scheduler.type";
 import { normalizeRpcApplicationArguments } from "../../src/utils/rpc-application-value.util";
-import {
-	type RpcHandlerJob,
-	RpcHandlerScheduler,
-} from "../../src/utils/rpc-handler-scheduler.util";
 import {
 	createRpcDirectSessionHarness,
 	createRpcTestNetwork,
@@ -41,13 +39,13 @@ const IScheduledRequirementsService =
 		"IScheduledRequirementsService",
 	);
 
-class ObservedRpcHandlerScheduler extends RpcHandlerScheduler {
+class ObservedRpcHandlerScheduler extends RpcHandlerSchedulerImpl {
 	jobStarts = 0;
 
 	override enqueue(
 		session: object,
 		job: RpcHandlerJob,
-	): ReturnType<RpcHandlerScheduler["enqueue"]> {
+	): ReturnType<RpcHandlerSchedulerImpl["enqueue"]> {
 		return super.enqueue(session, (releasePermit) => {
 			this.jobStarts += 1;
 			return job(releasePermit);
@@ -429,15 +427,16 @@ describe("Default RPC Protocol remaining requirements", () => {
 		await Promise.resolve();
 		expect(scheduler.jobStarts).toBe(1);
 
-		const peer = new RpcPeerImpl(
-			{ status: RpcStateStatusEnum.connected },
-			new Map(),
-			() => true,
-			() => {},
-			() => {},
-			scheduler,
-			1024 * 1024,
-		);
+		const peer = new RpcPeerImpl({
+			initialState: { status: RpcStateStatusEnum.connected },
+			ownerExposureRegistry: new Map(),
+			isOwnerActive: () => true,
+			emitEvent: () => {},
+			onProtocolFault: () => {},
+			handlerScheduler: scheduler,
+			maximumIncomingBytes: 1024 * 1024,
+			reserveRetainedBytes: () => ({ release() {} }),
+		});
 		const descriptor = createRemoteServiceDescriptor(
 			IScheduledRequirementsService,
 			{

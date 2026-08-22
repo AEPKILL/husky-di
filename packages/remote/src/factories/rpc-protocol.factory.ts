@@ -4,10 +4,13 @@
  * @created 2026-08-19 00:00:00
  */
 
+import { RpcBindingAttemptImpl } from "@/impls/protocol/rpc-binding-attempt.impl";
 import { RpcCodecImpl } from "@/impls/protocol/rpc-codec.impl";
 import { RpcCryptographyImpl } from "@/impls/protocol/rpc-cryptography.impl";
 import { RpcEndpointImpl } from "@/impls/protocol/rpc-endpoint.impl";
 import { RpcProtocolImpl } from "@/impls/protocol/rpc-protocol.impl";
+import { RpcRetainedBytesLedgerImpl } from "@/impls/protocol/rpc-retained-bytes-ledger.impl";
+import { RpcSessionImpl } from "@/impls/protocol/rpc-session.impl";
 import type { IRpcProtocol } from "@/interfaces/protocol/rpc-protocol.interface";
 import type { CreateRpcProtocolOptions } from "@/types/protocol/rpc-protocol.type";
 
@@ -26,6 +29,14 @@ function createBuiltInRpcProtocol(counterExhausted: boolean): IRpcProtocol {
 		codec,
 		cryptography,
 		createEndpoint: (options) => new RpcEndpointImpl(options),
+		createBindingAttempt: (options) => new RpcBindingAttemptImpl(options),
+		createSession: (options) =>
+			new RpcSessionImpl({
+				...options,
+				retainedBytesLedger: new RpcRetainedBytesLedgerImpl(
+					options.host.policy.maxRetainedBytesPerSession,
+				),
+			}),
 		counterExhausted,
 	});
 }

@@ -7,19 +7,11 @@
 import type { Cleanup } from "@husky-di/core";
 
 import { getRemoteServiceDescriptorData } from "@/factories/remote-service-descriptor.factory";
-
-export interface RpcHandlerRoute {
-	readonly implementation: object;
-	readonly handler: (...args: unknown[]) => unknown;
-	readonly cancelable: boolean;
-}
-
-export interface RpcExposure {
-	readonly wireName: string;
-	readonly methods: ReadonlyMap<string, RpcHandlerRoute>;
-}
-
-export type RpcExposureRegistry = Map<string, RpcExposure>;
+import type {
+	RpcExposure,
+	RpcExposureRegistry,
+	RpcHandlerRoute,
+} from "@/types/rpc-exposure.type";
 
 function findHandler(
 	implementation: object,

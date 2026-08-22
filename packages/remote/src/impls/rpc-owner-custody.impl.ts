@@ -7,6 +7,7 @@
 import type { Subscription } from "rxjs";
 
 import type { IRpcConnection } from "@/interfaces/rpc-connection.interface";
+import type { IRpcOwnerCustody } from "@/interfaces/rpc-owner-custody.interface";
 import type {
 	RpcOwnedCleanup,
 	RpcOwnedConnection,
@@ -17,7 +18,7 @@ const cleanupDeadline = Symbol("RPC Owner cleanup deadline");
 type RpcOwnerCleanupSettlement = Error | undefined | typeof cleanupDeadline;
 
 /** Owns a Topology Owner's Connections and cleanup barrier. */
-export class RpcOwnerCustodyImpl {
+export class RpcOwnerCustodyImpl implements IRpcOwnerCustody {
 	readonly #cleanupDeadlineMs: number;
 	readonly #cleanupProtocol: () => unknown;
 	readonly #cleanups: RpcOwnedCleanup[] = [];

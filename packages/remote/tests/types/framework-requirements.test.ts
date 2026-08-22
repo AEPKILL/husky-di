@@ -9,5 +9,5 @@ type MissingRpcCodec = import("../../src/protocol").IRpcCodec;
 void (null as unknown as MissingRpcCodec);
 
 // @ts-expect-error RPC-POLICY-004 keeps the internal scheduler private.
-type MissingRpcScheduler = import("../../src/index").RpcHandlerScheduler;
+type MissingRpcScheduler = import("../../src/index").RpcHandlerSchedulerImpl;
 void (null as unknown as MissingRpcScheduler);

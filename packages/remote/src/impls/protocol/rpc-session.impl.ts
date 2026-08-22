@@ -17,11 +17,6 @@ import { RpcProtocolSessionTransitionTypeEnum } from "@/enums/protocol/rpc-proto
 import { RpcWireRecordKindEnum } from "@/enums/protocol/rpc-wire-record-kind.enum";
 import { RpcCloseReasonEnum } from "@/enums/rpc-close-reason.enum";
 import { RpcExceptionCodeEnum } from "@/enums/rpc-exception-code.enum";
-import {
-	RpcRetainedBytesLedgerImpl,
-	registerRpcSessionRetainedBytes,
-	unregisterRpcSessionRetainedBytes,
-} from "@/impls/protocol/rpc-retained-bytes-ledger.impl";
 import type { IRpcCodec } from "@/interfaces/protocol/rpc-codec.interface";
 import type { IRpcEndpoint } from "@/interfaces/protocol/rpc-endpoint.interface";
 import type {
@@ -31,15 +26,16 @@ import type {
 	IRpcProtocolInvocationRequest,
 	IRpcProtocolInvocationReservation,
 	IRpcProtocolInvocationSink,
-	IRpcProtocolSession,
 	IRpcProtocolSessionHost,
 	IRpcRetainedBytesReservation,
 	RpcCallOutcome,
 	RpcHandlerOutcome,
 	RpcIncomingTerminal,
 } from "@/interfaces/protocol/rpc-protocol.interface";
+import type { IRpcRetainedBytesLedger } from "@/interfaces/protocol/rpc-retained-bytes-ledger.interface";
+import type { IRpcSession } from "@/interfaces/protocol/rpc-session.interface";
 import type {
-	CreateRpcSessionOptions,
+	CreateRpcSessionImplOptions,
 	RpcBindingCandidate,
 	RpcBindingCommit,
 	RpcBindingEpoch,
@@ -63,6 +59,10 @@ import type {
 	RpcSemanticMessage,
 	RpcWireErrorCode,
 } from "@/types/protocol/rpc-wire-record.type";
+import {
+	registerRpcSessionRetainedBytes,
+	unregisterRpcSessionRetainedBytes,
+} from "@/utils/rpc-session-retained-bytes.util";
 
 const RPC_SEQUENCE_RESERVE = 512;
 const RPC_LAST_ORDINARY_SEQUENCE =
@@ -169,12 +169,12 @@ interface IRpcQueuedSemantic {
 }
 
 /** Retains one Session Incarnation independently from its current Connection. */
-export class RpcSessionImpl<TKey = CryptoKey> implements IRpcProtocolSession {
+export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 	readonly _host: IRpcProtocolHost;
 	readonly _sessionId: string;
 	readonly _codec: IRpcCodec;
 	readonly _onTerminal: () => void;
-	readonly _retainedBytesLedger: RpcRetainedBytesLedgerImpl;
+	readonly _retainedBytesLedger: IRpcRetainedBytesLedger;
 	readonly _protectedRetainedBytesReservation: IRpcRetainedBytesReservation;
 	readonly _bindingCandidates = new WeakMap<
 		object,
@@ -241,19 +241,18 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcProtocolSession {
 	_gracefulCloseStarted = false;
 	_closed = false;
 
-	public constructor(options: CreateRpcSessionOptions<TKey>) {
+	public constructor(options: CreateRpcSessionImplOptions<TKey>) {
 		const {
 			codec,
 			counterExhausted = false,
 			host,
 			onTerminal,
 			proofKey,
+			retainedBytesLedger,
 			sessionId,
 		} = options;
 		this._host = host;
-		this._retainedBytesLedger = new RpcRetainedBytesLedgerImpl(
-			host.policy.maxRetainedBytesPerSession,
-		);
+		this._retainedBytesLedger = retainedBytesLedger;
 		const protectedRetainedBytesReservation = this._retainedBytesLedger.reserve(
 			RPC_PROTECTED_SESSION_BYTES,
 		);

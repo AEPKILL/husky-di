@@ -13,8 +13,7 @@ import { RpcProofOperationKindEnum } from "@/enums/protocol/rpc-proof-operation-
 import { RpcResumeRejectCodeEnum } from "@/enums/protocol/rpc-resume-reject-code.enum";
 import { RpcWireRecordKindEnum } from "@/enums/protocol/rpc-wire-record-kind.enum";
 import { RpcCloseReasonEnum } from "@/enums/rpc-close-reason.enum";
-import { RpcBindingAttemptImpl } from "@/impls/protocol/rpc-binding-attempt.impl";
-import { RpcSessionImpl } from "@/impls/protocol/rpc-session.impl";
+import type { IRpcBindingAttempt } from "@/interfaces/protocol/rpc-binding-attempt.interface";
 import type {
 	IRpcProtocol,
 	IRpcProtocolAcceptorHost,
@@ -23,6 +22,7 @@ import type {
 	IRpcProtocolConnectorRuntime,
 	IRpcRetainedBytesReservation,
 } from "@/interfaces/protocol/rpc-protocol.interface";
+import type { IRpcSession } from "@/interfaces/protocol/rpc-session.interface";
 import type { IRpcConnection } from "@/interfaces/rpc-connection.interface";
 import type { CreateRpcProtocolOptions } from "@/types/protocol/rpc-protocol.type";
 import type {
@@ -61,7 +61,7 @@ export class RpcProtocolImpl<TKey> implements IRpcProtocol {
 
 type RpcConnectorAttemptState<TKey> = {
 	readonly mode: "fresh" | "resume";
-	readonly session?: RpcSessionImpl<TKey>;
+	readonly session?: IRpcSession<TKey>;
 	request?: RpcFreshRequest | RpcResumeRequest;
 	requestAdmission?: Promise<void>;
 	resume?: RpcInitiatorResume<TKey>;
@@ -96,11 +96,11 @@ class RpcConnectorRuntime<TKey> implements IRpcProtocolConnectorRuntime {
 	readonly _host: IRpcProtocolConnectorHost;
 	readonly _options: Readonly<CreateRpcProtocolOptions<TKey>>;
 	readonly _attemptStates = new WeakMap<
-		RpcBindingAttemptImpl<TKey>,
+		IRpcBindingAttempt<TKey>,
 		RpcConnectorAttemptState<TKey>
 	>();
-	_attempt: RpcBindingAttemptImpl<TKey> | undefined;
-	_session: RpcSessionImpl<TKey> | undefined;
+	_attempt: IRpcBindingAttempt<TKey> | undefined;
+	_session: IRpcSession<TKey> | undefined;
 	_handshakeSlotsInUse = 0;
 	_closing = false;
 	_cleanupTask: Promise<void> | undefined;
@@ -134,9 +134,9 @@ class RpcConnectorRuntime<TKey> implements IRpcProtocolConnectorRuntime {
 		}
 		const mode = retainedSession === undefined ? "fresh" : "resume";
 		this._handshakeSlotsInUse += 1;
-		let attempt: RpcBindingAttemptImpl<TKey>;
+		let attempt: IRpcBindingAttempt<TKey>;
 		try {
-			attempt = new RpcBindingAttemptImpl({
+			attempt = this._options.createBindingAttempt({
 				connection,
 				signal,
 				timeoutMs: this._host.policy.bindingAttemptTimeoutMs,
@@ -188,7 +188,7 @@ class RpcConnectorRuntime<TKey> implements IRpcProtocolConnectorRuntime {
 		return this._cleanupTask;
 	}
 
-	_startFresh(attempt: RpcBindingAttemptImpl<TKey>): void {
+	_startFresh(attempt: IRpcBindingAttempt<TKey>): void {
 		if (!this._isCurrent(attempt)) {
 			return;
 		}
@@ -217,7 +217,7 @@ class RpcConnectorRuntime<TKey> implements IRpcProtocolConnectorRuntime {
 		void state.requestAdmission.catch((error) => attempt.fail(error));
 	}
 
-	async _startResume(attempt: RpcBindingAttemptImpl<TKey>): Promise<void> {
+	async _startResume(attempt: IRpcBindingAttempt<TKey>): Promise<void> {
 		if (!this._isCurrent(attempt)) {
 			return;
 		}
@@ -272,7 +272,7 @@ class RpcConnectorRuntime<TKey> implements IRpcProtocolConnectorRuntime {
 	}
 
 	_receiveConnectorRecord(
-		attempt: RpcBindingAttemptImpl<TKey>,
+		attempt: IRpcBindingAttempt<TKey>,
 		bytes: Uint8Array,
 	): Promise<void> | void {
 		const state = this._attemptStates.get(attempt);
@@ -286,7 +286,7 @@ class RpcConnectorRuntime<TKey> implements IRpcProtocolConnectorRuntime {
 	}
 
 	async _receiveFreshAccept(
-		attempt: RpcBindingAttemptImpl<TKey>,
+		attempt: IRpcBindingAttempt<TKey>,
 		bytes: Uint8Array,
 	): Promise<void> {
 		if (!this._isCurrent(attempt)) {
@@ -342,8 +342,8 @@ class RpcConnectorRuntime<TKey> implements IRpcProtocolConnectorRuntime {
 			const protectedSessionLease = attempt.ownTemporary(() =>
 				protectedSessionReservation.release(),
 			);
-			let session: RpcSessionImpl<TKey>;
-			session = new RpcSessionImpl({
+			let session: IRpcSession<TKey>;
+			session = this._options.createSession({
 				host: this._host,
 				sessionId: accept.sessionId,
 				proofKey,
@@ -377,7 +377,7 @@ class RpcConnectorRuntime<TKey> implements IRpcProtocolConnectorRuntime {
 	}
 
 	async _receiveResumeOutcome(
-		attempt: RpcBindingAttemptImpl<TKey>,
+		attempt: IRpcBindingAttempt<TKey>,
 		bytes: Uint8Array,
 	): Promise<void> {
 		if (!this._isCurrent(attempt)) {
@@ -500,13 +500,13 @@ class RpcConnectorRuntime<TKey> implements IRpcProtocolConnectorRuntime {
 		}
 	}
 
-	_isCurrent(attempt: RpcBindingAttemptImpl<TKey>): boolean {
+	_isCurrent(attempt: IRpcBindingAttempt<TKey>): boolean {
 		return attempt.pending && this._attempt === attempt && !this._closing;
 	}
 
 	async _installBinding(
-		attempt: RpcBindingAttemptImpl<TKey>,
-		session: RpcSessionImpl<TKey>,
+		attempt: IRpcBindingAttempt<TKey>,
+		session: IRpcSession<TKey>,
 		candidate: RpcBindingCandidate<TKey>,
 	): Promise<void> {
 		const provisional = attempt.holdsProvisionalSession(session);
@@ -521,7 +521,7 @@ class RpcConnectorRuntime<TKey> implements IRpcProtocolConnectorRuntime {
 		if (endpoint === undefined) {
 			return;
 		}
-		let commit: ReturnType<RpcSessionImpl<TKey>["commitBinding"]>;
+		let commit: ReturnType<IRpcSession<TKey>["commitBinding"]>;
 		try {
 			commit = session.commitBinding(candidate, endpoint);
 		} catch (error) {
@@ -548,12 +548,12 @@ class RpcConnectorRuntime<TKey> implements IRpcProtocolConnectorRuntime {
 class RpcAcceptorRuntime<TKey> implements IRpcProtocolAcceptorRuntime {
 	readonly _host: IRpcProtocolAcceptorHost;
 	readonly _options: Readonly<CreateRpcProtocolOptions<TKey>>;
-	readonly _attempts = new Set<RpcBindingAttemptImpl<TKey>>();
+	readonly _attempts = new Set<IRpcBindingAttempt<TKey>>();
 	readonly _attemptStates = new WeakMap<
-		RpcBindingAttemptImpl<TKey>,
+		IRpcBindingAttempt<TKey>,
 		RpcAcceptorAttemptState
 	>();
-	readonly _sessions = new Map<string, RpcSessionImpl<TKey>>();
+	readonly _sessions = new Map<string, IRpcSession<TKey>>();
 	readonly _provisionalSessionIds = new Set<string>();
 	_handshakeSlotsInUse = 0;
 	_freshSessionReservations = 0;
@@ -579,9 +579,9 @@ class RpcAcceptorRuntime<TKey> implements IRpcProtocolAcceptorRuntime {
 			);
 		}
 		this._handshakeSlotsInUse += 1;
-		let attempt: RpcBindingAttemptImpl<TKey>;
+		let attempt: IRpcBindingAttempt<TKey>;
 		try {
-			attempt = new RpcBindingAttemptImpl({
+			attempt = this._options.createBindingAttempt({
 				connection,
 				signal,
 				timeoutMs: this._host.policy.bindingAttemptTimeoutMs,
@@ -632,7 +632,7 @@ class RpcAcceptorRuntime<TKey> implements IRpcProtocolAcceptorRuntime {
 	}
 
 	_receiveBootstrap(
-		attempt: RpcBindingAttemptImpl<TKey>,
+		attempt: IRpcBindingAttempt<TKey>,
 		bytes: Uint8Array,
 	): Promise<void> | void {
 		if (!this._isCurrent(attempt)) {
@@ -655,7 +655,7 @@ class RpcAcceptorRuntime<TKey> implements IRpcProtocolAcceptorRuntime {
 	}
 
 	async _receiveFreshRequest(
-		attempt: RpcBindingAttemptImpl<TKey>,
+		attempt: IRpcBindingAttempt<TKey>,
 		request: RpcFreshRequest,
 	): Promise<void> {
 		if (!this._isCurrent(attempt)) {
@@ -730,8 +730,8 @@ class RpcAcceptorRuntime<TKey> implements IRpcProtocolAcceptorRuntime {
 			) {
 				throw new Error("Default RPC protected Session reservation was lost.");
 			}
-			let session: RpcSessionImpl<TKey>;
-			session = new RpcSessionImpl({
+			let session: IRpcSession<TKey>;
+			session = this._options.createSession({
 				host: this._host,
 				sessionId,
 				proofKey,
@@ -773,7 +773,7 @@ class RpcAcceptorRuntime<TKey> implements IRpcProtocolAcceptorRuntime {
 	}
 
 	async _receiveResumeRequest(
-		attempt: RpcBindingAttemptImpl<TKey>,
+		attempt: IRpcBindingAttempt<TKey>,
 		request: RpcResumeRequest,
 	): Promise<void> {
 		if (!this._isCurrent(attempt)) {
@@ -826,9 +826,9 @@ class RpcAcceptorRuntime<TKey> implements IRpcProtocolAcceptorRuntime {
 	}
 
 	async _acceptResume(
-		attempt: RpcBindingAttemptImpl<TKey>,
+		attempt: IRpcBindingAttempt<TKey>,
 		request: RpcResumeRequest,
-		session: RpcSessionImpl<TKey>,
+		session: IRpcSession<TKey>,
 		candidate: RpcResponderBindingCandidate<TKey>,
 	): Promise<void> {
 		if (
@@ -877,7 +877,7 @@ class RpcAcceptorRuntime<TKey> implements IRpcProtocolAcceptorRuntime {
 	}
 
 	async _rejectResumeGeneric(
-		attempt: RpcBindingAttemptImpl<TKey>,
+		attempt: IRpcBindingAttempt<TKey>,
 		request: RpcResumeRequest,
 	): Promise<void> {
 		try {
@@ -911,9 +911,9 @@ class RpcAcceptorRuntime<TKey> implements IRpcProtocolAcceptorRuntime {
 	}
 
 	async _rejectResumeContinuity(
-		attempt: RpcBindingAttemptImpl<TKey>,
+		attempt: IRpcBindingAttempt<TKey>,
 		request: RpcResumeRequest,
-		session: RpcSessionImpl<TKey>,
+		session: IRpcSession<TKey>,
 		candidate: RpcResponderContinuityCandidate<TKey>,
 	): Promise<void> {
 		try {
@@ -941,9 +941,7 @@ class RpcAcceptorRuntime<TKey> implements IRpcProtocolAcceptorRuntime {
 			if (attempt.claim() === undefined) {
 				return;
 			}
-			let authority: ReturnType<
-				RpcSessionImpl<TKey>["commitContinuityFailure"]
-			>;
+			let authority: ReturnType<IRpcSession<TKey>["commitContinuityFailure"]>;
 			try {
 				authority = session.commitContinuityFailure(candidate);
 			} catch (error) {
@@ -967,7 +965,7 @@ class RpcAcceptorRuntime<TKey> implements IRpcProtocolAcceptorRuntime {
 	}
 
 	async _rejectFresh(
-		attempt: RpcBindingAttemptImpl<TKey>,
+		attempt: IRpcBindingAttempt<TKey>,
 		code: "unsupported-profile" | "admission-rejected",
 	): Promise<void> {
 		try {
@@ -982,13 +980,13 @@ class RpcAcceptorRuntime<TKey> implements IRpcProtocolAcceptorRuntime {
 		}
 	}
 
-	_reserveFreshSession(attempt: RpcBindingAttemptImpl<TKey>): boolean {
+	_reserveFreshSession(attempt: IRpcBindingAttempt<TKey>): boolean {
 		const state = this._attemptStates.get(attempt);
 		if (state === undefined) {
 			attempt.fail(new Error("Default RPC Acceptor attempt state was lost."));
 			return false;
 		}
-		let reclaimedSession: RpcSessionImpl<TKey> | undefined;
+		let reclaimedSession: IRpcSession<TKey> | undefined;
 		let reclaimedSessionId: string | undefined;
 		let earliestRecoveryDeadline = Number.POSITIVE_INFINITY;
 		const reclaimAt = Date.now();
@@ -1059,7 +1057,7 @@ class RpcAcceptorRuntime<TKey> implements IRpcProtocolAcceptorRuntime {
 		return true;
 	}
 
-	_reserveSessionId(attempt: RpcBindingAttemptImpl<TKey>): string | undefined {
+	_reserveSessionId(attempt: IRpcBindingAttempt<TKey>): string | undefined {
 		const state = this._attemptStates.get(attempt);
 		if (state === undefined) {
 			attempt.fail(new Error("Default RPC Acceptor attempt state was lost."));
@@ -1083,13 +1081,13 @@ class RpcAcceptorRuntime<TKey> implements IRpcProtocolAcceptorRuntime {
 		return undefined;
 	}
 
-	_isCurrent(attempt: RpcBindingAttemptImpl<TKey>): boolean {
+	_isCurrent(attempt: IRpcBindingAttempt<TKey>): boolean {
 		return attempt.pending && this._attempts.has(attempt) && !this._closing;
 	}
 
 	async _installBinding(
-		attempt: RpcBindingAttemptImpl<TKey>,
-		session: RpcSessionImpl<TKey>,
+		attempt: IRpcBindingAttempt<TKey>,
+		session: IRpcSession<TKey>,
 		sessionId: string,
 		candidate: RpcBindingCandidate<TKey>,
 		reply: Uint8Array,
@@ -1109,7 +1107,7 @@ class RpcAcceptorRuntime<TKey> implements IRpcProtocolAcceptorRuntime {
 		if (endpoint === undefined) {
 			return;
 		}
-		let commit: ReturnType<RpcSessionImpl<TKey>["commitBinding"]>;
+		let commit: ReturnType<IRpcSession<TKey>["commitBinding"]>;
 		try {
 			commit = session.commitBinding(candidate, endpoint);
 		} catch (error) {

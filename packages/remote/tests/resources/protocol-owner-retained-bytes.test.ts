@@ -8,16 +8,14 @@ import { Subject } from "rxjs";
 import { describe, expect, it, vi } from "vitest";
 import { createRpcProtocol } from "../../src/factories/rpc-protocol.factory";
 import { RpcEndpointImpl } from "../../src/impls/protocol/rpc-endpoint.impl";
-import {
-	RpcRetainedBytesLedgerImpl,
-	reserveRpcSessionRetainedBytes,
-} from "../../src/impls/protocol/rpc-retained-bytes-ledger.impl";
+import { RpcRetainedBytesLedgerImpl } from "../../src/impls/protocol/rpc-retained-bytes-ledger.impl";
 import { createRpcAcceptor, createRpcConnector } from "../../src/index";
 import type {
 	IRpcProtocol,
 	IRpcProtocolHost,
 	IRpcProtocolSession,
 } from "../../src/interfaces/protocol/rpc-protocol.interface";
+import { reserveRpcSessionRetainedBytes } from "../../src/utils/rpc-session-retained-bytes.util";
 import {
 	createRpcDirectSessionHarness,
 	createRpcTestNetwork,

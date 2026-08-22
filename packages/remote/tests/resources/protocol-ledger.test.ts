@@ -13,6 +13,7 @@ import { RpcCallDirectionEnum } from "../../src/enums/rpc-call-direction.enum";
 import { RpcEventTypeEnum } from "../../src/enums/rpc-event-type.enum";
 import { createRpcProtocol } from "../../src/factories/rpc-protocol.factory";
 import { RpcCodecImpl } from "../../src/impls/protocol/rpc-codec.impl";
+import type { RpcRetainedBytesLedgerImpl } from "../../src/impls/protocol/rpc-retained-bytes-ledger.impl";
 import {
 	createRemoteServiceDescriptor,
 	createRpcAcceptor,
@@ -70,7 +71,9 @@ describe("Default RPC Protocol retained ledger", () => {
 
 		const args = normalizeRpcApplicationArguments(["retained"]);
 		const pendingCharge = args.weight + 256;
-		const retainedBeforePending = session._retainedBytesLedger._retainedBytes;
+		const retainedBeforePending = (
+			session._retainedBytesLedger as RpcRetainedBytesLedgerImpl
+		)._retainedBytes;
 		const occupied = session.reserveRetainedBytes(
 			session._host.policy.maxRetainedBytesPerSession -
 				retainedBeforePending -

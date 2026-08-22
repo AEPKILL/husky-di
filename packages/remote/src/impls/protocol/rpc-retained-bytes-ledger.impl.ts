@@ -1,58 +1,14 @@
 /**
- * @overview Owner and built-in Session retained-byte reservation ledgers.
+ * @overview Owner and built-in Session retained-byte reservation ledger implementation.
  * @author AEPKILL
  * @created 2026-08-21 00:00:00
  */
 
-import type {
-	IRpcProtocolSession,
-	IRpcRetainedBytesReservation,
-} from "@/interfaces/protocol/rpc-protocol.interface";
-
-type RpcSessionRetainedBytesReserve = (
-	bytes: number,
-) => IRpcRetainedBytesReservation | undefined;
-
-const sessionRetainedBytesReserves = new WeakMap<
-	IRpcProtocolSession,
-	RpcSessionRetainedBytesReserve
->();
-
-/** Registers the built-in Session's private aggregate reservation port. */
-export function registerRpcSessionRetainedBytes(
-	session: IRpcProtocolSession,
-	reserve: RpcSessionRetainedBytesReserve,
-): void {
-	sessionRetainedBytesReserves.set(session, reserve);
-}
-
-/** Removes a terminal built-in Session's private aggregate reservation port. */
-export function unregisterRpcSessionRetainedBytes(
-	session: IRpcProtocolSession,
-): void {
-	sessionRetainedBytesReserves.delete(session);
-}
-
-/** Uses the built-in Session aggregate when present, otherwise the Owner port. */
-export function reserveRpcSessionRetainedBytes(
-	session: IRpcProtocolSession | undefined,
-	reserveOwnerRetainedBytes: (
-		bytes: number,
-	) => IRpcRetainedBytesReservation | undefined,
-	bytes: number,
-): IRpcRetainedBytesReservation | undefined {
-	const reserveSessionRetainedBytes =
-		session === undefined
-			? undefined
-			: sessionRetainedBytesReserves.get(session);
-	if (reserveSessionRetainedBytes !== undefined) {
-		return reserveSessionRetainedBytes(bytes);
-	}
-	return reserveOwnerRetainedBytes(bytes);
-}
+import type { IRpcRetainedBytesReservation } from "@/interfaces/protocol/rpc-protocol.interface";
+import type { IRpcRetainedBytesLedger } from "@/interfaces/protocol/rpc-retained-bytes-ledger.interface";
 
 /** Atomically reserves one Session or Owner aggregate retained-byte allowance. */
-export class RpcRetainedBytesLedgerImpl {
+export class RpcRetainedBytesLedgerImpl implements IRpcRetainedBytesLedger {
 	readonly _maximumBytes: number;
 	_retainedBytes = 0;
 

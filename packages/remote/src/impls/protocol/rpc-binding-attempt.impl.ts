@@ -5,8 +5,9 @@
  */
 
 import { RpcEndpointFailureEnum } from "@/enums/protocol/rpc-endpoint-failure.enum";
-import type { RpcSessionImpl } from "@/impls/protocol/rpc-session.impl";
+import type { IRpcBindingAttempt } from "@/interfaces/protocol/rpc-binding-attempt.interface";
 import type { IRpcEndpoint } from "@/interfaces/protocol/rpc-endpoint.interface";
+import type { IRpcSession } from "@/interfaces/protocol/rpc-session.interface";
 import type {
 	CreateRpcBindingAttemptOptions,
 	RpcBindingAttemptLease,
@@ -14,12 +15,12 @@ import type {
 import type { RpcBindingEpoch } from "@/types/protocol/rpc-session.type";
 
 type RpcProvisionalSession<TKey> = Readonly<{
-	readonly session: RpcSessionImpl<TKey>;
+	readonly session: IRpcSession<TKey>;
 	readonly discard: () => void;
 }>;
 
 /** Owns one bootstrap attempt until it transfers an exact Binding Epoch. */
-export class RpcBindingAttemptImpl<TKey> {
+export class RpcBindingAttemptImpl<TKey> implements IRpcBindingAttempt<TKey> {
 	readonly task: Promise<void>;
 	readonly _endpoint: IRpcEndpoint;
 	readonly _resolve: () => void;
@@ -149,7 +150,7 @@ export class RpcBindingAttemptImpl<TKey> {
 	}
 
 	ownProvisionalSession(
-		session: RpcSessionImpl<TKey>,
+		session: IRpcSession<TKey>,
 		discard: () => void,
 	): boolean {
 		if (this._provisionalSession !== undefined || this._terminal) {
@@ -160,7 +161,7 @@ export class RpcBindingAttemptImpl<TKey> {
 		return true;
 	}
 
-	holdsProvisionalSession(session: RpcSessionImpl<TKey>): boolean {
+	holdsProvisionalSession(session: IRpcSession<TKey>): boolean {
 		return this._provisionalSession?.session === session;
 	}
 
@@ -172,7 +173,7 @@ export class RpcBindingAttemptImpl<TKey> {
 		return this._endpoint;
 	}
 
-	transferProvisionalSession(session: RpcSessionImpl<TKey>): boolean {
+	transferProvisionalSession(session: IRpcSession<TKey>): boolean {
 		const provisional = this._provisionalSession;
 		if (provisional === undefined) {
 			return true;

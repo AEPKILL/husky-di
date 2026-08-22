@@ -4,7 +4,8 @@
  * @created 2026-08-19 00:00:00
  */
 
-export type RpcHandlerJob = (releasePermit: () => void) => boolean;
+import type { IRpcHandlerScheduler } from "@/interfaces/rpc-handler-scheduler.interface";
+import type { RpcHandlerJob } from "@/types/rpc-handler-scheduler.type";
 
 interface RpcHandlerSessionQueue {
 	readonly jobs: RpcHandlerJob[];
@@ -13,7 +14,7 @@ interface RpcHandlerSessionQueue {
 }
 
 /** Acquires one owner permit and one per-Session permit before handler start. */
-export class RpcHandlerScheduler {
+export class RpcHandlerSchedulerImpl implements IRpcHandlerScheduler {
 	readonly #maximumOwnerHandlers: number;
 	readonly #maximumSessionHandlers: number;
 	readonly #sessions = new Map<object, RpcHandlerSessionQueue>();

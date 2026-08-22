@@ -10,6 +10,7 @@ import type {
 	IRpcProtocolHost,
 	IRpcRetainedBytesReservation,
 } from "@/interfaces/protocol/rpc-protocol.interface";
+import type { IRpcRetainedBytesLedger } from "@/interfaces/protocol/rpc-retained-bytes-ledger.interface";
 
 export type CreateRpcSessionOptions<TKey> = {
 	readonly host: IRpcProtocolHost;
@@ -19,6 +20,11 @@ export type CreateRpcSessionOptions<TKey> = {
 	readonly onTerminal: () => void;
 	readonly counterExhausted?: boolean;
 };
+
+export type CreateRpcSessionImplOptions<TKey> = CreateRpcSessionOptions<TKey> &
+	Readonly<{
+		readonly retainedBytesLedger: IRpcRetainedBytesLedger;
+	}>;
 
 export type RpcSessionRecovery = Readonly<{
 	readonly reclaimDeadline: number;
