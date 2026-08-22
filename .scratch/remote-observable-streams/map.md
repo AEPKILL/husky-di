@@ -28,6 +28,10 @@ Status: open
 
 ## Decisions so far
 
+- [决定远程 Observable 订阅的领域模型与生命周期](issues/02-define-remote-observable-domain-lifecycle.md) — 将每次 `subscribe()` 建模为独立、双向且可跨 Recovery 延续的 Logical Stream Subscription，分离 owning Application Stream 与 non-owning Observation Stream，并固定分层 admission、item、terminal、teardown 和 Framework/Protocol/source ownership 词汇。
+- [界定 v1 草案原地改写与 resolveAll() 移除边界](issues/03-define-v1-rewrite-and-resolve-all-removal.md) — 将未发布 unary `/1` 一次性原地替换为最终 streaming contract：不升级 Profile、不兼容旧构建、Session、wire 或 source；删除 resolveAll()/Group/RpcPeerResult，显式组合只建立在 peers/peers$、peer.resolve() 与原生 JS/RxJS 上。
+- [调研 RxJS 与可恢复推送流的订阅、流控和恢复先例](issues/01-research-rxjs-resumable-push-stream-precedents.md) — 确认 RxJS 只有 push/cancel 而无 demand/ACK；内部 credit 只能约束 bridge/wire，有限无损必须有显式容量终止边界；Reactive Streams、RSocket 与 gRPC 均分离发送许可、retained-byte/frame evidence 和 application processing。
+
 ## Not yet specified
 
 - 若有界流控或资源核算无法完全隐藏，caller-facing policy/options 的必要最小形状；只有流控与资源 tickets 解决后才能判断是否需要。
