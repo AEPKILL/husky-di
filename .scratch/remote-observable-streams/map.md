@@ -11,7 +11,7 @@ Status: open
 
 - 权威领域词汇以根目录的 [CONTEXT.md](../../CONTEXT.md) 为准；领域词汇在相应 decision ticket 解决时同步更新。
 - 每个决策会话都应使用 grilling、domain-modeling、codebase-design 和 ponytail；prototype ticket 还应使用 prototype，research ticket 应使用 research。
-- [协议可替换的双向 RPC 框架](../remote-rpc-framework/map.md) 是现有 unary、Recovery、资源、安全与关闭保证的决策来源；其“streaming 不在 v1 范围内”和保留 resolveAll() 的边界由本地图有意重新打开。
+- [协议可替换的双向 RPC 框架](../remote-rpc-framework/map.md) 是现有 unary、Recovery、资源、安全与关闭保证的决策来源；其“streaming 不在 v1 范围内”和保留 resolveAll() 的边界曾由本地图有意重新打开，其中 Group/resolveAll() 路线已由 03 号票关闭为删除。
 - 本地图只完成规划与规范路线，不实施生产代码。后续代码变更必须使用 husky-di-code-standard，并在同一变更中更新 normative specification 与 matching specification.test.ts coverage。
 - RxJS Observable 是唯一新增的 application-stream Interface。不支持 Observable 参数、AsyncIterable、ReadableStream、Promise-wrapped 或嵌套 Observable，也不提供 Subject 专属远程写入能力。
 - 流成员只有两种：返回直接 Observable 的方法，以及 Descriptor 显式 allowlist 的只读 Observable 属性，例如 remote.message$。
@@ -28,6 +28,7 @@ Status: open
 
 ## Decisions so far
 
+- [原型化流成员 Descriptor 与单 Peer facade Interface](issues/04-prototype-stream-descriptor-peer-facade.md) — 确认一个 `members` namespace 与 `unary`/`stream-method`/`stream-property` 显式 kind；限定 direct Observable、readonly `$` property、unary-only `AbortSignal` 与 local `isObservable()` guard；固定 opaque invariant Descriptor、single-Peer frozen facade identity，以及 state-neutral access/call、cold per-subscription preflight 和 recovering identity-free Pending 行为，并继承 03 号票已决定的 Group/`resolveAll()` 删除边界。
 - [决定远程 Observable 订阅的领域模型与生命周期](issues/02-define-remote-observable-domain-lifecycle.md) — 将每次 `subscribe()` 建模为独立、双向且可跨 Recovery 延续的 Logical Stream Subscription，分离 owning Application Stream 与 non-owning Observation Stream，并固定分层 admission、item、terminal、teardown 和 Framework/Protocol/source ownership 词汇。
 - [界定 v1 草案原地改写与 resolveAll() 移除边界](issues/03-define-v1-rewrite-and-resolve-all-removal.md) — 将未发布 unary `/1` 一次性原地替换为最终 streaming contract：不升级 Profile、不兼容旧构建、Session、wire 或 source；删除 resolveAll()/Group/RpcPeerResult，显式组合只建立在 peers/peers$、peer.resolve() 与原生 JS/RxJS 上。
 - [调研 RxJS 与可恢复推送流的订阅、流控和恢复先例](issues/01-research-rxjs-resumable-push-stream-precedents.md) — 确认 RxJS 只有 push/cancel 而无 demand/ACK；内部 credit 只能约束 bridge/wire，有限无损必须有显式容量终止边界；Reactive Streams、RSocket 与 gRPC 均分离发送许可、retained-byte/frame evidence 和 application processing。
