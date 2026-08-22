@@ -12,6 +12,10 @@ import type {
 	RpcExposureRegistry,
 	RpcHandlerRoute,
 } from "@/types/rpc-exposure.type";
+import {
+	rpcCallableSchema,
+	rpcObjectOrFunctionSchema,
+} from "@/utils/rpc-schema.util";
 
 function findHandler(
 	implementation: object,
@@ -29,7 +33,7 @@ function findHandler(
 			if (descriptor !== undefined) {
 				if (
 					!("value" in descriptor) ||
-					typeof descriptor.value !== "function"
+					!rpcCallableSchema.safeParse(descriptor.value).success
 				) {
 					throw new TypeError(
 						`Selected implementation member ${method} must be a data function.`,
@@ -56,11 +60,7 @@ function prepareExposure(
 	implementation: unknown,
 ): RpcExposure {
 	const data = getRemoteServiceDescriptorData(descriptor);
-	if (
-		(typeof implementation !== "object" &&
-			typeof implementation !== "function") ||
-		implementation === null
-	) {
+	if (!rpcObjectOrFunctionSchema.safeParse(implementation).success) {
 		throw new TypeError("implementation must be an object.");
 	}
 

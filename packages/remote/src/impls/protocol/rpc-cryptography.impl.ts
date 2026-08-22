@@ -18,6 +18,7 @@ import type {
 	RpcJsonValue,
 	RpcResumeRequest,
 } from "@/types/protocol/rpc-wire-record.type";
+import { rpcBase64Url32Schema } from "@/utils/rpc-schema.util";
 
 export class RpcCryptographyImpl implements IRpcCryptography<CryptoKey> {
 	public createRandomCarrier(): {
@@ -120,7 +121,6 @@ export class RpcCryptographyImpl implements IRpcCryptography<CryptoKey> {
 }
 
 const textEncoder = new TextEncoder();
-const base64Url32Pattern = /^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$/;
 
 function getWebCrypto(): Crypto {
 	const crypto = globalThis.crypto;
@@ -284,7 +284,7 @@ function createRpcRandomCarrier(): {
 }
 
 function decodeRpcBase64Url32(value: string): Uint8Array {
-	if (!base64Url32Pattern.test(value)) {
+	if (!rpcBase64Url32Schema.safeParse(value).success) {
 		throw new Error("RPC security carrier is not canonical Base64Url32.");
 	}
 	const padded = `${value.replaceAll("-", "+").replaceAll("_", "/")}=`;

@@ -50,10 +50,27 @@ import {
 	readRpcAbortSignalAborted,
 } from "@/utils/rpc-cancellation.util";
 import { readRpcClosedOptionsRecord } from "@/utils/rpc-runtime-policy.util";
+import {
+	rpcCallableSchema,
+	rpcNonNullObjectSchema,
+	rpcUndefinedSchema,
+} from "@/utils/rpc-schema.util";
 import { reserveRpcSessionRetainedBytes } from "@/utils/rpc-session-retained-bytes.util";
 import { isRpcSessionTransitionAllowed } from "@/utils/rpc-session-transition.util";
 
 const connectorConnectOptionKeys = new Set(["adapter", "signal"]);
+
+function isProtocolSession(value: unknown): value is IRpcProtocolSession {
+	if (!rpcNonNullObjectSchema.safeParse(value).success) {
+		return false;
+	}
+	const session = value as object;
+	return (
+		rpcCallableSchema.safeParse(Reflect.get(session, "reserveInvocation"))
+			.success &&
+		rpcCallableSchema.safeParse(Reflect.get(session, "forceClose")).success
+	);
+}
 
 type RpcConnectorClosedState = Extract<
 	RpcConnectorState,
@@ -177,21 +194,23 @@ export class RpcConnectorImpl implements IRpcConnector {
 			);
 		}
 		const adapter = optionRecord.adapter as IRpcConnectorAdapter;
-		if (typeof adapter !== "object" || adapter === null) {
+		if (!rpcNonNullObjectSchema.safeParse(adapter).success) {
 			return Promise.reject(new TypeError("adapter must be an object."));
 		}
 
-		const connectionSource = Reflect.get(adapter, "connection$") as
-			| Observable<IRpcConnection>
-			| undefined;
+		const connectionSource = Reflect.get(adapter, "connection$") as unknown;
 		const connect = Reflect.get(adapter, "connect");
+		const subscribe = rpcUndefinedSchema.safeParse(connectionSource).success
+			? undefined
+			: Reflect.get(connectionSource as object, "subscribe");
 		if (
-			connectionSource === undefined ||
-			typeof Reflect.get(connectionSource, "subscribe") !== "function" ||
-			typeof connect !== "function"
+			!rpcCallableSchema.safeParse(subscribe).success ||
+			!rpcCallableSchema.safeParse(connect).success
 		) {
 			return Promise.reject(new TypeError("adapter has an invalid shape."));
 		}
+		const validConnectionSource =
+			connectionSource as Observable<IRpcConnection>;
 
 		const fresh = this.peer.state.status === RpcStateStatusEnum.unbound;
 		if (fresh) {
@@ -243,7 +262,7 @@ export class RpcConnectorImpl implements IRpcConnector {
 		} = Promise.withResolvers<void>();
 
 		try {
-			attempt.subscription = connectionSource.subscribe({
+			attempt.subscription = validConnectionSource.subscribe({
 				next: (connection) => {
 					const ownedConnection = this.#custody.ownConnection(connection);
 					if (attempt.fenced || this.#attempt !== attempt) {
@@ -425,10 +444,7 @@ export class RpcConnectorImpl implements IRpcConnector {
 			attempt.insideHandoff ||
 			attempt.attached ||
 			this.#session !== undefined ||
-			typeof session !== "object" ||
-			session === null ||
-			typeof session.reserveInvocation !== "function" ||
-			typeof session.forceClose !== "function"
+			!isProtocolSession(session)
 		) {
 			return undefined;
 		}

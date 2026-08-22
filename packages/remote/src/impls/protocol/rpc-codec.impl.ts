@@ -11,9 +11,7 @@ import {
 	RPC_PROFILE,
 } from "@/constants/protocol/rpc-profile.const";
 import { RpcDecodePhaseEnum } from "@/enums/protocol/rpc-decode-phase.enum";
-import { RpcResumeRejectCodeEnum } from "@/enums/protocol/rpc-resume-reject-code.enum";
 import { RpcWireRecordKindEnum } from "@/enums/protocol/rpc-wire-record-kind.enum";
-import { RpcExceptionCodeEnum } from "@/enums/rpc-exception-code.enum";
 import type { IRpcCodec } from "@/interfaces/protocol/rpc-codec.interface";
 import type { RpcDecodedRecord } from "@/types/protocol/rpc-codec.type";
 import type {
@@ -34,12 +32,27 @@ import type {
 	RpcResumeReject,
 	RpcResumeRequest,
 	RpcSemanticMessage,
-	RpcWireErrorCode,
 } from "@/types/protocol/rpc-wire-record.type";
 import {
 	normalizeRpcApplicationArguments,
 	normalizeRpcApplicationValue,
 } from "@/utils/rpc-application-value.util";
+import {
+	rpcBase64Url32Schema,
+	rpcCallOrdinalSchema,
+	rpcErrorPayloadMemberNamesSchema,
+	rpcFirstBindingEpochSchema,
+	rpcJsonArraySchema,
+	rpcJsonRecordSchema,
+	rpcNonEmptyJsonArraySchema,
+	rpcNonNegativeSafeIntegerSchema,
+	rpcPositiveSafeIntegerSchema,
+	rpcProfileOfferSchema,
+	rpcResumeRejectCodeSchema,
+	rpcStringSchema,
+	rpcWireErrorCodeSchema,
+	rpcWireIdentifierSchema,
+} from "@/utils/rpc-schema.util";
 
 export class RpcCodecImpl implements IRpcCodec {
 	public encode(record: RpcJsonRecord): Uint8Array {
@@ -61,15 +74,19 @@ export class RpcCodecImpl implements IRpcCodec {
 		switch (phase) {
 			case RpcDecodePhaseEnum.bootstrapRequest: {
 				const kind = readRpcRecordKind(record);
-				if (kind === RpcWireRecordKindEnum.fresh) {
-					decoded = validateRpcFreshRequest(record);
-					break;
+				switch (kind) {
+					case RpcWireRecordKindEnum.fresh:
+						decoded = validateRpcFreshRequest(record);
+						break;
+					case RpcWireRecordKindEnum.resume:
+						decoded = validateRpcResumeRequest(record);
+						break;
+					default:
+						throw new Error(
+							"The first initiator record must be fresh or resume.",
+						);
 				}
-				if (kind === RpcWireRecordKindEnum.resume) {
-					decoded = validateRpcResumeRequest(record);
-					break;
-				}
-				throw new Error("The first initiator record must be fresh or resume.");
+				break;
 			}
 			case RpcDecodePhaseEnum.freshAccept:
 				decoded = validateRpcFreshAccept(record);
@@ -92,21 +109,7 @@ const textDecoder = new TextDecoder("utf-8", {
 	ignoreBOM: true,
 });
 const textEncoder = new TextEncoder();
-const base64Url32Pattern = /^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$/;
-const callOrdinalPattern = /^(?:[1-9][0-9]{0,15})$/;
 const numberPattern = /-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?/y;
-const wireErrorCodes = new Set<RpcWireErrorCode>([
-	RpcExceptionCodeEnum.canceled,
-	RpcExceptionCodeEnum.unavailable,
-	RpcExceptionCodeEnum.handlerFailed,
-	RpcExceptionCodeEnum.unknownService,
-	RpcExceptionCodeEnum.unknownMethod,
-]);
-const resumeRejectCodes = new Set<RpcResumeRejectCodeEnum>([
-	RpcResumeRejectCodeEnum.resumeRejected,
-	RpcResumeRejectCodeEnum.continuityFailure,
-	RpcResumeRejectCodeEnum.sessionTerminated,
-]);
 const closeForbiddenMembers = new Set([
 	"seq",
 	"ackThrough",
@@ -168,28 +171,25 @@ class BoundedJsonParser {
 		}
 
 		const character = this._text[this._index];
-		if (character === "{") {
-			return this._parseObject(depth);
+		switch (character) {
+			case "{":
+				return this._parseObject(depth);
+			case "[":
+				return this._parseArray(depth);
+			case '"':
+				return this._parseString(524_288, "string");
+			case "t":
+				this._consumeLiteral("true");
+				return true;
+			case "f":
+				this._consumeLiteral("false");
+				return false;
+			case "n":
+				this._consumeLiteral("null");
+				return null;
+			default:
+				return this._parseNumber();
 		}
-		if (character === "[") {
-			return this._parseArray(depth);
-		}
-		if (character === '"') {
-			return this._parseString(524_288, "string");
-		}
-		if (character === "t") {
-			this._consumeLiteral("true");
-			return true;
-		}
-		if (character === "f") {
-			this._consumeLiteral("false");
-			return false;
-		}
-		if (character === "n") {
-			this._consumeLiteral("null");
-			return null;
-		}
-		return this._parseNumber();
 	}
 
 	_parseObject(depth: number): RpcJsonRecord {
@@ -224,11 +224,13 @@ class BoundedJsonParser {
 			this._skipWhitespace();
 			const separator = this._text[this._index];
 			this._index += 1;
-			if (separator === "}") {
-				return result;
-			}
-			if (separator !== ",") {
-				throw new Error("RPC JSON object has an invalid separator.");
+			switch (separator) {
+				case "}":
+					return result;
+				case ",":
+					break;
+				default:
+					throw new Error("RPC JSON object has an invalid separator.");
 			}
 			this._skipWhitespace();
 		}
@@ -251,11 +253,13 @@ class BoundedJsonParser {
 			this._skipWhitespace();
 			const separator = this._text[this._index];
 			this._index += 1;
-			if (separator === "]") {
-				return result;
-			}
-			if (separator !== ",") {
-				throw new Error("RPC JSON array has an invalid separator.");
+			switch (separator) {
+				case "]":
+					return result;
+				case ",":
+					break;
+				default:
+					throw new Error("RPC JSON array has an invalid separator.");
 			}
 			this._skipWhitespace();
 		}
@@ -347,56 +351,59 @@ function validatePairedSurrogates(value: string, label: string): void {
 }
 
 function isJsonRecord(value: RpcJsonValue): value is RpcJsonRecord {
-	return typeof value === "object" && value !== null && !Array.isArray(value);
+	return rpcJsonRecordSchema.safeParse(value).success;
 }
 
 function readString(record: RpcJsonRecord, key: string): string {
 	const value = record[key];
-	if (typeof value !== "string") {
+	const result = rpcStringSchema.safeParse(value);
+	if (!result.success) {
 		throw new Error(`RPC record ${key} must be a string.`);
 	}
-	return value;
+	return result.data;
 }
 
 function readIdentifier(record: RpcJsonRecord, key: string): string {
 	const value = readString(record, key);
-	if (value.length === 0 || textEncoder.encode(value).byteLength > 256) {
+	const result = rpcWireIdentifierSchema.safeParse(value);
+	if (!result.success) {
 		throw new Error(`RPC record ${key} is not a valid identifier.`);
 	}
-	return value;
+	return result.data;
 }
 
 function readBase64Url32(record: RpcJsonRecord, key: string): string {
 	const value = readString(record, key);
-	if (!base64Url32Pattern.test(value)) {
+	const result = rpcBase64Url32Schema.safeParse(value);
+	if (!result.success) {
 		throw new Error(`RPC record ${key} is not canonical Base64Url32.`);
 	}
-	return value;
+	return result.data;
 }
 
 function readSequence(record: RpcJsonRecord, key: string): number {
-	const value = record[key];
-	if (!Number.isSafeInteger(value) || (value as number) < 1) {
+	const result = rpcPositiveSafeIntegerSchema.safeParse(record[key]);
+	if (!result.success) {
 		throw new Error(`RPC record ${key} must be a positive safe integer.`);
 	}
-	return value as number;
+	return result.data;
 }
 
 function readAckCursor(record: RpcJsonRecord, key: string): number {
-	const value = record[key];
-	if (!Number.isSafeInteger(value) || (value as number) < 0) {
+	const result = rpcNonNegativeSafeIntegerSchema.safeParse(record[key]);
+	if (!result.success) {
 		throw new Error(`RPC record ${key} must be a non-negative safe integer.`);
 	}
-	return value as number;
+	return result.data;
 }
 
 function readCallId(record: RpcJsonRecord): string {
 	const value = readString(record, "callId");
-	if (!callOrdinalPattern.test(value)) {
+	if (!rpcCallOrdinalSchema.safeParse(value).success) {
 		throw new Error("RPC callId must be a canonical Call Ordinal.");
 	}
 	const ordinal = Number(value);
-	if (!Number.isSafeInteger(ordinal) || ordinal < 1) {
+	if (!rpcPositiveSafeIntegerSchema.safeParse(ordinal).success) {
 		throw new Error("RPC callId exceeds the safe-integer domain.");
 	}
 	return value;
@@ -410,47 +417,50 @@ function validateSemanticMessage(
 	}
 	const kind = readString(value, "kind");
 	readCallId(value);
-	if (kind === RpcWireRecordKindEnum.call) {
-		readIdentifier(value, "service");
-		const method = readIdentifier(value, "method");
-		if (method === "then") {
-			throw new Error("RPC wire method then is reserved.");
+	switch (kind) {
+		case RpcWireRecordKindEnum.call: {
+			readIdentifier(value, "service");
+			const method = readIdentifier(value, "method");
+			if (method === "then") {
+				throw new Error("RPC wire method then is reserved.");
+			}
+			if (!rpcJsonArraySchema.safeParse(value.args).success) {
+				throw new Error("RPC call args must be an array.");
+			}
+			normalizeRpcApplicationArguments(value.args);
+			return value as RpcCallMessage;
 		}
-		if (!Array.isArray(value.args)) {
-			throw new Error("RPC call args must be an array.");
-		}
-		normalizeRpcApplicationArguments(value.args);
-		return value as RpcCallMessage;
-	}
-	if (kind === RpcWireRecordKindEnum.cancel) {
-		return value as RpcCancelMessage;
-	}
-	if (kind === RpcWireRecordKindEnum.result) {
-		if (Object.hasOwn(value, "value")) {
-			normalizeRpcApplicationValue(value.value);
-		}
-		return value as RpcResultMessage;
-	}
-	if (kind === RpcWireRecordKindEnum.error) {
-		if (!isJsonRecord(value.error)) {
-			throw new Error("RPC error payload must be an object.");
-		}
-		for (const key of Object.keys(value.error)) {
-			if (key !== "code" && key !== "message" && key !== "details") {
+		case RpcWireRecordKindEnum.cancel:
+			return value as RpcCancelMessage;
+		case RpcWireRecordKindEnum.result:
+			if (Object.hasOwn(value, "value")) {
+				normalizeRpcApplicationValue(value.value);
+			}
+			return value as RpcResultMessage;
+		case RpcWireRecordKindEnum.error: {
+			if (!isJsonRecord(value.error)) {
+				throw new Error("RPC error payload must be an object.");
+			}
+			if (
+				!rpcErrorPayloadMemberNamesSchema.safeParse(
+					Reflect.ownKeys(value.error),
+				).success
+			) {
 				throw new Error("RPC error payload contains an unknown member.");
 			}
+			const code = readString(value.error, "code");
+			if (!rpcWireErrorCodeSchema.safeParse(code).success) {
+				throw new Error("RPC error code is outside the profile union.");
+			}
+			readString(value.error, "message");
+			if (Object.hasOwn(value.error, "details")) {
+				normalizeRpcApplicationValue(value.error.details);
+			}
+			return value as RpcErrorMessage;
 		}
-		const code = readString(value.error, "code");
-		if (!wireErrorCodes.has(code as RpcWireErrorCode)) {
-			throw new Error("RPC error code is outside the profile union.");
-		}
-		readString(value.error, "message");
-		if (Object.hasOwn(value.error, "details")) {
-			normalizeRpcApplicationValue(value.error.details);
-		}
-		return value as RpcErrorMessage;
+		default:
+			throw new Error("RPC semantic message kind is unknown.");
 	}
-	throw new Error("RPC semantic message kind is unknown.");
 }
 
 function encodeRpcRecord(record: RpcJsonRecord): Uint8Array {
@@ -482,20 +492,12 @@ function validateRpcFreshRequest(record: RpcJsonRecord): RpcFreshRequest {
 	if (readRpcRecordKind(record) !== RpcWireRecordKindEnum.fresh) {
 		throw new Error("The first initiator record must be fresh or resume.");
 	}
-	if (!Array.isArray(record.profiles) || record.profiles.length === 0) {
-		throw new Error("RPC fresh profiles must be a non-empty array.");
-	}
-	const profiles = new Set<string>();
-	for (const profile of record.profiles) {
-		if (
-			typeof profile !== "string" ||
-			profile.length === 0 ||
-			textEncoder.encode(profile).byteLength > 256 ||
-			profiles.has(profile)
-		) {
-			throw new Error("RPC fresh profile offer is invalid.");
+	const profiles = rpcProfileOfferSchema.safeParse(record.profiles);
+	if (!profiles.success) {
+		if (!rpcNonEmptyJsonArraySchema.safeParse(record.profiles).success) {
+			throw new Error("RPC fresh profiles must be a non-empty array.");
 		}
-		profiles.add(profile);
+		throw new Error("RPC fresh profile offer is invalid.");
 	}
 	readBase64Url32(record, "initiatorNonce");
 	return record as RpcFreshRequest;
@@ -509,7 +511,7 @@ function validateRpcFreshAccept(record: RpcJsonRecord): RpcFreshAccept {
 		throw new Error("RPC fresh accept selected a different profile.");
 	}
 	readBase64Url32(record, "sessionId");
-	if (record.bindingEpoch !== 1) {
+	if (!rpcFirstBindingEpochSchema.safeParse(record.bindingEpoch).success) {
 		throw new Error("RPC fresh binding epoch must be one.");
 	}
 	readBase64Url32(record, "responderNonce");
@@ -533,28 +535,30 @@ function validateRpcResumeRequest(record: RpcJsonRecord): RpcResumeRequest {
 
 function validateRpcResumeOutcome(record: RpcJsonRecord): RpcResumeOutcome {
 	const kind = readRpcRecordKind(record);
-	if (kind === RpcWireRecordKindEnum.accept) {
-		readIdentifier(record, "profile");
-		readBase64Url32(record, "sessionId");
-		readSequence(record, "bindingEpoch");
-		readAckCursor(record, "receivedThrough");
-		readBase64Url32(record, "responderNonce");
-		readBase64Url32(record, "proof");
-		return record as RpcResumeAccept;
-	}
-	if (kind === RpcWireRecordKindEnum.reject) {
-		const code = readString(record, "code");
-		if (!resumeRejectCodes.has(code as RpcResumeRejectCodeEnum)) {
-			throw new Error("RPC resume reject code is outside the profile union.");
+	switch (kind) {
+		case RpcWireRecordKindEnum.accept:
+			readIdentifier(record, "profile");
+			readBase64Url32(record, "sessionId");
+			readSequence(record, "bindingEpoch");
+			readAckCursor(record, "receivedThrough");
+			readBase64Url32(record, "responderNonce");
+			readBase64Url32(record, "proof");
+			return record as RpcResumeAccept;
+		case RpcWireRecordKindEnum.reject: {
+			const code = readString(record, "code");
+			if (!rpcResumeRejectCodeSchema.safeParse(code).success) {
+				throw new Error("RPC resume reject code is outside the profile union.");
+			}
+			if (Object.hasOwn(record, "message")) {
+				throw new Error("RPC resume reject must not carry a message.");
+			}
+			readBase64Url32(record, "responderNonce");
+			readBase64Url32(record, "proof");
+			return record as RpcResumeReject;
 		}
-		if (Object.hasOwn(record, "message")) {
-			throw new Error("RPC resume reject must not carry a message.");
-		}
-		readBase64Url32(record, "responderNonce");
-		readBase64Url32(record, "proof");
-		return record as RpcResumeReject;
+		default:
+			throw new Error("RPC resume attempt did not receive accept or reject.");
 	}
-	throw new Error("RPC resume attempt did not receive accept or reject.");
 }
 
 function validateRpcActiveRecord(record: RpcJsonRecord): RpcActiveRecord {
@@ -572,11 +576,9 @@ function validateRpcActiveRecord(record: RpcJsonRecord): RpcActiveRecord {
 			return record as RpcAckRecord;
 		case RpcWireRecordKindEnum.ping:
 		case RpcWireRecordKindEnum.pong:
+			return record as RpcControlRecord;
 		case RpcWireRecordKindEnum.close:
-			if (
-				kind === RpcWireRecordKindEnum.close &&
-				Object.keys(record).some((key) => closeForbiddenMembers.has(key))
-			) {
+			if (Object.keys(record).some((key) => closeForbiddenMembers.has(key))) {
 				throw new Error("RPC close contains a forbidden control member.");
 			}
 			return record as RpcControlRecord;

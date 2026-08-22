@@ -12,6 +12,12 @@ import type {
 	RpcMethodDefinitions,
 	ValidateMethodDefinitions,
 } from "@/types/remote-service-descriptor.type";
+import {
+	rpcCancelableMethodDefinitionSchema,
+	rpcDescriptorPlainRecordSchema,
+	rpcStringSchema,
+	rpcWireIdentifierSchema,
+} from "@/utils/rpc-schema.util";
 
 export interface RemoteServiceDescriptorData {
 	readonly serviceIdentifier: ServiceIdentifier<unknown>;
@@ -26,28 +32,17 @@ const remoteServiceDescriptorData = new WeakMap<
 	RemoteServiceDescriptorData
 >();
 
-const textEncoder = new TextEncoder();
-const maximumIdentifierBytes = 256;
 const cancelableMethodDefinition = Object.freeze({ cancelable: true });
 
 function isPlainRecord(value: unknown): value is Record<PropertyKey, unknown> {
-	if (typeof value !== "object" || value === null) {
-		return false;
-	}
-
-	const prototype = Object.getPrototypeOf(value);
-	return prototype === Object.prototype || prototype === null;
+	return rpcDescriptorPlainRecordSchema.safeParse(value).success;
 }
 
 function validateWireIdentifier(
 	value: unknown,
 	label: string,
 ): asserts value is string {
-	if (
-		typeof value !== "string" ||
-		value.length === 0 ||
-		textEncoder.encode(value).byteLength > maximumIdentifierBytes
-	) {
+	if (!rpcWireIdentifierSchema.safeParse(value).success) {
 		throw new TypeError(
 			`${label} must be a non-empty string of at most 256 UTF-8 bytes.`,
 		);
@@ -65,11 +60,12 @@ function isCancelableMethodDefinition(value: unknown): boolean {
 	}
 
 	const descriptor = Object.getOwnPropertyDescriptor(value, "cancelable");
-	return (
-		descriptor !== undefined &&
-		"value" in descriptor &&
-		descriptor.value === true
-	);
+	if (descriptor === undefined || !("value" in descriptor)) {
+		return false;
+	}
+
+	const snapshot = { cancelable: descriptor.value };
+	return rpcCancelableMethodDefinitionSchema.safeParse(snapshot).success;
 }
 
 function snapshotMethods(
@@ -89,18 +85,20 @@ function snapshotMethods(
 		true | { readonly cancelable: true }
 	>;
 	for (const key of keys) {
-		if (typeof key !== "string") {
+		const keyResult = rpcStringSchema.safeParse(key);
+		if (!keyResult.success) {
 			throw new TypeError("methods must contain only string-named methods.");
 		}
+		const methodName = keyResult.data;
 
-		validateWireIdentifier(key, "method name");
-		if (key === "then") {
+		validateWireIdentifier(methodName, "method name");
+		if (methodName === "then") {
 			throw new TypeError(
 				"then is reserved and cannot be exposed as an RPC method.",
 			);
 		}
 
-		const descriptor = Object.getOwnPropertyDescriptor(value, key);
+		const descriptor = Object.getOwnPropertyDescriptor(value, methodName);
 		if (
 			descriptor === undefined ||
 			!descriptor.enumerable ||
@@ -113,7 +111,7 @@ function snapshotMethods(
 			);
 		}
 
-		snapshot[key] =
+		snapshot[methodName] =
 			descriptor.value === true ? true : cancelableMethodDefinition;
 	}
 

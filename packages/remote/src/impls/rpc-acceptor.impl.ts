@@ -66,8 +66,25 @@ import {
 } from "@/utils/rpc-cancellation.util";
 import { installRpcExposure } from "@/utils/rpc-exposure.util";
 import { createRpcFacade } from "@/utils/rpc-facade.util";
+import {
+	rpcCallableSchema,
+	rpcNonNullObjectSchema,
+	rpcUndefinedSchema,
+} from "@/utils/rpc-schema.util";
 import { reserveRpcSessionRetainedBytes } from "@/utils/rpc-session-retained-bytes.util";
 import { isRpcSessionTransitionAllowed } from "@/utils/rpc-session-transition.util";
+
+function isProtocolSession(value: unknown): value is IRpcProtocolSession {
+	if (!rpcNonNullObjectSchema.safeParse(value).success) {
+		return false;
+	}
+	const session = value as object;
+	return (
+		rpcCallableSchema.safeParse(Reflect.get(session, "reserveInvocation"))
+			.success &&
+		rpcCallableSchema.safeParse(Reflect.get(session, "forceClose")).success
+	);
+}
 
 interface RpcAcceptorListenerAttempt {
 	readonly abortController: AbortController;
@@ -205,20 +222,22 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 				createRpcException(RpcExceptionCodeEnum.unavailable),
 			);
 		}
-		if (typeof adapter !== "object" || adapter === null) {
+		if (!rpcNonNullObjectSchema.safeParse(adapter).success) {
 			return Promise.reject(new TypeError("adapter must be an object."));
 		}
-		const connectionSource = Reflect.get(adapter, "connection$") as
-			| Observable<IRpcConnection>
-			| undefined;
+		const connectionSource = Reflect.get(adapter, "connection$") as unknown;
 		const listen = Reflect.get(adapter, "listen");
+		const subscribe = rpcUndefinedSchema.safeParse(connectionSource).success
+			? undefined
+			: Reflect.get(connectionSource as object, "subscribe");
 		if (
-			connectionSource === undefined ||
-			typeof Reflect.get(connectionSource, "subscribe") !== "function" ||
-			typeof listen !== "function"
+			!rpcCallableSchema.safeParse(subscribe).success ||
+			!rpcCallableSchema.safeParse(listen).success
 		) {
 			return Promise.reject(new TypeError("adapter has an invalid shape."));
 		}
+		const validConnectionSource =
+			connectionSource as Observable<IRpcConnection>;
 
 		const {
 			promise: startup,
@@ -270,7 +289,7 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 		this.#commitListener({ status: RpcStateStatusEnum.starting });
 
 		try {
-			attempt.subscription = connectionSource.subscribe({
+			attempt.subscription = validConnectionSource.subscribe({
 				next: (connection) => this.#acceptConnection(connection),
 				error: (error) => this.#terminalListener(attempt, "error", error),
 				complete: () => this.#terminalListener(attempt, "complete"),
@@ -918,10 +937,7 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 			this.#insideConnectionHandoff ||
 			this.#sessions.size >= this.#policy.maxSessions ||
 			this.#sessions.has(session) ||
-			typeof session !== "object" ||
-			session === null ||
-			typeof session.reserveInvocation !== "function" ||
-			typeof session.forceClose !== "function"
+			!isProtocolSession(session)
 		) {
 			return undefined;
 		}

@@ -2740,6 +2740,50 @@ describe("custom Protocol incoming calls", () => {
 		await connector.close();
 	});
 
+	it("RPC-SPI-003 rejects extra own fields in an outgoing terminal", async () => {
+		let sink: IRpcProtocolInvocationSink | undefined;
+		let forceCalls = 0;
+		const session: IRpcProtocolSession = {
+			reserveInvocation() {
+				return {
+					commit(nextSink) {
+						sink = nextSink;
+						return { start() {}, cancel() {} };
+					},
+					release() {},
+				};
+			},
+			forceClose() {
+				forceCalls += 1;
+				sink?.finish({
+					type: RpcCallTerminalTypeEnum.failed,
+					code: RpcExceptionCodeEnum.outcomeUnknown,
+				});
+			},
+		};
+		const { connector } = await connectProtocolSession(session);
+		const descriptor = createRemoteServiceDescriptor(ICalculatorService, {
+			wireName: "example.calculator.v1",
+			methods: { add: true },
+		});
+		const result = connector.peer.resolve(descriptor).add(20, 21);
+		const terminal = Object.assign(Object.create(null), {
+			type: RpcCallTerminalTypeEnum.returnedVoid,
+		}) as Record<string, unknown>;
+		terminal.__proto__ = 0;
+
+		sink?.finish(terminal as never);
+
+		await expect(result).rejects.toMatchObject({ code: "outcome-unknown" });
+		expect(forceCalls).toBe(1);
+		expect(connector.peer.state).toMatchObject({
+			status: "closed",
+			outcome: "failed",
+			reason: "protocol-fault",
+		});
+		await connector.close();
+	});
+
 	it("RPC-SPI-003 RPC-SPI-006 rejects a mismatched unknown-call terminal", async () => {
 		let forceCalls = 0;
 		const session: IRpcProtocolSession = {
@@ -2831,6 +2875,41 @@ describe("custom Protocol incoming calls", () => {
 			method: "attackerMethod",
 			args: { value: [], weight: 2 } as never,
 		});
+
+		expect(reservation).toBeUndefined();
+		expect(forceCalls).toBe(1);
+		expect(connector.peer.state).toMatchObject({
+			status: "closed",
+			outcome: "failed",
+			reason: "protocol-fault",
+		});
+		expect(
+			events.filter(
+				(event) =>
+					event.type === "call-started" || event.type === "call-finished",
+			),
+		).toEqual([]);
+		await connector.close();
+	});
+
+	it("RPC-SPI-003 RPC-SPI-006 rejects extra own fields before incoming lookup", async () => {
+		let forceCalls = 0;
+		const session: IRpcProtocolSession = {
+			reserveInvocation: () => undefined,
+			forceClose() {
+				forceCalls += 1;
+			},
+		};
+		const { connector, host, sessionHost, events } =
+			await connectProtocolSession(session);
+		const request = Object.assign(Object.create(null), {
+			service: "attacker.service",
+			method: "attackerMethod",
+			args: host.normalizeApplicationArguments([]),
+		}) as Record<string, unknown>;
+		request.__proto__ = 0;
+
+		const reservation = sessionHost.reserveIncomingCall(request as never);
 
 		expect(reservation).toBeUndefined();
 		expect(forceCalls).toBe(1);

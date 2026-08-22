@@ -27,6 +27,10 @@ import {
 	normalizeRpcApplicationValue,
 	rpcApplicationValuesEqual,
 } from "@/utils/rpc-application-value.util";
+import {
+	rpcCallableSchema,
+	rpcNonNullObjectSchema,
+} from "@/utils/rpc-schema.util";
 
 interface ConstructionGuard {
 	active: boolean;
@@ -117,11 +121,10 @@ function createHostBase(
 }
 
 function isRuntimeMember(value: unknown, key: string): boolean {
-	return (
-		typeof value === "object" &&
-		value !== null &&
-		typeof Reflect.get(value, key) === "function"
-	);
+	if (!rpcNonNullObjectSchema.safeParse(value).success) {
+		return false;
+	}
+	return rpcCallableSchema.safeParse(Reflect.get(value as object, key)).success;
 }
 
 function validateRoleRuntime(
@@ -139,11 +142,7 @@ function validateProtocol(
 	value: unknown,
 	roleMember: string,
 ): asserts value is IRpcProtocol {
-	if (
-		typeof value !== "object" ||
-		value === null ||
-		typeof Reflect.get(value, roleMember) !== "function"
-	) {
+	if (!isRuntimeMember(value, roleMember)) {
 		throw new TypeError("protocol must implement both role factories.");
 	}
 }

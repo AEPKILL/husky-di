@@ -15,10 +15,15 @@ import type {
 	RpcConnectorOptions,
 	RpcConnectorRuntimePolicyOptions,
 } from "@/types/rpc-caller.type";
+import {
+	rpcClosedOptionsPlainRecordSchema,
+	rpcPlatformTimerDelaySchema,
+	rpcPositiveSafeIntegerSchema,
+	rpcStringSchema,
+} from "@/utils/rpc-schema.util";
 
 const mebibyte = 1024 * 1024;
 const handshakeTransientBytes = 4 * mebibyte;
-const maximumPlatformTimerDelayMs = 2_147_483_647;
 
 const defaultPolicy: IRpcProtocolRuntimePolicy = Object.freeze({
 	maxSessions: 64,
@@ -65,12 +70,7 @@ const timingPolicyKeys = new Set<keyof IRpcProtocolRuntimePolicy>([
 ]);
 
 function isPlainRecord(value: unknown): value is Record<PropertyKey, unknown> {
-	if (typeof value !== "object" || value === null || Array.isArray(value)) {
-		return false;
-	}
-
-	const prototype = Object.getPrototypeOf(value);
-	return prototype === Object.prototype || prototype === null;
+	return rpcClosedOptionsPlainRecordSchema.safeParse(value).success;
 }
 
 export function readRpcClosedOptionsRecord(
@@ -84,11 +84,13 @@ export function readRpcClosedOptionsRecord(
 
 	const snapshot = Object.create(null) as Record<string, unknown>;
 	for (const key of Reflect.ownKeys(value)) {
-		if (typeof key !== "string" || !allowedKeys.has(key)) {
+		const keyResult = rpcStringSchema.safeParse(key);
+		if (!keyResult.success || !allowedKeys.has(keyResult.data)) {
 			throw new TypeError(`${label} contains an unknown option.`);
 		}
+		const optionKey = keyResult.data;
 
-		const descriptor = Object.getOwnPropertyDescriptor(value, key);
+		const descriptor = Object.getOwnPropertyDescriptor(value, optionKey);
 		if (
 			descriptor === undefined ||
 			!descriptor.enumerable ||
@@ -99,7 +101,7 @@ export function readRpcClosedOptionsRecord(
 			);
 		}
 
-		snapshot[key] = descriptor.value;
+		snapshot[optionKey] = descriptor.value;
 	}
 
 	return Object.freeze(snapshot);
@@ -125,7 +127,7 @@ export function validateRpcPositiveSafeInteger(
 	value: unknown,
 	key: string,
 ): number {
-	if (!Number.isSafeInteger(value) || (value as number) <= 0) {
+	if (!rpcPositiveSafeIntegerSchema.safeParse(value).success) {
 		throw new TypeError(`${key} must be a positive safe integer.`);
 	}
 	return value as number;
@@ -134,7 +136,10 @@ export function validateRpcPositiveSafeInteger(
 function validatePolicy(policy: IRpcProtocolRuntimePolicy): void {
 	for (const key of policyKeys) {
 		const value = validateRpcPositiveSafeInteger(policy[key], key);
-		if (timingPolicyKeys.has(key) && value > maximumPlatformTimerDelayMs) {
+		if (
+			timingPolicyKeys.has(key) &&
+			!rpcPlatformTimerDelaySchema.safeParse(value).success
+		) {
 			throw new TypeError(
 				`${key} must not exceed the platform timer delay limit.`,
 			);

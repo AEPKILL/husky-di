@@ -49,8 +49,6 @@ import type {
 } from "@/types/rpc-exposure.type";
 import type { CreateRpcPeerOptions } from "@/types/rpc-peer.type";
 import {
-	isRpcApplicationArgumentsSnapshot,
-	isRpcApplicationSnapshot,
 	normalizeRpcApplicationArguments,
 	normalizeRpcApplicationValue,
 } from "@/utils/rpc-application-value.util";
@@ -60,6 +58,14 @@ import {
 } from "@/utils/rpc-cancellation.util";
 import { installRpcExposure } from "@/utils/rpc-exposure.util";
 import { createRpcFacade } from "@/utils/rpc-facade.util";
+import {
+	createRpcExpectedUnknownTerminalSchema,
+	rpcCallOutcomeSchema,
+	rpcCommittedInvocationSchema,
+	rpcHandlerTerminalSchema,
+	rpcIncomingCallRequestSchema,
+	rpcInvocationReservationSchema,
+} from "@/utils/rpc-schema.util";
 
 let nextObservationOrdinal = 0;
 
@@ -91,18 +97,14 @@ function invokeRpcHandler(
 	);
 }
 
-const outgoingFailureCodes = new Set([
-	RpcExceptionCodeEnum.canceled,
-	RpcExceptionCodeEnum.unavailable,
-	RpcExceptionCodeEnum.outcomeUnknown,
-	RpcExceptionCodeEnum.handlerFailed,
-	RpcExceptionCodeEnum.unknownService,
-	RpcExceptionCodeEnum.unknownMethod,
-]);
+interface IProtocolFieldsSnapshot {
+	readonly fieldNames: readonly string[];
+	readonly fields: Readonly<Record<string, unknown>>;
+}
 
 function readProtocolFields(
 	value: unknown,
-): ReadonlyMap<string, unknown> | undefined {
+): IProtocolFieldsSnapshot | undefined {
 	try {
 		if (typeof value !== "object" || value === null) {
 			return undefined;
@@ -111,7 +113,8 @@ function readProtocolFields(
 		if (prototype !== Object.prototype && prototype !== null) {
 			return undefined;
 		}
-		const fields = new Map<string, unknown>();
+		const fieldNames: string[] = [];
+		const fields = Object.create(null) as Record<string, unknown>;
 		for (const key of Reflect.ownKeys(value)) {
 			if (typeof key !== "string") {
 				return undefined;
@@ -120,42 +123,18 @@ function readProtocolFields(
 			if (descriptor === undefined || !("value" in descriptor)) {
 				return undefined;
 			}
-			fields.set(key, descriptor.value);
+			fieldNames.push(key);
+			fields[key] = descriptor.value;
 		}
-		return fields;
+		return { fieldNames, fields };
 	} catch {
 		return undefined;
 	}
 }
 
-function hasExactProtocolFields(
-	fields: ReadonlyMap<string, unknown>,
-	keys: readonly string[],
-): boolean {
-	return fields.size === keys.length && keys.every((key) => fields.has(key));
-}
-
 function isRpcCallOutcome(value: unknown): value is RpcCallOutcome {
 	const fields = readProtocolFields(value);
-	if (fields === undefined) {
-		return false;
-	}
-	const type = fields.get("type");
-	if (type === RpcCallTerminalTypeEnum.returnedVoid) {
-		return hasExactProtocolFields(fields, ["type"]);
-	}
-	if (type === RpcCallTerminalTypeEnum.returned) {
-		return (
-			hasExactProtocolFields(fields, ["type", "value"]) &&
-			isRpcApplicationSnapshot(fields.get("value"))
-		);
-	}
-	return (
-		type === RpcCallTerminalTypeEnum.failed &&
-		hasExactProtocolFields(fields, ["type", "code"]) &&
-		typeof fields.get("code") === "string" &&
-		outgoingFailureCodes.has(fields.get("code") as RpcExceptionCodeEnum)
-	);
+	return fields !== undefined && rpcCallOutcomeSchema.safeParse(fields).success;
 }
 
 function isExpectedUnknownTerminal(
@@ -165,9 +144,7 @@ function isExpectedUnknownTerminal(
 	const fields = readProtocolFields(value);
 	return (
 		fields !== undefined &&
-		hasExactProtocolFields(fields, ["type", "code"]) &&
-		fields.get("type") === RpcCallTerminalTypeEnum.failed &&
-		fields.get("code") === code
+		createRpcExpectedUnknownTerminalSchema(code).safeParse(fields).success
 	);
 }
 
@@ -187,28 +164,8 @@ type RpcHandlerTerminal =
 
 function isHandlerTerminal(value: unknown): value is RpcHandlerTerminal {
 	const fields = readProtocolFields(value);
-	if (fields === undefined) {
-		return false;
-	}
-	const type = fields.get("type");
-	if (
-		type === RpcCallTerminalTypeEnum.sessionTerminated ||
-		type === RpcCallTerminalTypeEnum.returnedVoid
-	) {
-		return hasExactProtocolFields(fields, ["type"]);
-	}
-	if (type === RpcCallTerminalTypeEnum.returned) {
-		return (
-			hasExactProtocolFields(fields, ["type", "value"]) &&
-			isRpcApplicationSnapshot(fields.get("value"))
-		);
-	}
-	const code = fields.get("code");
 	return (
-		type === RpcCallTerminalTypeEnum.failed &&
-		hasExactProtocolFields(fields, ["type", "code"]) &&
-		(code === RpcExceptionCodeEnum.canceled ||
-			code === RpcExceptionCodeEnum.handlerFailed)
+		fields !== undefined && rpcHandlerTerminalSchema.safeParse(fields).success
 	);
 }
 
@@ -216,21 +173,9 @@ function isIncomingCallRequest(
 	value: unknown,
 ): value is IRpcProtocolIncomingCallRequest {
 	const fields = readProtocolFields(value);
-	if (
-		fields === undefined ||
-		!hasExactProtocolFields(fields, ["service", "method", "args"])
-	) {
-		return false;
-	}
-	const service = fields.get("service");
-	const method = fields.get("method");
 	return (
-		typeof service === "string" &&
-		service.length > 0 &&
-		typeof method === "string" &&
-		method.length > 0 &&
-		method !== "then" &&
-		isRpcApplicationArgumentsSnapshot(fields.get("args"))
+		fields !== undefined &&
+		rpcIncomingCallRequestSchema.safeParse(fields).success
 	);
 }
 
@@ -413,12 +358,7 @@ export class RpcPeerImpl implements IRpcPeerRuntime {
 		if (reservation === undefined) {
 			return undefined;
 		}
-		if (
-			typeof reservation !== "object" ||
-			reservation === null ||
-			typeof reservation.commit !== "function" ||
-			typeof reservation.release !== "function"
-		) {
+		if (!rpcInvocationReservationSchema.safeParse(reservation).success) {
 			throw this.#protocolFailure(new Error("Invalid invocation reservation."));
 		}
 
@@ -534,12 +474,7 @@ export class RpcPeerImpl implements IRpcPeerRuntime {
 		} catch (error) {
 			throw this.#protocolFailure(error);
 		}
-		if (
-			typeof protocolInvocation !== "object" ||
-			protocolInvocation === null ||
-			typeof protocolInvocation.start !== "function" ||
-			typeof protocolInvocation.cancel !== "function"
-		) {
+		if (!rpcCommittedInvocationSchema.safeParse(protocolInvocation).success) {
 			throw this.#protocolFailure(new Error("Invalid committed invocation."));
 		}
 

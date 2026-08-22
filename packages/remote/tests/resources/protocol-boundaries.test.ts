@@ -177,6 +177,15 @@ function createSession(
 }
 
 describe("Default RPC Protocol resource boundaries", () => {
+	it("RPC-WIRE-003 rejects reserved-looking unknown Error payload members", () => {
+		const source =
+			'{"kind":"message","seq":1,"message":{"kind":"error","callId":"1","error":{"code":"canceled","message":"failed","__proto__":0}}}';
+
+		expect(() =>
+			codec.decode(encoder.encode(source), RpcDecodePhaseEnum.active),
+		).toThrow("RPC error payload contains an unknown member.");
+	});
+
 	it("RPC-VALUE-004 RPC-WIRE-003 round-trips Application Value depth and node boundaries through active envelopes", () => {
 		const boundaryCases = [
 			{
