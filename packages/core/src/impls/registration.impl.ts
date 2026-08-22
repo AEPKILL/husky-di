@@ -216,10 +216,11 @@ function resolveProviderDefinition<T>(
 			);
 		}
 
-		if (
+		// An optional alias container selector must be callable when present.
+		const getContainerIsInvalid =
 			aliasOptions.getContainer !== undefined &&
-			typeof aliasOptions.getContainer !== "function"
-		) {
+			typeof aliasOptions.getContainer !== "function";
+		if (getContainerIsInvalid) {
 			throw new CoreException(
 				CoreErrorCodeEnum.E_INVALID_PROVIDER,
 				"getContainer must be a function.",

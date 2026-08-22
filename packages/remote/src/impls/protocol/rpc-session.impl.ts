@@ -327,14 +327,15 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 		host: IRpcProtocolSessionHost,
 	): RpcBindingCandidate<TKey> {
 		const proofKey = this._proofKey;
-		if (
+		// Fresh binding is legal only for an open, unbound, never-recovered Session.
+		const cannotPrepareFreshBinding =
 			this._closed ||
 			proofKey === undefined ||
 			this._sessionHost !== undefined ||
 			this._binding !== undefined ||
 			this._bindingEpoch !== 0 ||
-			this._recovering
-		) {
+			this._recovering;
+		if (cannotPrepareFreshBinding) {
 			throw new Error("Default RPC fresh binding candidate is invalid.");
 		}
 		const candidate = Object.freeze({}) as RpcBindingCandidate<TKey>;
@@ -351,14 +352,15 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 	beginInitiatorResume(): RpcInitiatorResume<TKey> {
 		const proofKey = this._proofKey;
 		const recoveryDeadline = this._recoveryDeadline;
-		if (
+		// Resume requires live retained authority within the active recovery window.
+		const sessionIsNotRecoverable =
 			this._closed ||
 			!this._recovering ||
 			this._binding !== undefined ||
 			proofKey === undefined ||
 			recoveryDeadline === undefined ||
-			Date.now() >= recoveryDeadline
-		) {
+			Date.now() >= recoveryDeadline;
+		if (sessionIsNotRecoverable) {
 			throw new Error("Default RPC Session is not recoverable.");
 		}
 		if (this._resumeAttempt >= Number.MAX_SAFE_INTEGER) {
@@ -444,12 +446,13 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 	): RpcResponderResumeReview<TKey> {
 		const proofKey = this._responderProofCandidates.get(proof);
 		this._responderProofCandidates.delete(proof);
-		if (
+		// A responder proof must retain current Session authority and a newer attempt.
+		const responderProofIsInvalid =
 			proofKey === undefined ||
 			this._closed ||
 			this._proofKey !== proofKey ||
-			!this._canAcceptResumeAttempt(request.resumeAttempt)
-		) {
+			!this._canAcceptResumeAttempt(request.resumeAttempt);
+		if (responderProofIsInvalid) {
 			return Object.freeze({ kind: "generic-reject" });
 		}
 		const facts = this._snapshotCandidateFacts(proofKey);
@@ -622,7 +625,10 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 	}
 
 	_activateBinding(binding: RpcBindingEpochImpl<TKey>): boolean {
-		if (this._binding !== binding || binding._active || this._closed) {
+		// Activation applies once to the current binding of an open Session.
+		const cannotActivateBinding =
+			this._binding !== binding || binding._active || this._closed;
+		if (cannotActivateBinding) {
 			return false;
 		}
 		binding._active = true;
@@ -646,7 +652,10 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 	}
 
 	_receiveBinding(binding: RpcBindingEpochImpl<TKey>, bytes: Uint8Array): void {
-		if (this._closed || this._binding !== binding || !binding._active) {
+		// Ingress is accepted only from the active current binding of an open Session.
+		const bindingCannotReceive =
+			this._closed || this._binding !== binding || !binding._active;
+		if (bindingCannotReceive) {
 			this._deferDirectClose(binding._endpoint);
 			return;
 		}
@@ -704,10 +713,11 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 		if (this._binding !== binding || this._closed) {
 			return;
 		}
-		if (
+		// Protocol and resource failures terminate the Session instead of recovering it.
+		const isTerminalFailure =
 			reason === RpcEndpointFailureEnum.protocol ||
-			reason === RpcEndpointFailureEnum.resource
-		) {
+			reason === RpcEndpointFailureEnum.resource;
+		if (isTerminalFailure) {
 			this._fault(
 				reason === RpcEndpointFailureEnum.protocol
 					? RpcCloseReasonEnum.protocolFault
@@ -781,12 +791,13 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 		if (this._binding?._endpoint === endpoint) {
 			return "Default RPC binding candidate reused its current Endpoint.";
 		}
-		if (
+		// Binding continuity requires a safe newer epoch and a valid peer cursor.
+		const continuityIsInvalid =
 			!Number.isSafeInteger(candidate.nextBindingEpoch) ||
 			candidate.nextBindingEpoch <= this._bindingEpoch ||
 			this._classifyPeerCursor(candidate.peerReceivedThrough) !==
-				RpcPeerCursorClassificationEnum.valid
-		) {
+				RpcPeerCursorClassificationEnum.valid;
+		if (continuityIsInvalid) {
 			return "Default RPC binding candidate contradicts retained continuity.";
 		}
 		if (candidate.kind === "fresh") {
@@ -845,14 +856,15 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 		const maximumPendingBytes = Math.floor(
 			this._host.policy.maxRetainedBytesPerSession / 4,
 		);
-		if (
+		// Pending invocation admission requires an active Session and count/byte capacity.
+		const cannotReserveInvocation =
 			this._closed ||
 			this._draining ||
 			this._invocationCount >=
 				this._host.policy.maxPendingInvocationsPerSession ||
 			!Number.isSafeInteger(pendingCharge) ||
-			pendingCharge > maximumPendingBytes - this._pendingInvocationBytes
-		) {
+			pendingCharge > maximumPendingBytes - this._pendingInvocationBytes;
+		if (cannotReserveInvocation) {
 			return undefined;
 		}
 		const retainedBytesReservation = this.reserveRetainedBytes(pendingCharge);
@@ -936,10 +948,10 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 	}
 
 	_receiveEnvelope(envelope: RpcMessageEnvelope): boolean {
-		if (
-			envelope.ackThrough !== undefined &&
-			!this._applyAck(envelope.ackThrough)
-		) {
+		// An included ACK must advance only through retained sent evidence.
+		const ackIsInvalid =
+			envelope.ackThrough !== undefined && !this._applyAck(envelope.ackThrough);
+		if (ackIsInvalid) {
 			return false;
 		}
 		const expected = this._receivedThrough + 1;
@@ -1122,7 +1134,10 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 		entry: IRpcIncomingEntry,
 		outcome: RpcHandlerOutcome,
 	): void {
-		if (this._closed || entry.terminalSelected || entry.call === undefined) {
+		// Handler completion applies once while its admitted call remains live.
+		const handlerOutcomeIsStale =
+			this._closed || entry.terminalSelected || entry.call === undefined;
+		if (handlerOutcomeIsStale) {
 			return;
 		}
 		entry.terminalSelected = true;
@@ -1255,12 +1270,13 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 
 	_pump(): void {
 		const binding = this._binding;
-		if (
+		// Sending requires an active current binding whose Endpoint is idle.
+		const cannotPump =
 			this._closed ||
 			binding === undefined ||
 			!binding._active ||
-			!binding._endpoint.isSendIdle
-		) {
+			!binding._endpoint.isSendIdle;
+		if (cannotPump) {
 			return;
 		}
 
@@ -1308,10 +1324,11 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 			return;
 		}
 
-		if (
+		// Control traffic wins its turn when present and selected by the lane scheduler.
+		const shouldSendControl =
 			control !== undefined &&
-			(pending === undefined || this._nextSequencedLane === "control")
-		) {
+			(pending === undefined || this._nextSequencedLane === "control");
+		if (shouldSendControl) {
 			this._controlQueue.shift();
 			this._nextSequencedLane = "data";
 			this._probeSentLast = false;
@@ -1341,11 +1358,12 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 		binding: RpcBindingEpochImpl<TKey>,
 		entry: IRpcInvocationEntry,
 	): void {
-		if (
+		// Admission stops before either call or delivery sequencing can overflow.
+		const invocationCounterIsExhausted =
 			this._outgoingCallOrdinalExhausted ||
 			!Number.isSafeInteger(this._nextOutgoingCallOrdinal) ||
-			this._nextOutgoingSequence > RPC_LAST_ORDINARY_SEQUENCE
-		) {
+			this._nextOutgoingSequence > RPC_LAST_ORDINARY_SEQUENCE;
+		if (invocationCounterIsExhausted) {
 			this._beginCounterDrain();
 			return;
 		}
@@ -1457,10 +1475,11 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 		queued: IRpcQueuedSemantic,
 	): void {
 		const { message, replay } = queued;
-		if (
+		// Sequenced delivery stops before the safe-integer or wire sequence limit.
+		const outgoingSequenceIsExhausted =
 			this._outgoingSequenceExhausted ||
-			!Number.isSafeInteger(this._nextOutgoingSequence)
-		) {
+			!Number.isSafeInteger(this._nextOutgoingSequence);
+		if (outgoingSequenceIsExhausted) {
 			this._releaseReplayEntry(replay);
 			this._terminateRetainedSession(
 				RpcCloseReasonEnum.counterExhaustion,
@@ -1489,10 +1508,11 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 		}
 		this._highestSentSequence = sequence;
 		this._replay.set(sequence, replay);
-		if (
+		// Result and error records both carry retained terminal payload evidence.
+		const isTerminalPayload =
 			message.kind === RpcWireRecordKindEnum.result ||
-			message.kind === RpcWireRecordKindEnum.error
-		) {
+			message.kind === RpcWireRecordKindEnum.error;
+		if (isTerminalPayload) {
 			const incoming = this._incomingCalls.get(message.callId);
 			if (incoming?.terminalSelected) {
 				incoming.terminalSequence = sequence;
@@ -1560,6 +1580,13 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 		);
 		const isTerminalPayload = message.kind === RpcWireRecordKindEnum.result;
 		let retainedBytesReservation: IRpcRetainedBytesReservation | undefined;
+		// Ordinary replay must fit aggregate entry, byte, and terminal-payload budgets.
+		const ordinaryReplayCapacityExceeded =
+			this._ordinaryReplayCount >= maximumEntries ||
+			charge > maximumBytes - this._replayBytes ||
+			(isTerminalPayload &&
+				(this._terminalPayloadCount >= 256 ||
+					charge > maximumTerminalBytes - this._terminalReplayBytes));
 		if (resourceClass === "terminal") {
 			if (ordinaryCharge > charge || this._terminalReplayCount >= 256) {
 				return undefined;
@@ -1570,13 +1597,7 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 				return undefined;
 			}
 			this._cancelReplayCount += 1;
-		} else if (
-			this._ordinaryReplayCount >= maximumEntries ||
-			charge > maximumBytes - this._replayBytes ||
-			(isTerminalPayload &&
-				(this._terminalPayloadCount >= 256 ||
-					charge > maximumTerminalBytes - this._terminalReplayBytes))
-		) {
+		} else if (ordinaryReplayCapacityExceeded) {
 			return undefined;
 		} else {
 			retainedBytesReservation = this.reserveRetainedBytes(charge);
@@ -1712,10 +1733,11 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 			(sequence) => sequence > ackThrough,
 		);
 		for (const [callId, incoming] of this._incomingCalls) {
-			if (
+			// ACK retirement applies only after the incoming terminal was sequenced and acknowledged.
+			const terminalIsAcknowledged =
 				incoming.terminalSequence !== undefined &&
-				incoming.terminalSequence <= ackThrough
-			) {
+				incoming.terminalSequence <= ackThrough;
+			if (terminalIsAcknowledged) {
 				this._incomingCalls.delete(callId);
 			}
 		}
@@ -2018,7 +2040,10 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 	}
 
 	_recordInboundActivity(binding: RpcBindingEpochImpl<TKey>): void {
-		if (this._binding !== binding || !binding._active || this._closed) {
+		// Activity belongs only to the active current binding of an open Session.
+		const bindingIsStale =
+			this._binding !== binding || !binding._active || this._closed;
+		if (bindingIsStale) {
 			return;
 		}
 		const now = Date.now();
@@ -2031,7 +2056,10 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 
 	_scheduleHealthTimer(binding: RpcBindingEpochImpl<TKey>): void {
 		this._stopHealthTimer();
-		if (this._binding !== binding || !binding._active || this._closed) {
+		// Health checks run only for the active current binding of an open Session.
+		const bindingIsStale =
+			this._binding !== binding || !binding._active || this._closed;
+		if (bindingIsStale) {
 			return;
 		}
 		const silenceAt = Math.max(
@@ -2047,7 +2075,10 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 
 	_healthTimerFired(binding: RpcBindingEpochImpl<TKey>): void {
 		this._healthTimer = undefined;
-		if (this._binding !== binding || !binding._active || this._closed) {
+		// A timer firing from any replaced or inactive binding has no authority.
+		const timerIsStale =
+			this._binding !== binding || !binding._active || this._closed;
+		if (timerIsStale) {
 			return;
 		}
 		const now = Date.now();
@@ -2062,10 +2093,11 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 			this._scheduleHealthTimer(binding);
 			return;
 		}
-		if (
+		// Silence is authoritative only after both the activity deadline and stall grace expire.
+		const bindingIsSilent =
 			now - this._lastInboundActivityAt >= this._host.policy.silenceTimeoutMs &&
-			now >= this._healthStallGraceUntil
-		) {
+			now >= this._healthStallGraceUntil;
+		if (bindingIsSilent) {
 			this._enterRecovery(new Error("Default RPC binding became silent."));
 			return;
 		}
@@ -2086,11 +2118,12 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 	}
 
 	_checkGracefulShutdown(): void {
-		if (
+		// Drain evaluation runs only after shutdown starts and before closure begins.
+		const shouldNotCheckGracefulShutdown =
 			(this._shutdownTask === undefined && !this._counterDraining) ||
 			this._closed ||
-			this._gracefulCloseStarted
-		) {
+			this._gracefulCloseStarted;
+		if (shouldNotCheckGracefulShutdown) {
 			return;
 		}
 		const binding = this._binding;
@@ -2105,7 +2138,8 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 		const incomingActive = [...this._incomingCalls.values()].some(
 			(entry) => !entry.terminalSelected,
 		);
-		if (
+		// Graceful close waits for all retained work and binding I/O to drain.
+		const drainIsIncomplete =
 			this._invocations.size !== 0 ||
 			incomingActive ||
 			this._pendingInvocations.some((entry) => !entry.retired) ||
@@ -2116,8 +2150,8 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 			this._ackDue ||
 			!binding._active ||
 			!binding._endpoint.isIngressIdle ||
-			!binding._endpoint.isSendIdle
-		) {
+			!binding._endpoint.isSendIdle;
+		if (drainIsIncomplete) {
 			return;
 		}
 		this._gracefulCloseStarted = true;

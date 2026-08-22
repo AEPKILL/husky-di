@@ -31,10 +31,11 @@ function findHandler(
 			visited.add(target);
 			const descriptor = Object.getOwnPropertyDescriptor(target, method);
 			if (descriptor !== undefined) {
-				if (
+				// Exposed handlers must be callable data properties, never accessors.
+				const handlerDescriptorIsInvalid =
 					!("value" in descriptor) ||
-					!rpcCallableSchema.safeParse(descriptor.value).success
-				) {
+					!rpcCallableSchema.safeParse(descriptor.value).success;
+				if (handlerDescriptorIsInvalid) {
 					throw new TypeError(
 						`Selected implementation member ${method} must be a data function.`,
 					);
@@ -85,10 +86,11 @@ function assertNameAvailable(
 	registry: RpcExposureRegistry,
 	conflictingRegistries: readonly RpcExposureRegistry[],
 ): void {
-	if (
+	// A wire name must be absent from both the target and every conflicting registry.
+	const wireNameIsTaken =
 		registry.has(wireName) ||
-		conflictingRegistries.some((candidate) => candidate.has(wireName))
-	) {
+		conflictingRegistries.some((candidate) => candidate.has(wireName));
+	if (wireNameIsTaken) {
 		throw new TypeError(`RPC wire service ${wireName} is already exposed.`);
 	}
 }

@@ -48,7 +48,10 @@ export function assertValidResolveOptions<T>(
 		);
 	}
 
-	if (hasDefaultValue && multiple && !Array.isArray(defaultValue)) {
+	// Multiple resolution accepts only an array-shaped default value.
+	const hasInvalidMultipleDefault =
+		hasDefaultValue && multiple && !Array.isArray(defaultValue);
+	if (hasInvalidMultipleDefault) {
 		throw new ResolveException(
 			CoreErrorCodeEnum.E_INVALID_OPTIONS,
 			`When "multiple" is true, "defaultValue" must be an array for service identifier "${identifierName}".`,

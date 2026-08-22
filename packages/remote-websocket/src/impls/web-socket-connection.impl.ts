@@ -74,7 +74,10 @@ export class WebSocketConnectionImpl implements IRpcConnection {
 			return;
 		}
 		const code = Reflect.get(event, "code");
-		if (this._state === "closing" || code === 1000 || code === 1001) {
+		// Local shutdown and the standard normal close codes are clean terminals.
+		const closedNormally =
+			this._state === "closing" || code === 1000 || code === 1001;
+		if (closedNormally) {
 			this._finish(undefined, true);
 			return;
 		}
@@ -187,10 +190,11 @@ export class WebSocketConnectionImpl implements IRpcConnection {
 		if (bufferedAmount === 0) {
 			this._outboundQueuedMessages = 0;
 		}
-		if (
+		// Immediate send admission requires both message-count and byte capacity.
+		const canSendImmediately =
 			this._outboundQueuedMessages < this._limits.maxQueuedMessages &&
-			bufferedAmount + message.byteLength <= this._limits.maxQueuedBytes
-		) {
+			bufferedAmount + message.byteLength <= this._limits.maxQueuedBytes;
+		if (canSendImmediately) {
 			try {
 				this._socket.send(message);
 				this._outboundQueuedMessages =
@@ -281,11 +285,12 @@ export class WebSocketConnectionImpl implements IRpcConnection {
 			return;
 		}
 
-		if (
+		// Every inbound entry must fit both the per-message and aggregate queue limits.
+		const exceedsInboundLimits =
 			entry.size > this._limits.maxMessageBytes ||
 			this._inboundQueue.length >= this._limits.maxQueuedMessages ||
-			this._inboundQueuedBytes + entry.size > this._limits.maxQueuedBytes
-		) {
+			this._inboundQueuedBytes + entry.size > this._limits.maxQueuedBytes;
+		if (exceedsInboundLimits) {
 			this._failAndTerminate(
 				new RangeError(
 					"The inbound WebSocket message queue limit was exceeded.",
@@ -299,11 +304,12 @@ export class WebSocketConnectionImpl implements IRpcConnection {
 	}
 
 	private _drainInbound(): void {
-		if (
+		// A drain starts only for an active, idle consumer with queued work.
+		const cannotStartInboundDrain =
 			this._state !== "active" ||
 			this._drainingInbound ||
-			this._inboundQueue.length === 0
-		) {
+			this._inboundQueue.length === 0;
+		if (cannotStartInboundDrain) {
 			return;
 		}
 		this._drainingInbound = true;

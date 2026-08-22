@@ -44,13 +44,14 @@ export function createWebSocketConnectorAdapter(
 
 function getGlobalNetworkStatus(): IWebSocketNetworkStatus | undefined {
 	const browserNavigator = globalThis.navigator;
-	if (
+	// Network status requires the browser event API and a boolean online signal.
+	const networkStatusIsUnavailable =
 		typeof globalThis.addEventListener !== "function" ||
 		typeof globalThis.removeEventListener !== "function" ||
 		typeof browserNavigator !== "object" ||
 		browserNavigator === null ||
-		typeof browserNavigator.onLine !== "boolean"
-	) {
+		typeof browserNavigator.onLine !== "boolean";
+	if (networkStatusIsUnavailable) {
 		return undefined;
 	}
 

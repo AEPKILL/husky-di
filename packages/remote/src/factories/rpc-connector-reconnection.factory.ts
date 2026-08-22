@@ -50,7 +50,7 @@ function validateConnector(value: unknown): asserts value is IRpcConnector {
 	const peer = Reflect.get(connector, "peer") as unknown;
 	const state = Reflect.get(connector, "state") as unknown;
 	// Preserve the legacy short-circuit reads for potentially accessor-backed SPI objects.
-	if (
+	const connectorShapeIsInvalid =
 		!rpcCallableSchema.safeParse(Reflect.get(connector, "connect")).success ||
 		!rpcNonNullObjectSchema.safeParse(state).success ||
 		!hasObservableShape(Reflect.get(connector, "state$")) ||
@@ -58,8 +58,8 @@ function validateConnector(value: unknown): asserts value is IRpcConnector {
 		!rpcObjectTypeSchema.safeParse(Reflect.get(peer as object, "state"))
 			.success ||
 		rpcNullSchema.safeParse(Reflect.get(peer as object, "state")).success ||
-		!hasObservableShape(Reflect.get(peer as object, "state$"))
-	) {
+		!hasObservableShape(Reflect.get(peer as object, "state$"));
+	if (connectorShapeIsInvalid) {
 		throw new TypeError("connector has an invalid shape.");
 	}
 }
@@ -76,11 +76,12 @@ function snapshotRetryDelays(value: unknown): readonly number[] {
 	const snapshot: number[] = [];
 	for (let index = 0; index < (length as number); index += 1) {
 		const descriptor = Reflect.getOwnPropertyDescriptor(delays, `${index}`);
-		if (
+		// Retry delays must be represented by data properties containing valid delays.
+		const retryDelayIsInvalid =
 			descriptor === undefined ||
 			!("value" in descriptor) ||
-			!rpcRetryDelaySchema.safeParse(descriptor.value).success
-		) {
+			!rpcRetryDelaySchema.safeParse(descriptor.value).success;
+		if (retryDelayIsInvalid) {
 			throw new TypeError(
 				"retryDelaysMs must contain non-negative safe integers.",
 			);

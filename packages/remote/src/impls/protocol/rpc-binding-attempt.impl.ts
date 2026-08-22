@@ -193,11 +193,10 @@ export class RpcBindingAttemptImpl<TKey> implements IRpcBindingAttempt<TKey> {
 	}
 
 	transferBinding(binding: RpcBindingEpoch, reply?: Uint8Array): Promise<void> {
-		if (
-			this._terminal ||
-			!this._bindingClaimed ||
-			this._binding !== undefined
-		) {
+		// Transfer is legal exactly once after the attempt has claimed a binding.
+		const cannotTransferBinding =
+			this._terminal || !this._bindingClaimed || this._binding !== undefined;
+		if (cannotTransferBinding) {
 			return Promise.resolve();
 		}
 		this._binding = binding;

@@ -91,11 +91,12 @@ export function readRpcClosedOptionsRecord(
 		const optionKey = keyResult.data;
 
 		const descriptor = Object.getOwnPropertyDescriptor(value, optionKey);
-		if (
+		// Policy options must be enumerable data properties to avoid accessor effects.
+		const optionDescriptorIsInvalid =
 			descriptor === undefined ||
 			!descriptor.enumerable ||
-			!("value" in descriptor)
-		) {
+			!("value" in descriptor);
+		if (optionDescriptorIsInvalid) {
 			throw new TypeError(
 				`${label} options must be enumerable data properties.`,
 			);
@@ -136,10 +137,11 @@ export function validateRpcPositiveSafeInteger(
 function validatePolicy(policy: IRpcProtocolRuntimePolicy): void {
 	for (const key of policyKeys) {
 		const value = validateRpcPositiveSafeInteger(policy[key], key);
-		if (
+		// Timer-backed policy values must also fit the platform timer range.
+		const exceedsPlatformTimerLimit =
 			timingPolicyKeys.has(key) &&
-			!rpcPlatformTimerDelaySchema.safeParse(value).success
-		) {
+			!rpcPlatformTimerDelaySchema.safeParse(value).success;
+		if (exceedsPlatformTimerLimit) {
 			throw new TypeError(
 				`${key} must not exceed the platform timer delay limit.`,
 			);

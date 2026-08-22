@@ -139,10 +139,11 @@ export class RpcEndpointImpl implements IRpcEndpoint {
 			);
 			return;
 		}
-		if (
+		// Ingress admission must fit both record-count and retained-byte limits.
+		const ingressCapacityExceeded =
 			this._ingress.length >= RPC_MAX_INGRESS_RECORDS ||
-			this._ingressBytes + message.byteLength > RPC_MAX_INGRESS_BYTES
-		) {
+			this._ingressBytes + message.byteLength > RPC_MAX_INGRESS_BYTES;
+		if (ingressCapacityExceeded) {
 			this._fail(
 				RpcEndpointFailureEnum.resource,
 				new Error("RPC Connection ingress backlog overflowed."),
@@ -150,10 +151,11 @@ export class RpcEndpointImpl implements IRpcEndpoint {
 			return;
 		}
 		let reservation: IRpcRetainedBytesReservation | undefined;
-		if (
+		// Retained ingress accounting begins after the first bootstrap message.
+		const shouldReserveIngressBytes =
 			this._receivedFirstIngressMessage &&
-			this._reserveRetainedBytes !== undefined
-		) {
+			this._reserveRetainedBytes !== undefined;
+		if (shouldReserveIngressBytes) {
 			reservation = this._reserveRetainedBytes(message.byteLength);
 			if (reservation === undefined) {
 				this._fail(
@@ -194,14 +196,14 @@ export class RpcEndpointImpl implements IRpcEndpoint {
 				return;
 			}
 			this._ingressBytes -= entry.message.byteLength;
-			if (
-				entry.reservation !== undefined &&
-				this._reserveRetainedBytes !== undefined
-			) {
-				entry.reservation.release();
-				entry.reservation = this._reserveRetainedBytes(
-					entry.message.byteLength,
-				);
+			const reservation = entry.reservation;
+			const reserveRetainedBytes = this._reserveRetainedBytes;
+			// Queued ingress releases its reservation only while the reservation port remains active.
+			const shouldReleaseReservation =
+				reservation !== undefined && reserveRetainedBytes !== undefined;
+			if (shouldReleaseReservation) {
+				reservation.release();
+				entry.reservation = reserveRetainedBytes(entry.message.byteLength);
 				if (entry.reservation === undefined) {
 					this._fail(
 						RpcEndpointFailureEnum.resource,
@@ -255,13 +257,14 @@ export class RpcEndpointImpl implements IRpcEndpoint {
 	_sendProgressTimerFired(generation: number): void {
 		this._sendProgressTimer = undefined;
 		const timeoutMs = this._sendProgressTimeoutMs;
-		if (
+		// Only the live generation of an active blocked send may time out.
+		const sendProgressTimerIsStale =
 			timeoutMs === undefined ||
 			this._closed ||
 			this._failed ||
 			!this._sendBusy ||
-			this._sendGeneration !== generation
-		) {
+			this._sendGeneration !== generation;
+		if (sendProgressTimerIsStale) {
 			return;
 		}
 		const now = Date.now();

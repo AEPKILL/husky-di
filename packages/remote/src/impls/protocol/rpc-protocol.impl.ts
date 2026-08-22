@@ -124,10 +124,10 @@ class RpcConnectorRuntime<TKey> implements IRpcProtocolConnectorRuntime {
 			);
 		}
 		const retainedSession = this._session;
-		if (
-			retainedSession !== undefined &&
-			retainedSession.recovery === undefined
-		) {
+		// A retained Connector Session can bind only while it is recovering.
+		const retainedSessionIsNotRecovering =
+			retainedSession !== undefined && retainedSession.recovery === undefined;
+		if (retainedSessionIsNotRecovering) {
 			return Promise.reject(
 				new Error("Default RPC Connector Session is not recovering."),
 			);
@@ -247,11 +247,12 @@ class RpcConnectorRuntime<TKey> implements IRpcProtocolConnectorRuntime {
 					record: requestWithoutProof,
 				}),
 			);
-			if (
+			// The signed request remains usable only for the current Session resume candidate.
+			const resumeCandidateIsStale =
 				!this._isCurrent(attempt) ||
 				state.session !== session ||
-				!session.confirmInitiatorResume(resume)
-			) {
+				!session.confirmInitiatorResume(resume);
+			if (resumeCandidateIsStale) {
 				attempt.fail(
 					new Error("Default RPC initiator resume candidate became stale."),
 				);
@@ -295,11 +296,12 @@ class RpcConnectorRuntime<TKey> implements IRpcProtocolConnectorRuntime {
 		const state = this._attemptStates.get(attempt);
 		const request = state?.request;
 		const requestAdmission = state?.requestAdmission;
-		if (
+		// A fresh accept is valid only after its matching fresh request was admitted.
+		const freshRequestStateIsMissing =
 			request === undefined ||
 			request.kind !== RpcWireRecordKindEnum.fresh ||
-			requestAdmission === undefined
-		) {
+			requestAdmission === undefined;
+		if (freshRequestStateIsMissing) {
 			attempt.fail(
 				new Error("Default RPC received accept before sending fresh."),
 			);
@@ -388,13 +390,14 @@ class RpcConnectorRuntime<TKey> implements IRpcProtocolConnectorRuntime {
 		const resume = state?.resume;
 		const request = state?.request;
 		const requestAdmission = state?.requestAdmission;
-		if (
+		// A resume outcome requires the complete matching request and Session state.
+		const resumeRequestStateIsMissing =
 			session === undefined ||
 			resume === undefined ||
 			request === undefined ||
 			request.kind !== RpcWireRecordKindEnum.resume ||
-			requestAdmission === undefined
-		) {
+			requestAdmission === undefined;
+		if (resumeRequestStateIsMissing) {
 			attempt.fail(
 				new Error("Default RPC received a resume outcome before its request."),
 			);
@@ -419,11 +422,12 @@ class RpcConnectorRuntime<TKey> implements IRpcProtocolConnectorRuntime {
 						record: outcome,
 					}),
 				);
-				if (
+				// An authenticated reject must still belong to the live resume candidate.
+				const authenticatedRejectIsInvalid =
 					!valid ||
 					!this._isCurrent(attempt) ||
-					!session.confirmInitiatorResume(resume)
-				) {
+					!session.confirmInitiatorResume(resume);
+				if (authenticatedRejectIsInvalid) {
 					throw new Error(
 						"Default RPC authenticated resume reject is invalid.",
 					);
@@ -456,11 +460,12 @@ class RpcConnectorRuntime<TKey> implements IRpcProtocolConnectorRuntime {
 					record: outcome,
 				}),
 			);
-			if (
+			// An authenticated accept must still belong to the live resume candidate.
+			const resumeAcceptIsInvalid =
 				!valid ||
 				!this._isCurrent(attempt) ||
-				!session.confirmInitiatorResume(resume)
-			) {
+				!session.confirmInitiatorResume(resume);
+			if (resumeAcceptIsInvalid) {
 				throw new Error("Default RPC resume accept proof is invalid or stale.");
 			}
 			const preparation = session.prepareInitiatorBinding(resume, {
@@ -510,10 +515,11 @@ class RpcConnectorRuntime<TKey> implements IRpcProtocolConnectorRuntime {
 		candidate: RpcBindingCandidate<TKey>,
 	): Promise<void> {
 		const provisional = attempt.holdsProvisionalSession(session);
-		if (
+		// Installation requires the current attempt to retain the expected Session ownership.
+		const sessionOwnerChanged =
 			!this._isCurrent(attempt) ||
-			(provisional ? this._session !== undefined : this._session !== session)
-		) {
+			(provisional ? this._session !== undefined : this._session !== session);
+		if (sessionOwnerChanged) {
 			attempt.fail(new Error("Default RPC Connector Session owner changed."));
 			return;
 		}
@@ -569,10 +575,11 @@ class RpcAcceptorRuntime<TKey> implements IRpcProtocolAcceptorRuntime {
 	}
 
 	accept(connection: IRpcConnection, signal: AbortSignal): Promise<void> {
-		if (
+		// New handshakes require an open runtime and an available handshake slot.
+		const handshakeIsUnavailable =
 			this._closing ||
-			this._handshakeSlotsInUse >= this._host.policy.maxHandshakes
-		) {
+			this._handshakeSlotsInUse >= this._host.policy.maxHandshakes;
+		if (handshakeIsUnavailable) {
 			closeUnboundConnection(connection);
 			return Promise.reject(
 				new Error("Default RPC handshake capacity is full."),
@@ -689,10 +696,10 @@ class RpcAcceptorRuntime<TKey> implements IRpcProtocolAcceptorRuntime {
 				this._options.cryptography.deriveProofKey(secret.bytes, sessionId),
 			);
 			const state = this._attemptStates.get(attempt);
-			if (
-				!this._isCurrent(attempt) ||
-				state?.provisionalSessionId !== sessionId
-			) {
+			// Derived proof authority belongs only to the live reserved fresh Session.
+			const freshCandidateIsStale =
+				!this._isCurrent(attempt) || state?.provisionalSessionId !== sessionId;
+			if (freshCandidateIsStale) {
 				return;
 			}
 			const acceptWithoutProof = Object.freeze({
@@ -711,10 +718,10 @@ class RpcAcceptorRuntime<TKey> implements IRpcProtocolAcceptorRuntime {
 					record: acceptWithoutProof,
 				}),
 			);
-			if (
-				!this._isCurrent(attempt) ||
-				state?.provisionalSessionId !== sessionId
-			) {
+			// The signed accept belongs only to the live reserved fresh Session.
+			const freshAcceptIsStale =
+				!this._isCurrent(attempt) || state?.provisionalSessionId !== sessionId;
+			if (freshAcceptIsStale) {
 				return;
 			}
 			const accept = Object.freeze({
@@ -724,10 +731,11 @@ class RpcAcceptorRuntime<TKey> implements IRpcProtocolAcceptorRuntime {
 			const protectedSessionReservation = state?.protectedSessionReservation;
 			const transferProtectedSessionReservation =
 				state?.transferProtectedSessionReservation;
-			if (
+			// Fresh Session creation requires both the reservation and its transfer lease.
+			const protectedReservationIsMissing =
 				protectedSessionReservation === undefined ||
-				transferProtectedSessionReservation === undefined
-			) {
+				transferProtectedSessionReservation === undefined;
+			if (protectedReservationIsMissing) {
 				throw new Error("Default RPC protected Session reservation was lost.");
 			}
 			let session: IRpcSession<TKey>;
@@ -801,10 +809,11 @@ class RpcAcceptorRuntime<TKey> implements IRpcProtocolAcceptorRuntime {
 		} catch {
 			// A syntactically valid but unverifiable proof is a generic rejection.
 		}
-		if (
+		// Verification remains authoritative only for the current retained Session.
+		const responderProofIsStale =
 			!this._isCurrent(attempt) ||
-			this._sessions.get(request.sessionId) !== session
-		) {
+			this._sessions.get(request.sessionId) !== session;
+		if (responderProofIsStale) {
 			attempt.fail(new Error("Default RPC responder proof became stale."));
 			return;
 		}
@@ -831,10 +840,11 @@ class RpcAcceptorRuntime<TKey> implements IRpcProtocolAcceptorRuntime {
 		session: IRpcSession<TKey>,
 		candidate: RpcResponderBindingCandidate<TKey>,
 	): Promise<void> {
-		if (
+		// Resume acceptance starts only for the live attempt's retained Session.
+		const resumeCandidateIsStale =
 			!this._isCurrent(attempt) ||
-			this._sessions.get(request.sessionId) !== session
-		) {
+			this._sessions.get(request.sessionId) !== session;
+		if (resumeCandidateIsStale) {
 			return;
 		}
 		const responderNonce = this._options.cryptography.createRandomCarrier();
@@ -932,10 +942,11 @@ class RpcAcceptorRuntime<TKey> implements IRpcProtocolAcceptorRuntime {
 					record: rejectWithoutProof,
 				}),
 			);
-			if (
+			// The signed continuity rejection belongs only to the live retained Session.
+			const continuityCandidateIsStale =
 				!this._isCurrent(attempt) ||
-				this._sessions.get(request.sessionId) !== session
-			) {
+				this._sessions.get(request.sessionId) !== session;
+			if (continuityCandidateIsStale) {
 				return;
 			}
 			if (attempt.claim() === undefined) {
@@ -998,11 +1009,12 @@ class RpcAcceptorRuntime<TKey> implements IRpcProtocolAcceptorRuntime {
 		if (retainedAndReserved === this._host.policy.maxSessions) {
 			for (const [sessionId, session] of this._sessions) {
 				const recoveryDeadline = session.recovery?.reclaimDeadline;
-				if (
+				// Reclaim the live recovering Session with the earliest deadline.
+				const isEarlierReclaimCandidate =
 					recoveryDeadline !== undefined &&
 					recoveryDeadline > reclaimAt &&
-					recoveryDeadline < earliestRecoveryDeadline
-				) {
+					recoveryDeadline < earliestRecoveryDeadline;
+				if (isEarlierReclaimCandidate) {
 					reclaimedSession = session;
 					reclaimedSessionId = sessionId;
 					earliestRecoveryDeadline = recoveryDeadline;
@@ -1019,14 +1031,16 @@ class RpcAcceptorRuntime<TKey> implements IRpcProtocolAcceptorRuntime {
 		let protectedSessionReservation = this._host.reserveRetainedBytes(
 			RPC_PROTECTED_SESSION_BYTES,
 		);
-		if (
+		const sessionToReclaim = reclaimedSession;
+		// Capacity reclamation is useful only when a Session was selected to reclaim.
+		const shouldReclaimForProtectedReservation =
 			protectedSessionReservation === undefined &&
-			reclaimedSession !== undefined
-		) {
+			sessionToReclaim !== undefined;
+		if (shouldReclaimForProtectedReservation) {
 			if (reclaimedSessionId !== undefined) {
 				this._sessions.delete(reclaimedSessionId);
 			}
-			reclaimedSession.terminateForced();
+			sessionToReclaim.terminateForced();
 			reclaimedSession = undefined;
 			reclaimedSessionId = undefined;
 			protectedSessionReservation = this._host.reserveRetainedBytes(
@@ -1066,10 +1080,11 @@ class RpcAcceptorRuntime<TKey> implements IRpcProtocolAcceptorRuntime {
 		for (let candidateIndex = 0; candidateIndex < 8; candidateIndex += 1) {
 			const candidate = this._options.cryptography.createRandomCarrier();
 			candidate.bytes.fill(0);
-			if (
+			// Session IDs must be unique across retained and provisional Sessions.
+			const candidateIsAvailable =
 				!this._sessions.has(candidate.value) &&
-				!this._provisionalSessionIds.has(candidate.value)
-			) {
+				!this._provisionalSessionIds.has(candidate.value);
+			if (candidateIsAvailable) {
 				this._provisionalSessionIds.add(candidate.value);
 				state.provisionalSessionId = candidate.value;
 				attempt.ownTemporary(() =>
@@ -1094,12 +1109,13 @@ class RpcAcceptorRuntime<TKey> implements IRpcProtocolAcceptorRuntime {
 	): Promise<void> {
 		const provisional = attempt.holdsProvisionalSession(session);
 		const retainedSession = this._sessions.get(sessionId);
-		if (
+		// Installation requires the current attempt to retain the expected Session ownership.
+		const sessionOwnerChanged =
 			!this._isCurrent(attempt) ||
 			(provisional
 				? retainedSession !== undefined
-				: retainedSession !== session)
-		) {
+				: retainedSession !== session);
+		if (sessionOwnerChanged) {
 			attempt.fail(new Error("Default RPC Acceptor Session owner changed."));
 			return;
 		}

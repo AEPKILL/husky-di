@@ -131,10 +131,11 @@ export class RpcConnectorReconnectionImpl implements IRpcConnectorReconnection {
 	}
 
 	#runRecoveryAttempt(attemptNumber: number): void {
-		if (
+		// Recovery work belongs only to the matching current attempt state.
+		const attemptIsStale =
 			this.state.status !== RpcStateStatusEnum.reconnecting ||
-			this.state.attempt !== attemptNumber
-		) {
+			this.state.attempt !== attemptNumber;
+		if (attemptIsStale) {
 			return;
 		}
 		let adapter: ReturnType<RpcConnectorAdapterFactory>;
@@ -147,10 +148,11 @@ export class RpcConnectorReconnectionImpl implements IRpcConnectorReconnection {
 			);
 			return;
 		}
-		if (
+		// Adapter creation cannot continue after the recovery attempt changes.
+		const attemptChanged =
 			this.state.status !== RpcStateStatusEnum.reconnecting ||
-			this.state.attempt !== attemptNumber
-		) {
+			this.state.attempt !== attemptNumber;
+		if (attemptChanged) {
 			return;
 		}
 		const controller = new AbortController();
@@ -160,10 +162,11 @@ export class RpcConnectorReconnectionImpl implements IRpcConnectorReconnection {
 		void attemptTask.then(
 			() => {
 				this.#finishAttempt(controller, attemptTask);
-				if (
+				// Success advances only the matching current recovery attempt.
+				const attemptIsCurrent =
 					this.state.status === RpcStateStatusEnum.reconnecting &&
-					this.state.attempt === attemptNumber
-				) {
+					this.state.attempt === attemptNumber;
+				if (attemptIsCurrent) {
 					this.#publishState(
 						Object.freeze({ status: RpcStateStatusEnum.monitoring }),
 					);
@@ -201,10 +204,11 @@ export class RpcConnectorReconnectionImpl implements IRpcConnectorReconnection {
 		attemptNumber: number,
 		stage: RpcConnectorReconnectionAttemptFailureStageEnum,
 	): void {
-		if (
+		// Failure handling belongs only to the matching current recovery attempt.
+		const attemptIsStale =
 			this.state.status !== RpcStateStatusEnum.reconnecting ||
-			this.state.attempt !== attemptNumber
-		) {
+			this.state.attempt !== attemptNumber;
+		if (attemptIsStale) {
 			return;
 		}
 		const delayMs = this.#policy.retryDelaysMs[attemptNumber - 1];
@@ -226,10 +230,11 @@ export class RpcConnectorReconnectionImpl implements IRpcConnectorReconnection {
 			}),
 		);
 		const waitingState = this.#readState();
-		if (
+		// Retry scheduling requires the exact waiting state just published.
+		const waitingStateChanged =
 			waitingState.status !== RpcStateStatusEnum.waiting ||
-			waitingState.nextAttempt !== nextAttempt
-		) {
+			waitingState.nextAttempt !== nextAttempt;
+		if (waitingStateChanged) {
 			return;
 		}
 		this.#scheduleRetry(nextAttempt, delayMs);
@@ -240,10 +245,11 @@ export class RpcConnectorReconnectionImpl implements IRpcConnectorReconnection {
 		const delayMs = Math.min(remainingMs, maximumPlatformTimerDelayMs);
 		this.#retryTimer = setTimeout(() => {
 			this.#retryTimer = undefined;
-			if (
+			// A retry timer has authority only over its matching waiting attempt.
+			const retryIsStale =
 				this.state.status !== RpcStateStatusEnum.waiting ||
-				this.state.nextAttempt !== nextAttempt
-			) {
+				this.state.nextAttempt !== nextAttempt;
+			if (retryIsStale) {
 				return;
 			}
 			const nextRemainingMs = remainingMs - delayMs;
@@ -281,10 +287,11 @@ export class RpcConnectorReconnectionImpl implements IRpcConnectorReconnection {
 	}
 
 	#installLifecycleSubscriptions(): void {
-		if (
+		// Monitoring cannot start after either the Connector or its Peer terminates.
+		const connectorIsTerminated =
 			this.connector.state.status !== RpcStateStatusEnum.active ||
-			this.connector.peer.state.status === RpcStateStatusEnum.closed
-		) {
+			this.connector.peer.state.status === RpcStateStatusEnum.closed;
+		if (connectorIsTerminated) {
 			this.#commitStopped(
 				RpcConnectorReconnectionStopReasonEnum.connectorTerminated,
 			);
@@ -322,10 +329,11 @@ export class RpcConnectorReconnectionImpl implements IRpcConnectorReconnection {
 			);
 			return;
 		}
-		if (
+		// Recovery begins only when a monitored Peer enters recovery.
+		const shouldBeginRecovery =
 			peerState.status === RpcStateStatusEnum.recovering &&
-			this.state.status === RpcStateStatusEnum.monitoring
-		) {
+			this.state.status === RpcStateStatusEnum.monitoring;
+		if (shouldBeginRecovery) {
 			this.#beginRecovery();
 		}
 	}

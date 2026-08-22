@@ -210,14 +210,15 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 	}
 
 	#listen(adapter: IRpcAcceptorAdapter): Promise<void> {
-		if (
+		// Listening starts only from an idle owner with no prior listener resources.
+		const listenerIsUnavailable =
 			this.state.status !== RpcStateStatusEnum.active ||
 			(this.state.listener.status !== RpcStateStatusEnum.idle &&
 				this.state.listener.status !== RpcStateStatusEnum.stopped) ||
 			this.#listenerAttempt !== undefined ||
 			this.#listenerCleanupBarrier !== undefined ||
-			this.#overflowConnection !== undefined
-		) {
+			this.#overflowConnection !== undefined;
+		if (listenerIsUnavailable) {
 			return Promise.reject(
 				createRpcException(RpcExceptionCodeEnum.unavailable),
 			);
@@ -230,10 +231,11 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 		const subscribe = rpcUndefinedSchema.safeParse(connectionSource).success
 			? undefined
 			: Reflect.get(connectionSource as object, "subscribe");
-		if (
+		// An Acceptor Adapter must provide callable subscription and listen entrypoints.
+		const adapterShapeIsInvalid =
 			!rpcCallableSchema.safeParse(subscribe).success ||
-			!rpcCallableSchema.safeParse(listen).success
-		) {
+			!rpcCallableSchema.safeParse(listen).success;
+		if (adapterShapeIsInvalid) {
 			return Promise.reject(new TypeError("adapter has an invalid shape."));
 		}
 		const validConnectionSource =
@@ -254,10 +256,11 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 			adapterStartup.then(
 				() => undefined,
 				(error: unknown) => {
-					if (
+					// Cleanup suppresses only the AbortError produced by its own cancellation.
+					const cleanupFailed =
 						attempt.cleanupRequested &&
-						!(error instanceof DOMException && error.name === "AbortError")
-					) {
+						!(error instanceof DOMException && error.name === "AbortError");
+					if (cleanupFailed) {
 						throw error;
 					}
 				},
@@ -401,11 +404,12 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 	#acceptConnection(connection: IRpcConnection): void {
 		const connectionCount = this.#custody.connectionCount;
 		const ownedConnection = this.#custody.ownConnection(connection);
-		if (
+		// A Connection can proceed only while the current listener attempt is active.
+		const listenerCannotAcceptConnection =
 			this.state.status !== RpcStateStatusEnum.active ||
 			this.#listenerAttempt === undefined ||
-			this.#listenerAttempt.terminal
-		) {
+			this.#listenerAttempt.terminal;
+		if (listenerCannotAcceptConnection) {
 			queueMicrotask(() => ownedConnection.directClose());
 			return;
 		}
@@ -608,10 +612,11 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 
 	close(): Promise<void> {
 		const task = this.#terminationTask ?? this.#createTerminationTask();
-		if (
+		// Forced close starts only from a live owner state.
+		const canBeginForcedClose =
 			this.state.status === RpcStateStatusEnum.active ||
-			this.state.status === RpcStateStatusEnum.draining
-		) {
+			this.state.status === RpcStateStatusEnum.draining;
+		if (canBeginForcedClose) {
 			this.#beginClosing(RpcCloseReasonEnum.forcedClose, true);
 		}
 		return task;
@@ -726,10 +731,11 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 			| RpcCloseReasonEnum.shutdownDeadline,
 		forced: boolean,
 	): void {
-		if (
+		// Closing is idempotent once the owner is closing or closed.
+		const terminationAlreadyStarted =
 			this.state.status === RpcStateStatusEnum.closing ||
-			this.state.status === RpcStateStatusEnum.closed
-		) {
+			this.state.status === RpcStateStatusEnum.closed;
+		if (terminationAlreadyStarted) {
 			return;
 		}
 		if (this.#graceTimer !== undefined) {
@@ -783,11 +789,12 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 		const terminalPeers: IRpcPeerRuntime[] = [];
 		const membershipChanged = this.#peers.length > 0;
 		for (const peer of this.#sessions.values()) {
-			if (
+			// Counter-draining peers remain failed when graceful owner shutdown wins.
+			const counterDrainFailedDuringShutdown =
 				reason === RpcCloseReasonEnum.gracefulShutdown &&
 				peer.state.status === RpcStateStatusEnum.draining &&
-				peer.state.reason === RpcCloseReasonEnum.counterExhaustion
-			) {
+				peer.state.reason === RpcCloseReasonEnum.counterExhaustion;
+			if (counterDrainFailedDuringShutdown) {
 				peer.stageState({
 					status: RpcStateStatusEnum.closed,
 					outcome: RpcCloseOutcomeEnum.failed,
@@ -932,13 +939,14 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 	admitProtocolSession(
 		session: IRpcProtocolSession,
 	): IRpcProtocolSessionHost | undefined {
-		if (
+		// Session admission requires active ownership, capacity, uniqueness, and a valid SPI object.
+		const cannotAdmitSession =
 			this.state.status !== RpcStateStatusEnum.active ||
 			this.#insideConnectionHandoff ||
 			this.#sessions.size >= this.#policy.maxSessions ||
 			this.#sessions.has(session) ||
-			!isProtocolSession(session)
-		) {
+			!isProtocolSession(session);
+		if (cannotAdmitSession) {
 			return undefined;
 		}
 
@@ -1002,10 +1010,11 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 		if (this.#faultingSessions.has(session)) {
 			return;
 		}
-		if (
+		// Terminal owners ignore all later Session transitions.
+		const ownerIsTerminal =
 			this.state.status === RpcStateStatusEnum.closing ||
-			this.state.status === RpcStateStatusEnum.closed
-		) {
+			this.state.status === RpcStateStatusEnum.closed;
+		if (ownerIsTerminal) {
 			return;
 		}
 		const peer = this.#sessions.get(session);
@@ -1065,10 +1074,16 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 			RpcEvent,
 			{ readonly type: RpcEventTypeEnum.peerClosed }
 		>;
-		if (
+		// Continuity, protocol, and resource faults are reported as protocol failures.
+		const isProtocolFailure =
+			reason === RpcCloseReasonEnum.continuityFailure ||
+			reason === RpcCloseReasonEnum.protocolFault ||
+			reason === RpcCloseReasonEnum.resourceFault;
+		// Recovery expiry and counter exhaustion are reported as unavailability.
+		const isUnavailableFailure =
 			reason === RpcCloseReasonEnum.recoveryExpired ||
-			reason === RpcCloseReasonEnum.counterExhaustion
-		) {
+			reason === RpcCloseReasonEnum.counterExhaustion;
+		if (isUnavailableFailure) {
 			peer.stageState({
 				status: RpcStateStatusEnum.closed,
 				outcome: RpcCloseOutcomeEnum.failed,
@@ -1081,11 +1096,7 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 				outcome: RpcCloseOutcomeEnum.failed,
 				reason,
 			};
-		} else if (
-			reason === RpcCloseReasonEnum.continuityFailure ||
-			reason === RpcCloseReasonEnum.protocolFault ||
-			reason === RpcCloseReasonEnum.resourceFault
-		) {
+		} else if (isProtocolFailure) {
 			peer.stageState({
 				status: RpcStateStatusEnum.closed,
 				outcome: RpcCloseOutcomeEnum.failed,
@@ -1123,10 +1134,11 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 
 	/** Package-private shared Protocol fault port. */
 	protocolFault(reason: RpcProtocolFaultReason, error: Error): void {
-		if (
+		// Terminal owners ignore faults that can no longer affect live state.
+		const ownerIsTerminal =
 			this.state.status === RpcStateStatusEnum.closing ||
-			this.state.status === RpcStateStatusEnum.closed
-		) {
+			this.state.status === RpcStateStatusEnum.closed;
+		if (ownerIsTerminal) {
 			return;
 		}
 		if (this.#terminationTask === undefined) {

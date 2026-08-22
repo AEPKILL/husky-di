@@ -63,7 +63,10 @@ export const rpcDescriptorPlainRecordSchema = z.custom<
 export const rpcClosedOptionsPlainRecordSchema = z.custom<
 	Record<PropertyKey, unknown>
 >((value) => {
-	if (typeof value !== "object" || value === null || Array.isArray(value)) {
+	// Closed option bags must be non-null records rather than arrays.
+	const isNotRecord =
+		typeof value !== "object" || value === null || Array.isArray(value);
+	if (isNotRecord) {
 		return false;
 	}
 

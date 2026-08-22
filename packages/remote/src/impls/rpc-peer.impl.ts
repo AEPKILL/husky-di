@@ -267,11 +267,12 @@ export class RpcPeerImpl implements IRpcPeerRuntime {
 		descriptor: IRemoteServiceDescriptor<T, Definitions>,
 		implementation: NoInfer<RemoteServiceImplementation<T, Definitions>>,
 	): Cleanup {
-		if (
+		// Exposure changes require an active owner and a non-terminal Peer.
+		const cannotExposeService =
 			!this.#isOwnerActive() ||
 			this.state.status === RpcStateStatusEnum.draining ||
-			this.state.status === RpcStateStatusEnum.closed
-		) {
+			this.state.status === RpcStateStatusEnum.closed;
+		if (cannotExposeService) {
 			throw createRpcException(RpcExceptionCodeEnum.unavailable);
 		}
 		return installRpcExposure(
@@ -298,12 +299,13 @@ export class RpcPeerImpl implements IRpcPeerRuntime {
 		actualArguments: readonly unknown[],
 	): Promise<unknown> {
 		const prepared = prepareRpcInvocationArguments(cancelable, actualArguments);
-		if (
+		// Invocation requires an active owner and a retained connected or recovering Session.
+		const cannotInvoke =
 			!this.#isOwnerActive() ||
 			(this.state.status !== RpcStateStatusEnum.connected &&
 				this.state.status !== RpcStateStatusEnum.recovering) ||
-			this.#session === undefined
-		) {
+			this.#session === undefined;
+		if (cannotInvoke) {
 			return Promise.reject(
 				createRpcException(RpcExceptionCodeEnum.unavailable),
 			);
@@ -340,18 +342,20 @@ export class RpcPeerImpl implements IRpcPeerRuntime {
 		method: string,
 		args: IRpcApplicationArgumentsSnapshot,
 	): IRpcPeerInvocationReservation | undefined {
-		if (
+		const session = this.#session;
+		// Reservation uses the same active retained-Session gate as invocation.
+		const cannotReserveInvocation =
 			!this.#isOwnerActive() ||
 			(this.state.status !== RpcStateStatusEnum.connected &&
 				this.state.status !== RpcStateStatusEnum.recovering) ||
-			this.#session === undefined
-		) {
+			session === undefined;
+		if (cannotReserveInvocation) {
 			return undefined;
 		}
 
 		let reservation: ReturnType<IRpcProtocolSession["reserveInvocation"]>;
 		try {
-			reservation = this.#session.reserveInvocation({ service, method, args });
+			reservation = session.reserveInvocation({ service, method, args });
 		} catch (error) {
 			throw this.#protocolFailure(error);
 		}
@@ -432,10 +436,11 @@ export class RpcPeerImpl implements IRpcPeerRuntime {
 			}
 			settled = true;
 			const durationMs = observationDuration(startedAt);
-			if (
+			// Successful Protocol outcomes are normalized to one caller-visible result path.
+			const callReturned =
 				outcome.type === RpcCallTerminalTypeEnum.returned ||
-				outcome.type === RpcCallTerminalTypeEnum.returnedVoid
-			) {
+				outcome.type === RpcCallTerminalTypeEnum.returnedVoid;
+			if (callReturned) {
 				this.#emitEvent({
 					type: RpcEventTypeEnum.callFinished,
 					observationId,
@@ -507,7 +512,9 @@ export class RpcPeerImpl implements IRpcPeerRuntime {
 				}
 			},
 			start: () => {
-				if (settled || canceled || started) {
+				// A committed invocation starts at most once and never after cancellation or settlement.
+				const cannotStart = settled || canceled || started;
+				if (cannotStart) {
 					return;
 				}
 				started = true;
@@ -531,11 +538,12 @@ export class RpcPeerImpl implements IRpcPeerRuntime {
 			return undefined;
 		}
 		const charge = request.args.weight + 256;
-		if (
+		// Incoming admission must fit the Peer count and retained-byte budgets.
+		const cannotReserveIncomingCall =
 			this.state.status !== RpcStateStatusEnum.connected ||
 			this.#incomingReservationCount >= 256 ||
-			charge > this.#maximumIncomingBytes - this.#incomingReservationBytes
-		) {
+			charge > this.#maximumIncomingBytes - this.#incomingReservationBytes;
+		if (cannotReserveIncomingCall) {
 			return undefined;
 		}
 		const retainedBytesReservation = this.#reserveRetainedBytes(charge);
@@ -713,11 +721,12 @@ export class RpcPeerImpl implements IRpcPeerRuntime {
 				removeQueuedJob?.();
 				removeQueuedJob = undefined;
 				this.#releaseIncomingCapacity(charge, retainedBytesReservation);
-				if (
+				// Session termination and acknowledged cancellation both settle as cancellation.
+				const callWasCanceled =
 					outcome.type === RpcCallTerminalTypeEnum.sessionTerminated ||
 					(outcome.type === RpcCallTerminalTypeEnum.failed &&
-						outcome.code === RpcExceptionCodeEnum.canceled)
-				) {
+						outcome.code === RpcExceptionCodeEnum.canceled);
+				if (callWasCanceled) {
 					abortController.abort();
 				}
 				if (!handlerStarted) {
@@ -734,12 +743,13 @@ export class RpcPeerImpl implements IRpcPeerRuntime {
 					method,
 					durationMs: observationDuration(startedAt),
 				};
+				// Successful handler outcomes commit returned payload or void.
+				const handlerReturned =
+					outcome.type === RpcCallTerminalTypeEnum.returned ||
+					outcome.type === RpcCallTerminalTypeEnum.returnedVoid;
 				if (outcome.type === RpcCallTerminalTypeEnum.sessionTerminated) {
 					this.#emitEvent({ ...base, outcome: RpcCallStatusEnum.terminated });
-				} else if (
-					outcome.type === RpcCallTerminalTypeEnum.returned ||
-					outcome.type === RpcCallTerminalTypeEnum.returnedVoid
-				) {
+				} else if (handlerReturned) {
 					this.#emitEvent({ ...base, outcome: RpcCallStatusEnum.fulfilled });
 				} else {
 					this.#emitEvent({

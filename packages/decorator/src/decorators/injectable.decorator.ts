@@ -54,10 +54,11 @@ export const injectable: () => ClassDecorator = () =>
 
 			const serviceIdentifier = parametersServiceIdentifiers[index];
 
-			if (
+			// Implicit constructor injection accepts only class parameter types.
+			const isNotClassParameter =
 				typeof serviceIdentifier !== "function" ||
-				NON_CLASS_PARAMETER_TYPES.has(serviceIdentifier)
-			) {
+				NON_CLASS_PARAMETER_TYPES.has(serviceIdentifier);
+			if (isNotClassParameter) {
 				throw new DecoratorException(
 					DecoratorErrorCodeEnum.E_NON_CLASS_PARAMETER,
 					`Constructor '${target.name}' parameter #${index} must be a class type`,

@@ -171,13 +171,14 @@ export class RpcConnectorImpl implements IRpcConnector {
 	}
 
 	#connect(options: RpcConnectorConnectOptions): Promise<void> {
-		if (
+		// A connection attempt requires an active owner, an eligible peer, and free capacity.
+		const connectorIsUnavailable =
 			this.state.status !== RpcStateStatusEnum.active ||
 			(this.peer.state.status !== RpcStateStatusEnum.unbound &&
 				this.peer.state.status !== RpcStateStatusEnum.recovering) ||
 			this.#attempt !== undefined ||
-			this.#custody.connectionCount >= this.#connectionLimit
-		) {
+			this.#custody.connectionCount >= this.#connectionLimit;
+		if (connectorIsUnavailable) {
 			return Promise.reject(
 				createRpcException(RpcExceptionCodeEnum.unavailable),
 			);
@@ -203,10 +204,11 @@ export class RpcConnectorImpl implements IRpcConnector {
 		const subscribe = rpcUndefinedSchema.safeParse(connectionSource).success
 			? undefined
 			: Reflect.get(connectionSource as object, "subscribe");
-		if (
+		// A Connector Adapter must provide callable subscription and connect entrypoints.
+		const adapterShapeIsInvalid =
 			!rpcCallableSchema.safeParse(subscribe).success ||
-			!rpcCallableSchema.safeParse(connect).success
-		) {
+			!rpcCallableSchema.safeParse(connect).success;
+		if (adapterShapeIsInvalid) {
 			return Promise.reject(new TypeError("adapter has an invalid shape."));
 		}
 		const validConnectionSource =
@@ -228,10 +230,11 @@ export class RpcConnectorImpl implements IRpcConnector {
 		const startupCleanupTask = adapterStartup.then(
 			() => undefined,
 			(error: unknown) => {
-				if (
+				// Cleanup suppresses only the AbortError produced by its own cancellation.
+				const cleanupFailed =
 					attempt.cleanupRequested &&
-					!(error instanceof DOMException && error.name === "AbortError")
-				) {
+					!(error instanceof DOMException && error.name === "AbortError");
+				if (cleanupFailed) {
 					throw error;
 				}
 			},
@@ -341,13 +344,14 @@ export class RpcConnectorImpl implements IRpcConnector {
 				}
 				if (fresh) {
 					const session = attempt.provisionalSession;
-					if (
+					// Fresh startup commits only the live attempt's valid provisional Session.
+					const freshSessionCannotCommit =
 						session === undefined ||
 						attempt.fenced ||
 						this.#attempt !== attempt ||
 						this.state.status !== RpcStateStatusEnum.active ||
-						!this.peer.attachProtocolSession(session)
-					) {
+						!this.peer.attachProtocolSession(session);
+					if (freshSessionCannotCommit) {
 						throw new Error("Protocol did not attach a Connector Session.");
 					}
 					attempt.provisionalSession = undefined;
@@ -356,10 +360,11 @@ export class RpcConnectorImpl implements IRpcConnector {
 					if (attempt.ownerAbortError !== undefined) {
 						throw attempt.ownerAbortError;
 					}
-					if (
+					// Startup can publish success only while the Connector and Peer remain active.
+					const startupBecameStale =
 						this.state.status !== RpcStateStatusEnum.active ||
-						!this.#isPeerConnected()
-					) {
+						!this.#isPeerConnected();
+					if (startupBecameStale) {
 						throw new Error(
 							"Connector terminated before startup could settle.",
 						);
@@ -370,10 +375,11 @@ export class RpcConnectorImpl implements IRpcConnector {
 					});
 					return;
 				}
-				if (
+				// Resume startup must leave the retained Session connected.
+				const resumedSessionIsMissing =
 					this.#session === undefined ||
-					this.peer.state.status !== RpcStateStatusEnum.connected
-				) {
+					this.peer.state.status !== RpcStateStatusEnum.connected;
+				if (resumedSessionIsMissing) {
 					throw new Error("Protocol did not attach a Connector Session.");
 				}
 			})
@@ -438,14 +444,15 @@ export class RpcConnectorImpl implements IRpcConnector {
 		session: IRpcProtocolSession,
 	): IRpcProtocolSessionHost | undefined {
 		const attempt = this.#attempt;
-		if (
+		// Attachment is single-use and belongs to the live pre-handoff attempt.
+		const cannotAttachSession =
 			attempt === undefined ||
 			attempt.fenced ||
 			attempt.insideHandoff ||
 			attempt.attached ||
 			this.#session !== undefined ||
-			!isProtocolSession(session)
-		) {
+			!isProtocolSession(session);
+		if (cannotAttachSession) {
 			return undefined;
 		}
 
@@ -466,11 +473,12 @@ export class RpcConnectorImpl implements IRpcConnector {
 	): void {
 		const attempt = this.#attempt;
 		const provisional = attempt?.provisionalSession === session;
-		if (
+		// Ignore faults from Sessions no longer owned or already being faulted.
+		const sessionFaultIsStale =
 			(this.#session !== session && !provisional) ||
 			this.peer.state.status === RpcStateStatusEnum.closed ||
-			this.#faultingSessions.has(session)
-		) {
+			this.#faultingSessions.has(session);
+		if (sessionFaultIsStale) {
 			return;
 		}
 		this.#faultingSessions.add(session);
@@ -503,10 +511,11 @@ export class RpcConnectorImpl implements IRpcConnector {
 		if (this.#faultingSessions.has(session)) {
 			return;
 		}
-		if (
+		// Ignore transitions from a replaced Session or after Peer termination.
+		const transitionIsStale =
 			this.#session !== session ||
-			this.peer.state.status === RpcStateStatusEnum.closed
-		) {
+			this.peer.state.status === RpcStateStatusEnum.closed;
+		if (transitionIsStale) {
 			return;
 		}
 		if (
@@ -555,10 +564,11 @@ export class RpcConnectorImpl implements IRpcConnector {
 	}
 
 	#closeFromSession(reason: RpcSessionCloseReason, cause?: Error): void {
-		if (
+		// Session closure is idempotent once owner termination starts.
+		const terminationAlreadyStarted =
 			this.state.status === RpcStateStatusEnum.closing ||
-			this.state.status === RpcStateStatusEnum.closed
-		) {
+			this.state.status === RpcStateStatusEnum.closed;
+		if (terminationAlreadyStarted) {
 			return;
 		}
 		this.#abortCurrentAttempt();
@@ -573,6 +583,10 @@ export class RpcConnectorImpl implements IRpcConnector {
 			reason === RpcCloseReasonEnum.resourceFault;
 		let finalState: RpcConnectorClosedState;
 		let peerEvent: RpcPeerClosedEvent;
+		// Recovery expiry and counter exhaustion are reported as unavailability.
+		const isUnavailableFailure =
+			reason === RpcCloseReasonEnum.recoveryExpired ||
+			reason === RpcCloseReasonEnum.counterExhaustion;
 		if (!failed) {
 			finalState = Object.freeze({
 				status: RpcStateStatusEnum.closed,
@@ -585,10 +599,7 @@ export class RpcConnectorImpl implements IRpcConnector {
 				outcome: RpcCloseOutcomeEnum.normal,
 				reason,
 			};
-		} else if (
-			reason === RpcCloseReasonEnum.recoveryExpired ||
-			reason === RpcCloseReasonEnum.counterExhaustion
-		) {
+		} else if (isUnavailableFailure) {
 			const error = createRpcException(RpcExceptionCodeEnum.unavailable, cause);
 			finalState = Object.freeze({
 				status: RpcStateStatusEnum.closed,
@@ -655,10 +666,11 @@ export class RpcConnectorImpl implements IRpcConnector {
 
 	close(): Promise<void> {
 		const task = this.#terminationTask ?? this.#createTerminationTask();
-		if (
+		// Forced close starts only from a live owner state.
+		const canBeginForcedClose =
 			this.state.status === RpcStateStatusEnum.active ||
-			this.state.status === RpcStateStatusEnum.draining
-		) {
+			this.state.status === RpcStateStatusEnum.draining;
+		if (canBeginForcedClose) {
 			this.#beginClosing(RpcCloseReasonEnum.forcedClose, true);
 		}
 		return task;
@@ -682,6 +694,10 @@ export class RpcConnectorImpl implements IRpcConnector {
 			Object.freeze({ status: RpcStateStatusEnum.draining }),
 		);
 		const peerStatus = this.peer.state.status;
+		// Unbound and connecting Peers can close without draining a Session.
+		const peerHasNoSession =
+			peerStatus === RpcStateStatusEnum.unbound ||
+			peerStatus === RpcStateStatusEnum.connecting;
 		let terminalPeerReason:
 			| RpcCloseReasonEnum.gracefulShutdown
 			| RpcCloseReasonEnum.forcedClose
@@ -703,10 +719,7 @@ export class RpcConnectorImpl implements IRpcConnector {
 				outcome: RpcCloseOutcomeEnum.normal,
 				reason: terminalPeerReason,
 			});
-		} else if (
-			peerStatus === RpcStateStatusEnum.unbound ||
-			peerStatus === RpcStateStatusEnum.connecting
-		) {
+		} else if (peerHasNoSession) {
 			this.#abortCurrentAttempt();
 			terminalPeerReason = RpcCloseReasonEnum.gracefulShutdown;
 			this.peer.commitState({
@@ -777,10 +790,11 @@ export class RpcConnectorImpl implements IRpcConnector {
 			| RpcCloseReasonEnum.shutdownDeadline,
 		forced: boolean,
 	): void {
-		if (
+		// Closing is idempotent once the owner is closing or closed.
+		const terminationAlreadyStarted =
 			this.state.status === RpcStateStatusEnum.closing ||
-			this.state.status === RpcStateStatusEnum.closed
-		) {
+			this.state.status === RpcStateStatusEnum.closed;
+		if (terminationAlreadyStarted) {
 			return;
 		}
 		if (this.#graceTimer !== undefined) {
@@ -828,11 +842,12 @@ export class RpcConnectorImpl implements IRpcConnector {
 		}
 		let finalState: RpcConnectorClosedState;
 		let event: RpcPeerClosedEvent;
-		if (
+		// Counter drain remains a failed outcome when graceful owner shutdown wins.
+		const counterDrainFailedDuringShutdown =
 			reason === RpcCloseReasonEnum.gracefulShutdown &&
 			this.peer.state.status === RpcStateStatusEnum.draining &&
-			this.peer.state.reason === RpcCloseReasonEnum.counterExhaustion
-		) {
+			this.peer.state.reason === RpcCloseReasonEnum.counterExhaustion;
+		if (counterDrainFailedDuringShutdown) {
 			finalState = Object.freeze({
 				status: RpcStateStatusEnum.closed,
 				outcome: RpcCloseOutcomeEnum.failed,

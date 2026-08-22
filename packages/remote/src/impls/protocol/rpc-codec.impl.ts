@@ -291,10 +291,11 @@ class BoundedJsonParser {
 					this._index += 5;
 					continue;
 				}
-				if (
+				// JSON escapes require one of the grammar's defined escape characters.
+				const escapeIsInvalid =
 					escapeCharacter === undefined ||
-					!'"\\/bfnrt'.includes(escapeCharacter)
-				) {
+					!'"\\/bfnrt'.includes(escapeCharacter);
+				if (escapeIsInvalid) {
 					throw new Error(`RPC JSON ${label} has an invalid escape.`);
 				}
 			}

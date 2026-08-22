@@ -814,10 +814,11 @@ function createTrackedTransport(): TrackedProtocolTransport {
 			return ingress.subscribe(subscriber);
 		}),
 		async send(message) {
-			if (
+			// A Protocol cannot send after handing off its side of the Connection.
+			const sentAfterHandoff =
 				(direction === "connector" && transport.connectorHandoff) ||
-				(direction === "acceptor" && transport.acceptorHandoff)
-			) {
+				(direction === "acceptor" && transport.acceptorHandoff);
+			if (sentAfterHandoff) {
 				transport.handoffViolation = true;
 			}
 			if (closed) {
@@ -886,16 +887,18 @@ function outcomesEqual(left: RpcCallOutcome, right: RpcCallOutcome): boolean {
 	if (left.type !== right.type) {
 		return false;
 	}
-	if (
+	// Returned outcomes compare their normalized Application Values.
+	const bothReturned =
 		left.type === RpcCallTerminalTypeEnum.returned &&
-		right.type === RpcCallTerminalTypeEnum.returned
-	) {
+		right.type === RpcCallTerminalTypeEnum.returned;
+	if (bothReturned) {
 		return rpcApplicationValuesEqual(left.value, right.value);
 	}
-	if (
+	// Failed outcomes compare their safe failure codes.
+	const bothFailed =
 		left.type === RpcCallTerminalTypeEnum.failed &&
-		right.type === RpcCallTerminalTypeEnum.failed
-	) {
+		right.type === RpcCallTerminalTypeEnum.failed;
+	if (bothFailed) {
 		return left.code === right.code;
 	}
 	return true;

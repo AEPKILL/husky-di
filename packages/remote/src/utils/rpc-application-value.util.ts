@@ -98,13 +98,14 @@ function normalizeArray(
 	depth: number,
 ): NormalizedValue {
 	const lengthDescriptor = Object.getOwnPropertyDescriptor(input, "length");
-	if (
+	// Array length must be a non-negative safe integer stored as a data property.
+	const lengthDescriptorIsInvalid =
 		lengthDescriptor === undefined ||
 		!("value" in lengthDescriptor) ||
 		typeof lengthDescriptor.value !== "number" ||
 		!Number.isSafeInteger(lengthDescriptor.value) ||
-		lengthDescriptor.value < 0
-	) {
+		lengthDescriptor.value < 0;
+	if (lengthDescriptorIsInvalid) {
 		return invalidValue("Application Value array has an invalid length.");
 	}
 	const length = lengthDescriptor.value;
@@ -128,12 +129,13 @@ function normalizeArray(
 				continue;
 			}
 			const index = Number(key);
-			if (
+			// Every non-length array key must be a canonical in-range index.
+			const keyIsNotArrayIndex =
 				!Number.isInteger(index) ||
 				index < 0 ||
 				String(index) !== key ||
-				index >= length
-			) {
+				index >= length;
+			if (keyIsNotArrayIndex) {
 				return invalidValue(
 					"Application Value arrays cannot have non-index properties.",
 				);
@@ -144,11 +146,12 @@ function normalizeArray(
 		let weight = 2;
 		for (let index = 0; index < length; index += 1) {
 			const descriptor = Object.getOwnPropertyDescriptor(input, String(index));
-			if (
+			// Dense Application Value arrays require an enumerable data property per index.
+			const elementDescriptorIsInvalid =
 				descriptor === undefined ||
 				!("value" in descriptor) ||
-				!descriptor.enumerable
-			) {
+				!descriptor.enumerable;
+			if (elementDescriptorIsInvalid) {
 				return invalidValue(
 					"Application Value arrays must be dense data arrays.",
 				);
@@ -331,7 +334,10 @@ function valuesEqual(
 		}
 		return left.every((value, index) => valuesEqual(value, right[index]));
 	}
-	if (Array.isArray(right) || typeof left !== "object" || left === null) {
+	// After the array branch, only two non-null records can still be equal.
+	const valuesCannotBeRecords =
+		Array.isArray(right) || typeof left !== "object" || left === null;
+	if (valuesCannotBeRecords) {
 		return false;
 	}
 	if (typeof right !== "object" || right === null) {

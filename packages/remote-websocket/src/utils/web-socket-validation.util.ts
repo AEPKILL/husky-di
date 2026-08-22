@@ -32,10 +32,11 @@ export function assertWebSocketHeaders(
 	value: unknown,
 ): asserts value is Readonly<Record<string, string>> {
 	const record = optionsObjectSchema.safeParse(value);
-	if (
+	// Headers require both a valid record shape and string-only values.
+	const headersAreInvalid =
 		!record.success ||
-		!webSocketHeaderValuesSchema.safeParse(Object.values(record.data)).success
-	) {
+		!webSocketHeaderValuesSchema.safeParse(Object.values(record.data)).success;
+	if (headersAreInvalid) {
 		throw new TypeError("headers must be a string record.");
 	}
 }

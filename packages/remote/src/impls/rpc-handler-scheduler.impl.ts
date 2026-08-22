@@ -61,11 +61,12 @@ export class RpcHandlerSchedulerImpl implements IRpcHandlerScheduler {
 	}
 
 	#markReady(session: object, queue: RpcHandlerSessionQueue): void {
-		if (
+		// Only a non-ready queue with work and local capacity can enter rotation.
+		const cannotMarkReady =
 			queue.ready ||
 			queue.jobs.length === 0 ||
-			queue.running >= this.#maximumSessionHandlers
-		) {
+			queue.running >= this.#maximumSessionHandlers;
+		if (cannotMarkReady) {
 			return;
 		}
 		queue.ready = true;
@@ -127,7 +128,9 @@ export class RpcHandlerSchedulerImpl implements IRpcHandlerScheduler {
 	}
 
 	#removeIdleSession(session: object, queue: RpcHandlerSessionQueue): void {
-		if (queue.jobs.length === 0 && queue.running === 0 && !queue.ready) {
+		// An idle queue owns no queued, running, or scheduled handler work.
+		const idle = queue.jobs.length === 0 && queue.running === 0 && !queue.ready;
+		if (idle) {
 			this.#sessions.delete(session);
 		}
 	}

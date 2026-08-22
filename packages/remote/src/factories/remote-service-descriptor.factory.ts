@@ -99,13 +99,14 @@ function snapshotMethods(
 		}
 
 		const descriptor = Object.getOwnPropertyDescriptor(value, methodName);
-		if (
+		// A method definition must be an enumerable data property in an allowed shape.
+		const methodDefinitionIsInvalid =
 			descriptor === undefined ||
 			!descriptor.enumerable ||
 			!("value" in descriptor) ||
 			(descriptor.value !== true &&
-				!isCancelableMethodDefinition(descriptor.value))
-		) {
+				!isCancelableMethodDefinition(descriptor.value));
+		if (methodDefinitionIsInvalid) {
 			throw new TypeError(
 				"Each method definition must be true or exactly { cancelable: true }.",
 			);
