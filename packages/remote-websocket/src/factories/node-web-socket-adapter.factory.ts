@@ -22,14 +22,20 @@ import type {
 } from "@/interfaces/web-socket-platform.interface";
 import {
 	assertSafeIntegerAtLeast,
+	assertSafeIntegerAtMost,
 	normalizeWebSocketTransportLimits,
 } from "@/utils/web-socket-policy.util";
+import {
+	assertWebSocketHeaders,
+	assertWebSocketOptionsObject,
+	isWebSocketProtocolList,
+} from "@/utils/web-socket-validation.util";
 
 /** Creates a cold Connector Adapter using the Node `ws` client. */
 export function createNodeWebSocketConnectorAdapter(
 	options: INodeWebSocketConnectorAdapterOptions,
 ): IRpcConnectorAdapter {
-	assertOptionsObject(options, "Node WebSocket Connector");
+	assertWebSocketOptionsObject(options, "Node WebSocket Connector");
 	const limits = normalizeWebSocketTransportLimits(options);
 	if (options.handshakeTimeoutMs !== undefined) {
 		assertSafeIntegerAtLeast(
@@ -39,16 +45,9 @@ export function createNodeWebSocketConnectorAdapter(
 		);
 	}
 	if (options.headers !== undefined) {
-		if (typeof options.headers !== "object" || options.headers === null) {
-			throw new TypeError("headers must be a string record.");
-		}
-		for (const value of Object.values(options.headers)) {
-			if (typeof value !== "string") {
-				throw new TypeError("headers must be a string record.");
-			}
-		}
+		assertWebSocketHeaders(options.headers);
 	}
-	const protocols = Array.isArray(options.protocols)
+	const protocols = isWebSocketProtocolList(options.protocols)
 		? [...options.protocols]
 		: options.protocols;
 	const clientOptions = Object.freeze({
@@ -75,7 +74,7 @@ export function createNodeWebSocketConnectorAdapter(
 export function createNodeWebSocketAcceptorAdapter(
 	options: INodeWebSocketAcceptorAdapterOptions,
 ): IRpcAcceptorAdapter {
-	assertOptionsObject(options, "Node WebSocket Acceptor");
+	assertWebSocketOptionsObject(options, "Node WebSocket Acceptor");
 	const hasPort = options.port !== undefined;
 	const hasServer = options.server !== undefined;
 	if (hasPort === hasServer) {
@@ -83,9 +82,7 @@ export function createNodeWebSocketAcceptorAdapter(
 	}
 	if (options.port !== undefined) {
 		assertSafeIntegerAtLeast(options.port, 0, "port");
-		if (options.port > 65_535) {
-			throw new RangeError("port must not exceed 65535.");
-		}
+		assertSafeIntegerAtMost(options.port, 65_535, "port");
 	}
 	if (options.backlog !== undefined) {
 		assertSafeIntegerAtLeast(options.backlog, 0, "backlog");
@@ -114,13 +111,4 @@ export function createNodeWebSocketAcceptorAdapter(
 		limits,
 		maxConnections,
 	);
-}
-
-function assertOptionsObject(
-	value: unknown,
-	label: string,
-): asserts value is object {
-	if (typeof value !== "object" || value === null) {
-		throw new TypeError(`${label} options must be an object.`);
-	}
 }

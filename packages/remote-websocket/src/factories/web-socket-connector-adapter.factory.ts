@@ -13,20 +13,21 @@ import type {
 	IWebSocketNetworkStatus,
 } from "@/interfaces/web-socket-platform.interface";
 import { normalizeWebSocketTransportLimits } from "@/utils/web-socket-policy.util";
+import {
+	assertWebSocketConstructor,
+	assertWebSocketOptionsObject,
+	isWebSocketProtocolList,
+} from "@/utils/web-socket-validation.util";
 
 /** Creates a cold Connector Adapter backed by the supplied or global WebSocket. */
 export function createWebSocketConnectorAdapter(
 	options: IWebSocketConnectorAdapterOptions,
 ): IRpcConnectorAdapter {
-	if (typeof options !== "object" || options === null) {
-		throw new TypeError("WebSocket Connector options must be an object.");
-	}
+	assertWebSocketOptionsObject(options, "WebSocket Connector");
 	const limits = normalizeWebSocketTransportLimits(options);
 	const WebSocketConstructor = options.webSocket ?? globalThis.WebSocket;
-	if (typeof WebSocketConstructor !== "function") {
-		throw new TypeError("A WebSocket constructor is required.");
-	}
-	const protocols = Array.isArray(options.protocols)
+	assertWebSocketConstructor(WebSocketConstructor);
+	const protocols = isWebSocketProtocolList(options.protocols)
 		? [...options.protocols]
 		: options.protocols;
 

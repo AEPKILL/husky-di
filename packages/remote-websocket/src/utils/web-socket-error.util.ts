@@ -4,6 +4,8 @@
  * @created 2026-08-19 00:00:00
  */
 
+import { errorSchema } from "@/utils/web-socket-schema.util";
+
 const abortSignalAbortedGetter = Object.getOwnPropertyDescriptor(
 	AbortSignal.prototype,
 	"aborted",
@@ -38,8 +40,12 @@ export function addAbortListener(
 }
 
 export function getWebSocketEventError(event: Event, fallback: string): Error {
-	const value = Reflect.get(event, "error");
-	return value instanceof Error ? value : new Error(fallback);
+	return getWebSocketError(Reflect.get(event, "error"), fallback);
+}
+
+export function getWebSocketError(value: unknown, fallback: string): Error {
+	const result = errorSchema.safeParse(value);
+	return result.success ? result.data : new Error(fallback);
 }
 
 export function getWebSocketCloseError(event: Event): Error {

@@ -6,6 +6,10 @@
 
 import type { IWebSocketTransportLimitOptions } from "@/interfaces/web-socket-options.interface";
 import type { IWebSocketTransportLimits } from "@/interfaces/web-socket-platform.interface";
+import {
+	createSafeIntegerAtLeastSchema,
+	createSafeIntegerAtMostSchema,
+} from "@/utils/web-socket-schema.util";
 
 const MINIMUM_RPC_MESSAGE_BYTES = 1_048_576;
 
@@ -36,9 +40,26 @@ export function assertSafeIntegerAtLeast(
 	minimum: number,
 	name: string,
 ): void {
-	if (!Number.isSafeInteger(value) || value < minimum) {
+	if (!isSafeIntegerAtLeast(value, minimum)) {
 		throw new RangeError(
 			`${name} must be a safe integer of at least ${minimum}.`,
 		);
+	}
+}
+
+export function isSafeIntegerAtLeast(
+	value: unknown,
+	minimum: number,
+): value is number {
+	return createSafeIntegerAtLeastSchema(minimum).safeParse(value).success;
+}
+
+export function assertSafeIntegerAtMost(
+	value: number,
+	maximum: number,
+	name: string,
+): void {
+	if (!createSafeIntegerAtMostSchema(maximum).safeParse(value).success) {
+		throw new RangeError(`${name} must not exceed ${maximum}.`);
 	}
 }

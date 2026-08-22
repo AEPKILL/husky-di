@@ -16,6 +16,14 @@ import {
 	getWebSocketCloseError,
 	getWebSocketEventError,
 } from "@/utils/web-socket-error.util";
+import { isSafeIntegerAtLeast } from "@/utils/web-socket-policy.util";
+import {
+	arrayBufferMessageSchema,
+	arrayBufferViewMessageSchema,
+	blobMessageSchema,
+	byteMessageSchema,
+	textMessageSchema,
+} from "@/utils/web-socket-schema.util";
 
 interface IWebSocketInboundEntry {
 	readonly size: number;
@@ -106,7 +114,7 @@ export class WebSocketConnectionImpl implements IRpcConnection {
 	}
 
 	send(message: Uint8Array): Promise<void> {
-		if (!(message instanceof Uint8Array)) {
+		if (!byteMessageSchema.safeParse(message).success) {
 			const error = new TypeError(
 				"WebSocket messages must be Uint8Array values.",
 			);
@@ -229,7 +237,7 @@ export class WebSocketConnectionImpl implements IRpcConnection {
 
 	private _readBufferedAmount(): number {
 		const value = this._socket.bufferedAmount;
-		if (!Number.isSafeInteger(value) || value < 0) {
+		if (!isSafeIntegerAtLeast(value, 0)) {
 			throw new Error("WebSocket bufferedAmount is invalid.");
 		}
 		return value;
@@ -240,7 +248,7 @@ export class WebSocketConnectionImpl implements IRpcConnection {
 			return;
 		}
 		let entry: IWebSocketInboundEntry;
-		if (typeof data === "string") {
+		if (textMessageSchema.safeParse(data).success) {
 			this._failAndTerminate(
 				new Error(
 					"Text WebSocket frames are not valid RPC Transport messages.",
@@ -248,21 +256,23 @@ export class WebSocketConnectionImpl implements IRpcConnection {
 			);
 			return;
 		}
-		if (data instanceof Blob) {
+		if (blobMessageSchema.safeParse(data).success) {
+			const blob = data as Blob;
 			entry = {
-				size: data.size,
-				convert: async () => new Uint8Array(await data.arrayBuffer()),
+				size: blob.size,
+				convert: async () => new Uint8Array(await blob.arrayBuffer()),
 			};
-		} else if (data instanceof ArrayBuffer) {
+		} else if (arrayBufferMessageSchema.safeParse(data).success) {
+			const arrayBuffer = data as ArrayBuffer;
 			entry = {
-				size: data.byteLength,
-				convert: async () => new Uint8Array(data),
+				size: arrayBuffer.byteLength,
+				convert: async () => new Uint8Array(arrayBuffer),
 			};
-		} else if (ArrayBuffer.isView(data)) {
-			const bytes =
-				data instanceof Uint8Array
-					? data
-					: new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
+		} else if (arrayBufferViewMessageSchema.safeParse(data).success) {
+			const view = data as ArrayBufferView;
+			const bytes = byteMessageSchema.safeParse(view).success
+				? (view as Uint8Array)
+				: new Uint8Array(view.buffer, view.byteOffset, view.byteLength);
 			entry = { size: bytes.byteLength, convert: async () => bytes };
 		} else {
 			this._failAndTerminate(

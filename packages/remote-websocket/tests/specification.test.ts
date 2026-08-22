@@ -528,6 +528,26 @@ describe("WebSocket Connection messages", () => {
 });
 
 describe("WebSocket Connection sends and terminal", () => {
+	it("RPC-TRANSPORT-010 WS-SEND-001 rejects an invalid native buffered amount", async () => {
+		const harness = await openControlledConnection();
+		harness.socket.bufferedAmount = -1;
+		let terminal: unknown;
+		harness.connection.message$.subscribe({
+			error(error) {
+				terminal = error;
+			},
+		});
+
+		await expect(harness.connection.send(Uint8Array.of(1))).rejects.toBe(
+			terminal,
+		);
+		expect(terminal).toBeInstanceOf(Error);
+		expect(terminal).toMatchObject({
+			message: "WebSocket bufferedAmount is invalid.",
+		});
+		expect(harness.socket.sent).toEqual([]);
+	});
+
 	it("RPC-TRANSPORT-005 RPC-TRANSPORT-006 WS-SEND-001 waits for bounded native capacity before Local Admission", async () => {
 		const harness = await openControlledConnection();
 		const message = Uint8Array.of(3, 4);
@@ -707,6 +727,22 @@ describe("WebSocket Connection sends and terminal", () => {
 });
 
 describe("WebSocket policy", () => {
+	it("WS-API-001 validates browser Connector factory structure", () => {
+		const invalidOptions = () => createWebSocketConnectorAdapter(null as never);
+		expect(invalidOptions).toThrow(TypeError);
+		expect(invalidOptions).toThrow(
+			"WebSocket Connector options must be an object.",
+		);
+
+		const invalidConstructor = () =>
+			createWebSocketConnectorAdapter({
+				url: "ws://example.test",
+				webSocket: {} as never,
+			});
+		expect(invalidConstructor).toThrow(TypeError);
+		expect(invalidConstructor).toThrow("A WebSocket constructor is required.");
+	});
+
 	it("RPC-TRANSPORT-010 WS-LIMIT-001 rejects unsafe or incompatible finite limits", () => {
 		expect(() =>
 			createWebSocketConnectorAdapter({
@@ -1077,6 +1113,18 @@ describe("Node ws Adapters", () => {
 	});
 
 	it("RPC-TRANSPORT-010 WS-LIMIT-001 validates Node listener topology and capacity", () => {
+		const invalidConnectorOptions = () =>
+			createNodeWebSocketConnectorAdapter(null as never);
+		expect(invalidConnectorOptions).toThrow(TypeError);
+		expect(invalidConnectorOptions).toThrow(
+			"Node WebSocket Connector options must be an object.",
+		);
+		const invalidAcceptorOptions = () =>
+			createNodeWebSocketAcceptorAdapter(null as never);
+		expect(invalidAcceptorOptions).toThrow(TypeError);
+		expect(invalidAcceptorOptions).toThrow(
+			"Node WebSocket Acceptor options must be an object.",
+		);
 		expect(() => createNodeWebSocketAcceptorAdapter({})).toThrow(TypeError);
 		expect(() =>
 			createNodeWebSocketAcceptorAdapter({ port: 1, maxConnections: 0 }),

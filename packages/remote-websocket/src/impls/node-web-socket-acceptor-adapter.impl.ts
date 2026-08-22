@@ -17,6 +17,7 @@ import type {
 import {
 	addAbortListener,
 	createAbortError,
+	getWebSocketError,
 	isAbortSignalAborted,
 } from "@/utils/web-socket-error.util";
 
@@ -45,11 +46,8 @@ export class NodeWebSocketAcceptorAdapterImpl implements IRpcAcceptorAdapter {
 	};
 
 	private readonly _handleError = (...arguments_: unknown[]): void => {
-		const value = arguments_[0];
 		this._stopWithError(
-			value instanceof Error
-				? value
-				: new Error("The WebSocket listener failed."),
+			getWebSocketError(arguments_[0], "The WebSocket listener failed."),
 		);
 	};
 
