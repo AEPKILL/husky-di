@@ -170,6 +170,18 @@ methods, and internal helpers.
 - Keep factories, implementations, constants, types, and helpers in their own
   roles.
 - Comment intent, constraints, and edge cases—not obvious operations.
+- Extract every compound `if` condition that spans multiple lines into a
+  semantically named local boolean immediately before the branch. Precede the
+  predicate with a one-line intent comment, and branch on the predicate name;
+  keep simple single-line compound conditions inline.
+- Name extracted predicates after the domain fact or decision in the polarity
+  consumed by the branch, such as `resumeCandidateIsStale`,
+  `cannotAdmitSession`, or `shouldBeginRecovery`, rather than generic names such
+  as `condition` or `valid`.
+- Preserve the original left-to-right short-circuit order when extracting a
+  predicate. When TypeScript narrowing is needed after the branch, snapshot the
+  optional property or mutable member into a local value and use that same
+  snapshot in both the predicate and the guarded code.
 - Keep source comments and errors in the package's established language, normally
   English.
 - State what failed and include the relevant object or context in errors.
