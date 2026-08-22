@@ -4,13 +4,14 @@
  * @created 2026-08-19 00:00:00
  */
 
-import { RPC_PROTECTED_SESSION_BYTES } from "@/constants/protocol/rpc-profile.const";
+import {
+	RPC_PROFILE,
+	RPC_PROTECTED_SESSION_BYTES,
+} from "@/constants/protocol/rpc-profile.const";
 import { RpcDecodePhaseEnum } from "@/enums/protocol/rpc-decode-phase.enum";
 import { RpcEndpointFailureEnum } from "@/enums/protocol/rpc-endpoint-failure.enum";
 import { RpcPeerCursorClassificationEnum } from "@/enums/protocol/rpc-peer-cursor-classification.enum";
-import { RpcProfileEnum } from "@/enums/protocol/rpc-profile.enum";
 import { RpcProofOperationKindEnum } from "@/enums/protocol/rpc-proof-operation-kind.enum";
-import { RpcProtocolRoleEnum } from "@/enums/protocol/rpc-protocol-role.enum";
 import { RpcResumeRejectCodeEnum } from "@/enums/protocol/rpc-resume-reject-code.enum";
 import { RpcWireRecordKindEnum } from "@/enums/protocol/rpc-wire-record-kind.enum";
 import { RpcCloseReasonEnum } from "@/enums/rpc-close-reason.enum";
@@ -58,7 +59,6 @@ export class RpcProtocolImpl<TKey> implements IRpcProtocol {
 interface IRpcAttempt<TKey> {
 	readonly endpoint: IRpcEndpoint;
 	readonly signal: AbortSignal;
-	readonly task: Promise<void>;
 	readonly resolve: () => void;
 	readonly reject: (error: unknown) => void;
 	cryptoJobCount: number;
@@ -122,11 +122,9 @@ function createEndpoint<TKey>(
 
 function closeUnboundConnection(connection: IRpcConnection): void {
 	queueMicrotask(() => {
-		try {
-			void Promise.resolve(connection.close()).catch(() => {});
-		} catch {
+		void Promise.try(() => connection.close()).catch(() => {
 			// A pre-bootstrap Connection has no Session authority to report against.
-		}
+		});
 	});
 }
 
@@ -255,7 +253,6 @@ class RpcConnectorRuntime<TKey> implements IRpcProtocolConnectorRuntime {
 		attempt = {
 			endpoint,
 			signal,
-			task,
 			resolve,
 			reject,
 			cryptoJobCount: 0,
@@ -328,7 +325,7 @@ class RpcConnectorRuntime<TKey> implements IRpcProtocolConnectorRuntime {
 			initiatorNonce.bytes.fill(0);
 			request = Object.freeze({
 				kind: RpcWireRecordKindEnum.fresh,
-				profiles: Object.freeze([RpcProfileEnum.huskyDiRpc1]),
+				profiles: Object.freeze([RPC_PROFILE]),
 				initiatorNonce: initiatorNonce.value,
 			}) as RpcFreshRequest;
 			encoded = this._options.codec.encode(request);
@@ -359,7 +356,7 @@ class RpcConnectorRuntime<TKey> implements IRpcProtocolConnectorRuntime {
 			initiatorNonce.bytes.fill(0);
 			const requestWithoutProof = Object.freeze({
 				kind: RpcWireRecordKindEnum.resume,
-				profile: RpcProfileEnum.huskyDiRpc1,
+				profile: RPC_PROFILE,
 				sessionId: session.sessionId,
 				receivedThrough: session.receivedThrough,
 				resumeAttempt,
@@ -466,7 +463,6 @@ class RpcConnectorRuntime<TKey> implements IRpcProtocolConnectorRuntime {
 			attempt.protectedSessionReservation = protectedSessionReservation;
 
 			const session = this._options.createSession({
-				role: RpcProtocolRoleEnum.connector,
 				host: this._host,
 				sessionId: accept.sessionId,
 				proofKey,
@@ -566,7 +562,7 @@ class RpcConnectorRuntime<TKey> implements IRpcProtocolConnectorRuntime {
 				throw new Error("Default RPC resume accept proof is invalid or stale.");
 			}
 			const contradictory =
-				outcome.profile !== RpcProfileEnum.huskyDiRpc1 ||
+				outcome.profile !== RPC_PROFILE ||
 				outcome.sessionId !== session.sessionId ||
 				outcome.bindingEpoch <= session.bindingEpoch ||
 				session.classifyPeerCursor(outcome.receivedThrough) !==
@@ -698,7 +694,6 @@ class RpcAcceptorRuntime<TKey> implements IRpcProtocolAcceptorRuntime {
 		attempt = {
 			endpoint,
 			signal,
-			task,
 			resolve,
 			reject,
 			cryptoJobCount: 0,
@@ -791,7 +786,7 @@ class RpcAcceptorRuntime<TKey> implements IRpcProtocolAcceptorRuntime {
 			return;
 		}
 		try {
-			if (!request.profiles.includes(RpcProfileEnum.huskyDiRpc1)) {
+			if (!request.profiles.includes(RPC_PROFILE)) {
 				await this._rejectFresh(attempt, "unsupported-profile");
 				return;
 			}
@@ -825,7 +820,7 @@ class RpcAcceptorRuntime<TKey> implements IRpcProtocolAcceptorRuntime {
 			}
 			const acceptWithoutProof = Object.freeze({
 				kind: RpcWireRecordKindEnum.accept,
-				profile: RpcProfileEnum.huskyDiRpc1,
+				profile: RPC_PROFILE,
 				sessionId,
 				bindingEpoch: 1,
 				responderNonce: responderNonce.value,
@@ -854,7 +849,6 @@ class RpcAcceptorRuntime<TKey> implements IRpcProtocolAcceptorRuntime {
 				throw new Error("Default RPC protected Session reservation was lost.");
 			}
 			const session = this._options.createSession({
-				role: RpcProtocolRoleEnum.acceptor,
 				host: this._host,
 				sessionId,
 				proofKey,
@@ -910,7 +904,7 @@ class RpcAcceptorRuntime<TKey> implements IRpcProtocolAcceptorRuntime {
 		if (
 			session === undefined ||
 			proofKey === undefined ||
-			request.profile !== RpcProfileEnum.huskyDiRpc1
+			request.profile !== RPC_PROFILE
 		) {
 			await this._rejectResumeGeneric(attempt, request);
 			return;
@@ -983,7 +977,7 @@ class RpcAcceptorRuntime<TKey> implements IRpcProtocolAcceptorRuntime {
 			responderNonce.bytes.fill(0);
 			const acceptWithoutProof = Object.freeze({
 				kind: RpcWireRecordKindEnum.accept,
-				profile: RpcProfileEnum.huskyDiRpc1,
+				profile: RPC_PROFILE,
 				sessionId: session.sessionId,
 				bindingEpoch,
 				receivedThrough,

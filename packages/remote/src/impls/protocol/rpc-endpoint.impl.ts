@@ -72,10 +72,6 @@ export class RpcEndpointImpl implements IRpcEndpoint {
 		return !this._closed && !this._processing && this._ingress.length === 0;
 	}
 
-	get isClosed(): boolean {
-		return this._closed;
-	}
-
 	configureSendProgressTimeout(timeoutMs: number): void {
 		if (!Number.isSafeInteger(timeoutMs) || timeoutMs <= 0) {
 			throw new Error("RPC endpoint send-progress timeout is invalid.");
@@ -95,13 +91,7 @@ export class RpcEndpointImpl implements IRpcEndpoint {
 		this._sendGeneration += 1;
 		const generation = this._sendGeneration;
 		this._startSendProgressTimer(generation);
-		let admission: Promise<void>;
-		try {
-			admission = Promise.resolve(this._connection.send(message));
-		} catch (error) {
-			admission = Promise.reject(error);
-		}
-		return admission.finally(() => {
+		return Promise.try(() => this._connection.send(message)).finally(() => {
 			if (this._sendGeneration === generation) {
 				this._clearSendProgressTimer();
 				this._sendBusy = false;
@@ -122,11 +112,9 @@ export class RpcEndpointImpl implements IRpcEndpoint {
 		}
 		this._ingress.length = 0;
 		this._ingressBytes = 0;
-		try {
-			void Promise.resolve(this._connection.close()).catch(() => {});
-		} catch {
+		void Promise.try(() => this._connection.close()).catch(() => {
 			// Direct Close is best-effort; the exact endpoint is already fenced.
-		}
+		});
 	}
 
 	_enqueue(message: Uint8Array): void {

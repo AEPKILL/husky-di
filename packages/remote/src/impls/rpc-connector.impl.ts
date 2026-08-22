@@ -163,11 +163,7 @@ export class RpcConnectorImpl implements IRpcConnector {
 	}
 
 	connect(options: RpcConnectorConnectOptions): Promise<void> {
-		try {
-			return this.#connect(options);
-		} catch (error) {
-			return Promise.reject(error);
-		}
+		return Promise.try(() => this.#connect(options));
 	}
 
 	#connect(options: RpcConnectorConnectOptions): Promise<void> {

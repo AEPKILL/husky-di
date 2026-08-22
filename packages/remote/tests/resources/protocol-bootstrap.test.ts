@@ -9,7 +9,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { RpcDecodePhaseEnum } from "../../src/enums/protocol/rpc-decode-phase.enum";
 import { RpcProofOperationKindEnum } from "../../src/enums/protocol/rpc-proof-operation-kind.enum";
 import { RpcWireRecordKindEnum } from "../../src/enums/protocol/rpc-wire-record-kind.enum";
-import { getRpcProtocol } from "../../src/factories/rpc-protocol.factory";
+import { createRpcProtocol } from "../../src/factories/rpc-protocol.factory";
 import { RpcCodecImpl } from "../../src/impls/protocol/rpc-codec.impl";
 import { RpcCryptographyImpl } from "../../src/impls/protocol/rpc-cryptography.impl";
 import { RpcRetainedBytesLedgerImpl } from "../../src/impls/protocol/rpc-retained-bytes-ledger.impl";
@@ -97,7 +97,7 @@ function createAcceptorRuntime(
 		},
 	};
 	return {
-		runtime: getRpcProtocol().createAcceptor(host),
+		runtime: createRpcProtocol().createAcceptor(host),
 		ownerFaults,
 		admittedSessions,
 		retainedBytes,
@@ -131,7 +131,7 @@ function createConnectorRuntime(policy: IRpcProtocolRuntimePolicy): {
 		},
 	};
 	return {
-		runtime: getRpcProtocol().createConnector(host),
+		runtime: createRpcProtocol().createConnector(host),
 		ownerFaults,
 		attachedSessions,
 	};

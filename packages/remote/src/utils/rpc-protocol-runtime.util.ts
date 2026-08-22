@@ -7,7 +7,6 @@
 import { RpcCloseReasonEnum } from "@/enums/rpc-close-reason.enum";
 import { RpcExceptionCodeEnum } from "@/enums/rpc-exception-code.enum";
 import { createRpcException } from "@/factories/rpc-exception.factory";
-import { getRpcProtocol } from "@/factories/rpc-protocol.factory";
 import type {
 	IRpcApplicationArgumentsSnapshot,
 	IRpcApplicationSnapshot,
@@ -16,6 +15,7 @@ import type {
 	IRpcProtocolAcceptorRuntime,
 	IRpcProtocolConnectorHost,
 	IRpcProtocolConnectorRuntime,
+	IRpcProtocolHost,
 	IRpcProtocolRuntimePolicy,
 	IRpcProtocolSession,
 	IRpcProtocolSessionHost,
@@ -49,12 +49,6 @@ export interface RpcProtocolAcceptorHostPorts {
 	fault(reason: RpcProtocolFaultReason, error: Error): void;
 }
 
-export function resolveRpcProtocol(
-	protocol: IRpcProtocol | undefined,
-): IRpcProtocol {
-	return protocol ?? getRpcProtocol();
-}
-
 function constructionViolation(guard: ConstructionGuard): never {
 	guard.violated = true;
 	throw new TypeError(
@@ -69,19 +63,7 @@ function createHostBase(
 		bytes: number,
 	) => IRpcRetainedBytesReservation | undefined,
 	fault: (reason: RpcProtocolFaultReason, error: Error) => void,
-): {
-	readonly policy: IRpcProtocolRuntimePolicy;
-	reserveRetainedBytes(bytes: number): IRpcRetainedBytesReservation | undefined;
-	normalizeApplicationValue(value: unknown): IRpcApplicationSnapshot;
-	normalizeApplicationArguments(
-		value: unknown,
-	): IRpcApplicationArgumentsSnapshot;
-	applicationValuesEqual(
-		left: IRpcApplicationSnapshot,
-		right: IRpcApplicationSnapshot,
-	): boolean;
-	fault(reason: RpcProtocolFaultReason, error: Error): void;
-} {
+): IRpcProtocolHost {
 	return {
 		policy,
 		reserveRetainedBytes(

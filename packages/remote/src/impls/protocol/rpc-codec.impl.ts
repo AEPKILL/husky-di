@@ -8,9 +8,9 @@ import {
 	RPC_MAX_MESSAGE_BYTES,
 	RPC_MAX_WIRE_DEPTH,
 	RPC_MAX_WIRE_NODES,
+	RPC_PROFILE,
 } from "@/constants/protocol/rpc-profile.const";
 import { RpcDecodePhaseEnum } from "@/enums/protocol/rpc-decode-phase.enum";
-import { RpcProfileEnum } from "@/enums/protocol/rpc-profile.enum";
 import { RpcResumeRejectCodeEnum } from "@/enums/protocol/rpc-resume-reject-code.enum";
 import { RpcWireRecordKindEnum } from "@/enums/protocol/rpc-wire-record-kind.enum";
 import { RpcExceptionCodeEnum } from "@/enums/rpc-exception-code.enum";
@@ -505,7 +505,7 @@ function validateRpcFreshAccept(record: RpcJsonRecord): RpcFreshAccept {
 	if (readRpcRecordKind(record) !== RpcWireRecordKindEnum.accept) {
 		throw new Error("RPC fresh attempt did not receive accept.");
 	}
-	if (readIdentifier(record, "profile") !== RpcProfileEnum.huskyDiRpc1) {
+	if (readIdentifier(record, "profile") !== RPC_PROFILE) {
 		throw new Error("RPC fresh accept selected a different profile.");
 	}
 	readBase64Url32(record, "sessionId");

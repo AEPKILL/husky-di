@@ -39,11 +39,6 @@ export function createRpcProtocol(): IRpcProtocol {
 	return protocol;
 }
 
-/** Returns the private reusable built-in Protocol value for owner factories. */
-export function getRpcProtocol(): IRpcProtocol {
-	return createRpcProtocol();
-}
-
 /** Returns a package-private real-ledger counter exhaustion fixture. */
 export function createRpcCounterExhaustionProtocolForTest(): IRpcProtocol {
 	return createBuiltInRpcProtocol(true);

@@ -4,13 +4,11 @@
  * @created 2026-08-19 00:00:00
  */
 
+import { createRpcProtocol } from "@/factories/rpc-protocol.factory";
 import { RpcConnectorImpl } from "@/impls/rpc-connector.impl";
 import type { IRpcConnector } from "@/interfaces/rpc-caller.interface";
 import type { RpcConnectorOptions } from "@/types/rpc-caller.type";
-import {
-	createRpcProtocolConnectorRuntime,
-	resolveRpcProtocol,
-} from "@/utils/rpc-protocol-runtime.util";
+import { createRpcProtocolConnectorRuntime } from "@/utils/rpc-protocol-runtime.util";
 import {
 	createRpcConnectorRuntimePolicy,
 	snapshotRpcFactoryOptions,
@@ -24,7 +22,7 @@ export function createRpcConnector(
 	const policy = createRpcConnectorRuntimePolicy(snapshot.runtimePolicy);
 	let connector: RpcConnectorImpl | undefined;
 	const runtime = createRpcProtocolConnectorRuntime(
-		resolveRpcProtocol(snapshot.protocol),
+		snapshot.protocol ?? createRpcProtocol(),
 		policy,
 		{
 			reserveRetainedBytes: (bytes) => connector?.reserveRetainedBytes(bytes),

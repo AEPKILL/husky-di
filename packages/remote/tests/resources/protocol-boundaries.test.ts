@@ -12,7 +12,6 @@ import {
 } from "../../src/constants/protocol/rpc-profile.const";
 import { RpcDecodePhaseEnum } from "../../src/enums/protocol/rpc-decode-phase.enum";
 import type { RpcEndpointFailureEnum } from "../../src/enums/protocol/rpc-endpoint-failure.enum";
-import { RpcProtocolRoleEnum } from "../../src/enums/protocol/rpc-protocol-role.enum";
 import { RpcWireRecordKindEnum } from "../../src/enums/protocol/rpc-wire-record-kind.enum";
 import { RpcExceptionCodeEnum } from "../../src/enums/rpc-exception-code.enum";
 import { RpcCodecImpl } from "../../src/impls/protocol/rpc-codec.impl";
@@ -166,7 +165,6 @@ function createSession(
 		fault() {},
 	};
 	return new RpcSessionImpl({
-		role: RpcProtocolRoleEnum.connector,
 		host,
 		sessionId: "boundary-session",
 		proofKey: {} as CryptoKey,

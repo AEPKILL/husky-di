@@ -63,7 +63,7 @@ describe("Default RPC Protocol counter drain", () => {
 
 		await vi.waitFor(() => expect(sent).toHaveLength(512));
 
-		expect(session.highestSentSequence).toBe(Number.MAX_SAFE_INTEGER);
+		expect(session._highestSentSequence).toBe(Number.MAX_SAFE_INTEGER);
 		expect(Number.isSafeInteger(session._nextOutgoingSequence)).toBe(true);
 		session._applyAck(Number.MAX_SAFE_INTEGER);
 		session._queueSemantic({

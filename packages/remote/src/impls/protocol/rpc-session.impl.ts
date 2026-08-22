@@ -10,7 +10,6 @@ import { RpcDecodePhaseEnum } from "@/enums/protocol/rpc-decode-phase.enum";
 import { RpcEndpointFailureEnum } from "@/enums/protocol/rpc-endpoint-failure.enum";
 import { RpcIncomingCallKindEnum } from "@/enums/protocol/rpc-incoming-call-kind.enum";
 import { RpcPeerCursorClassificationEnum } from "@/enums/protocol/rpc-peer-cursor-classification.enum";
-import type { RpcProtocolRoleEnum } from "@/enums/protocol/rpc-protocol-role.enum";
 import { RpcProtocolSessionTransitionTypeEnum } from "@/enums/protocol/rpc-protocol-session-transition-type.enum";
 import { RpcWireRecordKindEnum } from "@/enums/protocol/rpc-wire-record-kind.enum";
 import { RpcCloseReasonEnum } from "@/enums/rpc-close-reason.enum";
@@ -54,7 +53,6 @@ const RPC_LAST_ORDINARY_SEQUENCE =
 
 interface IRpcBinding {
 	readonly endpoint: IRpcEndpoint;
-	readonly epoch: number;
 	active: boolean;
 }
 
@@ -69,7 +67,6 @@ interface IRpcInvocationEntry {
 	publicFinished: boolean;
 	retired: boolean;
 	callId?: string;
-	seq?: number;
 }
 
 interface IRpcIncomingEntry {
@@ -94,7 +91,6 @@ interface IRpcQueuedSemantic {
 
 /** Retains one Session Incarnation independently from its current Connection. */
 export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
-	readonly _role: RpcProtocolRoleEnum;
 	readonly _host: IRpcProtocolHost;
 	readonly _sessionId: string;
 	readonly _codec: IRpcCodec;
@@ -160,10 +156,8 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 			host,
 			onTerminal,
 			proofKey,
-			role,
 			sessionId,
 		} = options;
-		this._role = role;
 		this._host = host;
 		this._retainedBytesLedger = new RpcRetainedBytesLedgerImpl(
 			host.policy.maxRetainedBytesPerSession,
@@ -197,14 +191,6 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 		return this._receivedThrough;
 	}
 
-	get peerReceivedThrough(): number {
-		return this._peerReceivedThrough;
-	}
-
-	get highestSentSequence(): number {
-		return this._highestSentSequence;
-	}
-
 	get bindingEpoch(): number {
 		return this._bindingEpoch;
 	}
@@ -221,14 +207,6 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 		return this.isRecovering && this._binding === undefined
 			? this._recoveryDeadline
 			: undefined;
-	}
-
-	get isClosed(): boolean {
-		return this._closed;
-	}
-
-	get highestAcceptedResumeAttempt(): number {
-		return this._highestAcceptedResumeAttempt;
 	}
 
 	reserveRetainedBytes(
@@ -373,7 +351,7 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 		this._replayBarrier = [...this._replay.keys()].filter(
 			(sequence) => sequence > peerReceivedThrough,
 		);
-		this._binding = { endpoint, epoch, active: false };
+		this._binding = { endpoint, active: false };
 	}
 
 	activateBinding(): void {
@@ -568,15 +546,7 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 		if (this._closed) {
 			return;
 		}
-		this._closed = true;
-		this._clearTimers();
-		this._terminateOpenCalls();
-		this._releaseReplayState();
-		this._binding?.endpoint.fenceAndClose();
-		this._protectedRetainedBytesReservation.release();
-		unregisterRpcSessionRetainedBytes(this);
-		this._binding = undefined;
-		this._proofKey = undefined;
+		this._teardownTerminalState();
 		this._onTerminal(this);
 		this._resolveShutdown?.();
 		this._resolveShutdown = undefined;
@@ -1085,10 +1055,9 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 		this._highestSentSequence = sequence;
 		entry.admitted = true;
 		entry.callId = callId;
-		entry.seq = sequence;
 		this._releasePendingInvocationCharge(entry);
 		this._outgoingCalls.set(callId, entry);
-		this._retainReplayEntry(sequence, replay);
+		this._replay.set(sequence, replay);
 		entry.request = undefined;
 		this._consumePiggybackAck();
 		this._sendEncoded(binding, encoded);
@@ -1130,7 +1099,7 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 			this._nextOutgoingSequence += 1;
 		}
 		this._highestSentSequence = sequence;
-		this._retainReplayEntry(sequence, replay);
+		this._replay.set(sequence, replay);
 		if (
 			message.kind === RpcWireRecordKindEnum.result ||
 			message.kind === RpcWireRecordKindEnum.error
@@ -1239,10 +1208,6 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 			resourceClass,
 			released: false,
 		};
-	}
-
-	_retainReplayEntry(sequence: number, replay: IRpcReplayEntry): void {
-		this._replay.set(sequence, replay);
 	}
 
 	_releaseReplayEntry(replay: IRpcReplayEntry): void {
@@ -1547,13 +1512,7 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 		if (this._closed || !this._recovering) {
 			return;
 		}
-		this._closed = true;
-		this._clearTimers();
-		this._terminateOpenCalls();
-		this._releaseReplayState();
-		this._protectedRetainedBytesReservation.release();
-		unregisterRpcSessionRetainedBytes(this);
-		this._proofKey = undefined;
+		this._teardownTerminalState();
 		this._sessionHost?.transition({
 			type: RpcProtocolSessionTransitionTypeEnum.closed,
 			reason: RpcCloseReasonEnum.recoveryExpired,
@@ -1572,15 +1531,7 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 		if (this._closed) {
 			return;
 		}
-		this._closed = true;
-		this._clearTimers();
-		this._terminateOpenCalls();
-		this._releaseReplayState();
-		this._binding?.endpoint.fenceAndClose();
-		this._protectedRetainedBytesReservation.release();
-		unregisterRpcSessionRetainedBytes(this);
-		this._binding = undefined;
-		this._proofKey = undefined;
+		this._teardownTerminalState();
 		this._sessionHost?.transition({
 			type: RpcProtocolSessionTransitionTypeEnum.closed,
 			reason,
@@ -1595,6 +1546,15 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 		if (this._closed) {
 			return;
 		}
+		this._teardownTerminalState();
+		this._sessionHost?.transition({
+			type: RpcProtocolSessionTransitionTypeEnum.closed,
+			reason: RpcCloseReasonEnum.remoteTerminated,
+		});
+		this._onTerminal(this);
+	}
+
+	_teardownTerminalState(): void {
 		this._closed = true;
 		this._clearTimers();
 		this._terminateOpenCalls();
@@ -1604,11 +1564,6 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 		unregisterRpcSessionRetainedBytes(this);
 		this._binding = undefined;
 		this._proofKey = undefined;
-		this._sessionHost?.transition({
-			type: RpcProtocolSessionTransitionTypeEnum.closed,
-			reason: RpcCloseReasonEnum.remoteTerminated,
-		});
-		this._onTerminal(this);
 	}
 
 	_fault(

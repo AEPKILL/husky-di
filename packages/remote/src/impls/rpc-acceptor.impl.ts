@@ -202,11 +202,7 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 	}
 
 	listen(adapter: IRpcAcceptorAdapter): Promise<void> {
-		try {
-			return this.#listen(adapter);
-		} catch (error) {
-			return Promise.reject(error);
-		}
+		return Promise.try(() => this.#listen(adapter));
 	}
 
 	#listen(adapter: IRpcAcceptorAdapter): Promise<void> {

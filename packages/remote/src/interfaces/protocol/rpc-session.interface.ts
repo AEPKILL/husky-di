@@ -14,14 +14,10 @@ import type {
 export interface IRpcSession<TKey> extends IRpcProtocolSession {
 	readonly sessionId: string;
 	readonly receivedThrough: number;
-	readonly peerReceivedThrough: number;
-	readonly highestSentSequence: number;
 	readonly bindingEpoch: number;
 	readonly proofKey: TKey | undefined;
 	readonly isRecovering: boolean;
 	readonly recoveryReclaimDeadline: number | undefined;
-	readonly isClosed: boolean;
-	readonly highestAcceptedResumeAttempt: number;
 	reserveRetainedBytes(bytes: number): IRpcRetainedBytesReservation | undefined;
 	ownsEndpoint(endpoint: IRpcEndpoint): boolean;
 	consumeResumeAttempt(): number;

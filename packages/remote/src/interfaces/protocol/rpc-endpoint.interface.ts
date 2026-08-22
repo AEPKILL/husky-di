@@ -7,7 +7,6 @@
 export interface IRpcEndpoint {
 	readonly isSendIdle: boolean;
 	readonly isIngressIdle: boolean;
-	readonly isClosed: boolean;
 	configureSendProgressTimeout(timeoutMs: number): void;
 	observeIngressIdle(observer: () => void): void;
 	sendNow(message: Uint8Array): Promise<void>;

@@ -11,7 +11,7 @@ import { RpcIncomingCallKindEnum } from "../../src/enums/protocol/rpc-incoming-c
 import { RpcWireRecordKindEnum } from "../../src/enums/protocol/rpc-wire-record-kind.enum";
 import { RpcCallDirectionEnum } from "../../src/enums/rpc-call-direction.enum";
 import { RpcEventTypeEnum } from "../../src/enums/rpc-event-type.enum";
-import { getRpcProtocol } from "../../src/factories/rpc-protocol.factory";
+import { createRpcProtocol } from "../../src/factories/rpc-protocol.factory";
 import { RpcCodecImpl } from "../../src/impls/protocol/rpc-codec.impl";
 import {
 	createRemoteServiceDescriptor,
@@ -112,7 +112,7 @@ describe("Default RPC Protocol retained ledger", () => {
 
 	it("RPC-CALL-008 RPC-RESOURCE-003 releases committed incoming storage when reentrant Owner close wins", async () => {
 		const maximumBytes = 4 * 1024 * 1024;
-		const builtIn = getRpcProtocol();
+		const builtIn = createRpcProtocol();
 		let capturedHost: IRpcProtocolHost | undefined;
 		const protocol = Object.freeze<IRpcProtocol>({
 			createAcceptor: (host) => {

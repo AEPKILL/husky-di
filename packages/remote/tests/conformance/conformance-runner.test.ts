@@ -16,7 +16,7 @@ import {
 } from "../../src/conformance";
 import {
 	createRpcCounterExhaustionProtocolForTest,
-	getRpcProtocol,
+	createRpcProtocol,
 } from "../../src/factories/rpc-protocol.factory";
 import type { IRpcProtocol } from "../../src/protocol";
 import {
@@ -117,7 +117,7 @@ describe("RPC conformance runner", () => {
 
 		await runRpcProtocolConformance(
 			{
-				protocol: getRpcProtocol(),
+				protocol: createRpcProtocol(),
 				counterExhaustionProtocol: createRpcCounterExhaustionProtocolForTest(),
 				createActiveProtocolFaultMessage: () =>
 					encoder.encode(JSON.stringify({ kind: "bogus" })),

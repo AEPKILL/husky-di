@@ -7,19 +7,14 @@
 import type { RpcResumeRejectCodeEnum } from "@/enums/protocol/rpc-resume-reject-code.enum";
 import type { RpcWireRecordKindEnum } from "@/enums/protocol/rpc-wire-record-kind.enum";
 import type { RpcExceptionCodeEnum } from "@/enums/rpc-exception-code.enum";
-import type { RpcApplicationValue } from "@/interfaces/protocol/rpc-protocol.interface";
+import type {
+	IRpcApplicationRecord,
+	RpcApplicationValue,
+} from "@/interfaces/protocol/rpc-protocol.interface";
 
-export type RpcJsonRecord = {
-	readonly [key: string]: RpcJsonValue;
-};
+export type RpcJsonRecord = IRpcApplicationRecord;
 
-export type RpcJsonValue =
-	| null
-	| boolean
-	| string
-	| number
-	| readonly RpcJsonValue[]
-	| RpcJsonRecord;
+export type RpcJsonValue = RpcApplicationValue;
 
 export type RpcFreshRequest = RpcJsonRecord & {
 	readonly kind: RpcWireRecordKindEnum.fresh;

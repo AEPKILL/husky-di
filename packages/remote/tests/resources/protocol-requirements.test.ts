@@ -309,7 +309,7 @@ describe("Default RPC Protocol remaining requirements", () => {
 			{ type: "failed", code: "outcome-unknown" },
 			{ type: "failed", code: "unavailable" },
 		]);
-		expect(session.isClosed).toBe(true);
+		expect(session._closed).toBe(true);
 	});
 
 	it("RPC-SCHEDULE-005 serializes synchronous ingress emissions and never runs handlers in the Transport callback", async () => {

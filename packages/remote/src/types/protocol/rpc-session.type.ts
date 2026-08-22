@@ -4,13 +4,11 @@
  * @created 2026-08-19 00:00:00
  */
 
-import type { RpcProtocolRoleEnum } from "@/enums/protocol/rpc-protocol-role.enum";
 import type { IRpcCodec } from "@/interfaces/protocol/rpc-codec.interface";
 import type { IRpcProtocolHost } from "@/interfaces/protocol/rpc-protocol.interface";
 import type { IRpcSession } from "@/interfaces/protocol/rpc-session.interface";
 
 export type CreateRpcSessionOptions<TKey> = {
-	readonly role: RpcProtocolRoleEnum;
 	readonly host: IRpcProtocolHost;
 	readonly sessionId: string;
 	readonly proofKey: TKey;

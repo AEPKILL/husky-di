@@ -1,10 +1,11 @@
 /**
- * @overview Private numeric limits fixed by the husky-di-rpc/1 profile.
+ * @overview Private identifier and numeric limits for the husky-di-rpc/1 profile.
  * @author AEPKILL
  * @created 2026-08-19 00:00:00
  */
 
 export const RPC_MAX_MESSAGE_BYTES = 1_048_576;
+export const RPC_PROFILE = "husky-di-rpc/1";
 // An ACK-bearing Error.details record is the largest fixed Application wrapper.
 export const RPC_MAX_WIRE_DEPTH = 64 + 3;
 export const RPC_MAX_WIRE_NODES = 65_536 + 10;

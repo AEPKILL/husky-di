@@ -6,7 +6,7 @@
 
 import { Subject } from "rxjs";
 import { describe, expect, it, vi } from "vitest";
-import { getRpcProtocol } from "../../src/factories/rpc-protocol.factory";
+import { createRpcProtocol } from "../../src/factories/rpc-protocol.factory";
 import { RpcEndpointImpl } from "../../src/impls/protocol/rpc-endpoint.impl";
 import {
 	RpcRetainedBytesLedgerImpl,
@@ -185,7 +185,7 @@ describe("Default RPC Protocol owner retained bytes", () => {
 		"Acceptor",
 		"Connector",
 	] as const)("RPC-RESOURCE-002 RPC-RESOURCE-003 holds and releases the %s protected Session reservation", async (role) => {
-		const builtIn = getRpcProtocol();
+		const builtIn = createRpcProtocol();
 		let capturedHost: IRpcProtocolHost | undefined;
 		const protocol: IRpcProtocol = {
 			createAcceptor: (host) => {
