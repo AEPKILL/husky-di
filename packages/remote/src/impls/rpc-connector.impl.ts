@@ -21,6 +21,7 @@ import {
 	RpcRetainedBytesLedgerImpl,
 	reserveRpcSessionRetainedBytes,
 } from "@/impls/protocol/rpc-retained-bytes-ledger.impl";
+import { RpcOwnerCustodyImpl } from "@/impls/rpc-owner-custody.impl";
 import { RpcPeerImpl } from "@/impls/rpc-peer.impl";
 import type {
 	IRpcProtocolConnectorRuntime,
@@ -42,6 +43,10 @@ import type {
 	RpcConnectorConnectOptions,
 	RpcConnectorState,
 } from "@/types/rpc-caller.type";
+import type {
+	RpcOwnedCleanup,
+	RpcOwnedConnection,
+} from "@/types/rpc-owner-custody.type";
 import {
 	installRpcAbortListener,
 	readRpcAbortSignalAborted,
@@ -62,20 +67,14 @@ type RpcPeerClosedEvent = Extract<
 	{ readonly type: RpcEventTypeEnum.peerClosed }
 >;
 
-interface RpcConnectorOwnedCleanup {
-	readonly cleanup: () => unknown;
-	task?: Promise<void>;
-	error?: Error;
-}
-
 interface RpcConnectorAttempt {
 	readonly abortController: AbortController;
 	readonly ownerAbort: Promise<never>;
 	readonly rejectOwnerAbort: (error: Error) => void;
-	readonly startupCleanup: RpcConnectorOwnedCleanup;
+	readonly startupCleanup: RpcOwnedCleanup;
 	removeExternalAbortListener?: () => void;
 	subscription?: Subscription;
-	connection?: IRpcConnection;
+	connection?: RpcOwnedConnection;
 	provisionalSession?: IRpcProtocolSession;
 	insideHandoff: boolean;
 	attached: boolean;
@@ -92,17 +91,7 @@ export class RpcConnectorImpl implements IRpcConnector {
 	readonly #stateSubject: BehaviorSubject<RpcConnectorState>;
 	readonly #eventSubject = new Subject<RpcEvent>();
 	readonly #faultingSessions = new Set<IRpcProtocolSession>();
-	readonly #ownedConnections = new Set<IRpcConnection>();
-	readonly #connectionCloseTasks = new WeakMap<IRpcConnection, Promise<void>>();
-	readonly #connectionCleanupEntries = new WeakMap<
-		IRpcConnection,
-		RpcConnectorOwnedCleanup
-	>();
-	readonly #connectionTerminalSubscriptions = new Map<
-		IRpcConnection,
-		Subscription
-	>();
-	readonly #cleanupLedger: RpcConnectorOwnedCleanup[] = [];
+	readonly #custody: RpcOwnerCustodyImpl;
 	readonly #connectionLimit: number;
 	#attempt: RpcConnectorAttempt | undefined;
 	#session: IRpcProtocolSession | undefined;
@@ -110,7 +99,6 @@ export class RpcConnectorImpl implements IRpcConnector {
 	#resolveTermination: (() => void) | undefined;
 	#rejectTermination: ((error: unknown) => void) | undefined;
 	#graceTimer: ReturnType<typeof setTimeout> | undefined;
-	#cleanupTimer: ReturnType<typeof setTimeout> | undefined;
 	readonly state$: Observable<RpcConnectorState>;
 	readonly event$: Observable<RpcEvent>;
 	readonly peer: RpcPeerImpl;
@@ -121,6 +109,9 @@ export class RpcConnectorImpl implements IRpcConnector {
 	) {
 		this.#runtime = runtime;
 		this.#policy = policy;
+		this.#custody = new RpcOwnerCustodyImpl(policy.shutdownDeadlineMs, () =>
+			this.#runtime.cleanup(),
+		);
 		this.#retainedBytesLedger = new RpcRetainedBytesLedgerImpl(
 			policy.maxRetainedBytesTotal,
 		);
@@ -172,7 +163,7 @@ export class RpcConnectorImpl implements IRpcConnector {
 			(this.peer.state.status !== RpcStateStatusEnum.unbound &&
 				this.peer.state.status !== RpcStateStatusEnum.recovering) ||
 			this.#attempt !== undefined ||
-			this.#ownedConnections.size >= this.#connectionLimit
+			this.#custody.connectionCount >= this.#connectionLimit
 		) {
 			return Promise.reject(
 				createRpcException(RpcExceptionCodeEnum.unavailable),
@@ -231,7 +222,7 @@ export class RpcConnectorImpl implements IRpcConnector {
 			},
 		);
 		void startupCleanupTask.catch(() => {});
-		const startupCleanup = this.#admitOwnedCleanup(() => startupCleanupTask);
+		const startupCleanup = this.#custody.ownCleanup(() => startupCleanupTask);
 		attempt = {
 			abortController: new AbortController(),
 			ownerAbort,
@@ -258,23 +249,23 @@ export class RpcConnectorImpl implements IRpcConnector {
 		try {
 			attempt.subscription = connectionSource.subscribe({
 				next: (connection) => {
-					this.#ownConnection(connection);
+					const ownedConnection = this.#custody.ownConnection(connection);
 					if (attempt.fenced || this.#attempt !== attempt) {
-						this.#directClose(connection);
+						ownedConnection.directClose();
 						return;
 					}
 					if (attempt.connection !== undefined) {
-						this.#directClose(connection);
+						ownedConnection.directClose();
 						rejectBinding(
 							new Error("Connector Adapter emitted multiple Connections."),
 						);
 						return;
 					}
-					attempt.connection = connection;
+					attempt.connection = ownedConnection;
 					attempt.insideHandoff = true;
 					try {
 						const result = this.#runtime.bind(
-							connection,
+							ownedConnection.connection,
 							attempt.abortController.signal,
 						);
 						Promise.resolve(result).then(resolveBinding, rejectBinding);
@@ -384,7 +375,7 @@ export class RpcConnectorImpl implements IRpcConnector {
 			.finally(() => {
 				attempt.removeExternalAbortListener?.();
 				attempt.subscription?.unsubscribe();
-				this.#startOwnedCleanup(attempt.startupCleanup);
+				attempt.startupCleanup.start();
 				if (this.#attempt === attempt) {
 					this.#attempt = undefined;
 				}
@@ -420,121 +411,11 @@ export class RpcConnectorImpl implements IRpcConnector {
 			}
 		}
 		if (attempt.connection !== undefined) {
-			this.#directClose(attempt.connection);
+			attempt.connection.directClose();
 		}
 		if (fresh && this.#session === undefined) {
 			this.peer.commitState({ status: RpcStateStatusEnum.unbound });
 		}
-	}
-
-	#ownConnection(connection: IRpcConnection): void {
-		if (
-			this.#ownedConnections.has(connection) ||
-			this.#connectionCloseTasks.has(connection)
-		) {
-			return;
-		}
-		this.#ownedConnections.add(connection);
-		const cleanup = this.#admitOwnedCleanup(() =>
-			this.#directClose(connection),
-		);
-		this.#connectionCleanupEntries.set(connection, cleanup);
-		const subscription = connection.message$.subscribe({
-			error: () => this.#directClose(connection),
-			complete: () => this.#directClose(connection),
-		});
-		this.#connectionTerminalSubscriptions.set(connection, subscription);
-	}
-
-	#directClose(connection: IRpcConnection): Promise<void> {
-		const retained = this.#connectionCloseTasks.get(connection);
-		if (retained !== undefined) {
-			return retained;
-		}
-		this.#ownConnection(connection);
-
-		const {
-			promise: task,
-			resolve: resolveClose,
-			reject: rejectClose,
-		} = Promise.withResolvers<void>();
-		this.#connectionCloseTasks.set(connection, task);
-		const cleanup = this.#connectionCleanupEntries.get(connection);
-		if (cleanup !== undefined) {
-			this.#retainOwnedCleanup(cleanup, task);
-		}
-		try {
-			Promise.resolve(connection.close()).then(resolveClose, rejectClose);
-		} catch (error) {
-			rejectClose(error);
-		}
-		void task.catch(() => {});
-		void task.then(
-			() => this.#releaseOwnedConnection(connection),
-			() => {},
-		);
-		return task;
-	}
-
-	#admitOwnedCleanup(cleanup: () => unknown): RpcConnectorOwnedCleanup {
-		const entry: RpcConnectorOwnedCleanup = { cleanup };
-		this.#cleanupLedger.push(entry);
-		return entry;
-	}
-
-	#startOwnedCleanup(entry: RpcConnectorOwnedCleanup): Promise<void> {
-		if (entry.task !== undefined) {
-			return entry.task;
-		}
-		let cleanup: unknown;
-		try {
-			cleanup = entry.cleanup();
-		} catch (error) {
-			cleanup = Promise.reject(error);
-		}
-		return this.#retainOwnedCleanup(entry, cleanup);
-	}
-
-	#retainOwnedCleanup(
-		entry: RpcConnectorOwnedCleanup,
-		cleanup: unknown,
-	): Promise<void> {
-		if (entry.task !== undefined) {
-			return entry.task;
-		}
-		const task = Promise.resolve(cleanup).then(
-			() => undefined,
-			(error: unknown) => {
-				entry.error ??=
-					error instanceof Error
-						? error
-						: new Error("RPC Owner cleanup failed.");
-				throw entry.error;
-			},
-		);
-		entry.task = task;
-		void task.catch(() => {});
-		void task.then(
-			() => this.#releaseSettledOwnedCleanup(entry),
-			() => {},
-		);
-		return task;
-	}
-
-	#releaseSettledOwnedCleanup(entry: RpcConnectorOwnedCleanup): void {
-		if (this.#terminationTask !== undefined || entry.error !== undefined) {
-			return;
-		}
-		const index = this.#cleanupLedger.indexOf(entry);
-		if (index >= 0) {
-			this.#cleanupLedger.splice(index, 1);
-		}
-	}
-
-	#releaseOwnedConnection(connection: IRpcConnection): void {
-		this.#ownedConnections.delete(connection);
-		this.#connectionTerminalSubscriptions.get(connection)?.unsubscribe();
-		this.#connectionTerminalSubscriptions.delete(connection);
 	}
 
 	/** Package-private Protocol attachment port. */
@@ -971,52 +852,17 @@ export class RpcConnectorImpl implements IRpcConnector {
 	}
 
 	#startCleanup(finalState: RpcConnectorClosedState): void {
-		this.#admitOwnedCleanup(() => this.#runtime.cleanup());
-		const cleanups = this.#cleanupLedger.map((entry) =>
-			this.#startOwnedCleanup(entry),
+		void this.#custody.finishCleanup().then(
+			() => this.#finishCleanupSuccess(finalState),
+			(error: unknown) => this.#finishCleanupFailure(error),
 		);
-		this.#cleanupTimer = setTimeout(() => {
-			const errors = this.#collectOwnedCleanupErrors();
-			errors.push(new Error("RPC Owner cleanup exceeded its deadline."));
-			this.#finishCleanupFailure(this.#combineOwnedCleanupErrors(errors));
-		}, this.#policy.shutdownDeadlineMs);
-		void Promise.allSettled(cleanups).then((settlements) => {
-			if (this.state.status !== RpcStateStatusEnum.closing) {
-				return;
-			}
-			void settlements;
-			const errors = this.#collectOwnedCleanupErrors();
-			if (errors.length === 0) {
-				this.#finishCleanupSuccess(finalState);
-			} else {
-				this.#finishCleanupFailure(this.#combineOwnedCleanupErrors(errors));
-			}
-		});
-	}
-
-	#collectOwnedCleanupErrors(): Error[] {
-		const errors: Error[] = [];
-		for (const entry of this.#cleanupLedger) {
-			if (entry.error !== undefined) {
-				errors.push(entry.error);
-			}
-		}
-		return errors;
-	}
-
-	#combineOwnedCleanupErrors(errors: readonly Error[]): Error {
-		return errors.length === 1
-			? (errors[0] as Error)
-			: new AggregateError(errors, "RPC Owner cleanup failed.");
 	}
 
 	#finishCleanupSuccess(finalState: RpcConnectorClosedState): void {
 		if (this.state.status !== RpcStateStatusEnum.closing) {
 			return;
 		}
-		this.#clearCleanupTimer();
 		this.#stateSubject.next(finalState);
-		this.#detachOwnedCleanupState();
 		this.#stateSubject.complete();
 		if (finalState.outcome === RpcCloseOutcomeEnum.normal) {
 			this.#eventSubject.next({
@@ -1039,7 +885,6 @@ export class RpcConnectorImpl implements IRpcConnector {
 		if (this.state.status !== RpcStateStatusEnum.closing) {
 			return;
 		}
-		this.#clearCleanupTimer();
 		const error =
 			value instanceof Error ? value : new Error("RPC Owner cleanup failed.");
 		this.#stateSubject.next(
@@ -1050,7 +895,6 @@ export class RpcConnectorImpl implements IRpcConnector {
 				error,
 			}),
 		);
-		this.#detachOwnedCleanupState();
 		this.#stateSubject.complete();
 		this.#eventSubject.next({
 			type: RpcEventTypeEnum.topologyClosed,
@@ -1059,25 +903,5 @@ export class RpcConnectorImpl implements IRpcConnector {
 		});
 		this.#eventSubject.complete();
 		this.#rejectTermination?.(error);
-	}
-
-	#detachOwnedCleanupState(): void {
-		for (const subscription of this.#connectionTerminalSubscriptions.values()) {
-			try {
-				subscription.unsubscribe();
-			} catch {
-				// Final cleanup has already selected its authoritative outcome.
-			}
-		}
-		this.#connectionTerminalSubscriptions.clear();
-		this.#ownedConnections.clear();
-		this.#cleanupLedger.splice(0);
-	}
-
-	#clearCleanupTimer(): void {
-		if (this.#cleanupTimer !== undefined) {
-			clearTimeout(this.#cleanupTimer);
-			this.#cleanupTimer = undefined;
-		}
 	}
 }

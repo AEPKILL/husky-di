@@ -19,12 +19,14 @@ import type {
 	IRpcProtocolConnectorHost,
 	IRpcProtocolConnectorRuntime,
 	IRpcProtocolRuntimePolicy,
+	IRpcRetainedBytesReservation,
 	RpcProtocolSessionTransition,
 } from "../../src/interfaces/protocol/rpc-protocol.interface";
 import type { IRpcConnection } from "../../src/interfaces/rpc-connection.interface";
 import type {
 	RpcFreshAccept,
 	RpcJsonRecord,
+	RpcResumeRequest,
 } from "../../src/types/protocol/rpc-wire-record.type";
 import {
 	normalizeRpcApplicationArguments,
@@ -235,6 +237,31 @@ async function createFreshAccept(
 	};
 }
 
+async function createSignedResumeRequest(
+	sessionId: string,
+	proofKey: CryptoKey,
+	resumeAttempt: number,
+): Promise<RpcResumeRequest> {
+	const initiatorNonce = cryptography.createRandomCarrier();
+	initiatorNonce.bytes.fill(0);
+	const requestWithoutProof = {
+		kind: RpcWireRecordKindEnum.resume,
+		profile: "husky-di-rpc/1",
+		sessionId,
+		receivedThrough: 0,
+		resumeAttempt,
+		initiatorNonce: initiatorNonce.value,
+	} as const;
+	return {
+		...requestWithoutProof,
+		proof: await cryptography.signProof({
+			kind: RpcProofOperationKindEnum.resumeRequest,
+			proofKey,
+			record: requestWithoutProof,
+		}),
+	};
+}
+
 function accept(
 	runtime: IRpcProtocolAcceptorRuntime,
 	connection: IBootstrapConnectionHarness,
@@ -325,9 +352,13 @@ describe("Default RPC Protocol bootstrap resources", () => {
 		runtime.close();
 	});
 
-	it("RPC-RESOURCE-003 protects Session bytes before proof while the first ingress frame remains transient", async () => {
+	it("RPC-RESOURCE-003 RPC-SEC-009 retains protected Session bytes until aborted proof work settles", async () => {
+		let settleDigest!: (value: ArrayBuffer) => void;
 		vi.spyOn(globalThis.crypto.subtle, "digest").mockImplementation(
-			() => new Promise<ArrayBuffer>(() => {}),
+			() =>
+				new Promise<ArrayBuffer>((resolve) => {
+					settleDigest = resolve;
+				}),
 		);
 		const protectedBytes = 512 * 1024;
 		const totalBytes = 4 * 1024 * 1024;
@@ -354,8 +385,13 @@ describe("Default RPC Protocol bootstrap resources", () => {
 
 		expect(retainedBytes.reserve(1)).toBeUndefined();
 		runtime.close();
-		const released = retainedBytes.reserve(protectedBytes);
-		expect(released).toBeDefined();
+		expect(retainedBytes.reserve(protectedBytes)).toBeUndefined();
+		settleDigest(new Uint8Array(32).buffer);
+		let released: IRpcRetainedBytesReservation | undefined;
+		await vi.waitFor(() => {
+			released = retainedBytes.reserve(protectedBytes);
+			expect(released).toBeDefined();
+		});
 		released?.release();
 		occupied.release();
 	});
@@ -497,6 +533,72 @@ describe("Default RPC Protocol bootstrap resources", () => {
 		expect(admittedSessions).toEqual([1]);
 		expect(ownerFaults).toEqual([]);
 
+		runtime.close();
+	});
+
+	it("RPC-SESSION-009 discards a signed resume candidate made stale by a higher attempt", async () => {
+		const transitions: RpcProtocolSessionTransition[] = [];
+		const { runtime } = createAcceptorRuntime(
+			createPolicy({ maxHandshakes: 2, bindingAttemptTimeoutMs: 1_000 }),
+			(transition) => transitions.push(transition),
+		);
+		const fresh = createBootstrapConnection();
+		accept(runtime, fresh);
+		fresh.emit(createFreshRequest());
+		await vi.waitFor(() => expect(fresh.responses.at(-1)?.kind).toBe("accept"));
+		const freshAccept = fresh.responses.at(-1) as RpcFreshAccept;
+		const proofKey = await cryptography.deriveProofKey(
+			cryptography.decodeBase64Url32(freshAccept.sessionSecret),
+			freshAccept.sessionId,
+		);
+		const firstRequest = await createSignedResumeRequest(
+			freshAccept.sessionId,
+			proofKey,
+			1,
+		);
+		const higherRequest = await createSignedResumeRequest(
+			freshAccept.sessionId,
+			proofKey,
+			2,
+		);
+		fresh.complete();
+		await vi.waitFor(() =>
+			expect(transitions.at(-1)).toMatchObject({ type: "recovering" }),
+		);
+
+		const nativeSign = globalThis.crypto.subtle.sign.bind(
+			globalThis.crypto.subtle,
+		);
+		let settleStaleSign!: (value: ArrayBuffer) => void;
+		const staleSign = new Promise<ArrayBuffer>((resolve) => {
+			settleStaleSign = resolve;
+		});
+		const sign = vi
+			.spyOn(globalThis.crypto.subtle, "sign")
+			.mockImplementationOnce(() => staleSign)
+			.mockImplementation((algorithm, key, data) =>
+				nativeSign(algorithm, key, data),
+			);
+		const stale = createBootstrapConnection();
+		accept(runtime, stale);
+		stale.emit(firstRequest);
+		await vi.waitFor(() => expect(sign).toHaveBeenCalledTimes(1));
+
+		const winner = createBootstrapConnection();
+		accept(runtime, winner);
+		winner.emit(higherRequest);
+		await vi.waitFor(() =>
+			expect(winner.responses.at(-1)).toMatchObject({
+				kind: "accept",
+				bindingEpoch: 2,
+			}),
+		);
+
+		settleStaleSign(new Uint8Array(32).buffer);
+		await vi.waitFor(() => expect(stale.closeCount).toBe(1));
+
+		expect(stale.responses).toEqual([]);
+		expect(sign).toHaveBeenCalledTimes(2);
 		runtime.close();
 	});
 

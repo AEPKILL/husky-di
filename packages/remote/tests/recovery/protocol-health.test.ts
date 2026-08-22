@@ -51,10 +51,17 @@ describe("Default RPC Protocol health", () => {
 		const network = createRpcTestNetwork();
 		const acceptor = createRpcAcceptor({ runtimePolicy: healthPolicy });
 		const connector = createRpcConnector({ runtimePolicy: healthPolicy });
+		const statesAtClose: string[] = [];
 
 		await acceptor.listen(network.acceptorAdapter);
 		await connector.connect({
-			adapter: network.createConnectorAdapter("silent"),
+			adapter: network.createConnectorAdapter("silent", (direction) => {
+				statesAtClose.push(
+					direction === "connector"
+						? connector.peer.state.status
+						: (acceptor.peers[0]?.state.status ?? "missing"),
+				);
+			}),
 		});
 		network.setInterceptor(() => ({ drop: true }));
 
@@ -62,6 +69,7 @@ describe("Default RPC Protocol health", () => {
 
 		expect(connector.peer.state).toEqual({ status: "recovering" });
 		expect(acceptor.peers[0]?.state).toEqual({ status: "recovering" });
+		expect(statesAtClose).toEqual(["recovering"]);
 
 		await Promise.all([connector.close(), acceptor.close()]);
 	});

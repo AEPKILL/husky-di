@@ -20,6 +20,7 @@ import {
 	RpcRetainedBytesLedgerImpl,
 	reserveRpcSessionRetainedBytes,
 } from "@/impls/protocol/rpc-retained-bytes-ledger.impl";
+import { RpcOwnerCustodyImpl } from "@/impls/rpc-owner-custody.impl";
 import {
 	type RpcPeerCommittedInvocation,
 	RpcPeerImpl,
@@ -53,6 +54,10 @@ import type {
 	RpcAcceptorListenerState,
 	RpcAcceptorState,
 } from "@/types/rpc-caller.type";
+import type {
+	RpcOwnedCleanup,
+	RpcOwnedConnection,
+} from "@/types/rpc-owner-custody.type";
 import { normalizeRpcApplicationArguments } from "@/utils/rpc-application-value.util";
 import {
 	installRpcAbortListener,
@@ -70,19 +75,13 @@ interface RpcAcceptorListenerAttempt {
 	readonly abortController: AbortController;
 	readonly resolve: () => void;
 	readonly reject: (error: unknown) => void;
-	readonly listenerCleanup: RpcAcceptorOwnedCleanup;
-	readonly startupCleanup: RpcAcceptorOwnedCleanup;
+	readonly listenerCleanup: RpcOwnedCleanup;
+	readonly startupCleanup: RpcOwnedCleanup;
 	subscription?: Subscription;
 	ready: boolean;
 	terminal: boolean;
 	cleanupRequested: boolean;
 	cleanupBarrier?: Promise<void>;
-}
-
-interface RpcAcceptorOwnedCleanup {
-	readonly cleanup: () => unknown;
-	task?: Promise<void>;
-	error?: Error;
 }
 
 type RpcAcceptorClosedState = Extract<
@@ -102,21 +101,11 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 	readonly #sessions = new Map<IRpcProtocolSession, RpcPeerImpl>();
 	readonly #faultingSessions = new Set<IRpcProtocolSession>();
 	readonly #handlerScheduler: RpcHandlerScheduler;
-	readonly #ownedConnections = new Set<IRpcConnection>();
-	readonly #connectionCloseTasks = new WeakMap<IRpcConnection, Promise<void>>();
-	readonly #connectionCleanupEntries = new WeakMap<
-		IRpcConnection,
-		RpcAcceptorOwnedCleanup
-	>();
-	readonly #connectionTerminalSubscriptions = new Map<
-		IRpcConnection,
-		Subscription
-	>();
-	readonly #cleanupLedger: RpcAcceptorOwnedCleanup[] = [];
+	readonly #custody: RpcOwnerCustodyImpl;
 	readonly #ordinaryConnectionLimit: number;
 	#state: RpcAcceptorState;
 	#peers: readonly IRpcPeer[];
-	#overflowConnection: IRpcConnection | undefined;
+	#overflowConnection: RpcOwnedConnection | undefined;
 	#listenerCleanupBarrier: Promise<void> | undefined;
 	#listenerAttempt: RpcAcceptorListenerAttempt | undefined;
 	#insideConnectionHandoff = false;
@@ -124,7 +113,6 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 	#resolveTermination: (() => void) | undefined;
 	#rejectTermination: ((error: unknown) => void) | undefined;
 	#graceTimer: ReturnType<typeof setTimeout> | undefined;
-	#cleanupTimer: ReturnType<typeof setTimeout> | undefined;
 	readonly state$: Observable<RpcAcceptorState>;
 	readonly peers$: Observable<readonly IRpcPeer[]>;
 	readonly event$: Observable<RpcEvent>;
@@ -135,6 +123,9 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 	) {
 		this.#runtime = runtime;
 		this.#policy = policy;
+		this.#custody = new RpcOwnerCustodyImpl(policy.shutdownDeadlineMs, () =>
+			this.#runtime.cleanup(),
+		);
 		this.#retainedBytesLedger = new RpcRetainedBytesLedgerImpl(
 			policy.maxRetainedBytesTotal,
 		);
@@ -238,16 +229,37 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 			resolve: resolveStartup,
 			reject: rejectStartup,
 		} = Promise.withResolvers<void>();
+		const {
+			promise: adapterStartup,
+			resolve: resolveAdapterStartup,
+			reject: rejectAdapterStartup,
+		} = Promise.withResolvers<void>();
 		let attempt!: RpcAcceptorListenerAttempt;
-		const listenerCleanup = this.#admitOwnedCleanup(() =>
+		const startupCleanupTask = Promise.race([
+			adapterStartup.then(
+				() => undefined,
+				(error: unknown) => {
+					if (
+						attempt.cleanupRequested &&
+						!(error instanceof DOMException && error.name === "AbortError")
+					) {
+						throw error;
+					}
+				},
+			),
+			// Give a synchronous Adapter abort rejection first claim on cleanup.
+			startup
+				.then(
+					() => undefined,
+					() => undefined,
+				)
+				.then(() => undefined),
+		]);
+		void startupCleanupTask.catch(() => {});
+		const listenerCleanup = this.#custody.ownCleanup(() =>
 			attempt.subscription?.unsubscribe(),
 		);
-		const startupCleanup = this.#admitOwnedCleanup(() =>
-			startup.then(
-				() => undefined,
-				() => undefined,
-			),
-		);
+		const startupCleanup = this.#custody.ownCleanup(() => startupCleanupTask);
 		attempt = {
 			abortController: new AbortController(),
 			resolve: resolveStartup,
@@ -268,19 +280,19 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 				complete: () => this.#terminalListener(attempt, "complete"),
 			});
 		} catch (error) {
+			resolveAdapterStartup();
 			this.#terminalListener(attempt, "error", error);
 			return startup;
 		}
 
-		let readiness: Promise<unknown>;
 		try {
-			readiness = Promise.resolve(
+			Promise.resolve(
 				Reflect.apply(listen, adapter, [attempt.abortController.signal]),
-			);
+			).then(resolveAdapterStartup, rejectAdapterStartup);
 		} catch (error) {
-			readiness = Promise.reject(error);
+			rejectAdapterStartup(error);
 		}
-		readiness.then(
+		adapterStartup.then(
 			() => {
 				if (attempt.terminal || this.#listenerAttempt !== attempt) {
 					return;
@@ -289,15 +301,7 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 				this.#commitListener({ status: RpcStateStatusEnum.listening });
 				attempt.resolve();
 			},
-			(error) => {
-				if (
-					attempt.cleanupRequested &&
-					!(error instanceof DOMException && error.name === "AbortError")
-				) {
-					this.#recordOwnedCleanupFailure(attempt.startupCleanup, error);
-				}
-				this.#terminalListener(attempt, "error", error);
-			},
+			(error) => this.#terminalListener(attempt, "error", error),
 		);
 
 		return startup;
@@ -380,28 +384,28 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 	}
 
 	#acceptConnection(connection: IRpcConnection): void {
+		const connectionCount = this.#custody.connectionCount;
+		const ownedConnection = this.#custody.ownConnection(connection);
 		if (
 			this.state.status !== RpcStateStatusEnum.active ||
 			this.#listenerAttempt === undefined ||
 			this.#listenerAttempt.terminal
 		) {
-			queueMicrotask(() => this.#directClose(connection));
+			queueMicrotask(() => ownedConnection.directClose());
 			return;
 		}
 		const ordinaryConnectionCount =
-			this.#ownedConnections.size -
-			(this.#overflowConnection === undefined ? 0 : 1);
+			connectionCount - (this.#overflowConnection === undefined ? 0 : 1);
 		if (ordinaryConnectionCount >= this.#ordinaryConnectionLimit) {
-			this.#acceptOverflowConnection(connection);
+			this.#acceptOverflowConnection(ownedConnection);
 			return;
 		}
-		this.#ownConnection(connection);
 		this.#insideConnectionHandoff = true;
 		let acceptance: Promise<unknown>;
 		try {
 			acceptance = Promise.resolve(
 				this.#runtime.accept(
-					connection,
+					ownedConnection.connection,
 					this.#listenerAttempt?.abortController.signal ??
 						new AbortController().signal,
 				),
@@ -411,19 +415,18 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 		} finally {
 			this.#insideConnectionHandoff = false;
 		}
-		void acceptance.catch(() => this.#directClose(connection));
+		void acceptance.catch(() => ownedConnection.directClose());
 	}
 
-	#acceptOverflowConnection(connection: IRpcConnection): void {
+	#acceptOverflowConnection(connection: RpcOwnedConnection): void {
 		if (this.#overflowConnection !== undefined) {
-			queueMicrotask(() => this.#directClose(connection));
+			queueMicrotask(() => connection.directClose());
 			return;
 		}
 		this.#overflowConnection = connection;
-		this.#ownConnection(connection);
 		this.#stopListenerForResourcePressure();
 		queueMicrotask(() => {
-			const task = this.#directClose(connection);
+			const task = connection.directClose();
 			void task.then(
 				() => this.#releaseOverflowConnection(connection),
 				() => {},
@@ -456,125 +459,10 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 		this.#startListenerAttemptCleanup(attempt);
 	}
 
-	#releaseOverflowConnection(connection: IRpcConnection): void {
+	#releaseOverflowConnection(connection: RpcOwnedConnection): void {
 		if (this.#overflowConnection === connection) {
 			this.#overflowConnection = undefined;
 		}
-	}
-
-	#ownConnection(connection: IRpcConnection): void {
-		if (
-			this.#ownedConnections.has(connection) ||
-			this.#connectionCloseTasks.has(connection)
-		) {
-			return;
-		}
-		this.#ownedConnections.add(connection);
-		const cleanup = this.#admitOwnedCleanup(() =>
-			this.#directClose(connection),
-		);
-		this.#connectionCleanupEntries.set(connection, cleanup);
-		const subscription = connection.message$.subscribe({
-			error: () => this.#directClose(connection),
-			complete: () => this.#directClose(connection),
-		});
-		this.#connectionTerminalSubscriptions.set(connection, subscription);
-	}
-
-	#directClose(connection: IRpcConnection): Promise<void> {
-		const retained = this.#connectionCloseTasks.get(connection);
-		if (retained !== undefined) {
-			return retained;
-		}
-		this.#ownConnection(connection);
-
-		const {
-			promise: task,
-			resolve: resolveClose,
-			reject: rejectClose,
-		} = Promise.withResolvers<void>();
-		this.#connectionCloseTasks.set(connection, task);
-		const cleanup = this.#connectionCleanupEntries.get(connection);
-		if (cleanup !== undefined) {
-			this.#retainOwnedCleanup(cleanup, task);
-		}
-		try {
-			Promise.resolve(connection.close()).then(resolveClose, rejectClose);
-		} catch (error) {
-			rejectClose(error);
-		}
-		void task.catch(() => {});
-		void task.then(
-			() => this.#releaseOwnedConnection(connection),
-			() => {},
-		);
-		return task;
-	}
-
-	#admitOwnedCleanup(cleanup: () => unknown): RpcAcceptorOwnedCleanup {
-		const entry: RpcAcceptorOwnedCleanup = { cleanup };
-		this.#cleanupLedger.push(entry);
-		return entry;
-	}
-
-	#startOwnedCleanup(entry: RpcAcceptorOwnedCleanup): Promise<void> {
-		if (entry.task !== undefined) {
-			return entry.task;
-		}
-		let cleanup: unknown;
-		try {
-			cleanup = entry.cleanup();
-		} catch (error) {
-			cleanup = Promise.reject(error);
-		}
-		return this.#retainOwnedCleanup(entry, cleanup);
-	}
-
-	#retainOwnedCleanup(
-		entry: RpcAcceptorOwnedCleanup,
-		cleanup: unknown,
-	): Promise<void> {
-		if (entry.task !== undefined) {
-			return entry.task;
-		}
-		const task = Promise.resolve(cleanup).then(
-			() => undefined,
-			(error: unknown) => {
-				this.#recordOwnedCleanupFailure(entry, error);
-				throw entry.error;
-			},
-		);
-		entry.task = task;
-		void task.catch(() => {});
-		void task.then(
-			() => this.#releaseSettledOwnedCleanup(entry),
-			() => {},
-		);
-		return task;
-	}
-
-	#releaseSettledOwnedCleanup(entry: RpcAcceptorOwnedCleanup): void {
-		if (this.#terminationTask !== undefined || entry.error !== undefined) {
-			return;
-		}
-		const index = this.#cleanupLedger.indexOf(entry);
-		if (index >= 0) {
-			this.#cleanupLedger.splice(index, 1);
-		}
-	}
-
-	#recordOwnedCleanupFailure(
-		entry: RpcAcceptorOwnedCleanup,
-		value: unknown,
-	): void {
-		entry.error ??=
-			value instanceof Error ? value : new Error("RPC Owner cleanup failed.");
-	}
-
-	#releaseOwnedConnection(connection: IRpcConnection): void {
-		this.#ownedConnections.delete(connection);
-		this.#connectionTerminalSubscriptions.get(connection)?.unsubscribe();
-		this.#connectionTerminalSubscriptions.delete(connection);
 	}
 
 	resolveAll<T, Definitions extends RpcMethodDefinitions<T>>(
@@ -947,8 +835,8 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 			return attempt.cleanupBarrier;
 		}
 		const barrier = Promise.all([
-			this.#startOwnedCleanup(attempt.listenerCleanup),
-			this.#startOwnedCleanup(attempt.startupCleanup),
+			attempt.listenerCleanup.start(),
+			attempt.startupCleanup.start(),
 		]).then(() => undefined);
 		attempt.cleanupBarrier = barrier;
 		this.#listenerCleanupBarrier = barrier;
@@ -964,51 +852,18 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 	}
 
 	#startCleanup(finalState: RpcAcceptorClosedState): void {
-		this.#admitOwnedCleanup(() => this.#runtime.cleanup());
-		const cleanups = this.#cleanupLedger.map((entry) =>
-			this.#startOwnedCleanup(entry),
+		void this.#custody.finishCleanup().then(
+			() => this.#finishCleanupSuccess(finalState),
+			(error: unknown) => this.#finishCleanupFailure(error),
 		);
-		this.#cleanupTimer = setTimeout(() => {
-			const errors = this.#collectOwnedCleanupErrors();
-			errors.push(new Error("RPC Owner cleanup exceeded its deadline."));
-			this.#finishCleanupFailure(this.#combineOwnedCleanupErrors(errors));
-		}, this.#policy.shutdownDeadlineMs);
-		void Promise.allSettled(cleanups).then(() => {
-			if (this.state.status !== RpcStateStatusEnum.closing) {
-				return;
-			}
-			const errors = this.#collectOwnedCleanupErrors();
-			if (errors.length === 0) {
-				this.#finishCleanupSuccess(finalState);
-			} else {
-				this.#finishCleanupFailure(this.#combineOwnedCleanupErrors(errors));
-			}
-		});
-	}
-
-	#collectOwnedCleanupErrors(): Error[] {
-		const errors: Error[] = [];
-		for (const entry of this.#cleanupLedger) {
-			if (entry.error !== undefined) {
-				errors.push(entry.error);
-			}
-		}
-		return errors;
-	}
-
-	#combineOwnedCleanupErrors(errors: readonly Error[]): Error {
-		return errors.length === 1
-			? (errors[0] as Error)
-			: new AggregateError(errors, "RPC Owner cleanup failed.");
 	}
 
 	#finishCleanupSuccess(finalState: RpcAcceptorClosedState): void {
 		if (this.state.status !== RpcStateStatusEnum.closing) {
 			return;
 		}
-		this.#clearCleanupTimer();
 		this.#commitState(finalState);
-		this.#detachOwnedCleanupState();
+		this.#clearCleanupReferences();
 		this.#stateSubject.complete();
 		this.#peersSubject.complete();
 		if (finalState.outcome === RpcCloseOutcomeEnum.normal) {
@@ -1032,7 +887,6 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 		if (this.state.status !== RpcStateStatusEnum.closing) {
 			return;
 		}
-		this.#clearCleanupTimer();
 		const error =
 			value instanceof Error ? value : new Error("RPC Owner cleanup failed.");
 		this.#commitState(
@@ -1043,7 +897,7 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 				error,
 			}),
 		);
-		this.#detachOwnedCleanupState();
+		this.#clearCleanupReferences();
 		this.#stateSubject.complete();
 		this.#peersSubject.complete();
 		this.#eventSubject.next({
@@ -1055,26 +909,9 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 		this.#rejectTermination?.(error);
 	}
 
-	#detachOwnedCleanupState(): void {
-		for (const subscription of this.#connectionTerminalSubscriptions.values()) {
-			try {
-				subscription.unsubscribe();
-			} catch {
-				// Final cleanup has already selected its authoritative outcome.
-			}
-		}
-		this.#connectionTerminalSubscriptions.clear();
-		this.#ownedConnections.clear();
-		this.#cleanupLedger.splice(0);
+	#clearCleanupReferences(): void {
 		this.#overflowConnection = undefined;
 		this.#listenerCleanupBarrier = undefined;
-	}
-
-	#clearCleanupTimer(): void {
-		if (this.#cleanupTimer !== undefined) {
-			clearTimeout(this.#cleanupTimer);
-			this.#cleanupTimer = undefined;
-		}
 	}
 
 	/** Package-private Protocol admission port. */

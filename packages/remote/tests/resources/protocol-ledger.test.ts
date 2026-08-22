@@ -194,12 +194,7 @@ describe("Default RPC Protocol retained ledger", () => {
 		expect(entry).toBeDefined();
 		expect(entry?.request).toBeUndefined();
 		expect(harness.session._replay.has(1)).toBe(true);
-		const endpoint = harness.session._binding?.endpoint;
-		if (endpoint === undefined) {
-			throw new Error("Expected an active direct Session binding.");
-		}
-		harness.session.receive(
-			endpoint,
+		harness.receive(
 			codec.encode({ kind: RpcWireRecordKindEnum.ack, ackThrough: 1 }),
 		);
 		expect(harness.session._replay.has(1)).toBe(false);
@@ -267,10 +262,10 @@ describe("Default RPC Protocol retained ledger", () => {
 			releaseReplay = resolve;
 		});
 		harness.setSendSettlement(blockedReplay);
-		const endpoint = harness.installReplacement();
+		harness.installReplacement();
 		await vi.waitFor(() => expect(harness.sent).toHaveLength(4));
 
-		session.receive(endpoint, codec.encode({ kind: "ack", ackThrough: 3 }));
+		harness.receive(codec.encode({ kind: "ack", ackThrough: 3 }));
 		releaseReplay();
 		await Promise.resolve();
 		await Promise.resolve();

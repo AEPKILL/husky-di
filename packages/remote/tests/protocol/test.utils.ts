@@ -12,6 +12,7 @@ import { RpcSessionImpl } from "../../src/impls/protocol/rpc-session.impl";
 import type {
 	IRpcProtocolHost,
 	IRpcProtocolRuntimePolicy,
+	IRpcProtocolSessionHost,
 	RpcProtocolFaultReason,
 	RpcProtocolSessionTransition,
 } from "../../src/interfaces/protocol/rpc-protocol.interface";
@@ -20,6 +21,7 @@ import type {
 	IRpcConnectorAdapter,
 } from "../../src/interfaces/rpc-adapter.interface";
 import type { IRpcConnection } from "../../src/interfaces/rpc-connection.interface";
+import type { RpcBindingEpoch } from "../../src/types/protocol/rpc-session.type";
 import {
 	normalizeRpcApplicationArguments,
 	normalizeRpcApplicationValue,
@@ -50,6 +52,7 @@ export interface IRpcTestNetwork {
 	readonly records: IRpcCapturedRecord[];
 	createConnectorAdapter(
 		closeBehavior?: "propagate" | "silent",
+		onClose?: (direction: "connector" | "acceptor") => void,
 	): IRpcConnectorAdapter;
 	setInterceptor(
 		interceptor:
@@ -72,7 +75,8 @@ export interface IRpcDirectSessionHarness {
 	readonly transitions: RpcProtocolSessionTransition[];
 	readonly faults: RpcProtocolFaultReason[];
 	setSendSettlement(settlement: Promise<void> | undefined): void;
-	installReplacement(peerReceivedThrough?: number): RpcEndpointImpl;
+	receive(message: Uint8Array): void;
+	installReplacement(peerReceivedThrough?: number): void;
 }
 
 export function createRpcDirectSessionHarness(
@@ -83,7 +87,8 @@ export function createRpcDirectSessionHarness(
 	const faults: RpcProtocolFaultReason[] = [];
 	const decoder = new TextDecoder();
 	let sendSettlement: Promise<void> | undefined;
-	let session: RpcSessionImpl | undefined;
+	let activeBinding: RpcBindingEpoch | undefined;
+	let bindingEpoch = 1;
 	const policy: IRpcProtocolRuntimePolicy = {
 		maxSessions: 1,
 		maxHandshakes: 1,
@@ -112,9 +117,12 @@ export function createRpcDirectSessionHarness(
 		applicationValuesEqual: rpcApplicationValuesEqual,
 		fault: (reason) => faults.push(reason),
 	};
-	const createEndpoint = (): RpcEndpointImpl => {
-		let endpoint: RpcEndpointImpl;
-		endpoint = new RpcEndpointImpl({
+	const createEndpoint = (): Readonly<{
+		endpoint: RpcEndpointImpl;
+		install(binding: RpcBindingEpoch): void;
+	}> => {
+		let binding: RpcBindingEpoch | undefined;
+		const endpoint = new RpcEndpointImpl({
 			connection: {
 				message$: new Subject<Uint8Array>().asObservable(),
 				async send(bytes) {
@@ -127,11 +135,15 @@ export function createRpcDirectSessionHarness(
 				},
 				async close() {},
 			},
-			onMessage: (bytes) => session?.receive(endpoint, bytes),
-			onFailure: (reason, error) =>
-				session?.endpointFailed(endpoint, reason, error),
+			onMessage: (bytes) => binding?.receive(bytes),
+			onFailure: (reason, error) => binding?.failed(reason, error),
 		});
-		return endpoint;
+		return {
+			endpoint,
+			install(nextBinding) {
+				binding = nextBinding;
+			},
+		};
 	};
 	const created = new RpcSessionImpl({
 		host,
@@ -140,14 +152,24 @@ export function createRpcDirectSessionHarness(
 		codec,
 		onTerminal: () => {},
 	});
-	session = created;
-	created.installHost({
+	const sessionHost: IRpcProtocolSessionHost = {
 		reserveIncomingCall: () => undefined,
 		transition: (transition) => transitions.push(transition),
 		fault: (reason) => faults.push(reason),
-	});
-	created.installBinding(createEndpoint(), 1, 0);
-	created.activateBinding();
+	};
+	const initialEndpoint = createEndpoint();
+	const initialCommit = created.commitBinding(
+		created.prepareFreshBinding(sessionHost),
+		initialEndpoint.endpoint,
+	);
+	if (initialCommit.kind !== "installed") {
+		throw initialCommit.error;
+	}
+	initialEndpoint.install(initialCommit.binding);
+	activeBinding = initialCommit.binding;
+	if (!initialCommit.binding.activate()) {
+		throw new Error("Expected the direct Session binding to activate.");
+	}
 	return {
 		session: created,
 		sent,
@@ -156,15 +178,34 @@ export function createRpcDirectSessionHarness(
 		setSendSettlement(settlement) {
 			sendSettlement = settlement;
 		},
+		receive(message) {
+			if (activeBinding === undefined) {
+				throw new Error("Expected an active direct Session binding.");
+			}
+			activeBinding.receive(message);
+		},
 		installReplacement(peerReceivedThrough = 0) {
-			const endpoint = createEndpoint();
-			created.installBinding(
-				endpoint,
-				created.bindingEpoch + 1,
+			const resume = created.beginInitiatorResume();
+			bindingEpoch += 1;
+			const candidate = created.prepareInitiatorBinding(resume, {
+				profile: "husky-di-rpc/1",
+				sessionId: "direct-session",
+				bindingEpoch,
 				peerReceivedThrough,
-			);
-			created.activateBinding();
-			return endpoint;
+			});
+			if (candidate.kind !== "ready") {
+				throw new Error("Expected a ready replacement binding candidate.");
+			}
+			const endpoint = createEndpoint();
+			const commit = created.commitBinding(candidate, endpoint.endpoint);
+			if (commit.kind !== "installed") {
+				throw commit.error;
+			}
+			endpoint.install(commit.binding);
+			activeBinding = commit.binding;
+			if (!commit.binding.activate()) {
+				throw new Error("Expected the replacement binding to activate.");
+			}
 		},
 	};
 }
@@ -188,7 +229,7 @@ export function createRpcTestNetwork(): IRpcTestNetwork {
 			async listen() {},
 		},
 		records,
-		createConnectorAdapter(closeBehavior = "propagate") {
+		createConnectorAdapter(closeBehavior = "propagate", onClose) {
 			const connectorConnections = new Subject<IRpcConnection>();
 			return {
 				connection$: connectorConnections.asObservable(),
@@ -199,11 +240,14 @@ export function createRpcTestNetwork(): IRpcTestNetwork {
 					const acceptorIngress = new Subject<Uint8Array>();
 					links.set(connectionId, { connectorIngress, acceptorIngress });
 					let closed = false;
-					const close = async (): Promise<void> => {
+					const close = async (
+						direction: "connector" | "acceptor",
+					): Promise<void> => {
 						if (closed) {
 							return;
 						}
 						closed = true;
+						onClose?.(direction);
 						if (closeBehavior === "propagate") {
 							connectorIngress.complete();
 							acceptorIngress.complete();
@@ -232,7 +276,7 @@ export function createRpcTestNetwork(): IRpcTestNetwork {
 							}
 							await directive?.settlement;
 						},
-						close,
+						close: () => close(direction),
 					});
 					connectorConnections.next(
 						createConnection("connector", connectorIngress, acceptorIngress),

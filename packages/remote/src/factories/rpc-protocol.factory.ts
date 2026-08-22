@@ -8,7 +8,6 @@ import { RpcCodecImpl } from "@/impls/protocol/rpc-codec.impl";
 import { RpcCryptographyImpl } from "@/impls/protocol/rpc-cryptography.impl";
 import { RpcEndpointImpl } from "@/impls/protocol/rpc-endpoint.impl";
 import { RpcProtocolImpl } from "@/impls/protocol/rpc-protocol.impl";
-import { RpcSessionImpl } from "@/impls/protocol/rpc-session.impl";
 import type { IRpcProtocol } from "@/interfaces/protocol/rpc-protocol.interface";
 import type { CreateRpcProtocolOptions } from "@/types/protocol/rpc-protocol.type";
 
@@ -27,7 +26,6 @@ function createBuiltInRpcProtocol(counterExhausted: boolean): IRpcProtocol {
 		codec,
 		cryptography,
 		createEndpoint: (options) => new RpcEndpointImpl(options),
-		createSession: (options) => new RpcSessionImpl(options),
 		counterExhausted,
 	});
 }
