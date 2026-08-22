@@ -23,7 +23,8 @@ export interface RpcInvocationArguments {
 	readonly signal: AbortSignal | undefined;
 }
 
-function readAborted(value: unknown): boolean {
+/** Reads a platform AbortSignal without trusting instance properties. */
+export function readRpcAbortSignalAborted(value: unknown): boolean {
 	try {
 		return Reflect.apply(abortedGetter as () => boolean, value, []);
 	} catch {
@@ -31,11 +32,6 @@ function readAborted(value: unknown): boolean {
 			"Cancelable RPC methods require a platform AbortSignal or undefined.",
 		);
 	}
-}
-
-/** Reads a platform AbortSignal without trusting instance properties. */
-export function readRpcAbortSignalAborted(value: unknown): boolean {
-	return readAborted(value);
 }
 
 /** Splits and validates the non-wire cancellation slot before other preflight. */
@@ -57,7 +53,7 @@ export function prepareRpcInvocationArguments(
 	if (control === undefined) {
 		return { applicationArguments, signal: undefined };
 	}
-	if (readAborted(control)) {
+	if (readRpcAbortSignalAborted(control)) {
 		throw createRpcException(RpcExceptionCodeEnum.canceled);
 	}
 	return { applicationArguments, signal: control as AbortSignal };
@@ -76,7 +72,7 @@ export function installRpcAbortListener(
 		}
 	};
 	Reflect.apply(addEventListener, signal, ["abort", listener, { once: true }]);
-	if (readAborted(signal)) {
+	if (readRpcAbortSignalAborted(signal)) {
 		listener();
 	}
 

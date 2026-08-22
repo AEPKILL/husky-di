@@ -36,17 +36,7 @@ type RpcProtocolSessionFailureReason = Extract<
 	RpcCloseReasonEnum.continuityFailure | RpcProtocolFaultReason
 >;
 
-export type RpcPeerState =
-	| { readonly status: RpcStateStatusEnum.unbound }
-	| { readonly status: RpcStateStatusEnum.connecting }
-	| { readonly status: RpcStateStatusEnum.connected }
-	| {
-			readonly status: RpcStateStatusEnum.draining;
-			readonly reason:
-				| RpcCloseReasonEnum.gracefulShutdown
-				| RpcCloseReasonEnum.counterExhaustion;
-	  }
-	| { readonly status: RpcStateStatusEnum.recovering }
+type RpcSessionClosedState =
 	| {
 			readonly status: RpcStateStatusEnum.closed;
 			readonly outcome: RpcCloseOutcomeEnum.normal;
@@ -69,28 +59,21 @@ export type RpcPeerState =
 			};
 	  };
 
+export type RpcPeerState =
+	| { readonly status: RpcStateStatusEnum.unbound }
+	| { readonly status: RpcStateStatusEnum.connecting }
+	| { readonly status: RpcStateStatusEnum.connected }
+	| {
+			readonly status: RpcStateStatusEnum.draining;
+			readonly reason:
+				| RpcCloseReasonEnum.gracefulShutdown
+				| RpcCloseReasonEnum.counterExhaustion;
+	  }
+	| { readonly status: RpcStateStatusEnum.recovering }
+	| RpcSessionClosedState;
+
 type RpcConnectorClosedState =
-	| {
-			readonly status: RpcStateStatusEnum.closed;
-			readonly outcome: RpcCloseOutcomeEnum.normal;
-			readonly reason: RpcNormalSessionCloseReason;
-	  }
-	| {
-			readonly status: RpcStateStatusEnum.closed;
-			readonly outcome: RpcCloseOutcomeEnum.failed;
-			readonly reason: RpcUnavailableSessionFailureReason;
-			readonly error: RpcException & {
-				readonly code: RpcExceptionCodeEnum.unavailable;
-			};
-	  }
-	| {
-			readonly status: RpcStateStatusEnum.closed;
-			readonly outcome: RpcCloseOutcomeEnum.failed;
-			readonly reason: RpcProtocolSessionFailureReason;
-			readonly error: RpcException & {
-				readonly code: RpcExceptionCodeEnum.protocol;
-			};
-	  }
+	| RpcSessionClosedState
 	| {
 			readonly status: RpcStateStatusEnum.closed;
 			readonly outcome: RpcCloseOutcomeEnum.failed;
@@ -152,9 +135,8 @@ export type RpcAcceptorState =
 	| { readonly status: RpcStateStatusEnum.closing }
 	| RpcAcceptorClosedState;
 
-export type RpcAcceptorRuntimePolicyOptions = {
-	readonly [K in keyof IRpcProtocolRuntimePolicy]?: IRpcProtocolRuntimePolicy[K];
-};
+export type RpcAcceptorRuntimePolicyOptions =
+	Partial<IRpcProtocolRuntimePolicy>;
 
 export type RpcConnectorRuntimePolicyOptions = Pick<
 	RpcAcceptorRuntimePolicyOptions,

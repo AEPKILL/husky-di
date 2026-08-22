@@ -368,8 +368,6 @@ function createAcceptorHostProbe(): {
 	};
 }
 
-// Keep this selector independent of the built-in RpcProtocolRoleEnum so
-// conformance can exercise third-party Protocol implementations.
 function createHostProbe(role: "connector" | "acceptor"): {
 	readonly host: IRpcProtocolConnectorHost | IRpcProtocolAcceptorHost;
 	readonly calls: number;
@@ -490,7 +488,6 @@ interface ProtocolPair {
 	readonly connectorProbe: ProtocolHostProbe<IRpcProtocolConnectorHost>;
 	readonly acceptorProbe: ProtocolHostProbe<IRpcProtocolAcceptorHost>;
 	readonly connectorSession: IRpcProtocolSession;
-	readonly acceptorSession: IRpcProtocolSession;
 	readonly transport: TrackedProtocolTransport;
 }
 
@@ -653,7 +650,6 @@ async function openProtocolPair(protocol: IRpcProtocol): Promise<ProtocolPair> {
 		connectorProbe,
 		acceptorProbe,
 		connectorSession: connectorProbe.session,
-		acceptorSession: acceptorProbe.session,
 		transport,
 	};
 }
@@ -670,8 +666,6 @@ async function closeProtocolPair(pair: ProtocolPair): Promise<void> {
 	);
 }
 
-// Keep this selector independent of the built-in RpcProtocolRoleEnum so
-// conformance can exercise third-party Protocol implementations.
 function createSessionHostProbe(
 	role: "connector",
 ): ProtocolHostProbe<IRpcProtocolConnectorHost>;
@@ -881,15 +875,9 @@ async function invoke(
 		reservation !== undefined,
 		"Invocation capacity was unavailable.",
 	);
-	let finish: ((outcome: RpcCallOutcome) => void) | undefined;
-	const outcome = new Promise<RpcCallOutcome>((resolve) => {
-		finish = resolve;
-	});
-	const invocation = reservation.commit({
-		finish(value) {
-			finish?.(value);
-		},
-	});
+	const { promise: outcome, resolve: finish } =
+		Promise.withResolvers<RpcCallOutcome>();
+	const invocation = reservation.commit({ finish });
 	invocation.start();
 	return within(outcome, "Invocation sink");
 }

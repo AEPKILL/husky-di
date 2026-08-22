@@ -27,10 +27,8 @@ import type {
 	SelectedMethodKey,
 } from "@/types/remote-service-descriptor.type";
 import type {
-	RpcAcceptorOptions,
 	RpcAcceptorState,
 	RpcConnectorConnectOptions,
-	RpcConnectorOptions,
 	RpcConnectorState,
 	RpcPeerState,
 } from "@/types/rpc-caller.type";
@@ -260,9 +258,3 @@ export interface IRpcAcceptor {
 	shutdown(): Promise<void>;
 	close(): Promise<void>;
 }
-
-export type RpcConnectorFactory = (
-	options?: RpcConnectorOptions,
-) => IRpcConnector;
-
-export type RpcAcceptorFactory = (options?: RpcAcceptorOptions) => IRpcAcceptor;

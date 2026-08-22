@@ -18,10 +18,8 @@ export type RpcConnectorReconnectionPolicyOptions = {
 	readonly attemptTimeoutMs?: number;
 };
 
-export type RpcConnectorReconnectionPolicy = {
-	readonly retryDelaysMs: readonly number[];
-	readonly attemptTimeoutMs: number;
-};
+export type RpcConnectorReconnectionPolicy =
+	Required<RpcConnectorReconnectionPolicyOptions>;
 
 export type CreateRpcConnectorReconnectionOptions = {
 	readonly connector: IRpcConnector;

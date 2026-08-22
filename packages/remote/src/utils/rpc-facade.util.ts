@@ -27,16 +27,13 @@ export function createRpcFacade<T, Definitions extends RpcMethodDefinitions<T>>(
 
 	for (const method of Object.keys(data.methods)) {
 		const cancelable = data.methods[method] !== true;
-		Object.defineProperty(facade, method, {
-			enumerable: true,
-			value: (...actualArguments: unknown[]) => {
-				try {
-					return invoke(method, cancelable, actualArguments);
-				} catch (error) {
-					return Promise.reject(error);
-				}
-			},
-		});
+		facade[method] = (...actualArguments: unknown[]) => {
+			try {
+				return invoke(method, cancelable, actualArguments);
+			} catch (error) {
+				return Promise.reject(error);
+			}
+		};
 	}
 
 	return Object.freeze(facade) as RemoteService<T, Definitions>;

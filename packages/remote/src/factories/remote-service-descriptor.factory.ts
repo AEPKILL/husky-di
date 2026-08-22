@@ -155,15 +155,13 @@ export function createRemoteServiceDescriptor<
 export function getRemoteServiceDescriptorData(
 	descriptor: unknown,
 ): RemoteServiceDescriptorData {
-	if (
-		typeof descriptor !== "object" ||
-		descriptor === null ||
-		!remoteServiceDescriptorData.has(descriptor)
-	) {
+	if (typeof descriptor !== "object" || descriptor === null) {
 		throw new TypeError("descriptor must be created by this package instance.");
 	}
 
-	return remoteServiceDescriptorData.get(
-		descriptor,
-	) as RemoteServiceDescriptorData;
+	const data = remoteServiceDescriptorData.get(descriptor);
+	if (data === undefined) {
+		throw new TypeError("descriptor must be created by this package instance.");
+	}
+	return data;
 }

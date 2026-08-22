@@ -38,7 +38,7 @@ export function runRpcConnectorAdapterConformance(
 	fixture: IRpcConnectorAdapterConformanceFixture,
 	options?: RpcConformanceOptions,
 ): Promise<void> {
-	const wrap = createConnectorCaseFactory(fixture);
+	const wrap = createCaseFactory(fixture, "Connector");
 	return runRpcConformanceCases(
 		[
 			wrap(
@@ -72,7 +72,7 @@ export function runRpcAcceptorAdapterConformance(
 	fixture: IRpcAcceptorAdapterConformanceFixture,
 	options?: RpcConformanceOptions,
 ): Promise<void> {
-	const wrap = createAcceptorCaseFactory(fixture);
+	const wrap = createCaseFactory(fixture, "Acceptor");
 	return runRpcConformanceCases(
 		[
 			wrap(
@@ -329,45 +329,24 @@ function createConnectionCases<T>(
 	];
 }
 
-function createConnectorCaseFactory(
-	fixture: IRpcConnectorAdapterConformanceFixture,
+function createCaseFactory<T extends { cleanup(): Promise<void> }>(
+	fixture: { create(): Promise<T> },
+	label: string,
 ) {
 	return (
 		caseId: string,
-		run: (created: ConnectorFixture) => Promise<void>,
+		run: (created: T) => Promise<void>,
 	): IRpcConformanceCase => ({
 		caseId,
 		async run() {
 			const created = await within(
 				fixture.create(),
-				"Connector fixture creation",
+				`${label} fixture creation`,
 			);
 			try {
 				await run(created);
 			} finally {
-				await within(created.cleanup(), "Connector fixture cleanup");
-			}
-		},
-	});
-}
-
-function createAcceptorCaseFactory(
-	fixture: IRpcAcceptorAdapterConformanceFixture,
-) {
-	return (
-		caseId: string,
-		run: (created: AcceptorFixture) => Promise<void>,
-	): IRpcConformanceCase => ({
-		caseId,
-		async run() {
-			const created = await within(
-				fixture.create(),
-				"Acceptor fixture creation",
-			);
-			try {
-				await run(created);
-			} finally {
-				await within(created.cleanup(), "Acceptor fixture cleanup");
+				await within(created.cleanup(), `${label} fixture cleanup`);
 			}
 		},
 	});
