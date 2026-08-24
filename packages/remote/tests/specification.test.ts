@@ -17,7 +17,11 @@ import { config, Observable, of, Subject, Subscriber } from "rxjs";
 import { describe, expect, it, vi } from "vitest";
 
 import packageManifest from "../package.json";
-import { RpcConformanceStatusEnum } from "../src/conformance";
+import {
+	type RpcConformanceCaseResult,
+	RpcConformanceStatusEnum,
+	runRpcProtocolConformance,
+} from "../src/conformance";
 import {
 	createRemoteServiceDescriptor,
 	createRpcAcceptor,
@@ -62,6 +66,7 @@ import {
 	RpcIncomingCallKindEnum,
 	RpcProtocolSessionTransitionTypeEnum,
 } from "../src/protocol";
+import { createMemoryProtocolFixture } from "./conformance/test.utils";
 import { createRpcTestNetwork } from "./protocol/test.utils";
 
 interface CalculatorService {
@@ -108,6 +113,31 @@ const sessionCapacityPolicy = {
 	bindingAttemptTimeoutMs: 100,
 	recoveryGraceMs: 1_000,
 };
+
+let streamingConformanceReportTask:
+	| Promise<readonly RpcConformanceCaseResult[]>
+	| undefined;
+
+function getStreamingConformanceReport(): Promise<
+	readonly RpcConformanceCaseResult[]
+> {
+	streamingConformanceReportTask ??= (async () => {
+		const reports: RpcConformanceCaseResult[] = [];
+		await runRpcProtocolConformance(createMemoryProtocolFixture(), {
+			report: (result) => reports.push(result),
+		});
+		return reports;
+	})();
+	return streamingConformanceReportTask;
+}
+
+async function expectStreamingConformanceCase(caseId: string): Promise<void> {
+	const reports = await getStreamingConformanceReport();
+	expect(reports.find((result) => result.caseId === caseId)).toEqual({
+		caseId,
+		status: RpcConformanceStatusEnum.passed,
+	});
+}
 
 function createProtocolHarness(): {
 	readonly protocol: IRpcProtocol;
@@ -4500,6 +4530,87 @@ describe("exposure registries and remote facades", () => {
 			{ code: "unavailable" },
 		);
 		expect(businessGetterCalls).toBe(0);
+	});
+});
+
+describe("streaming Protocol conformance", () => {
+	it("RPC-CONFORMANCE-004 publishes and passes the outgoing stream lifecycle case", async () => {
+		await expectStreamingConformanceCase("protocol.stream.outgoing-lifecycle");
+	});
+
+	it("RPC-STREAM-004 RPC-FLOW-005 RPC-VALID-008 RPC-RESOURCE-012 RPC-CONFORMANCE-004 publishes and passes incoming stream resource-before-route", async () => {
+		await expectStreamingConformanceCase(
+			"protocol.stream.incoming-resource-before-route",
+		);
+	});
+
+	it("RPC-VALID-008 RPC-VALID-010 RPC-CONFORMANCE-004 publishes and passes incoming stream semantic unknown-member", async () => {
+		await expectStreamingConformanceCase(
+			"protocol.stream.incoming-semantic-unknown-member",
+		);
+	});
+
+	it("RPC-CONFORMANCE-004 publishes and passes projection disposition rearm", async () => {
+		await expectStreamingConformanceCase("protocol.stream.projection-rearm");
+	});
+
+	it("RPC-CONFORMANCE-004 publishes and passes Source reserve-before-raw", async () => {
+		await expectStreamingConformanceCase(
+			"protocol.stream.source-reserve-before-raw",
+		);
+	});
+
+	it("RPC-CONFORMANCE-004 publishes and passes Source W=1 overflow", async () => {
+		await expectStreamingConformanceCase("protocol.stream.source-w1-overflow");
+	});
+
+	it("RPC-CONFORMANCE-004 publishes and passes item-before-terminal ordering", async () => {
+		await expectStreamingConformanceCase(
+			"protocol.stream.item-before-terminal",
+		);
+	});
+
+	it("RPC-CONFORMANCE-004 publishes and passes terminal teardown release", async () => {
+		await expectStreamingConformanceCase(
+			"protocol.stream.terminal-teardown-release",
+		);
+	});
+
+	it("RPC-CONFORMANCE-004 publishes and passes over-credit Session fault classification", async () => {
+		await expectStreamingConformanceCase(
+			"protocol.stream.over-credit-session-fault",
+		);
+	});
+
+	it("RPC-SPI-017 RPC-CONFORMANCE-004 publishes and passes retained Source Recovery without resubscription", async () => {
+		await expectStreamingConformanceCase(
+			"protocol.stream.recovery-no-resubscribe",
+		);
+	});
+
+	it("RPC-CONFORMANCE-004 RPC-CONFORMANCE-005 publishes and passes bounded stream fairness progress", async () => {
+		await expectStreamingConformanceCase("protocol.stream.fairness-progress");
+	});
+
+	it("RPC-SHUTDOWN-013 RPC-SPI-017 RPC-CONFORMANCE-004 publishes and passes stream graceful-to-force shutdown", async () => {
+		await expectStreamingConformanceCase(
+			"protocol.stream.shutdown-graceful-force",
+		);
+	});
+
+	it("RPC-CONFORMANCE-005 publishes and passes one-direction terminal receipt isolation", async () => {
+		await expectStreamingConformanceCase(
+			"protocol.receipt.terminal-direction-only",
+		);
+	});
+
+	it("RPC-CONFORMANCE-004 RPC-CONFORMANCE-005 RPC-TRANSPORT-013 publishes and passes aggregate bounded stream load", async () => {
+		await expectStreamingConformanceCase(
+			"protocol.stream.aggregate-bounded-load",
+		);
+		await expectStreamingConformanceCase(
+			"protocol.stream.adapter-rejection-is-binding-failure",
+		);
 	});
 });
 

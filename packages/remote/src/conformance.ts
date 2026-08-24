@@ -22,6 +22,21 @@
  * - `protocol.termination.shutdown-phase`
  * - `protocol.termination.close-phase`
  * - `protocol.termination.cleanup-cached`
+ * - `protocol.stream.outgoing-lifecycle`
+ * - `protocol.stream.incoming-resource-before-route`
+ * - `protocol.stream.incoming-semantic-unknown-member`
+ * - `protocol.stream.projection-rearm`
+ * - `protocol.stream.source-reserve-before-raw`
+ * - `protocol.stream.source-w1-overflow`
+ * - `protocol.stream.item-before-terminal`
+ * - `protocol.stream.over-credit-session-fault`
+ * - `protocol.stream.terminal-teardown-release`
+ * - `protocol.stream.recovery-no-resubscribe`
+ * - `protocol.stream.fairness-progress`
+ * - `protocol.stream.shutdown-graceful-force`
+ * - `protocol.stream.aggregate-bounded-load`
+ * - `protocol.receipt.terminal-direction-only`
+ * - `protocol.stream.adapter-rejection-is-binding-failure`
  *
  * Stable Connector Adapter case IDs:
  *

@@ -3266,20 +3266,26 @@ stable stream cases for outgoing reserve/commit/start/cancel, incoming pre-route
 rejection, projection disposition/re-arm, Source reserve-before-raw and W=1 overflow, terminal teardown and
 release, Recovery without resubscription, resource-fault counters, fairness progress, graceful/forced shutdown,
 bounded aggregate load, and deliberately broken Protocol diagnostics. Each failed case **MUST** identify its
-own stable case ID without depending on the built-in wire representation.
-Every Adapter runner case ID **MUST** begin with every applicable canonical `RPC-TRANSPORT-*` requirement ID,
-followed by its stable descriptive role/case name. Structural runner case IDs **MUST NOT** claim
-`RPC-TRANSPORT-012`; that security boundary requires separate deployment documentation and platform evidence.
-Each fixture `create()` **MUST** return a fresh single-use Adapter. Its driver methods **MUST** deterministically
-control only the remote/test side, preserve supplied Error identity, and let `cleanup()` release only
-fixture-owned external resources; they **MUST NOT** close or settle candidate-owned resources on its behalf.
+own stable case ID without depending on the built-in wire representation. The stable stream IDs **MUST** be
+`protocol.stream.outgoing-lifecycle`, `protocol.stream.incoming-resource-before-route`,
+`protocol.stream.incoming-semantic-unknown-member`, `protocol.stream.projection-rearm`,
+`protocol.stream.source-reserve-before-raw`, `protocol.stream.source-w1-overflow`,
+`protocol.stream.item-before-terminal`, `protocol.stream.over-credit-session-fault`,
+`protocol.stream.terminal-teardown-release`, `protocol.stream.recovery-no-resubscribe`,
+`protocol.stream.fairness-progress`, `protocol.stream.shutdown-graceful-force`,
+`protocol.stream.aggregate-bounded-load`, `protocol.receipt.terminal-direction-only`, and
+`protocol.stream.adapter-rejection-is-binding-failure`.
 <!-- /RPC-CONFORMANCE-004 -->
 
 **RPC-CONFORMANCE-005 — Grandfathered Adapter suite and bounded load.** Both Adapter runners **MUST** retain
 their exact 24 pre-stream stable case IDs and remain unaware of stream records. They **MUST** cover
 subscribe-before-start, handoff/ownership, complete stable message identity/order/hot terminal behavior, one
 unsettled send with backpressure, the 1 MiB floor, abort/startup/close races, listener/Connection isolation, and
-Acceptor overflow using a fresh single-use fixture per case. Deterministic aggregate Protocol load **MUST** run
+Acceptor overflow using a fresh single-use fixture per case. Every Adapter runner case ID **MUST** begin with
+every applicable canonical `RPC-TRANSPORT-*` requirement ID, followed by its stable descriptive role/case name;
+structural runner case IDs **MUST NOT** claim `RPC-TRANSPORT-012`. Fixture drivers **MUST** control only the
+remote/test side, preserve supplied Error identity, and release only fixture-owned external resources; they
+**MUST NOT** close or settle candidate-owned resources on its behalf. Deterministic aggregate Protocol load **MUST** run
 over this bounded three-capability Connection: an Adapter send rejection is a binding failure that enters
 Recovery and **MUST NOT** become Stream Overflow. The Protocol runner **MUST** kill all five fixed broken-Protocol
 mutants through real candidate transactions, with the exact one-to-one failure mapping: over-credit acceptance
