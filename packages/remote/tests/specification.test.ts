@@ -42,6 +42,7 @@ import {
 	RpcStateStatusEnum,
 } from "../src/index";
 import type {
+	IRpcApplicationSnapshot,
 	IRpcConnection,
 	IRpcProtocolAcceptorHost,
 	IRpcProtocolConnectorHost,
@@ -52,6 +53,7 @@ import type {
 	IRpcProtocolSourceSink,
 	IRpcProtocolStreamReservation,
 	IRpcProtocolSubscriberSink,
+	RpcIncomingStreamTerminal,
 } from "../src/protocol";
 import {
 	createRpcProtocol,
@@ -231,6 +233,176 @@ async function connectProtocolSession(
 		throw new Error("Expected a Connector Protocol Session host.");
 	}
 	return { connector, host: connectorHost, sessionHost, events };
+}
+
+function createW1SemanticStreamHarness(): {
+	readonly session: IRpcProtocolSession;
+	attachIncomingHost(host: IRpcProtocolSessionHost): void;
+	flush(): void;
+	setOrdinaryCapacityAvailable(available: boolean): void;
+	readonly admittedItemCount: number;
+	readonly creditThrough: number;
+	readonly released: boolean;
+	readonly terminal: RpcIncomingStreamTerminal | undefined;
+} {
+	let incomingHost: IRpcProtocolSessionHost | undefined;
+	let subscriberSink: IRpcProtocolSubscriberSink | undefined;
+	let incomingStream: IRpcProtocolIncomingStream | undefined;
+	let admittedItemCount = 0;
+	let consumedCreditCount = 0;
+	let creditThrough = 1;
+	let terminal: RpcIncomingStreamTerminal | undefined;
+	let terminalProjected = false;
+	let released = false;
+	let ordinaryCapacityAvailable = true;
+	const pendingItems: IRpcApplicationSnapshot[] = [];
+
+	const projectTerminal = (): void => {
+		const selectedTerminal = terminal;
+		const selectedSink = subscriberSink;
+		// The protected terminal follows every previously admitted item.
+		const terminalProjectionIsBlocked =
+			selectedTerminal === undefined ||
+			terminalProjected ||
+			pendingItems.length > 0 ||
+			selectedSink === undefined;
+		if (terminalProjectionIsBlocked) {
+			return;
+		}
+		terminalProjected = true;
+		if (selectedTerminal.type === "session-terminated") {
+			selectedSink
+				.reserveTerminal({
+					type: "failed",
+					code: RpcExceptionCodeEnum.outcomeUnknown,
+				})
+				.commit();
+			return;
+		}
+		selectedSink.reserveTerminal(selectedTerminal).commit();
+	};
+	const selectTerminal = (outcome: RpcIncomingStreamTerminal): void => {
+		if (terminal !== undefined) {
+			return;
+		}
+		terminal = outcome;
+		incomingStream?.finish(outcome, () => {
+			released = true;
+		});
+		projectTerminal();
+	};
+	const sourceSink: IRpcProtocolSourceSink = {
+		reserveEmission() {
+			if (terminal !== undefined) {
+				return undefined;
+			}
+			if (consumedCreditCount >= creditThrough) {
+				selectTerminal({
+					type: "failed",
+					code: RpcExceptionCodeEnum.overflow,
+				});
+				return undefined;
+			}
+			consumedCreditCount += 1;
+			if (!ordinaryCapacityAvailable) {
+				selectTerminal({
+					type: "failed",
+					code: RpcExceptionCodeEnum.overflow,
+				});
+				return undefined;
+			}
+			let open = true;
+			return {
+				commit(snapshot) {
+					if (!open || terminal !== undefined) {
+						return;
+					}
+					open = false;
+					admittedItemCount += 1;
+					pendingItems.push(snapshot);
+				},
+				fail() {
+					if (!open || terminal !== undefined) {
+						return;
+					}
+					open = false;
+					selectTerminal({
+						type: "failed",
+						code: RpcExceptionCodeEnum.handlerFailed,
+					});
+				},
+			};
+		},
+		finish(outcome) {
+			selectTerminal(outcome);
+		},
+	};
+	const session: IRpcProtocolSession = {
+		reserveInvocation: () => undefined,
+		reserveStream(nextRequest) {
+			return {
+				commit(nextSubscriberSink) {
+					subscriberSink = nextSubscriberSink;
+					return {
+						start() {
+							const reservation =
+								incomingHost?.reserveIncomingStream(nextRequest);
+							if (reservation?.kind !== "source") {
+								nextSubscriberSink
+									.reserveTerminal({
+										type: "failed",
+										code: RpcExceptionCodeEnum.unavailable,
+									})
+									.commit();
+								return;
+							}
+							incomingStream = reservation.reservation.commit(sourceSink);
+						},
+						cancel() {
+							selectTerminal({ type: "canceled" });
+						},
+					};
+				},
+				release() {},
+			};
+		},
+		forceClose() {},
+	};
+
+	return {
+		session,
+		attachIncomingHost(host) {
+			incomingHost = host;
+		},
+		flush() {
+			while (pendingItems.length > 0) {
+				const snapshot = pendingItems.shift();
+				if (snapshot === undefined || subscriberSink === undefined) {
+					break;
+				}
+				const effect = subscriberSink.reserveItem(snapshot).commit();
+				if (effect === "rearm" && terminal === undefined) {
+					creditThrough += 1;
+				}
+			}
+			projectTerminal();
+		},
+		setOrdinaryCapacityAvailable(available) {
+			ordinaryCapacityAvailable = available;
+		},
+		get admittedItemCount() {
+			return admittedItemCount;
+		},
+		get creditThrough() {
+			return creditThrough;
+		},
+		get released() {
+			return released;
+		},
+		get terminal() {
+			return terminal;
+		},
+	};
 }
 
 function createReconnectionProtocolHarness(): {
@@ -1985,6 +2157,322 @@ describe("exposure registries and remote facades", () => {
 		await connector.close();
 	});
 
+	it("RPC-FLOW-001 RPC-FLOW-002 RPC-FLOW-004 RPC-FLOW-006 RPC-WIRE-019 RPC-EVENT-016 overflows a real RxJS burst at W=1", async () => {
+		const flow = createW1SemanticStreamHarness();
+		const { connector, sessionHost } = await connectProtocolSession(
+			flow.session,
+		);
+		flow.attachIncomingHost(sessionHost);
+		const descriptor = createRemoteServiceDescriptor(IMixedExposureService, {
+			wireName: "example.w1-burst.v1",
+			members: { history: { kind: "stream-method" } },
+		});
+		let poisonReads = 0;
+		const overflowValue = Object.defineProperty({}, "poison", {
+			enumerable: true,
+			get() {
+				poisonReads += 1;
+				return "must not be inspected";
+			},
+		});
+		let sourceTeardowns = 0;
+		connector.peer.expose(descriptor, {
+			history: () =>
+				new Observable<string>((subscriber) => {
+					subscriber.next("admitted");
+					subscriber.next(overflowValue as never);
+					return () => {
+						sourceTeardowns += 1;
+					};
+				}),
+		} as never);
+		const values: string[] = [];
+		const errors: unknown[] = [];
+
+		connector.peer
+			.resolve(descriptor)
+			.history("room")
+			.subscribe({
+				next: (value) => values.push(value),
+				error: (error) => errors.push(error),
+			});
+		await Promise.resolve();
+		await Promise.resolve();
+		flow.flush();
+
+		expect(values).toEqual(["admitted"]);
+		expect(errors).toHaveLength(1);
+		expect(errors[0]).toBeInstanceOf(RpcException);
+		expect(errors[0]).toMatchObject({
+			code: RpcExceptionCodeEnum.overflow,
+			cause: undefined,
+		});
+		expect(flow.terminal).toEqual({
+			type: "failed",
+			code: RpcExceptionCodeEnum.overflow,
+		});
+		expect(flow.admittedItemCount).toBe(1);
+		expect(flow.creditThrough).toBe(1);
+		expect(poisonReads).toBe(0);
+		expect(sourceTeardowns).toBe(1);
+		expect(flow.released).toBe(true);
+		await connector.close();
+	});
+
+	it("RPC-FLOW-004 RPC-EVENT-016 selects overflow before inspecting an emission without ordinary capacity", async () => {
+		const flow = createW1SemanticStreamHarness();
+		flow.setOrdinaryCapacityAvailable(false);
+		const { connector, sessionHost } = await connectProtocolSession(
+			flow.session,
+		);
+		flow.attachIncomingHost(sessionHost);
+		const descriptor = createRemoteServiceDescriptor(IMixedExposureService, {
+			wireName: "example.w1-capacity.v1",
+			members: { history: { kind: "stream-method" } },
+		});
+		let poisonReads = 0;
+		const unavailableValue = Object.defineProperty({}, "poison", {
+			enumerable: true,
+			get() {
+				poisonReads += 1;
+				return "must not be inspected";
+			},
+		});
+		connector.peer.expose(descriptor, {
+			history: () => of(unavailableValue),
+		} as never);
+		const errors: unknown[] = [];
+
+		connector.peer
+			.resolve(descriptor)
+			.history("room")
+			.subscribe({
+				error: (error) => errors.push(error),
+			});
+		await Promise.resolve();
+		await Promise.resolve();
+		flow.flush();
+
+		expect(errors[0]).toMatchObject({
+			code: RpcExceptionCodeEnum.overflow,
+			cause: undefined,
+		});
+		expect(flow.admittedItemCount).toBe(0);
+		expect(poisonReads).toBe(0);
+		await connector.close();
+	});
+
+	it("RPC-FLOW-005 classifies an invalid admitted emission as handler-failed", async () => {
+		const flow = createW1SemanticStreamHarness();
+		const { connector, sessionHost } = await connectProtocolSession(
+			flow.session,
+		);
+		flow.attachIncomingHost(sessionHost);
+		const descriptor = createRemoteServiceDescriptor(IMixedExposureService, {
+			wireName: "example.w1-invalid.v1",
+			members: { history: { kind: "stream-method" } },
+		});
+		connector.peer.expose(descriptor, {
+			history: () => of(Symbol("invalid item")),
+		} as never);
+		const errors: unknown[] = [];
+
+		connector.peer
+			.resolve(descriptor)
+			.history("room")
+			.subscribe({
+				error: (error) => errors.push(error),
+			});
+		await Promise.resolve();
+		await Promise.resolve();
+		flow.flush();
+
+		expect(errors[0]).toMatchObject({
+			code: RpcExceptionCodeEnum.handlerFailed,
+			cause: undefined,
+		});
+		expect(flow.terminal).toEqual({
+			type: "failed",
+			code: RpcExceptionCodeEnum.handlerFailed,
+		});
+		expect(flow.admittedItemCount).toBe(0);
+		await connector.close();
+	});
+
+	it("RPC-FLOW-003 RPC-WIRE-019 re-arms one cumulative credit after each serial next return", async () => {
+		const flow = createW1SemanticStreamHarness();
+		const { connector, sessionHost } = await connectProtocolSession(
+			flow.session,
+		);
+		flow.attachIncomingHost(sessionHost);
+		const descriptor = createRemoteServiceDescriptor(IMixedExposureService, {
+			wireName: "example.w1-rearm.v1",
+			members: { history: { kind: "stream-method" } },
+		});
+		const source = new Subject<string>();
+		connector.peer.expose(descriptor, { history: () => source } as never);
+		const values: string[] = [];
+		connector.peer
+			.resolve(descriptor)
+			.history("room")
+			.subscribe((value) => values.push(value));
+		await Promise.resolve();
+		await Promise.resolve();
+
+		source.next("first");
+		flow.flush();
+		expect(flow.creditThrough).toBe(2);
+		source.next("second");
+		flow.flush();
+
+		expect(values).toEqual(["first", "second"]);
+		expect(flow.admittedItemCount).toBe(2);
+		expect(flow.creditThrough).toBe(3);
+		await connector.close();
+	});
+
+	it("RPC-FLOW-003 RPC-FLOW-004 keeps reentrant delivery serial and exhausts credit inside next", async () => {
+		const flow = createW1SemanticStreamHarness();
+		const { connector, sessionHost } = await connectProtocolSession(
+			flow.session,
+		);
+		flow.attachIncomingHost(sessionHost);
+		const descriptor = createRemoteServiceDescriptor(IMixedExposureService, {
+			wireName: "example.w1-reentrant.v1",
+			members: { history: { kind: "stream-method" } },
+		});
+		const source = new Subject<string>();
+		connector.peer.expose(descriptor, { history: () => source } as never);
+		const trace: string[] = [];
+		let callbackDepth = 0;
+		let maximumCallbackDepth = 0;
+		connector.peer
+			.resolve(descriptor)
+			.history("room")
+			.subscribe({
+				next(value) {
+					callbackDepth += 1;
+					maximumCallbackDepth = Math.max(maximumCallbackDepth, callbackDepth);
+					trace.push(`next:${value}:begin`);
+					source.next("overflow");
+					trace.push(`next:${value}:end`);
+					callbackDepth -= 1;
+				},
+				error(error) {
+					callbackDepth += 1;
+					maximumCallbackDepth = Math.max(maximumCallbackDepth, callbackDepth);
+					trace.push(`error:${String((error as RpcException).code)}`);
+					callbackDepth -= 1;
+				},
+			});
+		await Promise.resolve();
+		await Promise.resolve();
+
+		source.next("first");
+		flow.flush();
+
+		expect(trace).toEqual([
+			"next:first:begin",
+			"next:first:end",
+			"error:overflow",
+		]);
+		expect(maximumCallbackDepth).toBe(1);
+		expect(flow.admittedItemCount).toBe(1);
+		expect(flow.creditThrough).toBe(1);
+		await connector.close();
+	});
+
+	it("RPC-FLOW-003 RPC-WIRE-019 faults an overlapping custom Protocol item projection before Observer reentry", async () => {
+		let forceCloses = 0;
+		let firstEffect: "closed" | "rearm" | undefined;
+		let sink: IRpcProtocolSubscriberSink | undefined;
+		const session: IRpcProtocolSession = {
+			reserveInvocation: () => undefined,
+			reserveStream() {
+				return {
+					commit(nextSink) {
+						sink = nextSink;
+						return {
+							start() {
+								firstEffect = nextSink
+									.reserveItem({ value: "first", weight: 5 } as never)
+									.commit();
+							},
+							cancel() {},
+						};
+					},
+					release() {},
+				};
+			},
+			forceClose() {
+				forceCloses += 1;
+			},
+		};
+		const { connector } = await connectProtocolSession(session);
+		const descriptor = createRemoteServiceDescriptor(IMixedExposureService, {
+			wireName: "example.overlapping-item.v1",
+			members: { history: { kind: "stream-method" } },
+		});
+		const values: string[] = [];
+		let callbackDepth = 0;
+		let maximumCallbackDepth = 0;
+
+		connector.peer
+			.resolve(descriptor)
+			.history("room")
+			.subscribe((value) => {
+				callbackDepth += 1;
+				maximumCallbackDepth = Math.max(maximumCallbackDepth, callbackDepth);
+				values.push(value);
+				if (value === "first") {
+					sink
+						?.reserveItem({ value: "over-credit", weight: 11 } as never)
+						.commit();
+				}
+				callbackDepth -= 1;
+			});
+
+		expect(values).toEqual(["first"]);
+		expect(maximumCallbackDepth).toBe(1);
+		expect(firstEffect).toBe("closed");
+		expect(forceCloses).toBe(1);
+		await connector.close();
+	});
+
+	it("RPC-FLOW-003 does not re-arm credit after unsubscribe inside next", async () => {
+		const flow = createW1SemanticStreamHarness();
+		const { connector, sessionHost } = await connectProtocolSession(
+			flow.session,
+		);
+		flow.attachIncomingHost(sessionHost);
+		const descriptor = createRemoteServiceDescriptor(IMixedExposureService, {
+			wireName: "example.w1-unsubscribe.v1",
+			members: { history: { kind: "stream-method" } },
+		});
+		const source = new Subject<string>();
+		connector.peer.expose(descriptor, { history: () => source } as never);
+		const values: string[] = [];
+		const observer = new Subscriber<string>({
+			next(value) {
+				values.push(value);
+				observer.unsubscribe();
+			},
+			error() {},
+			complete() {},
+		});
+		connector.peer.resolve(descriptor).history("room").subscribe(observer);
+		await Promise.resolve();
+		await Promise.resolve();
+
+		source.next("first");
+		flow.flush();
+
+		expect(values).toEqual(["first"]);
+		expect(flow.creditThrough).toBe(1);
+		expect(flow.terminal).toEqual({ type: "canceled" });
+		await connector.close();
+	});
+
 	it("RPC-STREAM-006 RPC-STREAM-009 serializes a reentrant terminal after next", async () => {
 		const trace: string[] = [];
 		let callbackDepth = 0;
@@ -2054,7 +2542,7 @@ describe("exposure registries and remote facades", () => {
 		await connector.close();
 	});
 
-	it("RPC-STREAM-007 keeps a committed item when its Observer throws", async () => {
+	it("RPC-STREAM-007 RPC-FLOW-003 keeps a committed item and re-arms when its Observer throws", async () => {
 		const reported: unknown[] = [];
 		const previousUnhandledError = config.onUnhandledError;
 		config.onUnhandledError = (error) => reported.push(error);

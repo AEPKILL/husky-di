@@ -9,6 +9,7 @@ import type {
 	IRpcApplicationSnapshot,
 	IRpcProtocolIncomingSourceReservation,
 	IRpcProtocolSession,
+	IRpcProtocolStream,
 	IRpcProtocolSubscriberSink,
 } from "../../src/protocol";
 
@@ -19,6 +20,7 @@ void (null as unknown as MissingRpcProtocolImpl);
 declare const args: IRpcApplicationArgumentsSnapshot;
 declare const snapshot: IRpcApplicationSnapshot;
 declare const session: IRpcProtocolSession;
+declare const stream: IRpcProtocolStream;
 declare const subscriberSink: IRpcProtocolSubscriberSink;
 declare const sourceReservation: IRpcProtocolIncomingSourceReservation;
 
@@ -39,6 +41,13 @@ sourceReservation.commit({
 	reserveEmission: () => ({ commit() {}, fail() {} }),
 	finish: () => undefined,
 });
+
+// @ts-expect-error RPC-FLOW-001 keeps caller demand out of the stream control seam.
+stream.request(1);
+// @ts-expect-error RPC-FLOW-001 keeps a public window out of the stream control seam.
+void stream.window;
+// @ts-expect-error RPC-FLOW-001 keeps capacity queries out of the stream control seam.
+void stream.capacity;
 
 session.reserveStream({
 	service: "example.type-probe.v1",

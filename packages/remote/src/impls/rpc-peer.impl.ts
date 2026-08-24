@@ -405,9 +405,17 @@ export class RpcPeerImpl implements IRpcPeerRuntime {
 
 		let terminalCommitted = false;
 		let dispatching = false;
+		let itemProjectionReserved = false;
+		let projectionClosed = false;
 		let deferredTerminal: (() => void) | undefined;
+		const closedItemProjection = Object.freeze({
+			commit: () => "closed" as const,
+		});
+		const closedTerminalProjection = Object.freeze({
+			commit: () => undefined,
+		});
 		const commitTerminal = (outcome: RpcStreamOutcome): void => {
-			if (terminalCommitted) {
+			if (terminalCommitted || projectionClosed) {
 				return;
 			}
 			terminalCommitted = true;
@@ -433,13 +441,33 @@ export class RpcPeerImpl implements IRpcPeerRuntime {
 		};
 		const sink: IRpcProtocolSubscriberSink = Object.freeze({
 			reserveItem: (snapshot: IRpcApplicationSnapshot) => {
+				if (terminalCommitted || projectionClosed || subscriber.closed) {
+					return closedItemProjection;
+				}
+				// One W=1 item projection must settle before another begins.
+				const itemProjectionOverlaps = dispatching || itemProjectionReserved;
+				if (itemProjectionOverlaps) {
+					projectionClosed = true;
+					this.#protocolFailure(
+						new Error("Protocol overlapped stream item projections."),
+					);
+					return closedItemProjection;
+				}
+				itemProjectionReserved = true;
 				let committed = false;
 				return Object.freeze({
 					commit: () => {
-						if (committed || terminalCommitted || subscriber.closed) {
+						if (committed) {
 							return "closed" as const;
 						}
 						committed = true;
+						itemProjectionReserved = false;
+						// A terminal, Session fault, or unsubscribe suppresses the reserved effect.
+						const itemProjectionIsClosed =
+							terminalCommitted || projectionClosed || subscriber.closed;
+						if (itemProjectionIsClosed) {
+							return "closed" as const;
+						}
 						dispatching = true;
 						try {
 							subscriber.next(snapshot.value);
@@ -449,13 +477,16 @@ export class RpcPeerImpl implements IRpcPeerRuntime {
 							deferredTerminal = undefined;
 							terminal?.();
 						}
-						return terminalCommitted || subscriber.closed
+						return terminalCommitted || projectionClosed || subscriber.closed
 							? ("closed" as const)
 							: ("rearm" as const);
 					},
 				});
 			},
 			reserveTerminal: (outcome: RpcStreamOutcome) => {
+				if (projectionClosed) {
+					return closedTerminalProjection;
+				}
 				let committed = false;
 				return Object.freeze({
 					commit: () => {
