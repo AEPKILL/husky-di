@@ -8,7 +8,7 @@ import { getRemoteServiceDescriptorData } from "@/factories/remote-service-descr
 import type { IRemoteServiceDescriptor } from "@/interfaces/remote-service-descriptor.interface";
 import type {
 	RemoteService,
-	RpcMethodDefinitions,
+	RpcMemberDefinitions,
 } from "@/types/remote-service-descriptor.type";
 
 export type RpcFacadeInvocation = (
@@ -18,15 +18,18 @@ export type RpcFacadeInvocation = (
 ) => Promise<unknown>;
 
 /** Creates one facade without retaining current Session or membership state. */
-export function createRpcFacade<T, Definitions extends RpcMethodDefinitions<T>>(
+export function createRpcFacade<T, Definitions extends RpcMemberDefinitions<T>>(
 	descriptor: IRemoteServiceDescriptor<T, Definitions>,
 	invoke: RpcFacadeInvocation,
 ): RemoteService<T, Definitions> {
 	const data = getRemoteServiceDescriptorData(descriptor);
 	const facade = Object.create(null) as Record<string, unknown>;
 
-	for (const method of Object.keys(data.methods)) {
-		const cancelable = data.methods[method] !== true;
+	for (const [method, interaction] of Object.entries(data.members)) {
+		if (interaction.kind !== "unary") {
+			continue;
+		}
+		const cancelable = interaction.cancelable;
 		facade[method] = (...actualArguments: unknown[]) => {
 			try {
 				return invoke(method, cancelable, actualArguments);

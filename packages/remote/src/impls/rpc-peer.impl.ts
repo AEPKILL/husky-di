@@ -40,7 +40,7 @@ import type {
 import type {
 	RemoteService,
 	RemoteServiceImplementation,
-	RpcMethodDefinitions,
+	RpcMemberDefinitions,
 } from "@/types/remote-service-descriptor.type";
 import type { RpcPeerState } from "@/types/rpc-caller.type";
 import type {
@@ -263,7 +263,7 @@ export class RpcPeerImpl implements IRpcPeerRuntime {
 		this.#stateSubject.complete();
 	}
 
-	expose<T, Definitions extends RpcMethodDefinitions<T>>(
+	expose<T, Definitions extends RpcMemberDefinitions<T>>(
 		descriptor: IRemoteServiceDescriptor<T, Definitions>,
 		implementation: NoInfer<RemoteServiceImplementation<T, Definitions>>,
 	): Cleanup {
@@ -283,7 +283,7 @@ export class RpcPeerImpl implements IRpcPeerRuntime {
 		);
 	}
 
-	resolve<T, Definitions extends RpcMethodDefinitions<T>>(
+	resolve<T, Definitions extends RpcMemberDefinitions<T>>(
 		descriptor: IRemoteServiceDescriptor<T, Definitions>,
 	): RemoteService<T, Definitions> {
 		const service = getRemoteServiceDescriptorData(descriptor).wireName;
@@ -562,8 +562,8 @@ export class RpcPeerImpl implements IRpcPeerRuntime {
 				retainedBytesReservation,
 			);
 		}
-		const route = exposure.methods.get(request.method);
-		if (route === undefined) {
+		const route = exposure.members.get(request.method);
+		if (route === undefined || route.kind !== "unary") {
 			return this.#reserveUnknownIncoming(
 				RpcExceptionCodeEnum.unknownMethod,
 				charge,

@@ -12,7 +12,7 @@ import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { CodedException, createServiceIdentifier } from "@husky-di/core";
-import { Observable, Subject } from "rxjs";
+import { Observable, of, Subject } from "rxjs";
 import { describe, expect, it, vi } from "vitest";
 
 import packageManifest from "../package.json";
@@ -61,6 +61,12 @@ interface CalculatorService {
 	cancel(value: string, signal: AbortSignal): Promise<string>;
 }
 
+interface MixedExposureService extends CalculatorService {
+	history(room: string): Observable<string>;
+	readonly events$: Observable<string>;
+	readonly lazy$: Observable<string>;
+}
+
 interface CaseSensitiveService {
 	Then(): void;
 }
@@ -75,6 +81,9 @@ interface RetainedReplayService {
 
 const ICalculatorService =
 	createServiceIdentifier<CalculatorService>("ICalculatorService");
+const IMixedExposureService = createServiceIdentifier<MixedExposureService>(
+	"IMixedExposureService",
+);
 const ICaseSensitiveService = createServiceIdentifier<CaseSensitiveService>(
 	"ICaseSensitiveService",
 );
@@ -287,61 +296,212 @@ function createSuccessfulConnectorAdapter(): IRpcConnectorAdapter {
 }
 
 describe("Remote Service Descriptor", () => {
-	it("RPC-DESC-001 creates an opaque Descriptor from local and wire identities", () => {
-		const descriptor = createRemoteServiceDescriptor(ICalculatorService, {
-			wireName: "example.calculator.v1",
-			methods: {
-				add: true,
-				cancel: { cancelable: true },
+	it("RPC-DESC-001 RPC-DESC-006 creates an opaque mixed-member Descriptor", () => {
+		const descriptor = createRemoteServiceDescriptor(IMixedExposureService, {
+			wireName: "example.mixed.v1",
+			members: {
+				add: { kind: "unary" },
+				cancel: { kind: "unary", cancelable: true },
+				history: { kind: "stream-method" },
+				events$: { kind: "stream-property" },
+				lazy$: { kind: "stream-property" },
 			},
 		});
 
 		expect(descriptor).toBeTypeOf("object");
+		expect(Object.getPrototypeOf(descriptor)).toBeNull();
+		expect(Object.isFrozen(descriptor)).toBe(true);
 		expect("serviceIdentifier" in descriptor).toBe(false);
 		expect("wireName" in descriptor).toBe(false);
-		expect("methods" in descriptor).toBe(false);
+		expect("members" in descriptor).toBe(false);
 	});
 
 	it.each([
-		["an empty wire name", { wireName: "", methods: { add: true } }],
-		["an empty allowlist", { wireName: "example.calculator.v1", methods: {} }],
 		[
-			"an empty method name",
-			{ wireName: "example.calculator.v1", methods: { "": true } },
+			"an empty wire name",
+			{ wireName: "", members: { add: { kind: "unary" } } },
+		],
+		["an empty allowlist", { wireName: "example.calculator.v1", members: {} }],
+		[
+			"the retired methods option",
+			{ wireName: "example.calculator.v1", methods: { add: true } },
 		],
 		[
-			"the reserved then method",
+			"an empty member name",
 			{
 				wireName: "example.calculator.v1",
-				methods: {
+				members: { "": { kind: "unary" } },
+			},
+		],
+		[
+			"the reserved then member",
+			{
+				wireName: "example.calculator.v1",
+				members: {
 					// biome-ignore lint/suspicious/noThenProperty: verifies the reserved method rejection.
-					then: true,
+					then: { kind: "unary" },
 				},
 			},
 		],
 		[
-			"an invalid method definition",
-			{ wireName: "example.calculator.v1", methods: { add: false } },
+			"a boolean shorthand",
+			{ wireName: "example.calculator.v1", members: { add: true } },
 		],
-	])("RPC-DESC-002 RPC-DESC-003 rejects %s", (_label, options) => {
+		[
+			"an extra definition field",
+			{
+				wireName: "example.calculator.v1",
+				members: { add: { kind: "unary", extra: true } },
+			},
+		],
+		[
+			"cancelable false",
+			{
+				wireName: "example.calculator.v1",
+				members: { cancel: { kind: "unary", cancelable: false } },
+			},
+		],
+		[
+			"an unknown interaction kind",
+			{
+				wireName: "example.calculator.v1",
+				members: { add: { kind: "batch" } },
+			},
+		],
+		[
+			"an extra stream definition field",
+			{
+				wireName: "example.calculator.v1",
+				members: { events$: { kind: "stream-property", extra: true } },
+			},
+		],
+		[
+			"a non-dollar stream property",
+			{
+				wireName: "example.calculator.v1",
+				members: { events: { kind: "stream-property" } },
+			},
+		],
+		[
+			"an extra outer option",
+			{
+				wireName: "example.calculator.v1",
+				members: { add: { kind: "unary" } },
+				extra: true,
+			},
+		],
+	])("RPC-DESC-006 RPC-DESC-009 rejects %s", (_label, options) => {
 		expect(() =>
-			createRemoteServiceDescriptor(
-				ICalculatorService,
-				options as unknown as {
-					readonly wireName: string;
-					readonly methods: { readonly add: true };
-				},
-			),
+			createRemoteServiceDescriptor(ICalculatorService, options as never),
 		).toThrow(TypeError);
 	});
 
-	it("RPC-DESC-003 compares the reserved method name exactly", () => {
+	it("RPC-DESC-006 rejects accessors without invoking them", () => {
+		let getterCalls = 0;
+		const accessorOptions = Object.defineProperty(
+			{ members: { add: { kind: "unary" } } },
+			"wireName",
+			{
+				enumerable: true,
+				get() {
+					getterCalls += 1;
+					return "example.accessor.v1";
+				},
+			},
+		);
+
+		expect(() =>
+			createRemoteServiceDescriptor(
+				ICalculatorService,
+				accessorOptions as never,
+			),
+		).toThrow(TypeError);
+		expect(getterCalls).toBe(0);
+	});
+
+	it("RPC-DESC-006 rejects member and definition accessors or symbol fields without invoking application code", () => {
+		let getterCalls = 0;
+		const accessorMembers = Object.defineProperty({}, "add", {
+			enumerable: true,
+			get() {
+				getterCalls += 1;
+				return { kind: "unary" };
+			},
+		});
+		const accessorDefinition = Object.defineProperty({}, "kind", {
+			enumerable: true,
+			get() {
+				getterCalls += 1;
+				return "unary";
+			},
+		});
+		const symbol = Symbol("extra");
+		const symbolMembers = {
+			add: { kind: "unary" },
+			[symbol]: { kind: "unary" },
+		};
+		const symbolDefinition = {
+			kind: "unary",
+			[symbol]: true,
+		};
+
+		for (const members of [
+			accessorMembers,
+			{ add: accessorDefinition },
+			symbolMembers,
+			{ add: symbolDefinition },
+		]) {
+			expect(() =>
+				createRemoteServiceDescriptor(ICalculatorService, {
+					wireName: "example.invalid-members.v1",
+					members,
+				} as never),
+			).toThrow(TypeError);
+		}
+		expect(getterCalls).toBe(0);
+	});
+
+	it("RPC-DESC-009 compares member names exactly", () => {
 		expect(() =>
 			createRemoteServiceDescriptor(ICaseSensitiveService, {
 				wireName: "example.case-sensitive.v1",
-				methods: { Then: true },
+				members: { Then: { kind: "unary" } },
 			}),
 		).not.toThrow();
+	});
+
+	it("RPC-DESC-001 RPC-DESC-006 retains a detached normalized snapshot", () => {
+		const members = { add: { kind: "unary" as const } };
+		const options = {
+			wireName: "example.snapshot.v1",
+			members,
+		};
+		const descriptor = createRemoteServiceDescriptor(
+			ICalculatorService,
+			options,
+		);
+		options.wireName = "example.replacement.v1";
+		(members.add as { kind: string }).kind = "stream-property";
+
+		const connector = createRpcConnector({
+			protocol: createProtocolHarness().protocol,
+		});
+		const implementation = {
+			add: (left: number, right: number) => left + right,
+		};
+		const cleanup = connector.peer.expose(descriptor, implementation);
+		const originalNameDescriptor = createRemoteServiceDescriptor(
+			ICalculatorService,
+			{
+				wireName: "example.snapshot.v1",
+				members: { add: { kind: "unary" } },
+			},
+		);
+
+		expect(() =>
+			connector.peer.expose(originalNameDescriptor, implementation),
+		).toThrow(TypeError);
+		cleanup();
 	});
 });
 
@@ -775,7 +935,7 @@ describe("Default Protocol aggregate retained capacity", () => {
 		const mebibyte = 1024 * 1024;
 		const descriptor = createRemoteServiceDescriptor(IRetainedReplayService, {
 			wireName: "example.retained-replay.v1",
-			methods: { run: true },
+			members: { run: { kind: "unary" } },
 		});
 		const network = createRpcTestNetwork();
 		const acceptor = createRpcAcceptor({
@@ -846,7 +1006,7 @@ describe("Default Protocol aggregate retained capacity", () => {
 		const mebibyte = 1024 * 1024;
 		const descriptor = createRemoteServiceDescriptor(IRetainedReplayService, {
 			wireName: "example.session-retained.v1",
-			methods: { run: true },
+			members: { run: { kind: "unary" } },
 		});
 		const acceptedCalls: string[] = [];
 		const network = createRpcTestNetwork();
@@ -1428,14 +1588,14 @@ describe("Application Value normalization", () => {
 });
 
 describe("exposure registries and remote facades", () => {
-	it("RPC-DESC-004 RPC-DESC-005 installs exposures atomically and cleans them up idempotently", () => {
+	it("RPC-DESC-005 RPC-DESC-009 installs exposures atomically and cleans them up idempotently", () => {
 		const { protocol } = createProtocolHarness();
 		const connector = createRpcConnector({ protocol });
 		const descriptor = createRemoteServiceDescriptor(ICalculatorService, {
 			wireName: "example.calculator.v1",
-			methods: {
-				add: true,
-				cancel: { cancelable: true },
+			members: {
+				add: { kind: "unary" },
+				cancel: { kind: "unary", cancelable: true },
 			},
 		});
 		const invalidImplementation = {
@@ -1467,6 +1627,112 @@ describe("exposure registries and remote facades", () => {
 		).not.toThrow();
 	});
 
+	it("RPC-DESC-008 captures mixed method routes and data-property sources without reading getters", () => {
+		const { protocol } = createProtocolHarness();
+		const connector = createRpcConnector({ protocol });
+		const descriptor = createRemoteServiceDescriptor(IMixedExposureService, {
+			wireName: "example.mixed-exposure.v1",
+			members: {
+				add: { kind: "unary" },
+				cancel: { kind: "unary", cancelable: true },
+				history: { kind: "stream-method" },
+				events$: { kind: "stream-property" },
+				lazy$: { kind: "stream-property" },
+			},
+		});
+		const source = new Subject<string>();
+		let getterCalls = 0;
+		const implementation = {
+			add: (left: number, right: number) => left + right,
+			async cancel(value: string) {
+				return value;
+			},
+			history: (room: string) => of(room),
+			events$: source,
+		};
+		Object.defineProperty(implementation, "lazy$", {
+			enumerable: true,
+			get() {
+				getterCalls += 1;
+				return of("lazy");
+			},
+		});
+
+		const cleanup = connector.peer.expose(
+			descriptor,
+			implementation as unknown as MixedExposureService,
+		);
+		expect(getterCalls).toBe(0);
+		implementation.history = () => of("replacement");
+		implementation.events$ = {} as Subject<string>;
+		expect(cleanup()).toBeUndefined();
+		expect(cleanup()).toBeUndefined();
+	});
+
+	it("RPC-DESC-008 rejects invalid mixed routes before installing any route", () => {
+		const { protocol } = createProtocolHarness();
+		const connector = createRpcConnector({ protocol });
+		const descriptor = createRemoteServiceDescriptor(IMixedExposureService, {
+			wireName: "example.invalid-mixed-exposure.v1",
+			members: {
+				history: { kind: "stream-method" },
+				events$: { kind: "stream-property" },
+			},
+		});
+		const validImplementation = {
+			history: () => of("valid"),
+			events$: of("valid"),
+		};
+		const invalidImplementation = {
+			history: () => of("invalid"),
+			events$: {},
+		};
+
+		expect(() =>
+			connector.peer.expose(descriptor, invalidImplementation as never),
+		).toThrow(TypeError);
+		expect(() =>
+			connector.peer.expose(descriptor, validImplementation as never),
+		).not.toThrow();
+	});
+
+	it("RPC-DESC-008 rejects method accessors and stream-property setters without invoking getters", () => {
+		const { protocol } = createProtocolHarness();
+		const connector = createRpcConnector({ protocol });
+		const descriptor = createRemoteServiceDescriptor(IMixedExposureService, {
+			wireName: "example.invalid-accessor-exposure.v1",
+			members: {
+				history: { kind: "stream-method" },
+				events$: { kind: "stream-property" },
+			},
+		});
+		let getterCalls = 0;
+		const methodAccessor = { events$: of("event") };
+		Object.defineProperty(methodAccessor, "history", {
+			enumerable: true,
+			get() {
+				getterCalls += 1;
+				return () => of("history");
+			},
+		});
+		const propertySetter = { history: () => of("history") };
+		Object.defineProperty(propertySetter, "events$", {
+			enumerable: true,
+			get() {
+				getterCalls += 1;
+				return of("event");
+			},
+			set(_value: Observable<string>) {},
+		});
+
+		for (const implementation of [methodAccessor, propertySetter]) {
+			expect(() =>
+				connector.peer.expose(descriptor, implementation as never),
+			).toThrow(TypeError);
+		}
+		expect(getterCalls).toBe(0);
+	});
+
 	it("RPC-CALL-001 creates frozen non-thenable single and group facades", async () => {
 		const connectorHarness = createProtocolHarness();
 		const connector = createRpcConnector({
@@ -1476,7 +1742,7 @@ describe("exposure registries and remote facades", () => {
 		const acceptor = createRpcAcceptor({ protocol: acceptorHarness.protocol });
 		const descriptor = createRemoteServiceDescriptor(ICalculatorService, {
 			wireName: "example.calculator.v1",
-			methods: { add: true },
+			members: { add: { kind: "unary" } },
 		});
 
 		const remote = connector.peer.resolve(descriptor);
@@ -1493,12 +1759,12 @@ describe("exposure registries and remote facades", () => {
 		await expect(add(1, 2)).rejects.toMatchObject({ code: "unavailable" });
 	});
 
-	it("RPC-DESC-004 RPC-DESC-005 applies the same duplicate and cleanup rules to Acceptor owner exposure", () => {
+	it("RPC-DESC-005 RPC-DESC-009 applies the same duplicate and cleanup rules to Acceptor owner exposure", () => {
 		const { protocol } = createProtocolHarness();
 		const acceptor = createRpcAcceptor({ protocol });
 		const descriptor = createRemoteServiceDescriptor(ICalculatorService, {
 			wireName: "example.calculator.v1",
-			methods: { add: true },
+			members: { add: { kind: "unary" } },
 		});
 		const implementation = {
 			add: (left: number, right: number) => left + right,
@@ -1518,7 +1784,7 @@ describe("exposure registries and remote facades", () => {
 		const connector = createRpcConnector({ protocol });
 		const descriptor = createRemoteServiceDescriptor(ICalculatorService, {
 			wireName: "example.calculator.v1",
-			methods: { cancel: { cancelable: true } },
+			members: { cancel: { kind: "unary", cancelable: true } },
 		});
 		const remote = connector.peer.resolve(descriptor);
 		const escapedCancel = remote.cancel as unknown as (
@@ -2245,7 +2511,7 @@ describe("custom Protocol outgoing invocations", () => {
 			await connectProtocolSession(session);
 		const descriptor = createRemoteServiceDescriptor(ICalculatorService, {
 			wireName: "example.calculator.v1",
-			methods: { add: true },
+			members: { add: { kind: "unary" } },
 		});
 		const remote = connector.peer.resolve(descriptor);
 		const admitted = remote.add(1, 2);
@@ -2403,7 +2669,7 @@ describe("custom Protocol outgoing invocations", () => {
 		const { connector, host, events } = await connectProtocolSession(session);
 		const descriptor = createRemoteServiceDescriptor(ICalculatorService, {
 			wireName: "example.calculator.v1",
-			methods: { add: true },
+			members: { add: { kind: "unary" } },
 		});
 		const result = connector.peer.resolve(descriptor).add(1, 2);
 
@@ -2480,7 +2746,7 @@ describe("custom Protocol outgoing invocations", () => {
 		const { connector, events } = await connectProtocolSession(session);
 		const descriptor = createRemoteServiceDescriptor(ICalculatorService, {
 			wireName: "example.calculator.v1",
-			methods: { cancel: { cancelable: true } },
+			members: { cancel: { kind: "unary", cancelable: true } },
 		});
 		const controller = new AbortController();
 		Object.defineProperties(controller.signal, {
@@ -2520,7 +2786,7 @@ describe("custom Protocol outgoing invocations", () => {
 		const { connector, events } = await connectProtocolSession(session);
 		const descriptor = createRemoteServiceDescriptor(ICalculatorService, {
 			wireName: "example.calculator.v1",
-			methods: { add: true },
+			members: { add: { kind: "unary" } },
 		});
 
 		await expect(
@@ -2602,7 +2868,7 @@ describe("stable remote service groups", () => {
 		).toBeDefined();
 		const descriptor = createRemoteServiceDescriptor(ICalculatorService, {
 			wireName: "example.calculator.v1",
-			methods: { add: true },
+			members: { add: { kind: "unary" } },
 		});
 
 		const results = await acceptor.resolveAll(descriptor).add(1, 2);
@@ -2661,7 +2927,7 @@ describe("stable remote service groups", () => {
 		});
 		const descriptor = createRemoteServiceDescriptor(ICalculatorService, {
 			wireName: "example.calculator.v1",
-			methods: { add: true },
+			members: { add: { kind: "unary" } },
 		});
 
 		await expect(
@@ -2725,7 +2991,7 @@ describe("custom Protocol incoming calls", () => {
 		const { connector } = await connectProtocolSession(session);
 		const descriptor = createRemoteServiceDescriptor(ICalculatorService, {
 			wireName: "example.calculator.v1",
-			methods: { add: true },
+			members: { add: { kind: "unary" } },
 		});
 		const result = connector.peer.resolve(descriptor).add(20, 21);
 
@@ -2768,7 +3034,7 @@ describe("custom Protocol incoming calls", () => {
 		const { connector } = await connectProtocolSession(session);
 		const descriptor = createRemoteServiceDescriptor(ICalculatorService, {
 			wireName: "example.calculator.v1",
-			methods: { add: true },
+			members: { add: { kind: "unary" } },
 		});
 		const result = connector.peer.resolve(descriptor).add(20, 21);
 		const terminal = Object.assign(Object.create(null), {
@@ -2834,7 +3100,7 @@ describe("custom Protocol incoming calls", () => {
 			await connectProtocolSession(session);
 		const descriptor = createRemoteServiceDescriptor(IDeferredService, {
 			wireName: "example.deferred.v1",
-			methods: { run: true },
+			members: { run: { kind: "unary" } },
 		});
 		connector.peer.expose(descriptor, {
 			run: () => new Promise<number>(() => {}),
@@ -2940,7 +3206,7 @@ describe("custom Protocol incoming calls", () => {
 			await connectProtocolSession(session);
 		const descriptor = createRemoteServiceDescriptor(ICalculatorService, {
 			wireName: "example.calculator.v1",
-			methods: { add: true },
+			members: { add: { kind: "unary" } },
 		});
 		let handlerCalls = 0;
 		const implementation = {
@@ -3008,7 +3274,7 @@ describe("custom Protocol incoming calls", () => {
 			await connectProtocolSession(session);
 		const descriptor = createRemoteServiceDescriptor(ICalculatorService, {
 			wireName: "example.calculator.v1",
-			methods: { add: true },
+			members: { add: { kind: "unary" } },
 		});
 		connector.peer.expose(descriptor, { add: (left, right) => left + right });
 		const args = host.normalizeApplicationArguments([]);
@@ -3077,7 +3343,7 @@ describe("custom Protocol incoming calls", () => {
 		);
 		const descriptor = createRemoteServiceDescriptor(IDeferredService, {
 			wireName: "example.deferred.v1",
-			methods: { run: true },
+			members: { run: { kind: "unary" } },
 		});
 		const handlerResolvers: ((value: number) => void)[] = [];
 		let handlerCalls = 0;
@@ -3176,7 +3442,7 @@ describe("custom Protocol incoming calls", () => {
 			await connectProtocolSession(session);
 		const descriptor = createRemoteServiceDescriptor(IDeferredService, {
 			wireName: "example.deferred.v1",
-			methods: { run: true },
+			members: { run: { kind: "unary" } },
 		});
 		let resolveHandler!: (value: number) => void;
 		let inspectionCalls = 0;

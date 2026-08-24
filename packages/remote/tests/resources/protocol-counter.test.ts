@@ -113,7 +113,7 @@ describe("Default RPC Protocol counter drain", () => {
 		const network = createRpcTestNetwork();
 		const descriptor = createRemoteServiceDescriptor(ICounterService, {
 			wireName: "example.counter.v1",
-			methods: { run: true },
+			members: { run: { kind: "unary" } },
 		});
 		const acceptor = createRpcAcceptor({ protocol });
 		const connector = createRpcConnector({ protocol });
@@ -149,7 +149,7 @@ describe("Default RPC Protocol counter drain", () => {
 		const network = createRpcTestNetwork();
 		const descriptor = createRemoteServiceDescriptor(ICounterService, {
 			wireName: "example.counter.v1",
-			methods: { run: true },
+			members: { run: { kind: "unary" } },
 		});
 		const acceptor = createRpcAcceptor({ protocol });
 		const connector = createRpcConnector({ protocol });

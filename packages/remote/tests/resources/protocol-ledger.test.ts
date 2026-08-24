@@ -127,7 +127,7 @@ describe("Default RPC Protocol retained ledger", () => {
 		const network = createRpcTestNetwork();
 		const descriptor = createRemoteServiceDescriptor(ILedgerService, {
 			wireName: "example.reentrant-incoming-ledger.v1",
-			methods: { run: true },
+			members: { run: { kind: "unary" } },
 		});
 		const handler = vi.fn((value: number) => value);
 		const acceptor = createRpcAcceptor({
@@ -283,7 +283,7 @@ describe("Default RPC Protocol retained ledger", () => {
 		const network = createRpcTestNetwork();
 		const descriptor = createRemoteServiceDescriptor(ILedgerService, {
 			wireName: "example.ledger.v1",
-			methods: { run: true },
+			members: { run: { kind: "unary" } },
 		});
 		const acceptor = createRpcAcceptor({ runtimePolicy: { ackDelayMs: 1 } });
 		const connector = createRpcConnector({ runtimePolicy: { ackDelayMs: 1 } });
@@ -356,11 +356,11 @@ describe("Default RPC Protocol retained ledger", () => {
 		const network = createRpcTestNetwork();
 		const descriptor = createRemoteServiceDescriptor(ILedgerService, {
 			wireName: "example.ledger.v1",
-			methods: { run: true },
+			members: { run: { kind: "unary" } },
 		});
 		const unknownDescriptor = createRemoteServiceDescriptor(ILedgerService, {
 			wireName: "example.unknown-ledger.v1",
-			methods: { run: true },
+			members: { run: { kind: "unary" } },
 		});
 		const acceptor = createRpcAcceptor({ runtimePolicy: { ackDelayMs: 1 } });
 		const connector = createRpcConnector({ runtimePolicy: { ackDelayMs: 1 } });
@@ -407,7 +407,7 @@ describe("Default RPC Protocol retained ledger", () => {
 		const network = createRpcTestNetwork();
 		const descriptor = createRemoteServiceDescriptor(ILedgerService, {
 			wireName: "example.ledger.v1",
-			methods: { run: true },
+			members: { run: { kind: "unary" } },
 		});
 		const policy = {
 			ackDelayMs: 1,
@@ -449,7 +449,7 @@ describe("Default RPC Protocol retained ledger", () => {
 		const network = createRpcTestNetwork();
 		const descriptor = createRemoteServiceDescriptor(ILargeLedgerService, {
 			wireName: "example.large-ledger.v1",
-			methods: { run: true },
+			members: { run: { kind: "unary" } },
 		});
 		const policy = {
 			ackDelayMs: 1,

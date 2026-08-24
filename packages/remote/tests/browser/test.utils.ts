@@ -182,9 +182,9 @@ export async function runRpcBrowserRoundtrip(): Promise<IBrowserRoundtripResult>
 	const webCryptoVectors = await verifyBrowserWebCryptoVectors();
 	const descriptor = createRemoteServiceDescriptor(IBrowserRpcService, {
 		wireName: "browser.release.v1",
-		methods: {
-			add: true,
-			wait: { cancelable: true },
+		members: {
+			add: { kind: "unary" },
+			wait: { kind: "unary", cancelable: true },
 		},
 	});
 	const network = createBrowserMemoryNetwork();

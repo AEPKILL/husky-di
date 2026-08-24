@@ -34,7 +34,7 @@ interface BatchService {
 const IBatchService = createServiceIdentifier<BatchService>("IBatchService");
 const batchDescriptor = createRemoteServiceDescriptor(IBatchService, {
 	wireName: "example.acceptor-batch.v1",
-	methods: { wait: true },
+	members: { wait: { kind: "unary" } },
 });
 
 interface AcceptorHarness {

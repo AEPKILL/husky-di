@@ -46,7 +46,7 @@ import type {
 } from "@/interfaces/rpc-peer.interface";
 import type {
 	RemoteServiceImplementation,
-	RpcMethodDefinitions,
+	RpcMemberDefinitions,
 } from "@/types/remote-service-descriptor.type";
 import type {
 	RpcAcceptorListenerState,
@@ -190,7 +190,7 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 		return this.#retainedBytesLedger.reserve(bytes);
 	}
 
-	expose<T, Definitions extends RpcMethodDefinitions<T>>(
+	expose<T, Definitions extends RpcMemberDefinitions<T>>(
 		descriptor: IRemoteServiceDescriptor<T, Definitions>,
 		implementation: NoInfer<RemoteServiceImplementation<T, Definitions>>,
 	): Cleanup {
@@ -484,7 +484,7 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 		}
 	}
 
-	resolveAll<T, Definitions extends RpcMethodDefinitions<T>>(
+	resolveAll<T, Definitions extends RpcMemberDefinitions<T>>(
 		descriptor: IRemoteServiceDescriptor<T, Definitions>,
 	): RemoteServiceGroup<T, Definitions> {
 		const service = getRemoteServiceDescriptorData(descriptor).wireName;

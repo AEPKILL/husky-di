@@ -55,7 +55,11 @@ const requirementDescriptor = createRemoteServiceDescriptor(
 	IRequirementService,
 	{
 		wireName: "example.requirements.v1",
-		methods: { cancel: { cancelable: true }, echo: true, wait: true },
+		members: {
+			cancel: { kind: "unary", cancelable: true },
+			echo: { kind: "unary" },
+			wait: { kind: "unary" },
+		},
 	},
 );
 
@@ -342,18 +346,26 @@ describe("Framework requirement evidence", () => {
 		await harness.connector.close();
 	});
 
-	it("RPC-DESC-005 keeps an admitted handler route after synchronous idempotent cleanup", async () => {
+	it("RPC-DESC-005 RPC-DESC-008 keeps the captured handler route after replacement and cleanup", async () => {
 		const harness = createConnectorHarness();
 		const sessionHost = await harness.connect();
-		const cleanup = harness.connector.peer.expose(requirementDescriptor, {
+		const implementation: RequirementService & { prefix: string } = {
+			prefix: "captured",
 			async cancel(value) {
 				return value;
 			},
-			echo: ({ secret }) => ({ secret: `captured:${secret}` }),
+			echo({ secret }) {
+				return { secret: `${this.prefix}:${secret}` };
+			},
 			async wait() {
 				return "done";
 			},
-		});
+		};
+		const cleanup = harness.connector.peer.expose(
+			requirementDescriptor,
+			implementation,
+		);
+		implementation.echo = ({ secret }) => ({ secret: `replacement:${secret}` });
 		const reservation = sessionHost.reserveIncomingCall({
 			service: "example.requirements.v1",
 			method: "echo",

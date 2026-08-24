@@ -59,7 +59,7 @@ describe("Default RPC Protocol remaining requirements", () => {
 		const blocked = Promise.withResolvers<void>();
 		const descriptor = createRemoteServiceDescriptor(IRequirementsService, {
 			wireName: "example.requirements.v1",
-			methods: { run: true },
+			members: { run: { kind: "unary" } },
 		});
 		const policy = { maxRetainedBytesPerSession: 4 * 1024 * 1024 };
 		const acceptor = createRpcAcceptor({ runtimePolicy: policy });
@@ -125,7 +125,7 @@ describe("Default RPC Protocol remaining requirements", () => {
 		const network = createRpcTestNetwork();
 		const descriptor = createRemoteServiceDescriptor(IRequirementsService, {
 			wireName: "example.bidirectional-ledger.v1",
-			methods: { run: true },
+			members: { run: { kind: "unary" } },
 		});
 		const acceptor = createRpcAcceptor();
 		const connector = createRpcConnector();
@@ -162,7 +162,7 @@ describe("Default RPC Protocol remaining requirements", () => {
 		const network = createRpcTestNetwork();
 		const descriptor = createRemoteServiceDescriptor(IRequirementsService, {
 			wireName: "example.plaintext-deployment.v1",
-			methods: { run: true },
+			members: { run: { kind: "unary" } },
 		});
 		const acceptor = createRpcAcceptor();
 		const connector = createRpcConnector();
@@ -240,7 +240,7 @@ describe("Default RPC Protocol remaining requirements", () => {
 		const network = createRpcTestNetwork();
 		const descriptor = createRemoteServiceDescriptor(IRequirementsService, {
 			wireName: "example.retained-owner.v1",
-			methods: { run: true },
+			members: { run: { kind: "unary" } },
 		});
 		const acceptor = createRpcAcceptor({ runtimePolicy: { maxSessions: 1 } });
 		const retainedConnector = createRpcConnector();
@@ -314,7 +314,7 @@ describe("Default RPC Protocol remaining requirements", () => {
 		const network = createRpcTestNetwork();
 		const descriptor = createRemoteServiceDescriptor(IRequirementsService, {
 			wireName: "example.ingress-order.v1",
-			methods: { run: true },
+			members: { run: { kind: "unary" } },
 		});
 		const acceptor = createRpcAcceptor();
 		const connector = createRpcConnector();
@@ -368,7 +368,7 @@ describe("Default RPC Protocol remaining requirements", () => {
 			IScheduledRequirementsService,
 			{
 				wireName: "example.handler-fairness.v1",
-				methods: { run: true },
+				members: { run: { kind: "unary" } },
 			},
 		);
 		const acceptor = createRpcAcceptor({
@@ -441,7 +441,7 @@ describe("Default RPC Protocol remaining requirements", () => {
 			IScheduledRequirementsService,
 			{
 				wireName: "example.terminal-queued-handler.v1",
-				methods: { run: true },
+				members: { run: { kind: "unary" } },
 			},
 		);
 		peer.expose(descriptor, { run: async (value) => value });

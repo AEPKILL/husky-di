@@ -430,7 +430,7 @@ void inventory;
 // @ts-expect-error The built-in Protocol is private.
 import { defaultRpcProtocol } from "@husky-di/remote";
 // @ts-expect-error Descriptor mapped helpers are private.
-import type { RemoteService, RpcMethodDefinitions } from "@husky-di/remote";
+import type { RemoteService, RpcMemberDefinitions } from "@husky-di/remote";
 // @ts-expect-error Concrete implementation classes are private.
 import type { RpcConnectorImpl as RootRpcConnectorImpl } from "@husky-di/remote";
 // @ts-expect-error Implementation deep imports are private.

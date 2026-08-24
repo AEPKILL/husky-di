@@ -115,7 +115,7 @@ describe("Acceptor termination cleanup", () => {
 		}
 		const descriptor = createRemoteServiceDescriptor(IFaultingService, {
 			wireName: "test.faulting.v1",
-			methods: { run: true },
+			members: { run: { kind: "unary" } },
 		});
 
 		await expect(faultingPeer.resolve(descriptor).run()).rejects.toMatchObject({

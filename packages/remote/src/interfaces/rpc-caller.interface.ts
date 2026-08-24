@@ -23,8 +23,8 @@ import type {
 	RemoteMethodKey,
 	RemoteService,
 	RemoteServiceImplementation,
-	RpcMethodDefinitions,
-	SelectedMethodKey,
+	RpcMemberDefinitions,
+	SelectedUnaryMemberKey,
 } from "@/types/remote-service-descriptor.type";
 import type {
 	RpcAcceptorState,
@@ -59,10 +59,10 @@ type RemoteGroupMethod<F, Definition> = F extends (
 
 export type RemoteServiceGroup<
 	T,
-	Definitions extends RpcMethodDefinitions<T>,
+	Definitions extends RpcMemberDefinitions<T>,
 > = {
 	readonly [K in Extract<
-		SelectedMethodKey<Definitions>,
+		SelectedUnaryMemberKey<Definitions>,
 		RemoteMethodKey<T>
 	>]: RemoteGroupMethod<Extract<T[K], AnyMethod>, Definitions[K]>;
 } & { readonly then?: never };
@@ -71,12 +71,12 @@ export interface IRpcPeer {
 	readonly state: RpcPeerState;
 	readonly state$: Observable<RpcPeerState>;
 
-	expose<T, Definitions extends RpcMethodDefinitions<T>>(
+	expose<T, Definitions extends RpcMemberDefinitions<T>>(
 		descriptor: IRemoteServiceDescriptor<T, Definitions>,
 		implementation: NoInfer<RemoteServiceImplementation<T, Definitions>>,
 	): Cleanup;
 
-	resolve<T, Definitions extends RpcMethodDefinitions<T>>(
+	resolve<T, Definitions extends RpcMemberDefinitions<T>>(
 		descriptor: IRemoteServiceDescriptor<T, Definitions>,
 	): RemoteService<T, Definitions>;
 }
@@ -244,14 +244,14 @@ export interface IRpcAcceptor {
 	readonly peers$: Observable<readonly IRpcPeer[]>;
 	readonly event$: Observable<RpcEvent>;
 
-	expose<T, Definitions extends RpcMethodDefinitions<T>>(
+	expose<T, Definitions extends RpcMemberDefinitions<T>>(
 		descriptor: IRemoteServiceDescriptor<T, Definitions>,
 		implementation: NoInfer<RemoteServiceImplementation<T, Definitions>>,
 	): Cleanup;
 
 	listen(adapter: IRpcAcceptorAdapter): Promise<void>;
 
-	resolveAll<T, Definitions extends RpcMethodDefinitions<T>>(
+	resolveAll<T, Definitions extends RpcMemberDefinitions<T>>(
 		descriptor: IRemoteServiceDescriptor<T, Definitions>,
 	): RemoteServiceGroup<T, Definitions>;
 

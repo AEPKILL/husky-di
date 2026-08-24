@@ -32,14 +32,14 @@ describe("Default RPC Protocol outbound fairness", () => {
 			IConnectorFairnessService,
 			{
 				wireName: "example.connector-fairness.v1",
-				methods: { run: true },
+				members: { run: { kind: "unary" } },
 			},
 		);
 		const acceptorDescriptor = createRemoteServiceDescriptor(
 			IAcceptorFairnessService,
 			{
 				wireName: "example.acceptor-fairness.v1",
-				methods: { run: true },
+				members: { run: { kind: "unary" } },
 			},
 		);
 		const acceptor = createRpcAcceptor();
@@ -109,7 +109,7 @@ describe("Default RPC Protocol outbound fairness", () => {
 		const network = createRpcTestNetwork();
 		const descriptor = createRemoteServiceDescriptor(IAcceptorFairnessService, {
 			wireName: "example.probe-fairness.v1",
-			methods: { run: true },
+			members: { run: { kind: "unary" } },
 		});
 		const acceptor = createRpcAcceptor();
 		const connector = createRpcConnector();
@@ -179,7 +179,7 @@ describe("Default RPC Protocol outbound fairness", () => {
 			IConnectorFairnessService,
 			{
 				wireName: "example.ack-fairness.v1",
-				methods: { run: true },
+				members: { run: { kind: "unary" } },
 			},
 		);
 		const acceptor = createRpcAcceptor({ runtimePolicy: { ackDelayMs: 1 } });

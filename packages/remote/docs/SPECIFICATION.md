@@ -371,11 +371,11 @@ export class RpcException extends CodedException<RpcExceptionCodeEnum> {
 export interface IRpcPeer {
   readonly state: RpcPeerState;
   readonly state$: Observable<RpcPeerState>;
-  expose<T, Definitions extends RpcMethodDefinitions<T>>(
+  expose<T, Definitions extends RpcMemberDefinitions<T>>(
     descriptor: IRemoteServiceDescriptor<T, Definitions>,
     implementation: NoInfer<RemoteServiceImplementation<T, Definitions>>,
   ): Cleanup;
-  resolve<T, Definitions extends RpcMethodDefinitions<T>>(
+  resolve<T, Definitions extends RpcMemberDefinitions<T>>(
     descriptor: IRemoteServiceDescriptor<T, Definitions>,
   ): RemoteService<T, Definitions>;
 }
@@ -396,7 +396,7 @@ export interface IRpcAcceptor {
   readonly peers: readonly IRpcPeer[];
   readonly peers$: Observable<readonly IRpcPeer[]>;
   readonly event$: Observable<RpcEvent>;
-  expose<T, Definitions extends RpcMethodDefinitions<T>>(
+  expose<T, Definitions extends RpcMemberDefinitions<T>>(
     descriptor: IRemoteServiceDescriptor<T, Definitions>,
     implementation: NoInfer<RemoteServiceImplementation<T, Definitions>>,
   ): Cleanup;
