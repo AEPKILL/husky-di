@@ -196,24 +196,27 @@ export class RpcSourceSubscriptionImpl implements IRpcProtocolIncomingStream {
 		if (emission === undefined || this.#finishRequested) {
 			return;
 		}
+		let snapshot: ReturnType<typeof normalizeRpcApplicationValue>;
 		try {
-			const snapshot = normalizeRpcApplicationValue(value);
-			if (!this.#finishRequested) {
-				emission.commit(snapshot);
-			}
-		} catch (error) {
-			if (error instanceof TypeError) {
-				try {
-					emission.fail();
-				} catch (protocolError) {
-					this.#onProtocolFault(protocolError);
-					return;
-				}
-				if (!this.#finishRequested) {
-					this.#reportSourceFailure();
-				}
+			snapshot = normalizeRpcApplicationValue(value);
+		} catch {
+			try {
+				emission.fail();
+			} catch (protocolError) {
+				this.#onProtocolFault(protocolError);
 				return;
 			}
+			if (!this.#finishRequested) {
+				this.#reportSourceFailure();
+			}
+			return;
+		}
+		if (this.#finishRequested) {
+			return;
+		}
+		try {
+			emission.commit(snapshot);
+		} catch (error) {
 			this.#onProtocolFault(error);
 		}
 	}

@@ -2325,6 +2325,195 @@ describe("exposure registries and remote facades", () => {
 		await connector.close();
 	});
 
+	it.each([
+		[
+			"acquisition throw",
+			() => {
+				throw new Error("raw acquisition failure");
+			},
+		],
+		["invalid Observable", () => ({})],
+		[
+			"subscribe throw",
+			() => ({
+				lift() {},
+				subscribe() {
+					throw new Error("raw subscribe failure");
+				},
+			}),
+		],
+		[
+			"source error",
+			() =>
+				new Observable((subscriber) => {
+					subscriber.error(new Error("raw source failure"));
+				}),
+		],
+		[
+			"item normalization failure",
+			() =>
+				new Observable((subscriber) => {
+					subscriber.next(Symbol("raw invalid item"));
+				}),
+		],
+	] as const)("RPC-STREAM-007 RPC-VALID-010 maps %s to handler-failed", async (_label, createSource) => {
+		const session: IRpcProtocolSession = {
+			reserveInvocation: () => undefined,
+			reserveStream: () => undefined,
+			forceClose() {},
+		};
+		const { connector, host, sessionHost } =
+			await connectProtocolSession(session);
+		const descriptor = createRemoteServiceDescriptor(IMixedExposureService, {
+			wireName: "example.failed-source.v1",
+			members: { history: { kind: "stream-method" } },
+		});
+		connector.peer.expose(descriptor, {
+			history: createSource,
+		} as never);
+		const reservation = sessionHost.reserveIncomingStream({
+			service: "example.failed-source.v1",
+			member: "history",
+			kind: "stream-method",
+			args: host.normalizeApplicationArguments(["room"]),
+		});
+		const terminals: unknown[] = [];
+		let incoming: IRpcProtocolIncomingStream | undefined;
+		const finishAsHandlerFailed = (): void => {
+			const terminal = {
+				type: "failed",
+				code: RpcExceptionCodeEnum.handlerFailed,
+			} as const;
+			terminals.push(terminal);
+			incoming?.finish(terminal, () => undefined);
+		};
+		if (reservation?.kind === "source") {
+			incoming = reservation.reservation.commit({
+				reserveEmission: () => ({
+					commit() {},
+					fail: finishAsHandlerFailed,
+				}),
+				finish(outcome) {
+					terminals.push(outcome);
+					incoming?.finish(outcome, () => undefined);
+				},
+			});
+		}
+
+		await Promise.resolve();
+		await Promise.resolve();
+
+		expect(terminals).toEqual([
+			{
+				type: "failed",
+				code: RpcExceptionCodeEnum.handlerFailed,
+			},
+		]);
+		expect(JSON.stringify(terminals)).not.toContain("raw");
+		await connector.close();
+	});
+
+	it("RPC-STREAM-012 RPC-STREAM-013 keeps completion authoritative when teardown throws", async () => {
+		const trace: string[] = [];
+		let teardownAttempts = 0;
+		const session: IRpcProtocolSession = {
+			reserveInvocation: () => undefined,
+			reserveStream: () => undefined,
+			forceClose() {},
+		};
+		const { connector, host, sessionHost } =
+			await connectProtocolSession(session);
+		const descriptor = createRemoteServiceDescriptor(IMixedExposureService, {
+			wireName: "example.throwing-teardown.v1",
+			members: { history: { kind: "stream-method" } },
+		});
+		connector.peer.expose(descriptor, {
+			history() {
+				return new Observable((subscriber) => {
+					subscriber.complete();
+					return () => {
+						teardownAttempts += 1;
+						trace.push("source:teardown-throw");
+						throw new Error("raw teardown failure");
+					};
+				});
+			},
+		} as never);
+		const reservation = sessionHost.reserveIncomingStream({
+			service: "example.throwing-teardown.v1",
+			member: "history",
+			kind: "stream-method",
+			args: host.normalizeApplicationArguments(["room"]),
+		});
+		let incoming: IRpcProtocolIncomingStream | undefined;
+		if (reservation?.kind === "source") {
+			incoming = reservation.reservation.commit({
+				reserveEmission: () => undefined,
+				finish(outcome) {
+					trace.push(`protocol:terminal:${outcome.type}`);
+					incoming?.finish(outcome, () => trace.push("protocol:on-released"));
+				},
+			});
+		}
+
+		await Promise.resolve();
+		await Promise.resolve();
+
+		expect(teardownAttempts).toBe(1);
+		expect(trace).toEqual([
+			"protocol:terminal:completed",
+			"source:teardown-throw",
+			"protocol:on-released",
+		]);
+		await connector.close();
+	});
+
+	it("RPC-SPI-015 keeps a Protocol emission commit throw out of source failure classification", async () => {
+		let forceCloses = 0;
+		let emissionFailures = 0;
+		const session: IRpcProtocolSession = {
+			reserveInvocation: () => undefined,
+			reserveStream: () => undefined,
+			forceClose() {
+				forceCloses += 1;
+			},
+		};
+		const { connector, host, sessionHost } =
+			await connectProtocolSession(session);
+		const descriptor = createRemoteServiceDescriptor(IMixedExposureService, {
+			wireName: "example.protocol-emission-failure.v1",
+			members: { history: { kind: "stream-method" } },
+		});
+		connector.peer.expose(descriptor, {
+			history: () => of("item"),
+		} as never);
+		const reservation = sessionHost.reserveIncomingStream({
+			service: "example.protocol-emission-failure.v1",
+			member: "history",
+			kind: "stream-method",
+			args: host.normalizeApplicationArguments(["room"]),
+		});
+		if (reservation?.kind === "source") {
+			reservation.reservation.commit({
+				reserveEmission: () => ({
+					commit() {
+						throw new TypeError("Protocol commit failed.");
+					},
+					fail() {
+						emissionFailures += 1;
+					},
+				}),
+				finish() {},
+			});
+		}
+
+		await Promise.resolve();
+		await Promise.resolve();
+
+		expect(emissionFailures).toBe(0);
+		expect(forceCloses).toBe(1);
+	});
+
 	it("RPC-API-007 omits every Remote Service Group facade", () => {
 		const { protocol } = createProtocolHarness();
 		const acceptor = createRpcAcceptor({ protocol });
