@@ -242,6 +242,7 @@ function createW1SemanticStreamHarness(): {
 	setOrdinaryCapacityAvailable(available: boolean): void;
 	readonly admittedItemCount: number;
 	readonly creditThrough: number;
+	readonly forceCloseCount: number;
 	readonly released: boolean;
 	readonly terminal: RpcIncomingStreamTerminal | undefined;
 } {
@@ -251,6 +252,7 @@ function createW1SemanticStreamHarness(): {
 	let admittedItemCount = 0;
 	let consumedCreditCount = 0;
 	let creditThrough = 1;
+	let forceCloseCount = 0;
 	let terminal: RpcIncomingStreamTerminal | undefined;
 	let terminalProjected = false;
 	let released = false;
@@ -366,7 +368,10 @@ function createW1SemanticStreamHarness(): {
 				release() {},
 			};
 		},
-		forceClose() {},
+		forceClose() {
+			forceCloseCount += 1;
+			selectTerminal({ type: "session-terminated" });
+		},
 	};
 
 	return {
@@ -395,6 +400,9 @@ function createW1SemanticStreamHarness(): {
 		},
 		get creditThrough() {
 			return creditThrough;
+		},
+		get forceCloseCount() {
+			return forceCloseCount;
 		},
 		get released() {
 			return released;
@@ -6939,6 +6947,132 @@ describe("Topology Owner termination", () => {
 			shutdown: 0,
 			close: 1,
 			cleanup: 1,
+		});
+	});
+
+	it("RPC-SHUTDOWN-002 RPC-SHUTDOWN-013 RPC-SHUTDOWN-014 drains an admitted connected stream through Source release", async () => {
+		const flow = createW1SemanticStreamHarness();
+		const { connector, sessionHost } = await connectProtocolSession(
+			flow.session,
+		);
+		flow.attachIncomingHost(sessionHost);
+		const descriptor = createRemoteServiceDescriptor(IMixedExposureService, {
+			wireName: "example.shutdown-stream-drain.v1",
+			members: { history: { kind: "stream-method" } },
+		});
+		const source = new Subject<string>();
+		let sourceTeardowns = 0;
+		let observerCompletions = 0;
+		connector.peer.expose(descriptor, {
+			history: () =>
+				new Observable((subscriber) => {
+					const subscription = source.subscribe(subscriber);
+					return () => {
+						sourceTeardowns += 1;
+						subscription.unsubscribe();
+					};
+				}),
+		} as never);
+		connector.peer
+			.resolve(descriptor)
+			.history("room")
+			.subscribe({
+				complete: () => {
+					observerCompletions += 1;
+				},
+			});
+		await Promise.resolve();
+		await Promise.resolve();
+
+		let settled = false;
+		const task = connector.shutdown();
+		void task.then(() => {
+			settled = true;
+		});
+		await Promise.resolve();
+		await Promise.resolve();
+
+		expect(connector.state).toEqual({ status: "draining" });
+		expect(connector.peer.state).toMatchObject({ status: "draining" });
+		expect(settled).toBe(false);
+		expect(sourceTeardowns).toBe(0);
+		expect(observerCompletions).toBe(0);
+
+		source.complete();
+		flow.flush();
+		await task;
+
+		expect(sourceTeardowns).toBe(1);
+		expect(observerCompletions).toBe(1);
+		expect(flow.released).toBe(true);
+		expect(connector.state).toEqual({
+			status: "closed",
+			outcome: "normal",
+			reason: "graceful-shutdown",
+		});
+	});
+
+	it("RPC-LIFE-001 RPC-LIFE-003 RPC-SHUTDOWN-002 forces a recovering stream at G through the cached task", async () => {
+		const flow = createW1SemanticStreamHarness();
+		const { connector, sessionHost } = await connectProtocolSession(
+			flow.session,
+		);
+		flow.attachIncomingHost(sessionHost);
+		const descriptor = createRemoteServiceDescriptor(IMixedExposureService, {
+			wireName: "example.shutdown-recovering-stream.v1",
+			members: { history: { kind: "stream-method" } },
+		});
+		const source = new Subject<string>();
+		let sourceTeardowns = 0;
+		const observerErrors: unknown[] = [];
+		connector.peer.expose(descriptor, {
+			history: () =>
+				new Observable((subscriber) => {
+					const subscription = source.subscribe(subscriber);
+					return () => {
+						sourceTeardowns += 1;
+						subscription.unsubscribe();
+					};
+				}),
+		} as never);
+		connector.peer
+			.resolve(descriptor)
+			.history("room")
+			.subscribe({ error: (error) => observerErrors.push(error) });
+		await Promise.resolve();
+		await Promise.resolve();
+		sessionHost.transition({
+			type: RpcProtocolSessionTransitionTypeEnum.recovering,
+		});
+
+		const task = connector.shutdown();
+
+		expect(connector.shutdown()).toBe(task);
+		expect(flow.forceCloseCount).toBe(1);
+		expect(sourceTeardowns).toBe(1);
+		expect(flow.released).toBe(true);
+		expect(observerErrors).toMatchObject([
+			{ code: RpcExceptionCodeEnum.outcomeUnknown },
+		]);
+		expect(connector.peer.state).toEqual({
+			status: "closed",
+			outcome: "normal",
+			reason: "forced-close",
+		});
+
+		sessionHost.transition({
+			type: RpcProtocolSessionTransitionTypeEnum.recovered,
+		});
+		await task;
+
+		expect(connector.shutdown()).toBe(task);
+		expect(connector.close()).toBe(task);
+		expect(flow.forceCloseCount).toBe(1);
+		expect(sourceTeardowns).toBe(1);
+		expect(connector.state).toEqual({
+			status: "closed",
+			outcome: "normal",
+			reason: "graceful-shutdown",
 		});
 	});
 

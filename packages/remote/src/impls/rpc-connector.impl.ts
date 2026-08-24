@@ -24,6 +24,7 @@ import type {
 } from "@/interfaces/protocol/rpc-protocol.interface";
 import type { IRpcRetainedBytesLedger } from "@/interfaces/protocol/rpc-retained-bytes-ledger.interface";
 import type { IRpcConnectorAdapter } from "@/interfaces/rpc-adapter.interface";
+import type { IRpcApplicationWorkLedger } from "@/interfaces/rpc-application-work-ledger.interface";
 import type {
 	IRpcConnector,
 	RpcEvent,
@@ -100,6 +101,7 @@ interface RpcConnectorAttempt {
 export class RpcConnectorImpl implements IRpcConnector {
 	readonly #runtime: IRpcProtocolConnectorRuntime;
 	readonly #policy: IRpcProtocolRuntimePolicy;
+	readonly #applicationWorkLedger: IRpcApplicationWorkLedger;
 	readonly #retainedBytesLedger: IRpcRetainedBytesLedger;
 	readonly #stateSubject: BehaviorSubject<RpcConnectorState>;
 	readonly #eventPublisher: IRpcEventPublisher;
@@ -129,6 +131,7 @@ export class RpcConnectorImpl implements IRpcConnector {
 		} = options;
 		this.#runtime = runtime;
 		this.#policy = policy;
+		this.#applicationWorkLedger = applicationWorkLedger;
 		this.#custody = custody;
 		this.#eventPublisher = eventPublisher;
 		this.#retainedBytesLedger = retainedBytesLedger;
@@ -787,7 +790,10 @@ export class RpcConnectorImpl implements IRpcConnector {
 		);
 		let grace: Promise<unknown>;
 		try {
-			grace = Promise.resolve(this.#runtime.shutdown());
+			grace = Promise.all([
+				this.#runtime.shutdown(),
+				this.#applicationWorkLedger.waitForIdle(),
+			]);
 		} catch {
 			this.#beginClosing(RpcCloseReasonEnum.forcedClose, true);
 			return;

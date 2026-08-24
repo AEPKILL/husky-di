@@ -20,6 +20,7 @@ export class RpcApplicationWorkLedgerImpl implements IRpcApplicationWorkLedger {
 	readonly #maximumWork: number;
 	readonly #local: RpcApplicationWorkCounts = { activeStreams: 0, work: 0 };
 	readonly #remote: RpcApplicationWorkCounts = { activeStreams: 0, work: 0 };
+	readonly #idleWaiters = new Set<() => void>();
 
 	constructor(maximumWork: number, maximumActiveStreams: number) {
 		this.#maximumWork = maximumWork;
@@ -32,6 +33,13 @@ export class RpcApplicationWorkLedgerImpl implements IRpcApplicationWorkLedger {
 
 	reserveRemote(stream: boolean): IRpcApplicationWorkReservation | undefined {
 		return this.#reserve(this.#remote, stream);
+	}
+
+	waitForIdle(): Promise<void> {
+		if (this.#local.work === 0 && this.#remote.work === 0) {
+			return Promise.resolve();
+		}
+		return new Promise((resolve) => this.#idleWaiters.add(resolve));
 	}
 
 	#reserve(
@@ -59,6 +67,12 @@ export class RpcApplicationWorkLedgerImpl implements IRpcApplicationWorkLedger {
 				counts.work -= 1;
 				if (stream) {
 					counts.activeStreams -= 1;
+				}
+				if (this.#local.work === 0 && this.#remote.work === 0) {
+					for (const resolve of this.#idleWaiters) {
+						resolve();
+					}
+					this.#idleWaiters.clear();
 				}
 			},
 		});

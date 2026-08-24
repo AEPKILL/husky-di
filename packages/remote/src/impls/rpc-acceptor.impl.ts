@@ -590,7 +590,10 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 
 		let grace: Promise<unknown>;
 		try {
-			grace = Promise.resolve(this.#runtime.shutdown());
+			grace = Promise.all([
+				this.#runtime.shutdown(),
+				this.#applicationWorkLedger.waitForIdle(),
+			]);
 		} catch {
 			this.#beginClosing(RpcCloseReasonEnum.forcedClose, true);
 			return;

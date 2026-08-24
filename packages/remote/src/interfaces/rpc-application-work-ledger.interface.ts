@@ -11,4 +11,5 @@ export interface IRpcApplicationWorkReservation {
 export interface IRpcApplicationWorkLedger {
 	reserveLocal(stream: boolean): IRpcApplicationWorkReservation | undefined;
 	reserveRemote(stream: boolean): IRpcApplicationWorkReservation | undefined;
+	waitForIdle(): Promise<void>;
 }
