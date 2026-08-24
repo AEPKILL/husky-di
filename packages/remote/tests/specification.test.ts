@@ -2626,6 +2626,78 @@ describe("exposure registries and remote facades", () => {
 		await connector.close();
 	});
 
+	it("RPC-STREAM-007 RPC-STREAM-009 defers release across synchronous Source reentrancy", async () => {
+		const trace: string[] = [];
+		let sourceTeardowns = 0;
+		const session: IRpcProtocolSession = {
+			reserveInvocation: () => undefined,
+			reserveStream: () => undefined,
+			forceClose() {},
+		};
+		const { connector, host, sessionHost } =
+			await connectProtocolSession(session);
+		const descriptor = createRemoteServiceDescriptor(IMixedExposureService, {
+			wireName: "example.source-reentrancy.v1",
+			members: { history: { kind: "stream-method" } },
+		});
+		connector.peer.expose(descriptor, {
+			history() {
+				return new Observable((subscriber) => {
+					trace.push("source:subscribe");
+					subscriber.next("first");
+					trace.push("source:after-first");
+					subscriber.next("late");
+					subscriber.complete();
+					subscriber.error(new Error("late raw error"));
+					return () => {
+						sourceTeardowns += 1;
+						trace.push("source:teardown");
+					};
+				});
+			},
+		} as never);
+		const reservation = sessionHost.reserveIncomingStream({
+			service: "example.source-reentrancy.v1",
+			member: "history",
+			kind: "stream-method",
+			args: host.normalizeApplicationArguments(["room"]),
+		});
+		let incoming: IRpcProtocolIncomingStream | undefined;
+		if (reservation?.kind === "source") {
+			incoming = reservation.reservation.commit({
+				reserveEmission: () => {
+					trace.push("protocol:reserve-emission");
+					return {
+						commit(snapshot) {
+							trace.push(`protocol:item:${snapshot.value}`);
+							incoming?.finish({ type: "canceled" }, () =>
+								trace.push("protocol:on-released"),
+							);
+						},
+						fail() {},
+					};
+				},
+				finish(outcome) {
+					trace.push(`protocol:late-terminal:${outcome.type}`);
+				},
+			});
+		}
+
+		await Promise.resolve();
+		await Promise.resolve();
+
+		expect(sourceTeardowns).toBe(1);
+		expect(trace).toEqual([
+			"source:subscribe",
+			"protocol:reserve-emission",
+			"protocol:item:first",
+			"source:after-first",
+			"source:teardown",
+			"protocol:on-released",
+		]);
+		await connector.close();
+	});
+
 	it("RPC-API-007 omits every Remote Service Group facade", () => {
 		const { protocol } = createProtocolHarness();
 		const acceptor = createRpcAcceptor({ protocol });
