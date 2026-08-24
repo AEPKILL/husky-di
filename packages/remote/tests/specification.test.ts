@@ -10,6 +10,7 @@
 import { spawnSync } from "node:child_process";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { queryObjects } from "node:v8";
 
 import { CodedException, createServiceIdentifier } from "@husky-di/core";
 import { Observable, of, Subject, Subscriber } from "rxjs";
@@ -2696,6 +2697,70 @@ describe("exposure registries and remote facades", () => {
 			"protocol:on-released",
 		]);
 		await connector.close();
+	});
+
+	it("RPC-STREAM-015 releases Source arguments and route references after subscribe settles", async () => {
+		class TrackedSource extends Observable<string> {
+			constructor() {
+				super((subscriber) => subscriber.complete());
+			}
+		}
+		class TrackedImplementation {
+			history(): Observable<string> {
+				return new TrackedSource();
+			}
+		}
+		const implementationBaseline = queryObjects(TrackedImplementation, {
+			format: "count",
+		});
+		const sourceBaseline = queryObjects(TrackedSource, { format: "count" });
+
+		await (async () => {
+			const session: IRpcProtocolSession = {
+				reserveInvocation: () => undefined,
+				reserveStream: () => undefined,
+				forceClose() {},
+			};
+			const { connector, host, sessionHost } =
+				await connectProtocolSession(session);
+			const descriptor = createRemoteServiceDescriptor(IMixedExposureService, {
+				wireName: "example.reference-retirement.v1",
+				members: { history: { kind: "stream-method" } },
+			});
+			const cleanup = connector.peer.expose(
+				descriptor,
+				new TrackedImplementation() as never,
+			);
+			const reservation = sessionHost.reserveIncomingStream({
+				service: "example.reference-retirement.v1",
+				member: "history",
+				kind: "stream-method",
+				args: host.normalizeApplicationArguments([
+					{ room: "detached argument" },
+				]),
+			});
+			let incoming: IRpcProtocolIncomingStream | undefined;
+			if (reservation?.kind === "source") {
+				incoming = reservation.reservation.commit({
+					reserveEmission: () => undefined,
+					finish(outcome) {
+						incoming?.finish(outcome, () => undefined);
+					},
+				});
+			}
+			await Promise.resolve();
+			await Promise.resolve();
+			cleanup();
+			await connector.close();
+		})();
+		await new Promise<void>((resolveTask) => setImmediate(resolveTask));
+
+		expect(queryObjects(TrackedImplementation, { format: "count" })).toBe(
+			implementationBaseline,
+		);
+		expect(queryObjects(TrackedSource, { format: "count" })).toBe(
+			sourceBaseline,
+		);
 	});
 
 	it("RPC-API-007 omits every Remote Service Group facade", () => {
