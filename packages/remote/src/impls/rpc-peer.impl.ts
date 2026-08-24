@@ -15,7 +15,7 @@ import { RpcExceptionCodeEnum } from "@/enums/rpc-exception-code.enum";
 import { RpcStateStatusEnum } from "@/enums/rpc-state-status.enum";
 import { getRemoteServiceDescriptorData } from "@/factories/remote-service-descriptor.factory";
 import { createRpcException } from "@/factories/rpc-exception.factory";
-import { RpcSourceSubscriptionImpl } from "@/impls/rpc-source-subscription.impl";
+import { createRpcSourceSubscription } from "@/factories/rpc-source-subscription.factory";
 import type {
 	IRpcApplicationArgumentsSnapshot,
 	IRpcApplicationSnapshot,
@@ -930,7 +930,7 @@ export class RpcPeerImpl implements IRpcPeerRuntime {
 						);
 					}
 					state = "committed";
-					const adapter = new RpcSourceSubscriptionImpl(
+					const adapter = createRpcSourceSubscription(
 						capturedRoute,
 						argumentsSnapshot,
 						source,
