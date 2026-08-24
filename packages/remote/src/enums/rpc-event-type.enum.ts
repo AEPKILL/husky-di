@@ -7,6 +7,8 @@
 export enum RpcEventTypeEnum {
 	callStarted = "call-started",
 	callFinished = "call-finished",
+	streamStarted = "stream-started",
+	streamFinished = "stream-finished",
 	peerOpened = "peer-opened",
 	peerRecovering = "peer-recovering",
 	peerRecovered = "peer-recovered",

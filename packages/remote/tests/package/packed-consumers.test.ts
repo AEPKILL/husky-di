@@ -25,9 +25,10 @@ const tscPath = resolve(packageRoot, "node_modules/typescript/bin/tsc");
 const esbuildPath = resolve(packageRoot, "node_modules/.bin/esbuild");
 let tarballPath = "";
 
-const nodeRuntimeExportAssertions = `assert.deepEqual(Object.keys(root).sort(), ["RpcAcceptorListenerStopReasonEnum", "RpcCallDirectionEnum", "RpcCallStatusEnum", "RpcCloseOutcomeEnum", "RpcCloseReasonEnum", "RpcConnectorReconnectionAttemptFailureStageEnum", "RpcConnectorReconnectionEventTypeEnum", "RpcConnectorReconnectionStopReasonEnum", "RpcEventTypeEnum", "RpcException", "RpcExceptionCodeEnum", "RpcStateStatusEnum", "createRemoteServiceDescriptor", "createRpcAcceptor", "createRpcConnector", "createRpcConnectorReconnection", "createRpcProtocol"]);
+const nodeRuntimeExportAssertions = `assert.deepEqual(Object.keys(root).sort(), ["RpcAcceptorListenerStopReasonEnum", "RpcCallStatusEnum", "RpcCloseOutcomeEnum", "RpcCloseReasonEnum", "RpcConnectorReconnectionAttemptFailureStageEnum", "RpcConnectorReconnectionEventTypeEnum", "RpcConnectorReconnectionStopReasonEnum", "RpcEventDirectionEnum", "RpcEventTypeEnum", "RpcException", "RpcExceptionCodeEnum", "RpcStateStatusEnum", "RpcStreamStatusEnum", "createRemoteServiceDescriptor", "createRpcAcceptor", "createRpcConnector", "createRpcConnectorReconnection", "createRpcProtocol"]);
 assert.equal(new root.RpcException(root.RpcExceptionCodeEnum.unavailable).code, "unavailable");
-assert.equal(root.RpcCallDirectionEnum.incoming, "incoming");
+assert.equal(root.RpcEventDirectionEnum.incoming, "incoming");
+assert.equal(root.RpcStreamStatusEnum.terminated, "terminated");
 assert.deepEqual(Object.keys(protocol).sort(), ["RpcCallTerminalTypeEnum", "RpcCloseReasonEnum", "RpcExceptionCodeEnum", "RpcIncomingCallKindEnum", "RpcProtocolSessionTransitionTypeEnum", "createRpcProtocol"]);
 assert.equal(protocol.RpcCloseReasonEnum.cleanupFailed, "cleanup-failed");
 assert.equal(Object.isFrozen(protocol.createRpcProtocol()), true);
@@ -286,7 +287,7 @@ assert.throws(
 		);
 		writeFileSync(
 			resolve(consumerRoot, "index.ts"),
-			`import { RpcAcceptorListenerStopReasonEnum, RpcCallDirectionEnum, RpcCallStatusEnum, RpcCloseOutcomeEnum, RpcCloseReasonEnum, RpcConnectorReconnectionAttemptFailureStageEnum, RpcConnectorReconnectionEventTypeEnum, RpcConnectorReconnectionStopReasonEnum, RpcEventTypeEnum, RpcException, RpcExceptionCodeEnum, RpcStateStatusEnum, createRemoteServiceDescriptor, createRpcAcceptor, createRpcConnector, createRpcConnectorReconnection } from "@husky-di/remote";
+			`import { RpcAcceptorListenerStopReasonEnum, RpcCallStatusEnum, RpcCloseOutcomeEnum, RpcCloseReasonEnum, RpcConnectorReconnectionAttemptFailureStageEnum, RpcConnectorReconnectionEventTypeEnum, RpcConnectorReconnectionStopReasonEnum, RpcEventDirectionEnum, RpcEventTypeEnum, RpcException, RpcExceptionCodeEnum, RpcStateStatusEnum, RpcStreamStatusEnum, createRemoteServiceDescriptor, createRpcAcceptor, createRpcConnector, createRpcConnectorReconnection } from "@husky-di/remote";
 import { RpcCallTerminalTypeEnum, RpcIncomingCallKindEnum, RpcProtocolSessionTransitionTypeEnum } from "@husky-di/remote/protocol";
 import type {
   IRemoteServiceDescriptor, IRpcPeer, IRpcConnector, IRpcConnectorReconnection,
@@ -351,7 +352,8 @@ const protocolSharedIdentity: Equal<
   ProtocolApplicationRecord & ProtocolRuntimePolicy & ProtocolApplicationValue
 > = true;
 const callerException = new RpcException(RpcExceptionCodeEnum.unavailable);
-const callDirection: RpcCallDirectionEnum = RpcCallDirectionEnum.incoming;
+const eventDirection: RpcEventDirectionEnum = RpcEventDirectionEnum.incoming;
+const streamStatus: RpcStreamStatusEnum = RpcStreamStatusEnum.completed;
 const closeReason: RpcCloseReasonEnum = RpcCloseReasonEnum.cleanupFailed;
 declare const connectorAdapter: IRpcConnectorAdapter;
 declare const connector: IRpcConnector;
@@ -380,8 +382,9 @@ const reconnectionEvent: RpcConnectorReconnectionEvent = {
 };
 void connector.connect(connectorConnectOptions);
 void [
-	RpcAcceptorListenerStopReasonEnum, RpcCallDirectionEnum, RpcCallStatusEnum,
+	RpcAcceptorListenerStopReasonEnum, RpcCallStatusEnum,
 	RpcCallTerminalTypeEnum, RpcCloseOutcomeEnum, RpcCloseReasonEnum, RpcEventTypeEnum,
+	RpcEventDirectionEnum, RpcStreamStatusEnum,
 	RpcException, RpcExceptionCodeEnum, RpcIncomingCallKindEnum,
 	RpcProtocolSessionTransitionTypeEnum, RpcStateStatusEnum,
 	RpcConnectorReconnectionAttemptFailureStageEnum,
@@ -391,7 +394,7 @@ void [
 	createRpcConnectorReconnection,
 	RpcConformanceStatusEnum, runRpcAcceptorAdapterConformance, runRpcConnectorAdapterConformance,
 	runRpcProtocolConformance, rootProtocolIdentity, connectionIdentity,
-	adapterIdentity, protocolSharedIdentity, callerException, callDirection, closeReason,
+	adapterIdentity, protocolSharedIdentity, callerException, eventDirection, streamStatus, closeReason,
 	connectorConnectOptions, adapterFactory, reconnectionPolicy, reconnectionOptions,
 	reconnection, reconnectionState, reconnectionEvent,
 ];
@@ -399,7 +402,7 @@ type Inventory = [
 	IRemoteServiceDescriptor<unknown, never>, IRpcPeer, IRpcConnector,
 	IRpcConnectorReconnection, IRpcAcceptor,
 	RpcPeerState, RpcConnectorState, RpcAcceptorListenerState,
-	RpcAcceptorState, RpcCloseReasonEnum, RpcCallDirectionEnum, RpcEvent, RpcExceptionCodeEnum,
+	RpcAcceptorState, RpcCloseReasonEnum, RpcEventDirectionEnum, RpcEvent, RpcExceptionCodeEnum,
 	RpcConnectorOptions, RpcConnectorConnectOptions, RpcAcceptorOptions,
 	RpcConnectorRuntimePolicyOptions,
 	RpcAcceptorRuntimePolicyOptions, IRpcConnectorAdapter, IRpcAcceptorAdapter,

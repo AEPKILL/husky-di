@@ -27,7 +27,6 @@ import {
 	type IRpcConnectorAdapter,
 	type IRpcProtocol,
 	RpcAcceptorListenerStopReasonEnum,
-	RpcCallDirectionEnum,
 	RpcCallStatusEnum,
 	RpcCloseOutcomeEnum,
 	RpcCloseReasonEnum,
@@ -36,10 +35,12 @@ import {
 	RpcConnectorReconnectionStopReasonEnum,
 	type RpcConnectorRuntimePolicyOptions,
 	type RpcEvent,
+	RpcEventDirectionEnum,
 	RpcEventTypeEnum,
 	RpcException,
 	RpcExceptionCodeEnum,
 	RpcStateStatusEnum,
+	RpcStreamStatusEnum,
 } from "../src/index";
 import type {
 	IRpcApplicationSnapshot,
@@ -2130,6 +2131,207 @@ describe("exposure registries and remote facades", () => {
 		});
 	});
 
+	it("RPC-EVENT-008 RPC-EVENT-009 RPC-EVENT-010 RPC-EVENT-011 RPC-EVENT-012 RPC-EVENT-017 publishes one payload-free outgoing pair", async () => {
+		const trace: string[] = [];
+		const session: IRpcProtocolSession = {
+			reserveInvocation: () => undefined,
+			reserveStream() {
+				return {
+					commit(sink) {
+						return {
+							start() {
+								sink
+									.reserveItem({ value: "private-item", weight: 14 } as never)
+									.commit();
+								sink.reserveTerminal({ type: "completed" }).commit();
+							},
+							cancel() {},
+						};
+					},
+					release() {},
+				};
+			},
+			forceClose() {},
+		};
+		const { connector, events } = await connectProtocolSession(session);
+		const descriptor = createRemoteServiceDescriptor(IMixedExposureService, {
+			wireName: "example.outgoing-telemetry.v1",
+			members: { history: { kind: "stream-method" } },
+		});
+		connector.event$.subscribe((event) => {
+			if (event.type === RpcEventTypeEnum.streamStarted) {
+				trace.push("stream-started");
+			}
+			if (event.type === RpcEventTypeEnum.streamFinished) {
+				trace.push("stream-finished");
+			}
+		});
+
+		connector.peer
+			.resolve(descriptor)
+			.history("room")
+			.subscribe({ complete: () => trace.push("observer-complete") });
+
+		const streamEvents = events.filter(
+			(event) =>
+				event.type === RpcEventTypeEnum.streamStarted ||
+				event.type === RpcEventTypeEnum.streamFinished,
+		);
+		expect(trace).toEqual([
+			"stream-started",
+			"stream-finished",
+			"observer-complete",
+		]);
+		expect(streamEvents).toHaveLength(2);
+		expect(streamEvents[0]).toMatchObject({
+			type: RpcEventTypeEnum.streamStarted,
+			direction: RpcEventDirectionEnum.outgoing,
+			service: "example.outgoing-telemetry.v1",
+			member: "history",
+		});
+		expect(streamEvents[1]).toMatchObject({
+			type: RpcEventTypeEnum.streamFinished,
+			observationId: Reflect.get(streamEvents[0] as object, "observationId"),
+			direction: RpcEventDirectionEnum.outgoing,
+			service: "example.outgoing-telemetry.v1",
+			member: "history",
+			outcome: RpcStreamStatusEnum.completed,
+			deliveredItemCount: 1,
+			durationMs: expect.any(Number),
+		});
+		expect(JSON.stringify(streamEvents)).not.toContain("private-item");
+		await connector.close();
+	});
+
+	it("RPC-EVENT-008 RPC-EVENT-009 emits no pair before Local Stream Subscription Admission", async () => {
+		let reservations = 0;
+		const session: IRpcProtocolSession = {
+			reserveInvocation: () => undefined,
+			reserveStream() {
+				reservations += 1;
+				return undefined;
+			},
+			forceClose() {},
+		};
+		const { connector, events } = await connectProtocolSession(session);
+		const descriptor = createRemoteServiceDescriptor(IMixedExposureService, {
+			wireName: "example.pre-admission-telemetry.v1",
+			members: { history: { kind: "stream-method" } },
+		});
+		const remote = connector.peer.resolve(descriptor);
+
+		remote.history(Symbol("invalid") as never).subscribe({ error() {} });
+		remote.history("capacity-rejected").subscribe({ error() {} });
+
+		expect(reservations).toBe(1);
+		expect(
+			events.filter(
+				(event) =>
+					event.type === RpcEventTypeEnum.streamStarted ||
+					event.type === RpcEventTypeEnum.streamFinished,
+			),
+		).toEqual([]);
+		await connector.close();
+	});
+
+	it("RPC-EVENT-009 emits one canceled outgoing finish and suppresses a late terminal", async () => {
+		let sink: IRpcProtocolSubscriberSink | undefined;
+		let cancels = 0;
+		const session: IRpcProtocolSession = {
+			reserveInvocation: () => undefined,
+			reserveStream() {
+				return {
+					commit(nextSink) {
+						sink = nextSink;
+						return {
+							start() {},
+							cancel() {
+								cancels += 1;
+							},
+						};
+					},
+					release() {},
+				};
+			},
+			forceClose() {},
+		};
+		const { connector, events } = await connectProtocolSession(session);
+		const descriptor = createRemoteServiceDescriptor(IMixedExposureService, {
+			wireName: "example.canceled-telemetry.v1",
+			members: { events$: { kind: "stream-property" } },
+		});
+		const subscription = connector.peer.resolve(descriptor).events$.subscribe();
+
+		subscription.unsubscribe();
+		subscription.unsubscribe();
+		sink?.reserveTerminal({ type: "completed" }).commit();
+
+		const finished = events.filter(
+			(event) => event.type === RpcEventTypeEnum.streamFinished,
+		);
+		expect(cancels).toBe(1);
+		expect(finished).toHaveLength(1);
+		expect(finished[0]).toMatchObject({
+			direction: RpcEventDirectionEnum.outgoing,
+			outcome: RpcStreamStatusEnum.canceled,
+			deliveredItemCount: 0,
+		});
+		await connector.close();
+	});
+
+	it("RPC-EVENT-009 RPC-EVENT-013 RPC-LIFE-003 preserves stream FIFO under reentrant force", async () => {
+		let sink: IRpcProtocolSubscriberSink | undefined;
+		const session: IRpcProtocolSession = {
+			reserveInvocation: () => undefined,
+			reserveStream() {
+				return {
+					commit(nextSink) {
+						sink = nextSink;
+						return { start() {}, cancel() {} };
+					},
+					release() {},
+				};
+			},
+			forceClose() {
+				sink
+					?.reserveTerminal({
+						type: "failed",
+						code: RpcExceptionCodeEnum.outcomeUnknown,
+					})
+					.commit();
+			},
+		};
+		const { connector } = await connectProtocolSession(session);
+		const descriptor = createRemoteServiceDescriptor(IMixedExposureService, {
+			wireName: "example.reentrant-stream-event.v1",
+			members: { events$: { kind: "stream-property" } },
+		});
+		connector.event$.subscribe((event) => {
+			if (event.type === RpcEventTypeEnum.streamStarted) {
+				sink
+					?.reserveTerminal({
+						type: "failed",
+						code: RpcExceptionCodeEnum.outcomeUnknown,
+					})
+					.commit();
+				void connector.close();
+			}
+		});
+		const trace: string[] = [];
+		connector.event$.subscribe((event) => trace.push(event.type));
+
+		connector.peer.resolve(descriptor).events$.subscribe({ error() {} });
+		await connector.close();
+
+		expect(trace).toEqual([
+			RpcEventTypeEnum.streamStarted,
+			RpcEventTypeEnum.streamFinished,
+			RpcEventTypeEnum.peerClosed,
+			RpcEventTypeEnum.ownerClosing,
+			RpcEventTypeEnum.topologyClosed,
+		]);
+	});
+
 	it("RPC-STREAM-010 RPC-RECOVERY-004 preserves one admitted outgoing stream through Recovery", async () => {
 		let committedSink: IRpcProtocolSubscriberSink | undefined;
 		let retainedItem:
@@ -2194,7 +2396,7 @@ describe("exposure registries and remote facades", () => {
 
 	it("RPC-STREAM-010 RPC-RECOVERY-008 RPC-SEC-011 RPC-RESOURCE-015 RPC-CONFORMANCE-004 publishes Recovery without Source resubscription", async () => {
 		const flow = createW1SemanticStreamHarness();
-		const { connector, sessionHost } = await connectProtocolSession(
+		const { connector, sessionHost, events } = await connectProtocolSession(
 			flow.session,
 		);
 		flow.attachIncomingHost(sessionHost);
@@ -2231,6 +2433,12 @@ describe("exposure registries and remote facades", () => {
 		sessionHost.transition({
 			type: RpcProtocolSessionTransitionTypeEnum.recovered,
 		});
+		expect(
+			events.filter((event) => event.type === RpcEventTypeEnum.streamStarted),
+		).toHaveLength(2);
+		expect(
+			events.filter((event) => event.type === RpcEventTypeEnum.streamFinished),
+		).toHaveLength(0);
 		source.next("after-recovery");
 		flow.flush();
 		source.complete();
@@ -2243,6 +2451,24 @@ describe("exposure registries and remote facades", () => {
 			sourceTeardowns: 1,
 		});
 		expect(flow.released).toBe(true);
+		const finished = events.filter(
+			(event) => event.type === RpcEventTypeEnum.streamFinished,
+		);
+		expect(finished).toHaveLength(2);
+		expect(finished).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({
+					direction: RpcEventDirectionEnum.incoming,
+					outcome: RpcStreamStatusEnum.completed,
+					admittedItemCount: 1,
+				}),
+				expect.objectContaining({
+					direction: RpcEventDirectionEnum.outgoing,
+					outcome: RpcStreamStatusEnum.completed,
+					deliveredItemCount: 1,
+				}),
+			]),
+		);
 		await connector.close();
 	});
 
@@ -2561,7 +2787,7 @@ describe("exposure registries and remote facades", () => {
 
 	it("RPC-FLOW-001 RPC-FLOW-002 RPC-FLOW-004 RPC-FLOW-006 RPC-WIRE-019 RPC-EVENT-016 overflows a real RxJS burst at W=1", async () => {
 		const flow = createW1SemanticStreamHarness();
-		const { connector, sessionHost } = await connectProtocolSession(
+		const { connector, sessionHost, events } = await connectProtocolSession(
 			flow.session,
 		);
 		flow.attachIncomingHost(sessionHost);
@@ -2618,6 +2844,25 @@ describe("exposure registries and remote facades", () => {
 		expect(poisonReads).toBe(0);
 		expect(sourceTeardowns).toBe(1);
 		expect(flow.released).toBe(true);
+		const finished = events.filter(
+			(event) => event.type === RpcEventTypeEnum.streamFinished,
+		);
+		expect(finished).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({
+					direction: RpcEventDirectionEnum.incoming,
+					outcome: RpcStreamStatusEnum.failed,
+					code: RpcExceptionCodeEnum.overflow,
+					admittedItemCount: 1,
+				}),
+				expect.objectContaining({
+					direction: RpcEventDirectionEnum.outgoing,
+					outcome: RpcStreamStatusEnum.failed,
+					code: RpcExceptionCodeEnum.overflow,
+					deliveredItemCount: 1,
+				}),
+			]),
+		);
 		await connector.close();
 	});
 
@@ -3064,7 +3309,7 @@ describe("exposure registries and remote facades", () => {
 			reserveStream: () => undefined,
 			forceClose() {},
 		};
-		const { connector, host, sessionHost } =
+		const { connector, host, sessionHost, events } =
 			await connectProtocolSession(session);
 		const descriptor = createRemoteServiceDescriptor(IMixedExposureService, {
 			wireName: "example.source-lifecycle.v1",
@@ -3090,6 +3335,11 @@ describe("exposure registries and remote facades", () => {
 			member: "history",
 			kind: "stream-method",
 			args: host.normalizeApplicationArguments(["room"]),
+		});
+		connector.event$.subscribe((event) => {
+			if (event.type === RpcEventTypeEnum.streamStarted) {
+				trace.push("event:stream-started");
+			}
 		});
 		expect(reservation?.kind).toBe("source");
 		let incoming: IRpcProtocolIncomingStream | undefined;
@@ -3120,6 +3370,7 @@ describe("exposure registries and remote facades", () => {
 		expect(sourceSubscriptions).toBe(1);
 		expect(sourceTeardowns).toBe(1);
 		expect(trace).toEqual([
+			"event:stream-started",
 			"acquire:room",
 			"source:subscribe",
 			"protocol:reserve-emission",
@@ -3128,6 +3379,28 @@ describe("exposure registries and remote facades", () => {
 			"source:teardown",
 			"protocol:on-released",
 		]);
+		const streamEvents = events.filter(
+			(event) =>
+				event.type === RpcEventTypeEnum.streamStarted ||
+				event.type === RpcEventTypeEnum.streamFinished,
+		);
+		expect(streamEvents).toHaveLength(2);
+		expect(streamEvents[0]).toMatchObject({
+			type: RpcEventTypeEnum.streamStarted,
+			direction: RpcEventDirectionEnum.incoming,
+			service: "example.source-lifecycle.v1",
+			member: "history",
+		});
+		expect(streamEvents[1]).toMatchObject({
+			type: RpcEventTypeEnum.streamFinished,
+			observationId: Reflect.get(streamEvents[0] as object, "observationId"),
+			direction: RpcEventDirectionEnum.incoming,
+			service: "example.source-lifecycle.v1",
+			member: "history",
+			outcome: RpcStreamStatusEnum.completed,
+			admittedItemCount: 1,
+			durationMs: expect.any(Number),
+		});
 		await connector.close();
 	});
 
@@ -3653,7 +3926,7 @@ describe("exposure registries and remote facades", () => {
 			reserveStream: () => undefined,
 			forceClose() {},
 		};
-		const { connector, host, sessionHost } =
+		const { connector, host, sessionHost, events } =
 			await connectProtocolSession(session);
 		const descriptor = createRemoteServiceDescriptor(IMixedExposureService, {
 			wireName: "example.failed-source.v1",
@@ -3701,6 +3974,16 @@ describe("exposure registries and remote facades", () => {
 			},
 		]);
 		expect(JSON.stringify(terminals)).not.toContain("raw");
+		expect(
+			events.filter((event) => event.type === RpcEventTypeEnum.streamFinished),
+		).toEqual([
+			expect.objectContaining({
+				direction: RpcEventDirectionEnum.incoming,
+				outcome: RpcStreamStatusEnum.failed,
+				code: RpcExceptionCodeEnum.handlerFailed,
+				admittedItemCount: 0,
+			}),
+		]);
 		await connector.close();
 	});
 
@@ -3712,7 +3995,7 @@ describe("exposure registries and remote facades", () => {
 			reserveStream: () => undefined,
 			forceClose() {},
 		};
-		const { connector, host, sessionHost } =
+		const { connector, host, sessionHost, events } =
 			await connectProtocolSession(session);
 		const descriptor = createRemoteServiceDescriptor(IMixedExposureService, {
 			wireName: "example.throwing-teardown.v1",
@@ -3736,6 +4019,11 @@ describe("exposure registries and remote facades", () => {
 			kind: "stream-method",
 			args: host.normalizeApplicationArguments(["room"]),
 		});
+		connector.event$.subscribe((event) => {
+			if (event.type === RpcEventTypeEnum.streamFinished) {
+				trace.push("event:stream-finished");
+			}
+		});
 		let incoming: IRpcProtocolIncomingStream | undefined;
 		if (reservation?.kind === "source") {
 			incoming = reservation.reservation.commit({
@@ -3755,7 +4043,71 @@ describe("exposure registries and remote facades", () => {
 			"protocol:terminal:completed",
 			"source:teardown-throw",
 			"protocol:on-released",
+			"event:stream-finished",
 		]);
+		const finished = events.filter(
+			(event) => event.type === RpcEventTypeEnum.streamFinished,
+		);
+		expect(finished).toHaveLength(1);
+		expect(finished[0]).toMatchObject({
+			direction: RpcEventDirectionEnum.incoming,
+			outcome: RpcStreamStatusEnum.completed,
+			admittedItemCount: 0,
+			sourceTeardownFailed: true,
+		});
+		await connector.close();
+	});
+
+	it("RPC-EVENT-018 does not classify a post-terminal subscribe throw as teardown failure", async () => {
+		const session: IRpcProtocolSession = {
+			reserveInvocation: () => undefined,
+			reserveStream: () => undefined,
+			forceClose() {},
+		};
+		const { connector, host, sessionHost, events } =
+			await connectProtocolSession(session);
+		const descriptor = createRemoteServiceDescriptor(IMixedExposureService, {
+			wireName: "example.post-terminal-subscribe-throw.v1",
+			members: { history: { kind: "stream-method" } },
+		});
+		connector.peer.expose(descriptor, {
+			history() {
+				return {
+					lift() {},
+					subscribe(subscriber: Subscriber<unknown>) {
+						subscriber.complete();
+						throw new Error("post-terminal subscribe failure");
+					},
+				};
+			},
+		} as never);
+		const reservation = sessionHost.reserveIncomingStream({
+			service: "example.post-terminal-subscribe-throw.v1",
+			member: "history",
+			kind: "stream-method",
+			args: host.normalizeApplicationArguments(["room"]),
+		});
+		let incoming: IRpcProtocolIncomingStream | undefined;
+		if (reservation?.kind === "source") {
+			incoming = reservation.reservation.commit({
+				reserveEmission: () => undefined,
+				finish(outcome) {
+					incoming?.finish(outcome, () => undefined);
+				},
+			});
+		}
+
+		await Promise.resolve();
+		await Promise.resolve();
+
+		const finished = events.find(
+			(event) => event.type === RpcEventTypeEnum.streamFinished,
+		);
+		expect(finished).toMatchObject({
+			outcome: RpcStreamStatusEnum.completed,
+			admittedItemCount: 0,
+		});
+		expect(finished).not.toHaveProperty("sourceTeardownFailed");
 		await connector.close();
 	});
 
@@ -3813,7 +4165,8 @@ describe("exposure registries and remote facades", () => {
 			reserveStream: () => undefined,
 			forceClose() {},
 		};
-		const { connector, sessionHost } = await connectProtocolSession(session);
+		const { connector, sessionHost, events } =
+			await connectProtocolSession(session);
 		const descriptor = createRemoteServiceDescriptor(IMixedExposureService, {
 			wireName: "example.route-classification.v1",
 			members: { history: { kind: "stream-method" } },
@@ -3867,6 +4220,30 @@ describe("exposure registries and remote facades", () => {
 
 		expect(acquisitions).toBe(0);
 		expect(releases).toBe(3);
+		const streamEvents = events.filter(
+			(event) =>
+				event.type === RpcEventTypeEnum.streamStarted ||
+				event.type === RpcEventTypeEnum.streamFinished,
+		);
+		expect(streamEvents).toHaveLength(6);
+		expect(streamEvents[0]).not.toHaveProperty("service");
+		expect(streamEvents[0]).not.toHaveProperty("member");
+		expect(streamEvents[1]).toMatchObject({
+			outcome: RpcStreamStatusEnum.failed,
+			code: RpcExceptionCodeEnum.unknownService,
+			admittedItemCount: 0,
+		});
+		expect(streamEvents[2]).toMatchObject({
+			service: "example.route-classification.v1",
+		});
+		expect(streamEvents[2]).not.toHaveProperty("member");
+		expect(streamEvents[3]).toMatchObject({
+			service: "example.route-classification.v1",
+			outcome: RpcStreamStatusEnum.failed,
+			code: RpcExceptionCodeEnum.unknownMember,
+			admittedItemCount: 0,
+		});
+		expect(JSON.stringify(streamEvents)).not.toContain("missing$");
 		await connector.close();
 	});
 
@@ -4720,9 +5097,15 @@ describe("custom Protocol outgoing invocations", () => {
 	it("RPC-PKG-007 RPC-PKG-008 RPC-PKG-009 exposes stable string enums for public RPC vocabularies", async () => {
 		const protocolEntry = await import("../src/protocol");
 
-		expect(RpcCallDirectionEnum).toEqual({
+		expect(RpcEventDirectionEnum).toEqual({
 			incoming: "incoming",
 			outgoing: "outgoing",
+		});
+		expect(RpcStreamStatusEnum).toEqual({
+			completed: "completed",
+			canceled: "canceled",
+			failed: "failed",
+			terminated: "terminated",
 		});
 		expect(RpcExceptionCodeEnum).toEqual({
 			canceled: "canceled",
@@ -7014,7 +7397,7 @@ describe("Topology Owner termination", () => {
 
 	it("RPC-LIFE-001 RPC-LIFE-003 RPC-SHUTDOWN-002 forces a recovering stream at G through the cached task", async () => {
 		const flow = createW1SemanticStreamHarness();
-		const { connector, sessionHost } = await connectProtocolSession(
+		const { connector, sessionHost, events } = await connectProtocolSession(
 			flow.session,
 		);
 		flow.attachIncomingHost(sessionHost);
@@ -7059,6 +7442,21 @@ describe("Topology Owner termination", () => {
 			outcome: "normal",
 			reason: "forced-close",
 		});
+		expect(
+			events.filter((event) => event.type === RpcEventTypeEnum.streamFinished),
+		).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({
+					direction: RpcEventDirectionEnum.incoming,
+					outcome: RpcStreamStatusEnum.terminated,
+				}),
+				expect.objectContaining({
+					direction: RpcEventDirectionEnum.outgoing,
+					outcome: RpcStreamStatusEnum.failed,
+					code: RpcExceptionCodeEnum.outcomeUnknown,
+				}),
+			]),
+		);
 
 		sessionHost.transition({
 			type: RpcProtocolSessionTransitionTypeEnum.recovered,

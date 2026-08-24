@@ -7,13 +7,17 @@
 import type { Cleanup } from "@husky-di/core";
 import type { Observable } from "rxjs";
 
-import type { RpcCallDirectionEnum } from "@/enums/rpc-call-direction.enum";
 import type { RpcCallStatusEnum } from "@/enums/rpc-call-status.enum";
 import type { RpcCloseOutcomeEnum } from "@/enums/rpc-close-outcome.enum";
 import type { RpcCloseReasonEnum } from "@/enums/rpc-close-reason.enum";
+import type { RpcEventDirectionEnum } from "@/enums/rpc-event-direction.enum";
 import type { RpcEventTypeEnum } from "@/enums/rpc-event-type.enum";
 import type { RpcExceptionCodeEnum } from "@/enums/rpc-exception-code.enum";
-import type { RpcCallFailure } from "@/interfaces/protocol/rpc-protocol.interface";
+import type { RpcStreamStatusEnum } from "@/enums/rpc-stream-status.enum";
+import type {
+	RpcCallFailure,
+	RpcStreamFailure,
+} from "@/interfaces/protocol/rpc-protocol.interface";
 import type { IRemoteServiceDescriptor } from "@/interfaces/remote-service-descriptor.interface";
 import type { IRpcAcceptorAdapter } from "@/interfaces/rpc-adapter.interface";
 import type {
@@ -48,25 +52,25 @@ type RpcCallObservationBase = {
 };
 
 type RpcOutgoingCallContext = {
-	readonly direction: RpcCallDirectionEnum.outgoing;
+	readonly direction: RpcEventDirectionEnum.outgoing;
 	readonly service: string;
 	readonly method: string;
 };
 
 type RpcKnownIncomingCallContext = {
-	readonly direction: RpcCallDirectionEnum.incoming;
+	readonly direction: RpcEventDirectionEnum.incoming;
 	readonly service: string;
 	readonly method: string;
 };
 
 type RpcUnknownServiceCallContext = {
-	readonly direction: RpcCallDirectionEnum.incoming;
+	readonly direction: RpcEventDirectionEnum.incoming;
 	readonly service?: never;
 	readonly method?: never;
 };
 
 type RpcUnknownMethodCallContext = {
-	readonly direction: RpcCallDirectionEnum.incoming;
+	readonly direction: RpcEventDirectionEnum.incoming;
 	readonly service: string;
 	readonly method?: never;
 };
@@ -112,6 +116,89 @@ type RpcCallFinishedEvent = RpcCallFinishedBase &
 		| (RpcUnknownMethodCallContext & {
 				readonly outcome: RpcCallStatusEnum.rejected;
 				readonly code: RpcExceptionCodeEnum.unknownMethod;
+		  })
+	);
+
+type RpcStreamObservationBase = {
+	readonly observationId: string;
+	readonly peer: IRpcPeer;
+};
+
+type RpcOutgoingStreamContext = {
+	readonly direction: RpcEventDirectionEnum.outgoing;
+	readonly service: string;
+	readonly member: string;
+};
+
+type RpcKnownIncomingStreamContext = {
+	readonly direction: RpcEventDirectionEnum.incoming;
+	readonly service: string;
+	readonly member: string;
+};
+
+type RpcUnknownServiceStreamContext = {
+	readonly direction: RpcEventDirectionEnum.incoming;
+	readonly service?: never;
+	readonly member?: never;
+};
+
+type RpcUnknownMemberStreamContext = {
+	readonly direction: RpcEventDirectionEnum.incoming;
+	readonly service: string;
+	readonly member?: never;
+};
+
+type RpcStreamStartedEvent = RpcStreamObservationBase &
+	(
+		| RpcOutgoingStreamContext
+		| RpcKnownIncomingStreamContext
+		| RpcUnknownServiceStreamContext
+		| RpcUnknownMemberStreamContext
+	) & { readonly type: RpcEventTypeEnum.streamStarted };
+
+type RpcStreamFinishedBase = RpcStreamObservationBase & {
+	readonly type: RpcEventTypeEnum.streamFinished;
+	readonly durationMs: number;
+};
+
+type RpcStreamFinishedEvent = RpcStreamFinishedBase &
+	(
+		| (RpcOutgoingStreamContext & {
+				readonly outcome:
+					| RpcStreamStatusEnum.completed
+					| RpcStreamStatusEnum.canceled;
+				readonly deliveredItemCount: number;
+		  })
+		| (RpcOutgoingStreamContext & {
+				readonly outcome: RpcStreamStatusEnum.failed;
+				readonly code: RpcStreamFailure;
+				readonly deliveredItemCount: number;
+		  })
+		| (RpcKnownIncomingStreamContext & {
+				readonly outcome:
+					| RpcStreamStatusEnum.completed
+					| RpcStreamStatusEnum.canceled
+					| RpcStreamStatusEnum.terminated;
+				readonly admittedItemCount: number;
+				readonly sourceTeardownFailed?: true;
+		  })
+		| (RpcKnownIncomingStreamContext & {
+				readonly outcome: RpcStreamStatusEnum.failed;
+				readonly code:
+					| RpcExceptionCodeEnum.handlerFailed
+					| RpcExceptionCodeEnum.overflow;
+				readonly admittedItemCount: number;
+				readonly sourceTeardownFailed?: true;
+		  })
+		| (RpcUnknownServiceStreamContext & {
+				readonly outcome: RpcStreamStatusEnum.failed;
+				readonly code: RpcExceptionCodeEnum.unknownService;
+				readonly admittedItemCount: 0;
+		  })
+		| (RpcUnknownMemberStreamContext & {
+				readonly outcome: RpcStreamStatusEnum.failed;
+				readonly code: RpcExceptionCodeEnum.unknownMember;
+				readonly admittedItemCount: 0;
 		  })
 	);
 
@@ -186,7 +273,9 @@ export type RpcEvent =
 	| RpcTopologyLifecycleEvent
 	| RpcPeerLifecycleEvent
 	| RpcCallStartedEvent
-	| RpcCallFinishedEvent;
+	| RpcCallFinishedEvent
+	| RpcStreamStartedEvent
+	| RpcStreamFinishedEvent;
 
 export interface IRpcConnector {
 	readonly state: RpcConnectorState;

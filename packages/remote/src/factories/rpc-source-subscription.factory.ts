@@ -8,6 +8,7 @@ import { RpcSourceSubscriptionImpl } from "@/impls/rpc-source-subscription.impl"
 import type {
 	IRpcApplicationArgumentsSnapshot,
 	IRpcProtocolSourceSink,
+	RpcIncomingStreamTerminal,
 } from "@/interfaces/protocol/rpc-protocol.interface";
 import type { RpcStreamRoute } from "@/types/rpc-exposure.type";
 
@@ -18,6 +19,12 @@ export function createRpcSourceSubscription(
 	source: IRpcProtocolSourceSink,
 	onProtocolFault: (error: unknown) => void,
 	releaseSourceRoot: () => void,
+	onFinished: (
+		outcome: RpcIncomingStreamTerminal,
+		finishedAt: number,
+		admittedItemCount: number,
+		sourceTeardownFailed: boolean,
+	) => void,
 ): RpcSourceSubscriptionImpl {
 	return new RpcSourceSubscriptionImpl(
 		route,
@@ -25,5 +32,6 @@ export function createRpcSourceSubscription(
 		source,
 		onProtocolFault,
 		releaseSourceRoot,
+		onFinished,
 	);
 }

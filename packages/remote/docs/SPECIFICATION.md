@@ -901,7 +901,7 @@ export enum RpcEventTypeEnum {
   peerClosed = "peer-closed",
   ownerDraining = "owner-draining",
   ownerClosing = "owner-closing",
-  topologyClosed = RpcEventTypeEnum.topologyClosed,
+  topologyClosed = "topology-closed",
 }
 
 export enum RpcStreamStatusEnum {
@@ -973,6 +973,82 @@ type RpcCallFinishedEvent = RpcCallFinishedBase & (
     })
 );
 
+type RpcStreamObservationBase = {
+  readonly observationId: string;
+  readonly peer: IRpcPeer;
+};
+
+type RpcOutgoingStreamContext = {
+  readonly direction: RpcEventDirectionEnum.outgoing;
+  readonly service: string;
+  readonly member: string;
+};
+
+type RpcKnownIncomingStreamContext = {
+  readonly direction: RpcEventDirectionEnum.incoming;
+  readonly service: string;
+  readonly member: string;
+};
+
+type RpcUnknownServiceStreamContext = {
+  readonly direction: RpcEventDirectionEnum.incoming;
+  readonly service?: never;
+  readonly member?: never;
+};
+
+type RpcUnknownMemberStreamContext = {
+  readonly direction: RpcEventDirectionEnum.incoming;
+  readonly service: string;
+  readonly member?: never;
+};
+
+type RpcStreamStartedEvent = RpcStreamObservationBase &
+  (RpcOutgoingStreamContext | RpcKnownIncomingStreamContext |
+   RpcUnknownServiceStreamContext | RpcUnknownMemberStreamContext) & {
+    readonly type: RpcEventTypeEnum.streamStarted;
+  };
+
+type RpcStreamFinishedBase = RpcStreamObservationBase & {
+  readonly type: RpcEventTypeEnum.streamFinished;
+  readonly durationMs: number;
+};
+
+type RpcStreamFinishedEvent = RpcStreamFinishedBase & (
+  | (RpcOutgoingStreamContext & {
+      readonly outcome: RpcStreamStatusEnum.completed | RpcStreamStatusEnum.canceled;
+      readonly deliveredItemCount: number;
+    })
+  | (RpcOutgoingStreamContext & {
+      readonly outcome: RpcStreamStatusEnum.failed;
+      readonly code: RpcStreamFailure;
+      readonly deliveredItemCount: number;
+    })
+  | (RpcKnownIncomingStreamContext & {
+      readonly outcome:
+        | RpcStreamStatusEnum.completed
+        | RpcStreamStatusEnum.canceled
+        | RpcStreamStatusEnum.terminated;
+      readonly admittedItemCount: number;
+      readonly sourceTeardownFailed?: true;
+    })
+  | (RpcKnownIncomingStreamContext & {
+      readonly outcome: RpcStreamStatusEnum.failed;
+      readonly code: RpcExceptionCodeEnum.handlerFailed | RpcExceptionCodeEnum.overflow;
+      readonly admittedItemCount: number;
+      readonly sourceTeardownFailed?: true;
+    })
+  | (RpcUnknownServiceStreamContext & {
+      readonly outcome: RpcStreamStatusEnum.failed;
+      readonly code: RpcExceptionCodeEnum.unknownService;
+      readonly admittedItemCount: 0;
+    })
+  | (RpcUnknownMemberStreamContext & {
+      readonly outcome: RpcStreamStatusEnum.failed;
+      readonly code: RpcExceptionCodeEnum.unknownMember;
+      readonly admittedItemCount: 0;
+    })
+);
+
 type RpcPeerLifecycleEvent =
   | { readonly type: RpcEventTypeEnum.peerOpened | RpcEventTypeEnum.peerRecovering | RpcEventTypeEnum.peerRecovered;
       readonly peer: IRpcPeer }
@@ -997,7 +1073,9 @@ export type RpcEvent =
   | RpcTopologyLifecycleEvent
   | RpcPeerLifecycleEvent
   | RpcCallStartedEvent
-  | RpcCallFinishedEvent;
+  | RpcCallFinishedEvent
+  | RpcStreamStartedEvent
+  | RpcStreamFinishedEvent;
 ```
 
 **RPC-EVENT-021 — Local call pairing.** An outgoing `call-started` **MUST** be staged when a validated invocation

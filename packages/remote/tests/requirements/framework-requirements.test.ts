@@ -287,20 +287,21 @@ describe("Framework requirement evidence", () => {
 		expect(acceptor.peers).toEqual([]);
 	});
 
-	it("RPC-BASE-003 RPC-EVENT-005 RPC-POLICY-004 keeps private machinery out of public runtime surfaces", () => {
+	it("RPC-BASE-003 RPC-EVENT-005 RPC-EVENT-010 RPC-POLICY-004 keeps private machinery out of public runtime surfaces", () => {
 		expect(Object.keys(rootEntry).sort()).toEqual([
 			"RpcAcceptorListenerStopReasonEnum",
-			"RpcCallDirectionEnum",
 			"RpcCallStatusEnum",
 			"RpcCloseOutcomeEnum",
 			"RpcCloseReasonEnum",
 			"RpcConnectorReconnectionAttemptFailureStageEnum",
 			"RpcConnectorReconnectionEventTypeEnum",
 			"RpcConnectorReconnectionStopReasonEnum",
+			"RpcEventDirectionEnum",
 			"RpcEventTypeEnum",
 			"RpcException",
 			"RpcExceptionCodeEnum",
 			"RpcStateStatusEnum",
+			"RpcStreamStatusEnum",
 			"createRemoteServiceDescriptor",
 			"createRpcAcceptor",
 			"createRpcConnector",

@@ -9,7 +9,6 @@ import { describe, expect, it, vi } from "vitest";
 import { RpcCallTerminalTypeEnum } from "../../src/enums/protocol/rpc-call-terminal-type.enum";
 import { RpcIncomingCallKindEnum } from "../../src/enums/protocol/rpc-incoming-call-kind.enum";
 import { RpcWireRecordKindEnum } from "../../src/enums/protocol/rpc-wire-record-kind.enum";
-import { RpcCallDirectionEnum } from "../../src/enums/rpc-call-direction.enum";
 import { RpcEventTypeEnum } from "../../src/enums/rpc-event-type.enum";
 import { createRpcProtocol } from "../../src/factories/rpc-protocol.factory";
 import { RpcCodecImpl } from "../../src/impls/protocol/rpc-codec.impl";
@@ -18,6 +17,7 @@ import {
 	createRemoteServiceDescriptor,
 	createRpcAcceptor,
 	createRpcConnector,
+	RpcEventDirectionEnum,
 } from "../../src/index";
 import type {
 	IRpcProtocol,
@@ -147,7 +147,7 @@ describe("Default RPC Protocol retained ledger", () => {
 		const eventSubscription = acceptor.event$.subscribe((event) => {
 			if (
 				event.type === RpcEventTypeEnum.callStarted &&
-				event.direction === RpcCallDirectionEnum.incoming
+				event.direction === RpcEventDirectionEnum.incoming
 			) {
 				closeTask ??= acceptor.close();
 			}

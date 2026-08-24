@@ -8,11 +8,12 @@ import type { Cleanup } from "@husky-di/core";
 import { Observable, type Subscriber, type TeardownLogic } from "rxjs";
 import { RpcCallTerminalTypeEnum } from "@/enums/protocol/rpc-call-terminal-type.enum";
 import { RpcIncomingCallKindEnum } from "@/enums/protocol/rpc-incoming-call-kind.enum";
-import { RpcCallDirectionEnum } from "@/enums/rpc-call-direction.enum";
 import { RpcCallStatusEnum } from "@/enums/rpc-call-status.enum";
+import { RpcEventDirectionEnum } from "@/enums/rpc-event-direction.enum";
 import { RpcEventTypeEnum } from "@/enums/rpc-event-type.enum";
 import { RpcExceptionCodeEnum } from "@/enums/rpc-exception-code.enum";
 import { RpcStateStatusEnum } from "@/enums/rpc-state-status.enum";
+import { RpcStreamStatusEnum } from "@/enums/rpc-stream-status.enum";
 import { getRemoteServiceDescriptorData } from "@/factories/remote-service-descriptor.factory";
 import { createRpcException } from "@/factories/rpc-exception.factory";
 import { createRpcSourceSubscription } from "@/factories/rpc-source-subscription.factory";
@@ -85,11 +86,19 @@ function createObservationId(): string {
 	return `rpc-observation-${nextObservationOrdinal}`;
 }
 
-function observationDuration(startedAt: number): number {
-	return Math.min(
-		Number.MAX_SAFE_INTEGER,
-		Math.max(0, Math.floor(Date.now() - startedAt)),
-	);
+function observationDuration(
+	startedAt: number,
+	finishedAt = Date.now(),
+): number {
+	const duration = finishedAt - startedAt;
+	if (!Number.isFinite(duration)) {
+		return 0;
+	}
+	return Math.min(Number.MAX_SAFE_INTEGER, Math.max(0, Math.floor(duration)));
+}
+
+function incrementObservationCount(count: number): number {
+	return Math.min(Number.MAX_SAFE_INTEGER, count + 1);
 }
 
 function invokeRpcHandler(
@@ -533,11 +542,60 @@ export class RpcPeerImpl implements IRpcPeerRuntime {
 			return;
 		}
 
+		const observationId = createObservationId();
+		const startedAt = Date.now();
+		let observationStarted = false;
+		let observationFinished = false;
+		let deliveredItemCount = 0;
 		let terminalCommitted = false;
 		let dispatching = false;
 		let itemProjectionReserved = false;
 		let projectionClosed = false;
-		let deferredTerminal: (() => void) | undefined;
+		const deferredEffects: Array<() => void> = [];
+		const runOrDefer = (effect: () => void): void => {
+			if (dispatching || !observationStarted) {
+				deferredEffects.push(effect);
+				return;
+			}
+			effect();
+		};
+		const flushDeferredEffects = (): void => {
+			if (dispatching || !observationStarted) {
+				return;
+			}
+			while (deferredEffects.length > 0) {
+				deferredEffects.shift()?.();
+			}
+		};
+		const createFinishedEvent = (
+			outcome: RpcStreamOutcome,
+		): RpcEvent | undefined => {
+			if (observationFinished) {
+				return undefined;
+			}
+			observationFinished = true;
+			const base = {
+				type: RpcEventTypeEnum.streamFinished as const,
+				observationId,
+				peer: this,
+				direction: RpcEventDirectionEnum.outgoing as const,
+				service,
+				member,
+				deliveredItemCount,
+				durationMs: observationDuration(startedAt),
+			};
+			if (outcome.type === "completed") {
+				return { ...base, outcome: RpcStreamStatusEnum.completed };
+			}
+			if (outcome.type === "canceled") {
+				return { ...base, outcome: RpcStreamStatusEnum.canceled };
+			}
+			return {
+				...base,
+				outcome: RpcStreamStatusEnum.failed,
+				code: outcome.code,
+			};
+		};
 		const closedItemProjection = Object.freeze({
 			commit: () => "closed" as const,
 		});
@@ -549,8 +607,12 @@ export class RpcPeerImpl implements IRpcPeerRuntime {
 				return;
 			}
 			terminalCommitted = true;
+			const finishedEvent = createFinishedEvent(outcome);
 			const effect = (): void => {
 				try {
+					if (finishedEvent !== undefined) {
+						this.#emitEvent(finishedEvent);
+					}
 					if (subscriber.closed) {
 						return;
 					}
@@ -567,11 +629,7 @@ export class RpcPeerImpl implements IRpcPeerRuntime {
 					releaseStreamRoot();
 				}
 			};
-			if (dispatching) {
-				deferredTerminal = effect;
-				return;
-			}
-			effect();
+			runOrDefer(effect);
 		};
 		const sink: IRpcProtocolSubscriberSink = Object.freeze({
 			reserveItem: (snapshot: IRpcApplicationSnapshot) => {
@@ -602,14 +660,13 @@ export class RpcPeerImpl implements IRpcPeerRuntime {
 						if (itemProjectionIsClosed) {
 							return "closed" as const;
 						}
+						deliveredItemCount = incrementObservationCount(deliveredItemCount);
 						dispatching = true;
 						try {
 							subscriber.next(snapshot.value);
 						} finally {
 							dispatching = false;
-							const terminal = deferredTerminal;
-							deferredTerminal = undefined;
-							terminal?.();
+							flushDeferredEffects();
 						}
 						return terminalCommitted || projectionClosed || subscriber.closed
 							? ("closed" as const)
@@ -648,12 +705,27 @@ export class RpcPeerImpl implements IRpcPeerRuntime {
 			return;
 		}
 
+		observationStarted = true;
+		this.#emitEvent({
+			type: RpcEventTypeEnum.streamStarted,
+			observationId,
+			peer: this,
+			direction: RpcEventDirectionEnum.outgoing,
+			service,
+			member,
+		});
+		flushDeferredEffects();
+
 		let canceled = false;
 		const cancel = (): void => {
 			if (terminalCommitted || canceled) {
 				return;
 			}
 			canceled = true;
+			const finishedEvent = createFinishedEvent({ type: "canceled" });
+			if (finishedEvent !== undefined) {
+				runOrDefer(() => this.#emitEvent(finishedEvent));
+			}
 			try {
 				stream.cancel();
 			} catch (error) {
@@ -664,10 +736,20 @@ export class RpcPeerImpl implements IRpcPeerRuntime {
 			cancel();
 			return;
 		}
+		if (terminalCommitted) {
+			return;
+		}
 		try {
 			stream.start();
 		} catch (error) {
 			terminalCommitted = true;
+			const finishedEvent = createFinishedEvent({
+				type: "failed",
+				code: RpcExceptionCodeEnum.outcomeUnknown,
+			});
+			if (finishedEvent !== undefined) {
+				this.#emitEvent(finishedEvent);
+			}
 			releaseStreamRoot();
 			subscriber.error(this.#protocolFailure(error));
 			return;
@@ -843,7 +925,7 @@ export class RpcPeerImpl implements IRpcPeerRuntime {
 					type: RpcEventTypeEnum.callFinished,
 					observationId,
 					peer: this,
-					direction: RpcCallDirectionEnum.outgoing,
+					direction: RpcEventDirectionEnum.outgoing,
 					service,
 					method,
 					outcome: RpcCallStatusEnum.fulfilled,
@@ -861,7 +943,7 @@ export class RpcPeerImpl implements IRpcPeerRuntime {
 				type: RpcEventTypeEnum.callFinished,
 				observationId,
 				peer: this,
-				direction: RpcCallDirectionEnum.outgoing,
+				direction: RpcEventDirectionEnum.outgoing,
 				service,
 				method,
 				outcome: RpcCallStatusEnum.rejected,
@@ -887,7 +969,7 @@ export class RpcPeerImpl implements IRpcPeerRuntime {
 			type: RpcEventTypeEnum.callStarted,
 			observationId,
 			peer: this,
-			direction: RpcCallDirectionEnum.outgoing,
+			direction: RpcEventDirectionEnum.outgoing,
 			service,
 			method,
 		});
@@ -1051,6 +1133,7 @@ export class RpcPeerImpl implements IRpcPeerRuntime {
 				charge,
 				retainedBytesReservation,
 				applicationWorkReservation,
+				exposure.wireName,
 			);
 		}
 		return this.#reserveSourceIncomingStream(
@@ -1069,9 +1152,12 @@ export class RpcPeerImpl implements IRpcPeerRuntime {
 		charge: number,
 		retainedBytesReservation: IRpcRetainedBytesReservation,
 		applicationWorkReservation: IRpcApplicationWorkReservation,
+		service?: string,
 	): RpcProtocolIncomingStreamReservation {
 		let state: "pending" | "committed" | "released" = "pending";
 		let finished = false;
+		let observationId = "";
+		let startedAt = 0;
 		const stream = Object.freeze<IRpcProtocolIncomingStream>({
 			finish: (outcome, onReleased) => {
 				if (finished || state !== "committed") {
@@ -1086,17 +1172,40 @@ export class RpcPeerImpl implements IRpcPeerRuntime {
 					return;
 				}
 				finished = true;
+				const durationMs = observationDuration(startedAt);
 				this.#releaseIncomingCapacity(
 					charge,
 					retainedBytesReservation,
 					applicationWorkReservation,
 				);
+				let releaseError: unknown;
 				try {
 					onReleased();
 				} catch (error) {
+					releaseError = error;
+				}
+				const base = {
+					type: RpcEventTypeEnum.streamFinished as const,
+					observationId,
+					peer: this,
+					direction: RpcEventDirectionEnum.incoming as const,
+					outcome: RpcStreamStatusEnum.failed as const,
+					admittedItemCount: 0 as const,
+					durationMs,
+				};
+				this.#emitEvent(
+					code === RpcExceptionCodeEnum.unknownService
+						? { ...base, code: RpcExceptionCodeEnum.unknownService }
+						: {
+								...base,
+								service: service as string,
+								code: RpcExceptionCodeEnum.unknownMember,
+							},
+				);
+				if (releaseError !== undefined) {
 					this.#onProtocolFault(
-						error instanceof Error
-							? error
+						releaseError instanceof Error
+							? releaseError
 							: new Error("Protocol stream release callback failed."),
 					);
 				}
@@ -1114,6 +1223,19 @@ export class RpcPeerImpl implements IRpcPeerRuntime {
 						return stream;
 					}
 					state = "committed";
+					observationId = createObservationId();
+					startedAt = Date.now();
+					const base = {
+						type: RpcEventTypeEnum.streamStarted as const,
+						observationId,
+						peer: this,
+						direction: RpcEventDirectionEnum.incoming as const,
+					};
+					this.#emitEvent(
+						code === RpcExceptionCodeEnum.unknownService
+							? base
+							: { ...base, service: service as string },
+					);
 					return stream;
 				},
 				release: () => {
@@ -1142,6 +1264,8 @@ export class RpcPeerImpl implements IRpcPeerRuntime {
 		applicationWorkReservation: IRpcApplicationWorkReservation,
 	): RpcProtocolIncomingStreamReservation {
 		let state: "pending" | "committed" | "released" = "pending";
+		const service = request.service;
+		const member = request.member;
 		let capturedRoute: RpcStreamRoute | undefined = route;
 		let argumentsSnapshot =
 			request.kind === "stream-method" ? request.args : undefined;
@@ -1155,6 +1279,8 @@ export class RpcPeerImpl implements IRpcPeerRuntime {
 						);
 					}
 					state = "committed";
+					const observationId = createObservationId();
+					const startedAt = Date.now();
 					const adapter = createRpcSourceSubscription(
 						capturedRoute,
 						argumentsSnapshot,
@@ -1166,7 +1292,72 @@ export class RpcPeerImpl implements IRpcPeerRuntime {
 								retainedBytesReservation,
 								applicationWorkReservation,
 							),
+						(outcome, finishedAt, admittedItemCount, sourceTeardownFailed) => {
+							const base = {
+								type: RpcEventTypeEnum.streamFinished as const,
+								observationId,
+								peer: this,
+								direction: RpcEventDirectionEnum.incoming as const,
+								service,
+								member,
+								admittedItemCount,
+								durationMs: observationDuration(startedAt, finishedAt),
+								...(sourceTeardownFailed
+									? { sourceTeardownFailed: true as const }
+									: {}),
+							};
+							if (outcome.type === "completed") {
+								this.#emitEvent({
+									...base,
+									outcome: RpcStreamStatusEnum.completed,
+								});
+								return;
+							}
+							if (outcome.type === "canceled") {
+								this.#emitEvent({
+									...base,
+									outcome: RpcStreamStatusEnum.canceled,
+								});
+								return;
+							}
+							if (outcome.type === "session-terminated") {
+								this.#emitEvent({
+									...base,
+									outcome: RpcStreamStatusEnum.terminated,
+								});
+								return;
+							}
+							// A known Source exposes only application failure and overflow codes.
+							const sourceFailureIsPublic =
+								outcome.code === RpcExceptionCodeEnum.handlerFailed ||
+								outcome.code === RpcExceptionCodeEnum.overflow;
+							if (!sourceFailureIsPublic) {
+								this.#emitEvent({
+									...base,
+									outcome: RpcStreamStatusEnum.terminated,
+								});
+								this.#protocolFailure(
+									new Error(
+										"Protocol supplied an invalid known-stream terminal.",
+									),
+								);
+								return;
+							}
+							this.#emitEvent({
+								...base,
+								outcome: RpcStreamStatusEnum.failed,
+								code: outcome.code,
+							});
+						},
 					);
+					this.#emitEvent({
+						type: RpcEventTypeEnum.streamStarted,
+						observationId,
+						peer: this,
+						direction: RpcEventDirectionEnum.incoming,
+						service,
+						member,
+					});
 					capturedRoute = undefined;
 					argumentsSnapshot = undefined;
 					const removeQueuedJob = this.#handlerScheduler.enqueue(
@@ -1244,7 +1435,7 @@ export class RpcPeerImpl implements IRpcPeerRuntime {
 						type: RpcEventTypeEnum.callFinished,
 						observationId,
 						peer: this,
-						direction: RpcCallDirectionEnum.incoming as const,
+						direction: RpcEventDirectionEnum.incoming as const,
 						outcome: RpcCallStatusEnum.rejected,
 						code: RpcExceptionCodeEnum.unknownService,
 						durationMs,
@@ -1254,7 +1445,7 @@ export class RpcPeerImpl implements IRpcPeerRuntime {
 						type: RpcEventTypeEnum.callFinished,
 						observationId,
 						peer: this,
-						direction: RpcCallDirectionEnum.incoming,
+						direction: RpcEventDirectionEnum.incoming,
 						service: service as string,
 						outcome: RpcCallStatusEnum.rejected,
 						code: RpcExceptionCodeEnum.unknownMethod,
@@ -1282,7 +1473,7 @@ export class RpcPeerImpl implements IRpcPeerRuntime {
 						type: RpcEventTypeEnum.callStarted as const,
 						observationId,
 						peer: this,
-						direction: RpcCallDirectionEnum.incoming as const,
+						direction: RpcEventDirectionEnum.incoming as const,
 					};
 					this.#emitEvent(
 						code === RpcExceptionCodeEnum.unknownService
@@ -1366,7 +1557,7 @@ export class RpcPeerImpl implements IRpcPeerRuntime {
 					type: RpcEventTypeEnum.callFinished as const,
 					observationId,
 					peer: this,
-					direction: RpcCallDirectionEnum.incoming as const,
+					direction: RpcEventDirectionEnum.incoming as const,
 					service,
 					method,
 					durationMs: observationDuration(startedAt),
@@ -1492,7 +1683,7 @@ export class RpcPeerImpl implements IRpcPeerRuntime {
 						type: RpcEventTypeEnum.callStarted,
 						observationId,
 						peer: this,
-						direction: RpcCallDirectionEnum.incoming,
+						direction: RpcEventDirectionEnum.incoming,
 						service,
 						method,
 					});

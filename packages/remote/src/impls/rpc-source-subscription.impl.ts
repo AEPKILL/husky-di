@@ -9,6 +9,7 @@ import {
 	type Observable,
 	Subscriber,
 	type Subscription,
+	type TeardownLogic,
 } from "rxjs";
 
 import { RpcExceptionCodeEnum } from "@/enums/rpc-exception-code.enum";
@@ -35,6 +36,22 @@ function isSourceSubscription(value: unknown): value is Subscription {
 	}
 }
 
+class RpcSourceSubscriber extends Subscriber<unknown> {
+	#teardownFailed = false;
+
+	get teardownFailed(): boolean {
+		return this.#teardownFailed;
+	}
+
+	override add(teardown: TeardownLogic): void {
+		try {
+			super.add(teardown);
+		} catch {
+			this.#teardownFailed = true;
+		}
+	}
+}
+
 /** Owns at most one Source Subscription and one truthful release receipt. */
 export class RpcSourceSubscriptionImpl implements IRpcProtocolIncomingStream {
 	#route: RpcStreamRoute | undefined;
@@ -46,10 +63,21 @@ export class RpcSourceSubscriptionImpl implements IRpcProtocolIncomingStream {
 	#onReleased: (() => void) | undefined;
 	readonly #onProtocolFault: (error: unknown) => void;
 	readonly #releaseSourceRoot: () => void;
+	readonly #onFinished: (
+		outcome: RpcIncomingStreamTerminal,
+		finishedAt: number,
+		admittedItemCount: number,
+		sourceTeardownFailed: boolean,
+	) => void;
 	#starting = false;
 	#started = false;
 	#finishRequested = false;
+	#finishOutcome: RpcIncomingStreamTerminal | undefined;
+	#finishedAt = 0;
+	#admittedItemCount = 0;
+	#emissionInProgress = false;
 	#teardownAttempted = false;
+	#sourceTeardownFailed = false;
 	#released = false;
 
 	constructor(
@@ -58,12 +86,19 @@ export class RpcSourceSubscriptionImpl implements IRpcProtocolIncomingStream {
 		source: IRpcProtocolSourceSink,
 		onProtocolFault: (error: unknown) => void,
 		releaseSourceRoot: () => void,
+		onFinished: (
+			outcome: RpcIncomingStreamTerminal,
+			finishedAt: number,
+			admittedItemCount: number,
+			sourceTeardownFailed: boolean,
+		) => void,
 	) {
 		this.#route = route;
 		this.#argumentsSnapshot = argumentsSnapshot;
 		this.#source = source;
 		this.#onProtocolFault = onProtocolFault;
 		this.#releaseSourceRoot = releaseSourceRoot;
+		this.#onFinished = onFinished;
 	}
 
 	/** Arms cancellation of the one queued Source Start Job. */
@@ -105,7 +140,7 @@ export class RpcSourceSubscriptionImpl implements IRpcProtocolIncomingStream {
 				return true;
 			}
 
-			const sourceSubscriber = new Subscriber<unknown>({
+			const sourceSubscriber = new RpcSourceSubscriber({
 				next: (value) => this.#emit(value),
 				error: () => this.#reportSourceFailure(),
 				complete: () => this.#finishSource({ type: "completed" }),
@@ -122,6 +157,7 @@ export class RpcSourceSubscriptionImpl implements IRpcProtocolIncomingStream {
 				}
 				return true;
 			}
+			this.#sourceTeardownFailed ||= sourceSubscriber.teardownFailed;
 			if (!isSourceSubscription(returnedSubscription)) {
 				if (!this.#finishRequested) {
 					this.#reportSourceFailure();
@@ -141,17 +177,19 @@ export class RpcSourceSubscriptionImpl implements IRpcProtocolIncomingStream {
 		}
 	}
 
-	finish(_outcome: RpcIncomingStreamTerminal, onReleased: () => void): void {
+	finish(outcome: RpcIncomingStreamTerminal, onReleased: () => void): void {
 		if (this.#finishRequested) {
 			return;
 		}
 		this.#finishRequested = true;
+		this.#finishOutcome = outcome;
+		this.#finishedAt = Date.now();
 		this.#onReleased = onReleased;
 		this.#route = undefined;
 		this.#argumentsSnapshot = undefined;
 		this.#removeQueuedJob?.();
 		this.#removeQueuedJob = undefined;
-		if (!this.#starting) {
+		if (!this.#starting && !this.#emissionInProgress) {
 			this.#teardownAndRelease();
 		}
 	}
@@ -213,10 +251,20 @@ export class RpcSourceSubscriptionImpl implements IRpcProtocolIncomingStream {
 		if (this.#finishRequested) {
 			return;
 		}
+		this.#emissionInProgress = true;
 		try {
 			emission.commit(snapshot);
+			this.#admittedItemCount = Math.min(
+				Number.MAX_SAFE_INTEGER,
+				this.#admittedItemCount + 1,
+			);
 		} catch (error) {
 			this.#onProtocolFault(error);
+		} finally {
+			this.#emissionInProgress = false;
+			if (this.#finishRequested && !this.#starting) {
+				this.#teardownAndRelease();
+			}
 		}
 	}
 
@@ -246,7 +294,7 @@ export class RpcSourceSubscriptionImpl implements IRpcProtocolIncomingStream {
 		try {
 			subscription.unsubscribe();
 		} catch {
-			// A Source Teardown failure is a payload-free local incident only.
+			this.#sourceTeardownFailed = true;
 		}
 	}
 
@@ -264,13 +312,27 @@ export class RpcSourceSubscriptionImpl implements IRpcProtocolIncomingStream {
 		}
 		this.#released = true;
 		const onReleased = this.#onReleased;
+		const finishOutcome = this.#finishOutcome;
 		this.#onReleased = undefined;
+		this.#finishOutcome = undefined;
+		let releaseError: unknown;
 		try {
 			onReleased?.();
 		} catch (error) {
-			this.#onProtocolFault(error);
+			releaseError = error;
 		} finally {
 			this.#releaseSourceRoot();
+		}
+		if (finishOutcome !== undefined) {
+			this.#onFinished(
+				finishOutcome,
+				this.#finishedAt,
+				this.#admittedItemCount,
+				this.#sourceTeardownFailed,
+			);
+		}
+		if (releaseError !== undefined) {
+			this.#onProtocolFault(releaseError);
 		}
 	}
 }
