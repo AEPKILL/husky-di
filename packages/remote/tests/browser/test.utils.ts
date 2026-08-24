@@ -5,7 +5,7 @@
  */
 
 import { createServiceIdentifier } from "@husky-di/core";
-import { Subject } from "rxjs";
+import { firstValueFrom, Observable, of, Subject, toArray } from "rxjs";
 
 import {
 	createRemoteServiceDescriptor,
@@ -20,6 +20,8 @@ import knownAnswerVectors from "../../wire/husky-di-rpc-1/known-answer-vectors.j
 
 interface IBrowserRpcService {
 	add(left: number, right: number): number;
+	count(limit: number): Observable<number>;
+	readonly status$: Observable<string>;
 	wait(signal: AbortSignal): Promise<string>;
 }
 
@@ -34,6 +36,8 @@ interface IBrowserRoundtripResult {
 	readonly canceledCode: string;
 	readonly connectorStatus: string;
 	readonly initialResult: number;
+	readonly streamItems: readonly number[];
+	readonly streamProperty: string;
 	readonly recoveredResult: number;
 	readonly sameAcceptorPeer: boolean;
 	readonly sameConnectorPeer: boolean;
@@ -184,6 +188,8 @@ export async function runRpcBrowserRoundtrip(): Promise<IBrowserRoundtripResult>
 		wireName: "browser.release.v1",
 		members: {
 			add: { kind: "unary" },
+			count: { kind: "stream-method" },
+			status$: { kind: "stream-property" },
 			wait: { kind: "unary", cancelable: true },
 		},
 	});
@@ -206,6 +212,21 @@ export async function runRpcBrowserRoundtrip(): Promise<IBrowserRoundtripResult>
 		Promise.withResolvers<void>();
 	acceptor.expose(descriptor, {
 		add: (left, right) => left + right,
+		count(limit) {
+			return new Observable((subscriber) => {
+				let value = 0;
+				const timer = setInterval(() => {
+					subscriber.next(value);
+					value += 1;
+					if (value === limit) {
+						clearInterval(timer);
+						subscriber.complete();
+					}
+				}, 4);
+				return () => clearInterval(timer);
+			});
+		},
+		status$: of("ready"),
 		wait(signal) {
 			resolveHandlerStarted();
 			return new Promise((resolve) => {
@@ -236,6 +257,8 @@ export async function runRpcBrowserRoundtrip(): Promise<IBrowserRoundtripResult>
 	const remote = connector.peer.resolve(descriptor);
 	const assimilated = (await Promise.resolve(remote)) === remote;
 	const initialResult = await remote.add(19, 23);
+	const streamItems = await firstValueFrom(remote.count(3).pipe(toArray()));
+	const streamProperty = await firstValueFrom(remote.status$);
 
 	const frame = document.createElement("iframe");
 	document.body.append(frame);
@@ -296,6 +319,8 @@ export async function runRpcBrowserRoundtrip(): Promise<IBrowserRoundtripResult>
 		canceledCode,
 		connectorStatus: connector.state.status,
 		initialResult,
+		streamItems,
+		streamProperty,
 		recoveredResult,
 		sameAcceptorPeer,
 		sameConnectorPeer,

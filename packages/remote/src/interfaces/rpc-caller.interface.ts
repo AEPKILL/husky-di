@@ -54,25 +54,25 @@ type RpcCallObservationBase = {
 type RpcOutgoingCallContext = {
 	readonly direction: RpcEventDirectionEnum.outgoing;
 	readonly service: string;
-	readonly method: string;
+	readonly member: string;
 };
 
 type RpcKnownIncomingCallContext = {
 	readonly direction: RpcEventDirectionEnum.incoming;
 	readonly service: string;
-	readonly method: string;
+	readonly member: string;
 };
 
 type RpcUnknownServiceCallContext = {
 	readonly direction: RpcEventDirectionEnum.incoming;
 	readonly service?: never;
-	readonly method?: never;
+	readonly member?: never;
 };
 
-type RpcUnknownMethodCallContext = {
+type RpcUnknownMemberCallContext = {
 	readonly direction: RpcEventDirectionEnum.incoming;
 	readonly service: string;
-	readonly method?: never;
+	readonly member?: never;
 };
 
 type RpcCallStartedEvent = RpcCallObservationBase &
@@ -80,7 +80,7 @@ type RpcCallStartedEvent = RpcCallObservationBase &
 		| RpcOutgoingCallContext
 		| RpcKnownIncomingCallContext
 		| RpcUnknownServiceCallContext
-		| RpcUnknownMethodCallContext
+		| RpcUnknownMemberCallContext
 	) & { readonly type: RpcEventTypeEnum.callStarted };
 
 type RpcCallFinishedBase = RpcCallObservationBase & {
@@ -113,9 +113,9 @@ type RpcCallFinishedEvent = RpcCallFinishedBase &
 				readonly outcome: RpcCallStatusEnum.rejected;
 				readonly code: RpcExceptionCodeEnum.unknownService;
 		  })
-		| (RpcUnknownMethodCallContext & {
+		| (RpcUnknownMemberCallContext & {
 				readonly outcome: RpcCallStatusEnum.rejected;
-				readonly code: RpcExceptionCodeEnum.unknownMethod;
+				readonly code: RpcExceptionCodeEnum.unknownMember;
 		  })
 	);
 

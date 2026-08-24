@@ -14,7 +14,7 @@ import type {
 } from "@/types/remote-service-descriptor.type";
 
 export type RpcFacadeInvocation = (
-	method: string,
+	member: string,
 	cancelable: boolean,
 	actualArguments: readonly unknown[],
 ) => Promise<unknown>;

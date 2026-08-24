@@ -30,7 +30,7 @@
         <mxCell id="framework-layer" value="Framework Core" style="swimlane;startSize=36;horizontal=1;rounded=1;whiteSpace=wrap;html=1;container=1;pointerEvents=0;fillColor=#d5e8d4;swimlaneFillColor=#f7fcf7;strokeColor=#82b366;fontFamily=PingFang SC;fontSize=14;fontStyle=1;fontColor=#2f5d32;" vertex="1" parent="1">
           <mxGeometry x="50" y="550" width="1700" height="240" as="geometry" />
         </mxCell>
-        <mxCell id="peer-runtime" value="RpcPeerImpl&#xa;stable Peer · exposure registry · typed facade&#xa;bidirectional unary + independent subscription roots&#xa;state$ / event$" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontFamily=PingFang SC;fontSize=14;fontStyle=1;" vertex="1" parent="framework-layer">
+        <mxCell id="peer-runtime" value="RpcPeerImpl&#xa;stable Peer · exposure registry · typed facade&#xa;mixed unary/Observable · independent subscription roots&#xa;state$ / event$" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontFamily=PingFang SC;fontSize=14;fontStyle=1;" vertex="1" parent="framework-layer">
           <mxGeometry x="150" y="70" width="600" height="120" as="geometry" />
         </mxCell>
         <mxCell id="protocol-runtime" value="Protocol Runtime 与 Policy&#xa;内置 husky-di-rpc/1 或自定义 IRpcProtocol&#xa;W=1 · ordinary/protected resources&#xa;control / progress fairness · G/F lifecycle" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontFamily=PingFang SC;fontSize=14;" vertex="1" parent="framework-layer">
@@ -50,7 +50,7 @@
         <mxCell id="transport-layer" value="Transport Boundary（包外）" style="swimlane;startSize=36;horizontal=1;rounded=1;whiteSpace=wrap;html=1;container=1;pointerEvents=0;fillColor=#ffe6cc;swimlaneFillColor=#fffaf5;strokeColor=#d79b00;fontFamily=PingFang SC;fontSize=14;fontStyle=1;fontColor=#754c00;" vertex="1" parent="1">
           <mxGeometry x="50" y="1160" width="1700" height="190" as="geometry" />
         </mxCell>
-        <mxCell id="transport-adapter" value="Transport Adapter（stream-unaware）&#xa;connect / listen · connection$&#xa;finite native frame / queue limits" style="rounded=1;whiteSpace=wrap;html=1;dashed=1;fillColor=#f5f5f5;strokeColor=#666666;fontFamily=PingFang SC;fontSize=13;" vertex="1" parent="transport-layer">
+        <mxCell id="transport-adapter" value="Transport Adapter（stream-unaware）&#xa;Connection: message$ / send / close&#xa;connect / listen · finite native frame / queue limits" style="rounded=1;whiteSpace=wrap;html=1;dashed=1;fillColor=#f5f5f5;strokeColor=#666666;fontFamily=PingFang SC;fontSize=13;" vertex="1" parent="transport-layer">
           <mxGeometry x="100" y="60" width="400" height="90" as="geometry" />
         </mxCell>
         <mxCell id="connection" value="IRpcConnection（unchanged 3-member seam）&#xa;完整、有序的 Uint8Array 消息&#xa;message$ · send(Uint8Array) · close()" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontFamily=PingFang SC;fontSize=13;fontStyle=1;" vertex="1" parent="transport-layer">

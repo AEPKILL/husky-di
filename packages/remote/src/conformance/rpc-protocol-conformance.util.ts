@@ -220,7 +220,7 @@ export function runRpcProtocolConformance(
 						);
 						const reservation = pair.connectorSession.reserveInvocation({
 							service: "service",
-							method: "method",
+							member: "member",
 							args,
 						});
 						assertRpcConformance(
@@ -290,7 +290,7 @@ export function runRpcProtocolConformance(
 						);
 						const reservation = pair.connectorSession.reserveInvocation({
 							service: "service",
-							method: "method",
+							member: "member",
 							args,
 						});
 						if (reservation !== undefined) {
@@ -475,7 +475,7 @@ interface ProtocolHostProbe<
 	lastRequest:
 		| {
 				readonly service: string;
-				readonly method: string;
+				readonly member: string;
 				readonly args: IRpcApplicationArgumentsSnapshot;
 		  }
 		| undefined;
@@ -557,7 +557,7 @@ function createIncomingDispositionCases(
 		...(
 			[
 				RpcExceptionCodeEnum.unknownService,
-				RpcExceptionCodeEnum.unknownMethod,
+				RpcExceptionCodeEnum.unknownMember,
 			] as const
 		).map(
 			(code): IRpcConformanceCase => ({
@@ -1686,7 +1686,7 @@ async function invoke(
 ): Promise<RpcCallOutcome> {
 	const reservation = session.reserveInvocation({
 		service: "service",
-		method: "method",
+		member: "member",
 		args,
 	});
 	assertRpcConformance(

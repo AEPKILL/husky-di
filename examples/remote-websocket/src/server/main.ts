@@ -15,6 +15,7 @@ import {
 } from "@husky-di/remote";
 import { createNodeWebSocketAcceptorAdapter } from "@husky-di/remote-websocket/node";
 import { Hono } from "hono";
+import { interval, map } from "rxjs";
 
 import {
 	REMOTE_BROWSER_DISPLAY_SERVICE,
@@ -42,7 +43,11 @@ async function main(): Promise<void> {
 		}
 	});
 
-	acceptor.expose(REMOTE_GREETING_SERVICE, { greet, greetCancelable });
+	acceptor.expose(REMOTE_GREETING_SERVICE, {
+		clock$: interval(1_000).pipe(map(() => new Date().toISOString())),
+		greet,
+		greetCancelable,
+	});
 
 	const app = new Hono();
 	app.get("/health", (context) => context.json({ status: "ok" }));

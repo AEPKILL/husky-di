@@ -8,9 +8,9 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import {
-	RpcCallDirectionEnum,
 	RpcCallStatusEnum,
 	type RpcEvent,
+	RpcEventDirectionEnum,
 	RpcEventTypeEnum,
 } from "@husky-di/remote";
 
@@ -21,16 +21,16 @@ describe("pending-call observatory ledger", () => {
 		const started = {
 			type: RpcEventTypeEnum.callStarted,
 			observationId: "call-1",
-			direction: RpcCallDirectionEnum.outgoing,
+			direction: RpcEventDirectionEnum.outgoing,
 			service: "example.greeting.v1",
-			method: "greet",
+			member: "greet",
 		} as unknown as RpcEvent;
 		const finished = {
 			type: RpcEventTypeEnum.callFinished,
 			observationId: "call-1",
-			direction: RpcCallDirectionEnum.outgoing,
+			direction: RpcEventDirectionEnum.outgoing,
 			service: "example.greeting.v1",
-			method: "greet",
+			member: "greet",
 			outcome: RpcCallStatusEnum.fulfilled,
 			durationMs: 2_000,
 		} as unknown as RpcEvent;
@@ -41,7 +41,7 @@ describe("pending-call observatory ledger", () => {
 				observationId: "call-1",
 				direction: "outgoing",
 				service: "example.greeting.v1",
-				method: "greet",
+				member: "greet",
 				startedAt: 100,
 			},
 		]);

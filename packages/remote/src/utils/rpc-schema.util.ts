@@ -149,7 +149,7 @@ export const rpcOutgoingFailureCodeSchema = z.enum([
 	RpcExceptionCodeEnum.outcomeUnknown,
 	RpcExceptionCodeEnum.handlerFailed,
 	RpcExceptionCodeEnum.unknownService,
-	RpcExceptionCodeEnum.unknownMethod,
+	RpcExceptionCodeEnum.unknownMember,
 ]);
 
 export const rpcTypeOnlyFieldNamesSchema = z.array(z.literal("type")).length(1);
@@ -160,7 +160,7 @@ export const rpcTypeCodeFieldNamesSchema = z
 	.array(z.enum(["type", "code"]))
 	.length(2);
 export const rpcIncomingCallFieldNamesSchema = z
-	.array(z.enum(["service", "method", "args"]))
+	.array(z.enum(["service", "member", "args"]))
 	.length(3);
 
 export const rpcCallOutcomeSchema = z.union([
@@ -219,10 +219,10 @@ export const rpcIncomingCallRequestSchema = z.object({
 	fieldNames: rpcIncomingCallFieldNamesSchema,
 	fields: z.object({
 		service: z.string().min(1),
-		method: z
+		member: z
 			.string()
 			.min(1)
-			.refine((method) => method !== "then"),
+			.refine((member) => member !== "then"),
 		args: rpcApplicationArgumentsSnapshotSchema,
 	}),
 });

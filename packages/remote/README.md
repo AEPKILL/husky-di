@@ -256,9 +256,8 @@ import { from, map, mergeMap } from "rxjs";
 const peers = acceptor.peers;
 const samples$ = from(peers).pipe(
   mergeMap(
-    (peer) =>
-      peer
-        .resolve(remoteMetrics)
+	(peer) =>
+	        .resolve(remoteMetrics)
         .samples()
         .pipe(map((value) => ({ peer, value }))),
     4,

@@ -64,7 +64,7 @@ type MemoryProtocolRecord =
 			readonly kind: "call";
 			readonly id: number;
 			readonly service: string;
-			readonly method: string;
+			readonly member: string;
 			readonly args: readonly RpcApplicationValue[];
 	  }
 	| { readonly kind: "cancel"; readonly id: number }
@@ -302,7 +302,7 @@ class MemoryProtocolRuntime
 							kind: "call",
 							id,
 							service: request.service,
-							method: request.method,
+							member: request.member,
 							args: request.args.value,
 						});
 					},
@@ -495,7 +495,7 @@ class MemoryProtocolRuntime
 		const args = this.#host.normalizeApplicationArguments(record.args);
 		const reserved = this.#sessionHost?.reserveIncomingCall({
 			service: record.service,
-			method: record.method,
+			member: record.member,
 			args,
 		});
 		if (reserved === undefined) {

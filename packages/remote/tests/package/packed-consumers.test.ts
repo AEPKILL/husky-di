@@ -5,6 +5,7 @@
  */
 
 import { execFileSync } from "node:child_process";
+import { createHash, createHmac, hkdfSync } from "node:crypto";
 import {
 	existsSync,
 	mkdirSync,
@@ -17,13 +18,158 @@ import {
 import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import ts from "typescript";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
+const coreRoot = resolve(packageRoot, "../core");
 const fixtureRoot = mkdtempSync(join(tmpdir(), "husky-di-remote-pack-"));
 const tscPath = resolve(packageRoot, "node_modules/typescript/bin/tsc");
 const esbuildPath = resolve(packageRoot, "node_modules/.bin/esbuild");
 let tarballPath = "";
+let coreTarballPath = "";
+
+const declarationInventories = {
+	root: {
+		runtime: [
+			"RpcAcceptorListenerStopReasonEnum",
+			"RpcCallStatusEnum",
+			"RpcCloseOutcomeEnum",
+			"RpcCloseReasonEnum",
+			"RpcConnectorReconnectionAttemptFailureStageEnum",
+			"RpcConnectorReconnectionEventTypeEnum",
+			"RpcConnectorReconnectionStopReasonEnum",
+			"RpcEventDirectionEnum",
+			"RpcEventTypeEnum",
+			"RpcException",
+			"RpcExceptionCodeEnum",
+			"RpcStateStatusEnum",
+			"RpcStreamStatusEnum",
+			"createRemoteServiceDescriptor",
+			"createRpcAcceptor",
+			"createRpcConnector",
+			"createRpcConnectorReconnection",
+			"createRpcProtocol",
+		],
+		typeOnly: [
+			"CreateRpcConnectorReconnectionOptions",
+			"IRemoteServiceDescriptor",
+			"IRpcAcceptor",
+			"IRpcAcceptorAdapter",
+			"IRpcApplicationRecord",
+			"IRpcConnection",
+			"IRpcConnector",
+			"IRpcConnectorAdapter",
+			"IRpcConnectorReconnection",
+			"IRpcPeer",
+			"IRpcProtocol",
+			"IRpcProtocolRuntimePolicy",
+			"RpcAcceptorListenerState",
+			"RpcAcceptorOptions",
+			"RpcAcceptorRuntimePolicyOptions",
+			"RpcAcceptorState",
+			"RpcApplicationValue",
+			"RpcCallFailure",
+			"RpcConnectorAdapterFactory",
+			"RpcConnectorConnectOptions",
+			"RpcConnectorOptions",
+			"RpcConnectorReconnectionEvent",
+			"RpcConnectorReconnectionPolicyOptions",
+			"RpcConnectorReconnectionState",
+			"RpcConnectorRuntimePolicyOptions",
+			"RpcConnectorState",
+			"RpcEvent",
+			"RpcPeerState",
+			"RpcProtocolFaultReason",
+			"RpcSessionCloseReason",
+		],
+	},
+	protocol: {
+		runtime: [
+			"RpcCallTerminalTypeEnum",
+			"RpcCloseReasonEnum",
+			"RpcExceptionCodeEnum",
+			"RpcIncomingCallKindEnum",
+			"RpcProtocolSessionTransitionTypeEnum",
+			"createRpcProtocol",
+		],
+		typeOnly: [
+			"IRpcApplicationArgumentsSnapshot",
+			"IRpcApplicationRecord",
+			"IRpcApplicationSnapshot",
+			"IRpcConnection",
+			"IRpcProtocol",
+			"IRpcProtocolAcceptorHost",
+			"IRpcProtocolAcceptorRuntime",
+			"IRpcProtocolConnectorHost",
+			"IRpcProtocolConnectorRuntime",
+			"IRpcProtocolHost",
+			"IRpcProtocolIncomingCall",
+			"IRpcProtocolIncomingCallRequest",
+			"IRpcProtocolIncomingCallReservation",
+			"IRpcProtocolIncomingHandlerCall",
+			"IRpcProtocolIncomingSourceReservation",
+			"IRpcProtocolIncomingStream",
+			"IRpcProtocolIncomingUnknownStreamReservation",
+			"IRpcProtocolInvocation",
+			"IRpcProtocolInvocationRequest",
+			"IRpcProtocolInvocationReservation",
+			"IRpcProtocolInvocationSink",
+			"IRpcProtocolProjection",
+			"IRpcProtocolRoleRuntime",
+			"IRpcProtocolRuntimePolicy",
+			"IRpcProtocolSession",
+			"IRpcProtocolSessionHost",
+			"IRpcProtocolSourceEmissionReservation",
+			"IRpcProtocolSourceSink",
+			"IRpcProtocolStream",
+			"IRpcProtocolStreamReservation",
+			"IRpcProtocolSubscriberSink",
+			"IRpcRetainedBytesReservation",
+			"RpcApplicationValue",
+			"RpcCallFailure",
+			"RpcCallOutcome",
+			"RpcHandlerOutcome",
+			"RpcIncomingFailure",
+			"RpcIncomingStreamTerminal",
+			"RpcIncomingTerminal",
+			"RpcProtocolFaultReason",
+			"RpcProtocolIncomingCallReservation",
+			"RpcProtocolIncomingStreamReservation",
+			"RpcProtocolSessionTransition",
+			"RpcProtocolSessionTransitionCloseReason",
+			"RpcProtocolStreamRequest",
+			"RpcSessionCloseReason",
+			"RpcSourceTerminal",
+			"RpcStreamFailure",
+			"RpcStreamItemEffect",
+			"RpcStreamOutcome",
+			"RpcUnknownCallFailure",
+		],
+	},
+	transport: {
+		runtime: [],
+		typeOnly: ["IRpcAcceptorAdapter", "IRpcConnectorAdapter", "IRpcConnection"],
+	},
+	conformance: {
+		runtime: [
+			"RpcConformanceStatusEnum",
+			"runRpcAcceptorAdapterConformance",
+			"runRpcConnectorAdapterConformance",
+			"runRpcProtocolConformance",
+		],
+		typeOnly: [
+			"IRpcAcceptorAdapterConformanceFixture",
+			"IRpcAdapterConformanceRemote",
+			"IRpcConnectorAdapterConformanceFixture",
+			"IRpcProtocolConformanceFixture",
+			"RpcConformanceCaseResult",
+			"RpcConformanceFailure",
+			"RpcConformanceOptions",
+			"RpcConformanceReport",
+		],
+	},
+} as const;
 
 const nodeRuntimeExportAssertions = `assert.deepEqual(Object.keys(root).sort(), ["RpcAcceptorListenerStopReasonEnum", "RpcCallStatusEnum", "RpcCloseOutcomeEnum", "RpcCloseReasonEnum", "RpcConnectorReconnectionAttemptFailureStageEnum", "RpcConnectorReconnectionEventTypeEnum", "RpcConnectorReconnectionStopReasonEnum", "RpcEventDirectionEnum", "RpcEventTypeEnum", "RpcException", "RpcExceptionCodeEnum", "RpcStateStatusEnum", "RpcStreamStatusEnum", "createRemoteServiceDescriptor", "createRpcAcceptor", "createRpcConnector", "createRpcConnectorReconnection", "createRpcProtocol"]);
 assert.equal(new root.RpcException(root.RpcExceptionCodeEnum.unavailable).code, "unavailable");
@@ -33,7 +179,16 @@ assert.deepEqual(Object.keys(protocol).sort(), ["RpcCallTerminalTypeEnum", "RpcC
 assert.equal(protocol.RpcCloseReasonEnum.cleanupFailed, "cleanup-failed");
 assert.equal(Object.isFrozen(protocol.createRpcProtocol()), true);
 assert.deepEqual(Object.keys(transport), []);
-assert.deepEqual(Object.keys(conformance).sort(), ["RpcConformanceStatusEnum", "runRpcAcceptorAdapterConformance", "runRpcConnectorAdapterConformance", "runRpcProtocolConformance"]);`;
+assert.deepEqual(Object.keys(conformance).sort(), ["RpcConformanceStatusEnum", "runRpcAcceptorAdapterConformance", "runRpcConnectorAdapterConformance", "runRpcProtocolConformance"]);
+assert.equal(root.RpcCallDirectionEnum, undefined);
+assert.equal(root.RpcPeerResult, undefined);
+assert.equal(root.RemoteServiceGroup, undefined);
+assert.equal(root.unknownMethod, undefined);
+assert.equal(root.maxPendingInvocationsPerSession, undefined);
+assert.equal(root.RpcExceptionCodeEnum.unknownMethod, undefined);
+const acceptor = root.createRpcAcceptor();
+assert.equal(acceptor.resolveAll, undefined);
+assert.equal(acceptor.close(), acceptor.close());`;
 
 function run(command: string, args: readonly string[], cwd: string): string {
 	return execFileSync(command, args, {
@@ -44,10 +199,7 @@ function run(command: string, args: readonly string[], cwd: string): string {
 }
 
 function runPnpm(args: readonly string[], cwd: string): string {
-	const npmExecPath = process.env.npm_execpath;
-	return npmExecPath === undefined
-		? run("pnpm", args, cwd)
-		: run(process.execPath, [npmExecPath, ...args], cwd);
+	return run("corepack", ["pnpm", ...args], cwd);
 }
 
 function createConsumer(
@@ -61,7 +213,13 @@ function createConsumer(
 		JSON.stringify({
 			private: true,
 			type,
-			dependencies: { "@husky-di/remote": `file:${tarballPath}` },
+			packageManager: "pnpm@11.13.1",
+			pnpm: { overrides: { "@husky-di/core": `file:${coreTarballPath}` } },
+			dependencies: {
+				"@husky-di/core": `file:${coreTarballPath}`,
+				"@husky-di/remote": `file:${tarballPath}`,
+				rxjs: "7.8.2",
+			},
 		}),
 	);
 	runPnpm(
@@ -87,13 +245,44 @@ function listFiles(root: string, prefix = ""): string[] {
 }
 
 beforeAll(() => {
-	runPnpm(["pack", "--pack-destination", fixtureRoot, "--json"], packageRoot);
-	const tarballName = readdirSync(fixtureRoot).find((name) =>
-		name.endsWith(".tgz"),
-	);
-	if (tarballName === undefined) {
-		throw new Error("pnpm pack did not create a tarball.");
+	const authoritativeCoreTarball = process.env.HUSKY_CORE_TGZ;
+	if (authoritativeCoreTarball !== undefined) {
+		if (!existsSync(authoritativeCoreTarball)) {
+			throw new Error(
+				`Support Core tarball does not exist: ${authoritativeCoreTarball}`,
+			);
+		}
+		coreTarballPath = resolve(authoritativeCoreTarball);
+	} else {
+		run(
+			process.execPath,
+			[resolve(packageRoot, "scripts/finalize-declarations.mjs"), coreRoot],
+			packageRoot,
+		);
+		runPnpm(["pack", "--pack-destination", fixtureRoot, "--json"], coreRoot);
+		const coreTarballName = readdirSync(fixtureRoot).find(
+			(name) => name.startsWith("husky-di-core-") && name.endsWith(".tgz"),
+		);
+		if (coreTarballName === undefined)
+			throw new Error("pnpm pack did not create the Core support tarball.");
+		coreTarballPath = resolve(fixtureRoot, coreTarballName);
 	}
+	const authoritativeTarball = process.env.HUSKY_REMOTE_TGZ;
+	if (authoritativeTarball !== undefined) {
+		if (!existsSync(authoritativeTarball)) {
+			throw new Error(
+				`Authoritative tarball does not exist: ${authoritativeTarball}`,
+			);
+		}
+		tarballPath = resolve(authoritativeTarball);
+		return;
+	}
+	runPnpm(["pack", "--pack-destination", fixtureRoot, "--json"], packageRoot);
+	const tarballName = readdirSync(fixtureRoot).find(
+		(name) => name.startsWith("husky-di-remote-") && name.endsWith(".tgz"),
+	);
+	if (tarballName === undefined)
+		throw new Error("pnpm pack did not create a tarball.");
 	tarballPath = resolve(fixtureRoot, tarballName);
 }, 120_000);
 
@@ -219,6 +408,170 @@ describe("installed @husky-di/remote package", () => {
 		expect(documentation).toContain("per-principal connection");
 	});
 
+	it("RPC-CORPUS-005 RPC-CORPUS-010 verifies the installed four-tuple, JCS, and KAT", () => {
+		const consumerRoot = createConsumer("installed-corpus");
+		const installedRoot = resolve(
+			consumerRoot,
+			"node_modules/@husky-di/remote",
+		);
+		const wireRoot = resolve(installedRoot, "wire/husky-di-rpc-1");
+		const names = [
+			"schema.json",
+			"raw-vectors.json",
+			"transcripts.json",
+			"known-answer-vectors.json",
+		] as const;
+		const bytes = Object.fromEntries(
+			names.map((name) => [name, readFileSync(resolve(wireRoot, name))]),
+		);
+		const tuple = Object.fromEntries(
+			names.map((name) => [
+				name,
+				createHash("sha256").update(bytes[name]).digest("hex"),
+			]),
+		);
+		expect(new Set(Object.values(tuple)).size).toBe(4);
+		const raw = JSON.parse(bytes["raw-vectors.json"].toString("utf8"));
+		const transcripts = JSON.parse(bytes["transcripts.json"].toString("utf8"));
+		const kat = JSON.parse(bytes["known-answer-vectors.json"].toString("utf8"));
+		expect(raw.profile).toBe("husky-di-rpc/1");
+		expect(raw.vectors).toHaveLength(82);
+		expect(transcripts.profile).toBe("husky-di-rpc/1");
+		expect(
+			transcripts.scenarios.flatMap(
+				(scenario: { steps: unknown[] }) => scenario.steps,
+			),
+		).toHaveLength(68);
+		const canonicalize = (value: unknown): string => {
+			if (Array.isArray(value)) return `[${value.map(canonicalize).join(",")}]`;
+			if (typeof value === "object" && value !== null) {
+				return `{${Object.keys(value)
+					.sort()
+					.map(
+						(key) =>
+							`${JSON.stringify(key)}:${canonicalize(Reflect.get(value, key))}`,
+					)
+					.join(",")}}`;
+			}
+			return JSON.stringify(value);
+		};
+		for (const vector of kat.jcs)
+			expect(canonicalize(vector.input)).toBe(vector.canonical);
+		const hmac = createHmac("sha256", Buffer.from(kat.hmacSha256.keyHex, "hex"))
+			.update(Buffer.from(kat.hmacSha256.dataHex, "hex"))
+			.digest("hex");
+		expect(hmac).toBe(kat.hmacSha256.tagHex);
+		const hkdf = Buffer.from(
+			hkdfSync(
+				"sha256",
+				Buffer.from(kat.hkdfSha256.ikmHex, "hex"),
+				Buffer.from(kat.hkdfSha256.saltHex, "hex"),
+				Buffer.from(kat.hkdfSha256.infoHex, "hex"),
+				kat.hkdfSha256.length,
+			),
+		).toString("hex");
+		expect(hkdf).toBe(kat.hkdfSha256.okmHex);
+	});
+
+	it("RPC-PKG-010 RPC-RELEASE-014 parses exact emitted declaration inventories", () => {
+		const consumerRoot = createConsumer("compiler-api");
+		const installedRoot = resolve(
+			consumerRoot,
+			"node_modules/@husky-di/remote",
+		);
+		const entryPaths = Object.fromEntries(
+			["root", "protocol", "transport", "conformance"].map((name) => [
+				name,
+				resolve(installedRoot, `dist/${name === "root" ? "index" : name}.d.ts`),
+			]),
+		) as Record<keyof typeof declarationInventories, string>;
+		const program = ts.createProgram({
+			rootNames: Object.values(entryPaths),
+			options: {
+				module: ts.ModuleKind.NodeNext,
+				moduleResolution: ts.ModuleResolutionKind.NodeNext,
+				noEmit: true,
+				skipLibCheck: false,
+				strict: true,
+				types: [],
+			},
+		});
+		expect(
+			ts
+				.getPreEmitDiagnostics(program)
+				.map((diagnostic) =>
+					ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n"),
+				),
+		).toEqual([]);
+		const checker = program.getTypeChecker();
+		for (const [name, expected] of Object.entries(declarationInventories)) {
+			const source = program.getSourceFile(
+				entryPaths[name as keyof typeof entryPaths],
+			);
+			if (source === undefined)
+				throw new Error(`Missing declaration entry: ${name}`);
+			const moduleSymbol = checker.getSymbolAtLocation(source);
+			if (moduleSymbol === undefined)
+				throw new Error(`Missing module symbol: ${name}`);
+			const exports = checker.getExportsOfModule(moduleSymbol).map((symbol) => {
+				const target =
+					symbol.flags & ts.SymbolFlags.Alias
+						? checker.getAliasedSymbol(symbol)
+						: symbol;
+				return {
+					name: symbol.name,
+					value: Boolean(target.flags & ts.SymbolFlags.Value),
+				};
+			});
+			expect(
+				exports
+					.filter((item) => item.value)
+					.map((item) => item.name)
+					.sort(),
+			).toEqual([...expected.runtime].sort());
+			expect(
+				exports
+					.filter((item) => !item.value)
+					.map((item) => item.name)
+					.sort(),
+			).toEqual([...expected.typeOnly].sort());
+		}
+
+		const rootSource = program.getSourceFile(entryPaths.root);
+		const rootSymbol = rootSource && checker.getSymbolAtLocation(rootSource);
+		const exceptionSymbol =
+			rootSymbol &&
+			checker
+				.getExportsOfModule(rootSymbol)
+				.find((symbol) => symbol.name === "RpcExceptionCodeEnum");
+		if (exceptionSymbol === undefined)
+			throw new Error("Missing RpcExceptionCodeEnum declaration.");
+		const target = checker.getAliasedSymbol(exceptionSymbol);
+		const declaration = target.declarations?.find(ts.isEnumDeclaration);
+		if (declaration === undefined)
+			throw new Error("Missing emitted enum declaration.");
+		expect(
+			Object.fromEntries(
+				declaration.members.map((member) => [
+					member.name.getText(),
+					member.initializer !== undefined &&
+					ts.isStringLiteral(member.initializer)
+						? member.initializer.text
+						: undefined,
+				]),
+			),
+		).toEqual({
+			canceled: "canceled",
+			unavailable: "unavailable",
+			outcomeUnknown: "outcome-unknown",
+			handlerFailed: "handler-failed",
+			unknownService: "unknown-service",
+			unknownMember: "unknown-member",
+			overflow: "overflow",
+			protocol: "protocol",
+		});
+	});
+
 	it("RPC-PKG-001 RPC-PKG-004 RPC-PKG-007 RPC-PKG-009 RPC-RELEASE-003 resolve every public subpath in Node ESM", () => {
 		const consumerRoot = createConsumer("node-esm");
 		const entryPath = resolve(consumerRoot, "index.mjs");
@@ -268,25 +621,173 @@ assert.throws(
 		run(process.execPath, [entryPath], consumerRoot);
 	});
 
-	it("RPC-PKG-001 RPC-PKG-002 RPC-PKG-008 RPC-PKG-009 RPC-RELEASE-001 RPC-RELEASE-003 compile installed strict declarations", () => {
+	it("RPC-CONFORMANCE-004 RPC-CONFORMANCE-005 runs installed Protocol and Transport conformance", () => {
+		const consumerRoot = createConsumer("installed-conformance");
+		const fixtureSource = readFileSync(
+			resolve(packageRoot, "tests/conformance/test.utils.ts"),
+			"utf8",
+		)
+			.replaceAll('"../../src/conformance"', '"@husky-di/remote/conformance"')
+			.replaceAll('"../../src/index"', '"@husky-di/remote"')
+			.replaceAll(
+				'"../../src/interfaces/protocol/rpc-protocol.interface"',
+				'"@husky-di/remote/protocol"',
+			)
+			.replaceAll(
+				'"../../src/interfaces/rpc-adapter.interface"',
+				'"@husky-di/remote/transport"',
+			)
+			.replaceAll(
+				'"../../src/interfaces/rpc-connection.interface"',
+				'"@husky-di/remote/transport"',
+			)
+			.replaceAll('"../../src/protocol"', '"@husky-di/remote/protocol"');
+		writeFileSync(resolve(consumerRoot, "fixture.ts"), fixtureSource);
+		writeFileSync(
+			resolve(consumerRoot, "runner.ts"),
+			`import assert from "node:assert/strict";
+import {
+  runRpcAcceptorAdapterConformance,
+  runRpcConnectorAdapterConformance,
+  runRpcProtocolConformance,
+} from "@husky-di/remote/conformance";
+import {
+  createMemoryAcceptorFixture,
+  createMemoryConnectorFixture,
+  createMemoryProtocolFixture,
+} from "./fixture";
+
+const protocol = [];
+const connector = [];
+const acceptor = [];
+await runRpcProtocolConformance(createMemoryProtocolFixture(), { report: (result) => protocol.push(result) });
+await runRpcConnectorAdapterConformance(createMemoryConnectorFixture(), { report: (result) => connector.push(result) });
+await runRpcAcceptorAdapterConformance(createMemoryAcceptorFixture(), { report: (result) => acceptor.push(result) });
+assert.equal(protocol.length, 30);
+assert.equal(connector.length, 10);
+assert.equal(acceptor.length, 14);
+assert.equal([...protocol, ...connector, ...acceptor].every((result) => result.status === "passed"), true);
+`,
+		);
+		const bundlePath = resolve(consumerRoot, "runner.mjs");
+		run(
+			esbuildPath,
+			[
+				resolve(consumerRoot, "runner.ts"),
+				"--bundle",
+				"--format=esm",
+				"--platform=node",
+				"--packages=external",
+				`--outfile=${bundlePath}`,
+			],
+			consumerRoot,
+		);
+		run(process.execPath, [bundlePath], consumerRoot);
+	}, 30_000);
+
+	it("RPC-STREAM-001 RPC-STREAM-002 RPC-RELEASE-009 runs an installed mixed stream smoke", () => {
+		const consumerRoot = createConsumer("installed-stream");
+		const entryPath = resolve(consumerRoot, "stream.mjs");
+		writeFileSync(
+			entryPath,
+			`import assert from "node:assert/strict";
+import { Observable, Subject, firstValueFrom, of, toArray } from "rxjs";
+import { createRemoteServiceDescriptor, createRpcAcceptor, createRpcConnector } from "@husky-di/remote";
+
+const accepted = new Subject();
+const links = [];
+const acceptorAdapter = { connection$: accepted.asObservable(), async listen(signal) { signal.throwIfAborted(); } };
+const createConnectorAdapter = () => {
+  const connected = new Subject();
+  return {
+    connection$: connected.asObservable(),
+    async connect(signal) {
+      signal.throwIfAborted();
+      const connectorIngress = new Subject();
+      const acceptorIngress = new Subject();
+      let closed = false;
+      const close = async () => {
+        if (closed) return;
+        closed = true;
+        connectorIngress.complete();
+        acceptorIngress.complete();
+      };
+      const connection = (ingress, remote) => ({
+        message$: ingress.asObservable(),
+        async send(bytes) {
+          if (closed) throw new Error("closed");
+          const snapshot = bytes.slice();
+          await Promise.resolve();
+          if (!closed) remote.next(snapshot);
+        },
+        close,
+      });
+      links.push(close);
+      connected.next(connection(connectorIngress, acceptorIngress));
+      accepted.next(connection(acceptorIngress, connectorIngress));
+      connected.complete();
+    },
+  };
+};
+const descriptor = createRemoteServiceDescriptor({}, {
+  wireName: "installed.stream.v1",
+  members: {
+    add: { kind: "unary" },
+    count: { kind: "stream-method" },
+    status$: { kind: "stream-property" },
+  },
+});
+const acceptor = createRpcAcceptor({ runtimePolicy: { ackDelayMs: 1 } });
+const connector = createRpcConnector({ runtimePolicy: { ackDelayMs: 1 } });
+acceptor.expose(descriptor, {
+  add: (left, right) => left + right,
+  count(limit) {
+    return new Observable((subscriber) => {
+      let value = 0;
+      const timer = setInterval(() => {
+        subscriber.next(value++);
+        if (value === limit) { clearInterval(timer); subscriber.complete(); }
+      }, 4);
+      return () => clearInterval(timer);
+    });
+  },
+  status$: of("ready"),
+});
+await acceptor.listen(acceptorAdapter);
+await connector.connect({ adapter: createConnectorAdapter() });
+const remote = connector.peer.resolve(descriptor);
+assert.equal(Object.isFrozen(remote), true);
+assert.equal(Object.getPrototypeOf(remote), null);
+assert.equal("then" in remote, false);
+assert.equal(await remote.add(20, 22), 42);
+assert.deepEqual(await firstValueFrom(remote.count(3).pipe(toArray())), [0, 1, 2]);
+assert.equal(await firstValueFrom(remote.status$), "ready");
+await connector.shutdown();
+await acceptor.shutdown();
+`,
+		);
+		run(process.execPath, [entryPath], consumerRoot);
+	}, 30_000);
+
+	it("RPC-PKG-001 RPC-PKG-002 RPC-RELEASE-016 compiles an installed strict NodeNext .mts consumer", () => {
 		const consumerRoot = createConsumer("declarations");
 		writeFileSync(
 			resolve(consumerRoot, "tsconfig.json"),
 			JSON.stringify({
 				compilerOptions: {
 					lib: ["ES2023", "DOM"],
-					module: "ESNext",
-					moduleResolution: "Bundler",
+					module: "NodeNext",
+					moduleResolution: "NodeNext",
 					noEmit: true,
 					skipLibCheck: false,
 					strict: true,
 					types: [],
 				},
-				include: ["index.ts"],
+				include: ["index.mts"],
 			}),
 		);
 		writeFileSync(
-			resolve(consumerRoot, "index.ts"),
+			resolve(consumerRoot, "index.mts"),
 			`import { RpcAcceptorListenerStopReasonEnum, RpcCallStatusEnum, RpcCloseOutcomeEnum, RpcCloseReasonEnum, RpcConnectorReconnectionAttemptFailureStageEnum, RpcConnectorReconnectionEventTypeEnum, RpcConnectorReconnectionStopReasonEnum, RpcEventDirectionEnum, RpcEventTypeEnum, RpcException, RpcExceptionCodeEnum, RpcStateStatusEnum, RpcStreamStatusEnum, createRemoteServiceDescriptor, createRpcAcceptor, createRpcConnector, createRpcConnectorReconnection } from "@husky-di/remote";
 import { RpcCallTerminalTypeEnum, RpcIncomingCallKindEnum, RpcProtocolSessionTransitionTypeEnum } from "@husky-di/remote/protocol";
 import type {
@@ -442,9 +943,65 @@ import type { RpcConnectorImpl as DeepRpcConnectorImpl } from "@husky-di/remote/
 import type { RpcPeerResult } from "@husky-di/remote";
 // @ts-expect-error RPC-API-007 removes RemoteServiceGroup from the installed root.
 import type { RemoteServiceGroup } from "@husky-di/remote";
+// @ts-expect-error RPC-RELEASE-018 removes RpcCallDirectionEnum from the installed root.
+import { RpcCallDirectionEnum } from "@husky-di/remote";
 declare const acceptor: IRpcAcceptor;
 // @ts-expect-error RPC-API-007 removes resolveAll from the installed IRpcAcceptor.
 acceptor.resolveAll;
+// @ts-expect-error RPC-RELEASE-018 removes unknownMethod from the exact enum.
+RpcExceptionCodeEnum.unknownMethod;
+declare const runtimePolicy: IRpcProtocolRuntimePolicy;
+// @ts-expect-error RPC-RELEASE-018 removes maxPendingInvocationsPerSession.
+runtimePolicy.maxPendingInvocationsPerSession;
+`,
+		);
+		run(process.execPath, [tscPath, "-p", consumerRoot], consumerRoot);
+	});
+
+	it("RPC-RELEASE-017 RPC-RELEASE-018 compiles an installed strict NodeNext .cts require consumer", () => {
+		const consumerRoot = createConsumer("declarations-cjs", "commonjs");
+		writeFileSync(
+			resolve(consumerRoot, "tsconfig.json"),
+			JSON.stringify({
+				compilerOptions: {
+					lib: ["ES2023", "DOM", "DOM.Iterable"],
+					module: "NodeNext",
+					moduleResolution: "NodeNext",
+					noEmit: true,
+					skipLibCheck: false,
+					strict: true,
+					types: [],
+				},
+				include: ["index.cts"],
+			}),
+		);
+		writeFileSync(
+			resolve(consumerRoot, "index.cts"),
+			`import root = require("@husky-di/remote");
+import protocol = require("@husky-di/remote/protocol");
+import transport = require("@husky-di/remote/transport");
+import conformance = require("@husky-di/remote/conformance");
+
+declare const peer: root.IRpcPeer;
+declare const connection: transport.IRpcConnection;
+declare const protocolValue: protocol.IRpcProtocol;
+declare const report: conformance.RpcConformanceReport;
+void [root.createRpcConnector, protocol.createRpcProtocol,
+  conformance.runRpcProtocolConformance, peer, connection, protocolValue, report];
+// @ts-expect-error RPC-RELEASE-018 removes RpcCallDirectionEnum.
+root.RpcCallDirectionEnum;
+// @ts-expect-error RPC-RELEASE-018 removes RpcPeerResult.
+type RemovedPeerResult = root.RpcPeerResult;
+// @ts-expect-error RPC-RELEASE-018 removes RemoteServiceGroup.
+type RemovedGroup = root.RemoteServiceGroup;
+declare const acceptor: root.IRpcAcceptor;
+// @ts-expect-error RPC-RELEASE-018 removes resolveAll.
+acceptor.resolveAll;
+// @ts-expect-error RPC-RELEASE-018 removes unknownMethod.
+root.RpcExceptionCodeEnum.unknownMethod;
+declare const policy: root.IRpcProtocolRuntimePolicy;
+// @ts-expect-error RPC-RELEASE-018 removes maxPendingInvocationsPerSession.
+policy.maxPendingInvocationsPerSession;
 `,
 		);
 		run(process.execPath, [tscPath, "-p", consumerRoot], consumerRoot);

@@ -1,6 +1,6 @@
 {
 	"name": "@husky-di/remote",
-	"version": "0.0.0",
+	"version": "1.0.0",
 	"type": "module",
 	"sideEffects": false,
 	"engines": {
@@ -48,13 +48,18 @@
 		"LICENSE"
 	],
 	"scripts": {
-		"build": "rslib build",
+		"build": "rslib build && node scripts/finalize-declarations.mjs",
 		"dev": "rslib build --watch",
 		"evidence:generate": "node scripts/evidence-registry.mjs generate",
 		"evidence:graph": "node scripts/evidence-registry.mjs graph",
 		"evidence:ledger": "node scripts/evidence-registry.mjs ledger",
+		"evidence:corpus-lock": "node scripts/release-evidence.mjs corpus-lock",
+		"evidence:pack-parity": "node scripts/release-evidence.mjs pack-parity",
+		"evidence:receipt": "node scripts/generate-release-receipt.mjs",
 		"test": "pnpm run typecheck && vitest run && pnpm run test:browser",
 		"test:browser": "playwright test --config playwright.config.ts",
+		"test:release": "node scripts/release-evidence.mjs release",
+		"test:reproducible-pack": "node scripts/release-evidence.mjs compare",
 		"typecheck": "tsc -p tsconfig.json && tsc -p tests/tsconfig.json"
 	},
 	"devDependencies": {

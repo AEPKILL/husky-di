@@ -88,7 +88,7 @@ describe("Default RPC Protocol counter drain", () => {
 		session._nextOutgoingCallOrdinal = Number.MAX_SAFE_INTEGER;
 		const reservation = session.reserveInvocation({
 			service: "example.counter.v1",
-			method: "run",
+			member: "run",
 			args: normalizeRpcApplicationArguments([]),
 		});
 		if (reservation === undefined) {

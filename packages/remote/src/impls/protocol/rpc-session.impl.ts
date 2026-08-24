@@ -1200,7 +1200,7 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 		}
 		const reservation = sessionHost.reserveIncomingCall({
 			service: message.service,
-			method: message.member,
+			member: message.member,
 			args,
 		});
 		this._highestIncomingCallOrdinal = ordinal;
@@ -1232,12 +1232,7 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 							},
 				);
 				if (!this._closed) {
-					this._queueError(
-						message.callId,
-						reservation.code === RpcExceptionCodeEnum.unknownMethod
-							? RpcExceptionCodeEnum.unknownMember
-							: reservation.code,
-					);
+					this._queueError(message.callId, reservation.code);
 				}
 			};
 		}
@@ -1315,10 +1310,7 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 		}
 		const outcome: RpcCallOutcome = {
 			type: RpcCallTerminalTypeEnum.failed,
-			code:
-				message.error.code === RpcExceptionCodeEnum.unknownMember
-					? RpcExceptionCodeEnum.unknownMethod
-					: message.error.code,
+			code: message.error.code,
 		};
 		const shouldFinish = !invocation.publicFinished;
 		invocation.publicFinished = true;
@@ -2220,7 +2212,7 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 			kind: RpcWireRecordKindEnum.call,
 			callId,
 			service: request.service,
-			member: request.method,
+			member: request.member,
 			args: request.args.value,
 		}) as RpcCallMessage;
 		const sequence = this._nextOutgoingSequence;

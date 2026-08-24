@@ -261,7 +261,7 @@ describe("Default RPC Protocol retained ledger", () => {
 		for (let ordinal = 1; ordinal <= 4; ordinal += 1) {
 			const reservation = session.reserveInvocation({
 				service: "example.replay-guard.v1",
-				method: "run",
+				member: "run",
 				args: normalizeRpcApplicationArguments([ordinal]),
 			});
 			if (reservation === undefined) {
@@ -291,7 +291,7 @@ describe("Default RPC Protocol retained ledger", () => {
 		}
 		const reservation = session.reserveInvocation({
 			service: "example.replay-guard.v1",
-			method: "run",
+			member: "run",
 			args,
 		});
 		if (reservation === undefined) {
@@ -389,7 +389,7 @@ describe("Default RPC Protocol retained ledger", () => {
 		const harness = createRpcDirectSessionHarness();
 		const reservation = harness.session.reserveInvocation({
 			service: "example.outgoing-ledger.v1",
-			method: "run",
+			member: "run",
 			args: normalizeRpcApplicationArguments(["x".repeat(512 * 1024)]),
 		});
 		if (reservation === undefined) {

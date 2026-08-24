@@ -29,7 +29,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '23'
+          node-version: '23.6.0'
           registry-url: 'https://registry.npmjs.org'
 
       - name: Setup pnpm
@@ -66,12 +66,6 @@ jobs:
             echo "has_changesets=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Run tests
-        run: pnpm test
-
-      - name: Build packages
-        run: pnpm build
-
       - name: Version packages and changelog
         if: steps.pending_changesets.outputs.has_changesets == 'true'
         run: pnpm changeset:version
@@ -93,10 +87,29 @@ jobs:
           git commit -m "chore: version packages [skip ci]"
           git push origin HEAD:master
 
+      - name: Build packages
+        run: pnpm build
+
+      - name: Run tests
+        run: pnpm test
+
+      - name: Build authoritative release artifacts
+        shell: bash
+        run: |
+          node packages/remote/scripts/finalize-declarations.mjs packages/core
+          pnpm --filter @husky-di/core pack --pack-destination "$RUNNER_TEMP"
+          echo "HUSKY_CORE_TGZ=$RUNNER_TEMP/husky-di-core-1.4.1.tgz" >> "$GITHUB_ENV"
+          echo "A_TGZ=$RUNNER_TEMP/husky-di-remote-1.0.0.tgz" >> "$GITHUB_ENV"
+          echo "HUSKY_REMOTE_TGZ=$RUNNER_TEMP/husky-di-remote-1.0.0.tgz" >> "$GITHUB_ENV"
+          node packages/remote/scripts/release-evidence.mjs pack "$RUNNER_TEMP/husky-di-remote-1.0.0.tgz"
+
+      - name: Verify authoritative release artifact
+        run: pnpm --filter @husky-di/remote test:release
+
       - name: Publish to npm
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: pnpm exec changeset publish
+        run: npm publish "$A_TGZ" --access public
 
       - name: Push release tags
         shell: bash

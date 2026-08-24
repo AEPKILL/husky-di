@@ -17,7 +17,7 @@ export type PendingCallDiagnostic = {
 	readonly observationId: string;
 	readonly direction: string;
 	readonly service: string;
-	readonly method: string;
+	readonly member: string;
 	readonly startedAt: number;
 };
 
@@ -27,7 +27,7 @@ export type RpcEventDiagnostic = {
 	readonly timestamp: number;
 	readonly direction?: string;
 	readonly service?: string;
-	readonly method?: string;
+	readonly member?: string;
 	readonly outcome?: string;
 	readonly code?: string;
 };

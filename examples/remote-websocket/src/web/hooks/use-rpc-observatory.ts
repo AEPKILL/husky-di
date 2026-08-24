@@ -66,7 +66,7 @@ function toDiagnostic(event: RpcEvent, timestamp: number): RpcEventDiagnostic {
 		timestamp,
 		direction: "direction" in event ? event.direction : undefined,
 		service: "service" in event ? event.service : undefined,
-		method: "method" in event ? event.method : undefined,
+		member: "member" in event ? event.member : undefined,
 		outcome: "outcome" in event ? event.outcome : undefined,
 		code: "code" in event ? event.code : undefined,
 	};

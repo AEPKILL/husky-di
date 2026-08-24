@@ -4,7 +4,8 @@ This example runs a React Web application with TanStack Query, Tailwind CSS, and
 local shadcn/ui components against a Hono-powered Node server over a real
 WebSocket connection. Both sides expose a service and call the other side:
 
-- **Web → Node:** the page calls the Node greeting service.
+- **Web → Node:** the page calls unary greeting members and subscribes to the
+  cold `clock$` Observable property.
 - **Node → Web:** Node calls the browser display service and prints its reply.
 
 The observatory visualizes the public Connector, Peer, and Acceptor states; a
@@ -12,7 +13,9 @@ live topology; current `pendingCalls` derived from call lifecycle events; Node
 diagnostic snapshots; and the recent RPC event stream. The playground can add
 handler latency, call the separate cancelable `greetCancelable` method, and
 launch overlapping calls so the pending ledger remains visible long enough to
-inspect.
+inspect. The `members` Descriptor mixes ordinary/cancelable unary routes with
+the stream property; every reconnecting UI subscription owns an independent
+single-peer stream.
 
 ## Structure
 

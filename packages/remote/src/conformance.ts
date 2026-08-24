@@ -15,7 +15,7 @@
  * - `protocol.outgoing.reserve-commit-start-sink`
  * - `protocol.incoming.resource-disposition`
  * - `protocol.incoming.semantic-unknown-service`
- * - `protocol.incoming.semantic-unknown-method`
+ * - `protocol.incoming.semantic-unknown-member`
  * - `protocol.incoming.handler-dispositions-permit`
  * - `protocol.fault.active-session-scope`
  * - `protocol.counter.first-call-drains`

@@ -8,6 +8,7 @@
  */
 
 import { spawnSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { queryObjects } from "node:v8";
@@ -752,6 +753,19 @@ describe("cold Topology Owner factories", () => {
 				"LICENSE",
 			],
 		});
+	});
+
+	it("RPC-DOC-001 RPC-SPI-021 documents the final mixed member contract", () => {
+		const specification = readFileSync(
+			fileURLToPath(new URL("../docs/SPECIFICATION.md", import.meta.url)),
+			"utf8",
+		);
+		expect(specification).toContain("**Status:** Normative");
+		expect(specification).toContain(
+			"bidirectional mixed unary and Observable\nstream RPC Framework",
+		);
+		expect(specification).toContain("readonly member: string;");
+		expect(specification).not.toContain("readonly method: string;");
 	});
 
 	it("RPC-API-001 RPC-SPI-001 constructs only the selected custom Protocol role", () => {
@@ -3659,7 +3673,7 @@ describe("exposure registries and remote facades", () => {
 		});
 		const call = sessionHost.reserveIncomingCall({
 			service: "missing.service",
-			method: "missing",
+			member: "missing",
 			args,
 		});
 
@@ -5293,7 +5307,6 @@ describe("custom Protocol outgoing invocations", () => {
 			outcomeUnknown: "outcome-unknown",
 			handlerFailed: "handler-failed",
 			unknownService: "unknown-service",
-			unknownMethod: "unknown-method",
 			unknownMember: "unknown-member",
 			overflow: "overflow",
 			protocol: "protocol",
@@ -5518,7 +5531,7 @@ describe("custom Protocol outgoing invocations", () => {
 		let request:
 			| {
 					readonly service: string;
-					readonly method: string;
+					readonly member: string;
 					readonly args: { readonly value: readonly unknown[] };
 			  }
 			| undefined;
@@ -5551,7 +5564,7 @@ describe("custom Protocol outgoing invocations", () => {
 		const result = connector.peer.resolve(descriptor).add(1, 2);
 
 		expect(request?.service).toBe("example.calculator.v1");
-		expect(request?.method).toBe("add");
+		expect(request?.member).toBe("add");
 		expect(request?.args.value).toEqual([1, 2]);
 		expect(startCalls).toBe(1);
 		expect(releaseCalls).toBe(0);
@@ -5564,7 +5577,7 @@ describe("custom Protocol outgoing invocations", () => {
 				type: "call-started",
 				direction: "outgoing",
 				service: "example.calculator.v1",
-				method: "add",
+				member: "add",
 			},
 		]);
 
@@ -5584,7 +5597,7 @@ describe("custom Protocol outgoing invocations", () => {
 				type: "call-finished",
 				direction: "outgoing",
 				service: "example.calculator.v1",
-				method: "add",
+				member: "add",
 				outcome: "fulfilled",
 			},
 		]);
@@ -5931,7 +5944,7 @@ describe("custom Protocol incoming calls", () => {
 			await connectProtocolSession(session);
 		const reserved = sessionHost.reserveIncomingCall({
 			service: "unknown.service",
-			method: "unknownMethod",
+			member: "unknownMember",
 			args: host.normalizeApplicationArguments([]),
 		});
 		if (reserved?.kind !== "unknown") {
@@ -5941,7 +5954,7 @@ describe("custom Protocol incoming calls", () => {
 
 		call.finish({
 			type: RpcCallTerminalTypeEnum.failed,
-			code: RpcExceptionCodeEnum.unknownMethod,
+			code: RpcExceptionCodeEnum.unknownMember,
 		});
 
 		expect(forceCalls).toBe(1);
@@ -5973,7 +5986,7 @@ describe("custom Protocol incoming calls", () => {
 		});
 		const reserved = sessionHost.reserveIncomingCall({
 			service: "example.deferred.v1",
-			method: "run",
+			member: "run",
 			args: host.normalizeApplicationArguments([1]),
 		});
 		if (reserved?.kind !== "handler") {
@@ -6009,7 +6022,7 @@ describe("custom Protocol incoming calls", () => {
 
 		const reservation = sessionHost.reserveIncomingCall({
 			service: "attacker.service",
-			method: "attackerMethod",
+			member: "attackerMember",
 			args: { value: [], weight: 2 } as never,
 		});
 
@@ -6042,7 +6055,7 @@ describe("custom Protocol incoming calls", () => {
 			await connectProtocolSession(session);
 		const request = Object.assign(Object.create(null), {
 			service: "attacker.service",
-			method: "attackerMethod",
+			member: "attackerMember",
 			args: host.normalizeApplicationArguments([]),
 		}) as Record<string, unknown>;
 		request.__proto__ = 0;
@@ -6089,7 +6102,7 @@ describe("custom Protocol incoming calls", () => {
 
 		const reserved = sessionHost.reserveIncomingCall({
 			service: "example.calculator.v1",
-			method: "add",
+			member: "add",
 			args: host.normalizeApplicationArguments([2, 3]),
 		});
 		expect(reserved?.kind).toBe("handler");
@@ -6122,19 +6135,19 @@ describe("custom Protocol incoming calls", () => {
 				type: "call-started",
 				direction: "incoming",
 				service: "example.calculator.v1",
-				method: "add",
+				member: "add",
 			},
 			{
 				type: "call-finished",
 				direction: "incoming",
 				service: "example.calculator.v1",
-				method: "add",
+				member: "add",
 				outcome: "fulfilled",
 			},
 		]);
 	});
 
-	it("RPC-SPI-006 RPC-SPI-007 RPC-EVENT-001 RPC-EVENT-002 RPC-EVENT-003 emits safe correlated unknown-service and unknown-method pairs", async () => {
+	it("RPC-CALL-014 RPC-SPI-021 RPC-EVENT-022 emits safe correlated unknown-service and unknown-member pairs", async () => {
 		const session: IRpcProtocolSession = {
 			reserveInvocation: () => undefined,
 			reserveStream: () => undefined,
@@ -6151,7 +6164,7 @@ describe("custom Protocol incoming calls", () => {
 
 		const unknownService = sessionHost.reserveIncomingCall({
 			service: "attacker.supplied.service",
-			method: "attackerMethod",
+			member: "attackerMember",
 			args,
 		});
 		expect(unknownService).toMatchObject({
@@ -6166,21 +6179,21 @@ describe("custom Protocol incoming calls", () => {
 			code: RpcExceptionCodeEnum.unknownService,
 		});
 
-		const unknownMethod = sessionHost.reserveIncomingCall({
+		const unknownMember = sessionHost.reserveIncomingCall({
 			service: "example.calculator.v1",
-			method: "attackerMethod",
+			member: "attackerMember",
 			args,
 		});
-		expect(unknownMethod).toMatchObject({
+		expect(unknownMember).toMatchObject({
 			kind: "unknown",
-			code: "unknown-method",
+			code: "unknown-member",
 		});
-		if (unknownMethod?.kind !== "unknown") {
-			throw new Error("Expected unknown-method reservation.");
+		if (unknownMember?.kind !== "unknown") {
+			throw new Error("Expected unknown-member reservation.");
 		}
-		unknownMethod.reservation.commit().finish({
+		unknownMember.reservation.commit().finish({
 			type: RpcCallTerminalTypeEnum.failed,
-			code: RpcExceptionCodeEnum.unknownMethod,
+			code: RpcExceptionCodeEnum.unknownMember,
 		});
 
 		const observations = events.filter(
@@ -6190,14 +6203,14 @@ describe("custom Protocol incoming calls", () => {
 		expect(observations).toHaveLength(4);
 		expect(observations[0]).toMatchObject({ direction: "incoming" });
 		expect(observations[0]).not.toHaveProperty("service");
-		expect(observations[0]).not.toHaveProperty("method");
+		expect(observations[0]).not.toHaveProperty("member");
 		expect(observations[1]).toMatchObject({ code: "unknown-service" });
 		expect(observations[2]).toMatchObject({
 			direction: "incoming",
 			service: "example.calculator.v1",
 		});
-		expect(observations[2]).not.toHaveProperty("method");
-		expect(observations[3]).toMatchObject({ code: "unknown-method" });
+		expect(observations[2]).not.toHaveProperty("member");
+		expect(observations[3]).toMatchObject({ code: "unknown-member" });
 		expect(connector.peer.state).toEqual({ status: "connected" });
 		await connector.close();
 	});
@@ -6230,7 +6243,7 @@ describe("custom Protocol incoming calls", () => {
 		const reserve = (value: number) => {
 			const reservation = sessionHost.reserveIncomingCall({
 				service: "example.deferred.v1",
-				method: "run",
+				member: "run",
 				args: host.normalizeApplicationArguments([value]),
 			});
 			if (reservation?.kind !== "handler") {
@@ -6286,7 +6299,7 @@ describe("custom Protocol incoming calls", () => {
 
 		const request = {
 			service: "unknown.service",
-			method: "unknownMethod",
+			member: "unknownMember",
 			args,
 		};
 		const first = sessionHost.reserveIncomingCall(request);
@@ -6328,7 +6341,7 @@ describe("custom Protocol incoming calls", () => {
 		});
 		const reserved = sessionHost.reserveIncomingCall({
 			service: "example.deferred.v1",
-			method: "run",
+			member: "run",
 			args: host.normalizeApplicationArguments([1]),
 		});
 		if (reserved?.kind !== "handler") {

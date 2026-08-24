@@ -43,7 +43,7 @@ export type RpcCallFailure = Exclude<
 
 export type RpcUnknownCallFailure = Extract<
 	RpcCallFailure,
-	RpcExceptionCodeEnum.unknownService | RpcExceptionCodeEnum.unknownMethod
+	RpcExceptionCodeEnum.unknownService | RpcExceptionCodeEnum.unknownMember
 >;
 
 export type RpcIncomingFailure = Extract<
@@ -133,7 +133,7 @@ export interface IRpcProtocolHost {
 
 export interface IRpcProtocolInvocationRequest {
 	readonly service: string;
-	readonly method: string;
+	readonly member: string;
 	readonly args: IRpcApplicationArgumentsSnapshot;
 }
 
@@ -271,7 +271,7 @@ export interface IRpcProtocolSession {
 
 export interface IRpcProtocolIncomingCallRequest {
 	readonly service: string;
-	readonly method: string;
+	readonly member: string;
 	readonly args: IRpcApplicationArgumentsSnapshot;
 }
 

@@ -451,8 +451,8 @@ export class RpcPeerImpl implements IRpcPeerRuntime {
 		const service = getRemoteServiceDescriptorData(descriptor).wireName;
 		return createRpcFacade(
 			descriptor,
-			(method, cancelable, actualArguments) =>
-				this.#invoke(service, method, cancelable, actualArguments),
+			(member, cancelable, actualArguments) =>
+				this.#invoke(service, member, cancelable, actualArguments),
 			(member, kind, actualArguments, subscriber) =>
 				this.#subscribe(service, member, kind, actualArguments, subscriber),
 		);
@@ -759,7 +759,7 @@ export class RpcPeerImpl implements IRpcPeerRuntime {
 
 	#invoke(
 		service: string,
-		method: string,
+		member: string,
 		cancelable: boolean,
 		actualArguments: readonly unknown[],
 	): Promise<unknown> {
@@ -780,7 +780,7 @@ export class RpcPeerImpl implements IRpcPeerRuntime {
 		);
 		const reservation = this.reserveOutgoingProtocolInvocation(
 			service,
-			method,
+			member,
 			args,
 		);
 		if (reservation === undefined) {
@@ -801,10 +801,10 @@ export class RpcPeerImpl implements IRpcPeerRuntime {
 		return invocation.result.finally(removeAbortListener);
 	}
 
-	/** Package-private all-or-none group reservation seam. */
+	/** Package-private unary invocation reservation seam. */
 	reserveOutgoingProtocolInvocation(
 		service: string,
-		method: string,
+		member: string,
 		args: IRpcApplicationArgumentsSnapshot,
 	): IRpcPeerInvocationReservation | undefined {
 		const session = this.#session;
@@ -827,7 +827,7 @@ export class RpcPeerImpl implements IRpcPeerRuntime {
 
 		let reservation: ReturnType<IRpcProtocolSession["reserveInvocation"]>;
 		try {
-			reservation = session.reserveInvocation({ service, method, args });
+			reservation = session.reserveInvocation({ service, member, args });
 		} catch (error) {
 			applicationWorkReservation.release();
 			throw this.#protocolFailure(error);
@@ -854,7 +854,7 @@ export class RpcPeerImpl implements IRpcPeerRuntime {
 					reservation,
 					applicationWorkReservation,
 					service,
-					method,
+					member,
 				);
 			},
 			release: () => {
@@ -881,7 +881,7 @@ export class RpcPeerImpl implements IRpcPeerRuntime {
 		>,
 		applicationWorkReservation: IRpcApplicationWorkReservation,
 		service: string,
-		method: string,
+		member: string,
 	): IRpcPeerCommittedInvocation {
 		const result = Promise.withResolvers<unknown>();
 		const observationId = createObservationId();
@@ -927,7 +927,7 @@ export class RpcPeerImpl implements IRpcPeerRuntime {
 					peer: this,
 					direction: RpcEventDirectionEnum.outgoing,
 					service,
-					method,
+					member,
 					outcome: RpcCallStatusEnum.fulfilled,
 					durationMs,
 				});
@@ -945,7 +945,7 @@ export class RpcPeerImpl implements IRpcPeerRuntime {
 				peer: this,
 				direction: RpcEventDirectionEnum.outgoing,
 				service,
-				method,
+				member,
 				outcome: RpcCallStatusEnum.rejected,
 				code: outcome.code,
 				durationMs,
@@ -971,7 +971,7 @@ export class RpcPeerImpl implements IRpcPeerRuntime {
 			peer: this,
 			direction: RpcEventDirectionEnum.outgoing,
 			service,
-			method,
+			member,
 		});
 		published = true;
 		if (queuedOutcome !== undefined) {
@@ -1057,10 +1057,10 @@ export class RpcPeerImpl implements IRpcPeerRuntime {
 				applicationWorkReservation,
 			);
 		}
-		const route = exposure.members.get(request.method);
+		const route = exposure.members.get(request.member);
 		if (route === undefined || route.kind !== "unary") {
 			return this.#reserveUnknownIncoming(
-				RpcExceptionCodeEnum.unknownMethod,
+				RpcExceptionCodeEnum.unknownMember,
 				charge,
 				retainedBytesReservation,
 				applicationWorkReservation,
@@ -1448,7 +1448,7 @@ export class RpcPeerImpl implements IRpcPeerRuntime {
 						direction: RpcEventDirectionEnum.incoming,
 						service: service as string,
 						outcome: RpcCallStatusEnum.rejected,
-						code: RpcExceptionCodeEnum.unknownMethod,
+						code: RpcExceptionCodeEnum.unknownMember,
 						durationMs,
 					});
 				}
@@ -1501,7 +1501,7 @@ export class RpcPeerImpl implements IRpcPeerRuntime {
 	}
 
 	#reserveHandlerIncoming(
-		{ args, method }: IRpcProtocolIncomingCallRequest,
+		{ args, member }: IRpcProtocolIncomingCallRequest,
 		service: string,
 		route: RpcHandlerRoute,
 		charge: number,
@@ -1559,7 +1559,7 @@ export class RpcPeerImpl implements IRpcPeerRuntime {
 					peer: this,
 					direction: RpcEventDirectionEnum.incoming as const,
 					service,
-					method,
+					member,
 					durationMs: observationDuration(startedAt),
 				};
 				// Successful handler outcomes commit returned payload or void.
@@ -1685,7 +1685,7 @@ export class RpcPeerImpl implements IRpcPeerRuntime {
 						peer: this,
 						direction: RpcEventDirectionEnum.incoming,
 						service,
-						method,
+						member,
 					});
 					removeQueuedJob = this.#handlerScheduler.enqueue(this, runHandler);
 					return call;

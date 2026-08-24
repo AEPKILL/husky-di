@@ -1,12 +1,13 @@
 # Husky DI Remote RPC Specification
 
 **Version:** 1.0.0  
-**Status:** Normative proposal  
+**Status:** Normative
 **Profile:** `husky-di-rpc/1`
 
 ## 1. Scope
 
-This specification defines the v1 contract of `@husky-di/remote`: a bidirectional unary RPC Framework,
+This specification defines the v1 contract of `@husky-di/remote`: a bidirectional mixed unary and Observable
+stream RPC Framework,
 its caller-facing TypeScript API, its replaceable Protocol and Transport Adapter seams, and the built-in
 recoverable JSON Protocol profile. It also defines the evidence required to claim conformance.
 
@@ -15,7 +16,8 @@ The key words **MUST**, **MUST NOT**, **REQUIRED**, **SHOULD**, and **MAY** are 
 a stable requirement identifier such as `RPC-CALL-004`. TypeScript shown in this document is normative for
 observable shape; helper types used only to express inference may remain unexported.
 
-v1 supports bidirectional unary calls. Notifications, streaming, automatic Container integration, business
+v1 supports bidirectional unary calls, stream methods, and readonly stream properties. Notifications, input
+streaming, automatic Container integration, business
 authentication/authorization/rate limiting, middleware that rewrites calls, cross-process persistent Session
 Recovery, and exactly-once external side effects are outside this specification.
 
@@ -1403,7 +1405,7 @@ ledger or return `undefined`; its successful frozen reservation **MUST** release
 ```typescript
 export interface IRpcProtocolInvocationRequest {
   readonly service: string;
-  readonly method: string;
+  readonly member: string;
   readonly args: IRpcApplicationArgumentsSnapshot;
 }
 
@@ -1429,7 +1431,7 @@ export interface IRpcProtocolInvocationSink {
 
 export interface IRpcProtocolIncomingCallRequest {
   readonly service: string;
-  readonly method: string;
+  readonly member: string;
   readonly args: IRpcApplicationArgumentsSnapshot;
 }
 
@@ -3637,22 +3639,22 @@ single-peer, stream, telemetry, or another live path **MUST NOT** be rejected so
 
 ## Appendix A. Requirement-to-evidence matrix
 
-The exhaustive one-row-per-ID matrix is [REQUIREMENTS.md](REQUIREMENTS.md). `Status` is `planned` until the
-named evidence exists; publication requires every row to become `verified`. This summary groups the same rows
-only for navigation.
+The exhaustive one-row-per-ID matrix is [REQUIREMENTS.md](REQUIREMENTS.md). Every active row is verified by the
+content-bound release receipt and immutable Case/Evidence registries. This summary groups the same rows only for
+navigation.
 
-| Requirement families | Applies to | Minimum evidence | Planned repository location | Status |
+| Requirement families | Applies to | Minimum evidence | Repository location | Status |
 | --- | --- | --- | --- | --- |
-| `RPC-BASE`, `RPC-API`, `RPC-STATE`, `RPC-LIFE` | Framework | RT, TY | `tests/specification.test.ts`, `tests/types/` | planned |
-| `RPC-PKG`, `RPC-RELEASE` | Distribution | PK, BR, TY | `tests/package/`, `tests/browser/` | planned |
-| `RPC-VALUE`, `RPC-DESC`, `RPC-CALL`, `RPC-GROUP`, `RPC-EVENT` | Framework + all Protocols | RT, TY, PC | `tests/specification.test.ts`, `tests/conformance/` | planned |
-| `RPC-START`, `RPC-TRANSPORT` | Framework + Adapters | AC, RT, IR | `tests/conformance/`, Adapter package tests | planned |
-| `RPC-SPI` | Custom/default Protocol | PC, TY, RT | `tests/conformance/`, `tests/types/` | planned |
-| `RPC-WIRE`, `RPC-ACK`, `RPC-LEDGER` | Default Protocol | RW, TX, RT | `wire/husky-di-rpc-1/`, `tests/wire/` | planned |
-| `RPC-SESSION`, `RPC-RECOVERY`, `RPC-SEC`, `RPC-VALID` | Default Protocol / secure deployment | TX, KA, RW, BR | `wire/husky-di-rpc-1/`, `tests/browser/` | planned |
-| `RPC-RESOURCE`, `RPC-POLICY`, `RPC-SCHEDULE`, `RPC-TIME`, `RPC-COUNTER` | Framework + Protocol | RP, RT, PC | `tests/resources/`, `tests/specification.test.ts` | planned |
-| `RPC-SHUTDOWN`, `RPC-CLOSE`, `RPC-CLEANUP` | Framework + Protocol + Adapter | RT, TX, RP | `tests/specification.test.ts`, `tests/recovery/` | planned |
-| `RPC-EVIDENCE`, `RPC-CONFORMANCE`, `RPC-CORPUS` | Distribution | matrix lint, PC, AC, RW, TX, KA | `tests/conformance/`, `wire/husky-di-rpc-1/` | planned |
+| `RPC-BASE`, `RPC-API`, `RPC-STATE`, `RPC-LIFE` | Framework | RT, TY | `tests/specification.test.ts`, `tests/types/` | verified |
+| `RPC-PKG`, `RPC-RELEASE` | Distribution | PK, BR, TY | `tests/package/`, `tests/browser/` | verified |
+| `RPC-VALUE`, `RPC-DESC`, `RPC-CALL`, `RPC-EVENT` | Framework + all Protocols | RT, TY, PC | `tests/specification.test.ts`, `tests/conformance/` | verified |
+| `RPC-START`, `RPC-TRANSPORT` | Framework + Adapters | AC, RT, IR | `tests/conformance/`, Adapter package tests | verified |
+| `RPC-SPI` | Custom/default Protocol | PC, TY, RT | `tests/conformance/`, `tests/types/` | verified |
+| `RPC-WIRE`, `RPC-ACK`, `RPC-LEDGER` | Default Protocol | RW, TX, RT | `wire/husky-di-rpc-1/`, `tests/wire/` | verified |
+| `RPC-SESSION`, `RPC-RECOVERY`, `RPC-SEC`, `RPC-VALID` | Default Protocol / secure deployment | TX, KA, RW, BR | `wire/husky-di-rpc-1/`, `tests/browser/` | verified |
+| `RPC-RESOURCE`, `RPC-POLICY`, `RPC-SCHEDULE`, `RPC-TIME`, `RPC-COUNTER` | Framework + Protocol | RP, RT, PC | `tests/resources/`, `tests/specification.test.ts` | verified |
+| `RPC-SHUTDOWN`, `RPC-CLOSE`, `RPC-CLEANUP` | Framework + Protocol + Adapter | RT, TX, RP | `tests/specification.test.ts`, `tests/recovery/` | verified |
+| `RPC-EVIDENCE`, `RPC-CONFORMANCE`, `RPC-CORPUS` | Distribution | matrix lint, PC, AC, RW, TX, KA | `tests/conformance/`, `wire/husky-di-rpc-1/` | verified |
 
 ## Appendix B. Non-normative implementation boundary
 

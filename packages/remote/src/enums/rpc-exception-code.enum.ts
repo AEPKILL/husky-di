@@ -10,7 +10,6 @@ export enum RpcExceptionCodeEnum {
 	outcomeUnknown = "outcome-unknown",
 	handlerFailed = "handler-failed",
 	unknownService = "unknown-service",
-	unknownMethod = "unknown-method",
 	unknownMember = "unknown-member",
 	overflow = "overflow",
 	protocol = "protocol",

@@ -273,7 +273,7 @@ describe("Default RPC Protocol remaining requirements", () => {
 		const { session } = createRpcDirectSessionHarness();
 		const request = {
 			service: "example.reentrant-reclamation.v1",
-			method: "run",
+			member: "run",
 			args: normalizeRpcApplicationArguments([]),
 		};
 		const outcomes: unknown[] = [];
@@ -451,7 +451,7 @@ describe("Default RPC Protocol remaining requirements", () => {
 		peer.expose(descriptor, { run: async (value) => value });
 		const reservation = peer.reserveIncomingProtocolCall({
 			service: "example.terminal-queued-handler.v1",
-			method: "run",
+			member: "run",
 			args: normalizeRpcApplicationArguments(["payload"]),
 		});
 		if (reservation?.kind !== "handler") {

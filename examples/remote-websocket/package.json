@@ -25,6 +25,7 @@
 		"hono": "^4.13.3",
 		"react": "^19.2.7",
 		"react-dom": "^19.2.7",
+		"rxjs": "^7.8.2",
 		"tailwind-merge": "^3.6.0"
 	},
 	"devDependencies": {

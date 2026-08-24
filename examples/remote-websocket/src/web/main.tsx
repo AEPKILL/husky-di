@@ -60,9 +60,18 @@ function App() {
 	const [greetingController, setGreetingController] =
 		useState<AbortController>();
 	const [nodeMessage, setNodeMessage] = useState("Waiting for Node…");
+	const [serverClock, setServerClock] = useState("Waiting for stream…");
 	const { connectorState, peerState, pendingCalls, events } =
 		useRpcObservatory(connector);
 	const connected = peerState.status === RpcStateStatusEnum.connected;
+	useEffect(() => {
+		if (!connected) return;
+		const subscription = greetingService.clock$.subscribe({
+			next: setServerClock,
+			error: () => setServerClock("Stream unavailable"),
+		});
+		return () => subscription.unsubscribe();
+	}, [connected]);
 	const peerStatusPresentation = getRpcPeerStatusPresentation(peerState.status);
 	const nodeDiagnostics = useQuery({
 		queryKey: ["node-diagnostics"],
@@ -349,7 +358,7 @@ function App() {
 									className="rounded-lg border border-primary/20 bg-primary/5 p-4 font-mono text-sm text-primary"
 									data-testid="node-message"
 								>
-									{nodeMessage}
+									{nodeMessage} · {serverClock}
 								</p>
 							</CardContent>
 						</Card>
@@ -460,7 +469,7 @@ function PendingCalls({
 								<Badge variant="warning">{call.direction}</Badge>
 								<div className="min-w-0 font-mono text-xs">
 									<p className="truncate">{call.service}</p>
-									<p className="text-muted-foreground">.{call.method}()</p>
+									<p className="text-muted-foreground">.{call.member}()</p>
 								</div>
 								<span className="font-mono text-xs tabular-nums text-warning">
 									{Date.now() - call.startedAt} ms
@@ -499,7 +508,7 @@ function EventStream({
 								<p className="truncate">
 									{event.direction === undefined
 										? "topology"
-										: `${event.direction} · ${event.service ?? "unknown"}.${event.method ?? "unknown"}`}
+										: `${event.direction} · ${event.service ?? "unknown"}.${event.member ?? "unknown"}`}
 								</p>
 								<p className="text-muted-foreground">{getEventDetail(event)}</p>
 							</div>

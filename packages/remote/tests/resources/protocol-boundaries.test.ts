@@ -414,7 +414,7 @@ describe("Default RPC Protocol resource boundaries", () => {
 			const reserve = (stringBytes: number) =>
 				session.reserveInvocation({
 					service: "example.boundary.v1",
-					method: "run",
+					member: "run",
 					args: normalizeRpcApplicationArguments(["x".repeat(stringBytes)]),
 				});
 			const first = reserve(524_028);
@@ -436,7 +436,7 @@ describe("Default RPC Protocol resource boundaries", () => {
 		const reserve = () =>
 			session.reserveInvocation({
 				service: "example.boundary.v1",
-				method: "run",
+				member: "run",
 				args: normalizeRpcApplicationArguments([]),
 			});
 		const limitMinusOne = reserve();
@@ -456,7 +456,7 @@ describe("Default RPC Protocol resource boundaries", () => {
 		for (let index = 0; index < 3; index += 1) {
 			const reservation = session.reserveInvocation({
 				service: "example.pending-cancel.v1",
-				method: "run",
+				member: "run",
 				args: normalizeRpcApplicationArguments(["x".repeat(1024)]),
 			});
 			if (reservation === undefined) {

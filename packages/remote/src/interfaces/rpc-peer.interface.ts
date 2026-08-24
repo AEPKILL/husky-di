@@ -34,7 +34,7 @@ export interface IRpcPeerRuntime extends IRpcPeer {
 	completeState(): void;
 	reserveOutgoingProtocolInvocation(
 		service: string,
-		method: string,
+		member: string,
 		args: IRpcApplicationArgumentsSnapshot,
 	): IRpcPeerInvocationReservation | undefined;
 	reserveIncomingProtocolCall(

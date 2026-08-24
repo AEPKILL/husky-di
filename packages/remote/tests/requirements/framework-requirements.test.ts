@@ -394,7 +394,7 @@ describe("Framework requirement evidence", () => {
 		implementation.echo = ({ secret }) => ({ secret: `replacement:${secret}` });
 		const reservation = sessionHost.reserveIncomingCall({
 			service: "example.requirements.v1",
-			method: "echo",
+			member: "echo",
 			args: harness.host.normalizeApplicationArguments([{ secret: "value" }]),
 		});
 		expect(reservation?.kind).toBe("handler");
@@ -489,7 +489,7 @@ describe("Framework requirement evidence", () => {
 		expect(
 			futureSessionHost?.reserveIncomingCall({
 				service: "example.requirements.v1",
-				method: "wait",
+				member: "wait",
 				args: host.normalizeApplicationArguments([]),
 			})?.kind,
 		).toBe("handler");
@@ -502,7 +502,7 @@ describe("Framework requirement evidence", () => {
 		expect(
 			currentSessionHost?.reserveIncomingCall({
 				service: "example.requirements.v1",
-				method: "wait",
+				member: "wait",
 				args: host.normalizeApplicationArguments([]),
 			})?.kind,
 		).toBe("handler");
@@ -680,7 +680,7 @@ describe("Framework requirement evidence", () => {
 		};
 		const unknownCallRequest = {
 			service: "missing.resource.service",
-			method: "run",
+			member: "run",
 			args: host.normalizeApplicationArguments([]),
 		};
 
@@ -729,7 +729,7 @@ describe("Framework requirement evidence", () => {
 		const reserveRun = (value: string) =>
 			firstSession.reserveIncomingCall({
 				service: "example.framework-scheduler.v1",
-				method: "run",
+				member: "run",
 				args: host.normalizeApplicationArguments([value]),
 			});
 
@@ -856,7 +856,7 @@ describe("Framework requirement evidence", () => {
 		}
 		expect(Reflect.ownKeys(requests[0] ?? {})).toEqual([
 			"service",
-			"method",
+			"member",
 			"args",
 		]);
 		await harness.connector.close();

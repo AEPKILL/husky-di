@@ -73,6 +73,7 @@ describe("Connector Reconnection composition", () => {
 		}
 		const session: IRpcProtocolSession = {
 			reserveInvocation: () => undefined,
+			reserveStream: () => undefined,
 			forceClose() {},
 		};
 		let sessionHost: IRpcProtocolSessionHost | undefined;

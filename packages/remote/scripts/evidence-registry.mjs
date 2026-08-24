@@ -6,7 +6,7 @@
 
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -20,6 +20,7 @@ const supportManifestPath = resolve(
 	".scratch/remote-observable-streams/support/legacy-preserved-requirement-boundaries.json",
 );
 const evidenceRoot = resolve(packageRoot, "evidence");
+const executionResultsPath = resolve(evidenceRoot, "execution-results.json");
 const requirementPattern = /^RPC-[A-Z]+-[0-9]{3}$/u;
 const supportManifestSha256 =
 	"3b11a2432026fc4dc0833c1425041a4caf1900dea1a0afc7bfe7f3247f550b66";
@@ -489,6 +490,7 @@ export function buildRegistries({
 	supportManifest,
 	baselineSpecificationBytes,
 	legacyVerdicts,
+	executionResults,
 }) {
 	const retiredIds = Object.keys(RETIRED_REQUIREMENT_REPLACEMENTS);
 	const blocks = parseSpecificationBlocks(specificationBytes, retiredIds);
@@ -567,6 +569,10 @@ export function buildRegistries({
 	const canonical = [];
 	const evidence = [];
 	const matrix = [];
+	const executionById = new Map(
+		(executionResults?.commands ?? []).map((command) => [command.id, command]),
+	);
+	const executionCases = new Map();
 	for (const requirement of active) {
 		const specCase = {
 			id: requirement.specificationCaseId,
@@ -583,6 +589,26 @@ export function buildRegistries({
 			status: "verified",
 		};
 		const profile = getVerificationProfile(requirement.id, new Set(preservedIds));
+		const installedPackageRequirement =
+			requirement.id.startsWith("RPC-PKG-") ||
+			requirement.id.startsWith("RPC-MIGRATION-") ||
+			/^RPC-RELEASE-(?:007|008|010|013|014|015|016|017|018|021)$/u.test(
+				requirement.id,
+			);
+		const executionId =
+			requirement.id === "RPC-RELEASE-009"
+				? "browser"
+				: profile.prefix === "raw"
+					? "corpus"
+					: installedPackageRequirement ||
+						(profile.prefix !== "package" && profile.prefix !== "doc")
+						? "installed-node"
+						: "pack";
+		const execution = executionById.get(executionId);
+		const executionSelector = `result:${executionId}`;
+		const verified =
+			executionResults?.artifactSha256 !== undefined &&
+			execution?.status === "passed";
 		const verifyCase = {
 			id: requirement.verificationCaseId,
 			classification: "canonical",
@@ -591,8 +617,8 @@ export function buildRegistries({
 			input: { requirementId: requirement.id },
 			expected: requirement.proposition,
 			failureOwner: profile.owner,
-			evidence: [],
-			status: "planned",
+			evidence: verified ? [executionSelector] : [],
+			status: verified ? "verified" : "planned",
 		};
 		canonical.push(specCase, verifyCase);
 		evidence.push({
@@ -608,9 +634,27 @@ export function buildRegistries({
 			runnerDigest,
 			status: "verified",
 		});
+		if (verified) {
+			const cases = executionCases.get(executionId) ?? [];
+			cases.push(verifyCase.id);
+			executionCases.set(executionId, cases);
+		}
 		matrix.push({
 			requirementId: requirement.id,
 			cases: [specCase.id, verifyCase.id],
+		});
+	}
+	for (const [executionId, cases] of executionCases) {
+		const execution = executionById.get(executionId);
+		evidence.push({
+			selector: `result:${executionId}`,
+			class: executionId,
+			cases,
+			input: { artifactSha256: executionResults.artifactSha256 },
+			expected: `The ${executionId} command completed against the authoritative artifact.`,
+			artifactDigest: executionResults.artifactSha256,
+			runnerDigest: execution.outputSha256 ?? runnerDigest,
+			status: "verified",
 		});
 	}
 
@@ -652,6 +696,7 @@ export function buildRegistries({
 export function generateRegistries({
 	inputSpecificationPath = specificationPath,
 	inputSupportManifestPath = supportManifestPath,
+	inputExecutionResultsPath = executionResultsPath,
 	outputDirectory = evidenceRoot,
 } = {}) {
 	const supportManifestBytes = readFileSync(inputSupportManifestPath);
@@ -672,6 +717,9 @@ export function generateRegistries({
 		supportManifest,
 		baselineSpecificationBytes,
 		legacyVerdicts: buildLegacyVerdicts(supportManifest.baselineCommit),
+		executionResults: existsSync(inputExecutionResultsPath)
+			? JSON.parse(readFileSync(inputExecutionResultsPath, "utf8"))
+			: undefined,
 	});
 
 	// All validation above is intentionally complete before the first output byte.
