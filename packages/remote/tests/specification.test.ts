@@ -2213,6 +2213,118 @@ describe("exposure registries and remote facades", () => {
 		await connector.close();
 	});
 
+	it("RPC-STREAM-005 removes a queued Source Start Job after a terminal winner", async () => {
+		let acquisitions = 0;
+		let subscriptions = 0;
+		let releases = 0;
+		const session: IRpcProtocolSession = {
+			reserveInvocation: () => undefined,
+			reserveStream: () => undefined,
+			forceClose() {},
+		};
+		const { connector, host, sessionHost } =
+			await connectProtocolSession(session);
+		const descriptor = createRemoteServiceDescriptor(IMixedExposureService, {
+			wireName: "example.queued-source.v1",
+			members: { history: { kind: "stream-method" } },
+		});
+		connector.peer.expose(descriptor, {
+			history() {
+				acquisitions += 1;
+				return new Observable(() => {
+					subscriptions += 1;
+				});
+			},
+		} as never);
+		const reservation = sessionHost.reserveIncomingStream({
+			service: "example.queued-source.v1",
+			member: "history",
+			kind: "stream-method",
+			args: host.normalizeApplicationArguments(["room"]),
+		});
+		let incoming: IRpcProtocolIncomingStream | undefined;
+		if (reservation?.kind === "source") {
+			incoming = reservation.reservation.commit({
+				reserveEmission: () => undefined,
+				finish() {},
+			});
+		}
+		incoming?.finish({ type: "canceled" }, () => {
+			releases += 1;
+		});
+		incoming?.finish({ type: "canceled" }, () => {
+			releases += 100;
+		});
+
+		await Promise.resolve();
+		await Promise.resolve();
+
+		expect(acquisitions).toBe(0);
+		expect(subscriptions).toBe(0);
+		expect(releases).toBe(1);
+		await connector.close();
+	});
+
+	it("RPC-STREAM-009 RPC-STREAM-012 RPC-STREAM-013 fences and tears down an active Source once", async () => {
+		const applicationSource = new Subject<string>();
+		let sourceTeardowns = 0;
+		let releases = 0;
+		const session: IRpcProtocolSession = {
+			reserveInvocation: () => undefined,
+			reserveStream: () => undefined,
+			forceClose() {},
+		};
+		const { connector, host, sessionHost } =
+			await connectProtocolSession(session);
+		const descriptor = createRemoteServiceDescriptor(IMixedExposureService, {
+			wireName: "example.active-source.v1",
+			members: { history: { kind: "stream-method" } },
+		});
+		connector.peer.expose(descriptor, {
+			history() {
+				return new Observable<string>((subscriber) => {
+					const subscription = applicationSource.subscribe(subscriber);
+					return () => {
+						sourceTeardowns += 1;
+						subscription.unsubscribe();
+					};
+				});
+			},
+		} as never);
+		const reservation = sessionHost.reserveIncomingStream({
+			service: "example.active-source.v1",
+			member: "history",
+			kind: "stream-method",
+			args: host.normalizeApplicationArguments(["room"]),
+		});
+		const items: unknown[] = [];
+		let incoming: IRpcProtocolIncomingStream | undefined;
+		if (reservation?.kind === "source") {
+			incoming = reservation.reservation.commit({
+				reserveEmission: () => ({
+					commit: (snapshot) => items.push(snapshot.value),
+					fail() {},
+				}),
+				finish() {},
+			});
+		}
+		await Promise.resolve();
+		await Promise.resolve();
+		applicationSource.next("first");
+		incoming?.finish({ type: "canceled" }, () => {
+			releases += 1;
+		});
+		incoming?.finish({ type: "session-terminated" }, () => {
+			releases += 100;
+		});
+		applicationSource.next("late");
+
+		expect(items).toEqual(["first"]);
+		expect(sourceTeardowns).toBe(1);
+		expect(releases).toBe(1);
+		await connector.close();
+	});
+
 	it("RPC-API-007 omits every Remote Service Group facade", () => {
 		const { protocol } = createProtocolHarness();
 		const acceptor = createRpcAcceptor({ protocol });
