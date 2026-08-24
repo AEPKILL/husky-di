@@ -12,7 +12,7 @@ import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { CodedException, createServiceIdentifier } from "@husky-di/core";
-import { Observable, of, Subject } from "rxjs";
+import { Observable, of, Subject, Subscriber } from "rxjs";
 import { describe, expect, it, vi } from "vitest";
 
 import packageManifest from "../package.json";
@@ -1953,6 +1953,126 @@ describe("exposure registries and remote facades", () => {
 			},
 		]);
 		expect(completed).toBe(1);
+		await connector.close();
+	});
+
+	it("RPC-STREAM-006 RPC-STREAM-009 serializes a reentrant terminal after next", async () => {
+		const trace: string[] = [];
+		let callbackDepth = 0;
+		let maximumCallbackDepth = 0;
+		let subscriberSink: IRpcProtocolSubscriberSink | undefined;
+		const session: IRpcProtocolSession = {
+			reserveInvocation: () => undefined,
+			reserveStream() {
+				return {
+					commit(sink) {
+						subscriberSink = sink;
+						return {
+							start() {
+								const item = sink.reserveItem({
+									value: "first",
+									weight: 5,
+								} as never);
+								trace.push(`item:${item.commit()}`);
+								trace.push(
+									`late:${sink
+										.reserveItem({ value: "late", weight: 4 } as never)
+										.commit()}`,
+								);
+							},
+							cancel() {},
+						};
+					},
+					release() {},
+				};
+			},
+			forceClose() {},
+		};
+		const { connector } = await connectProtocolSession(session);
+		const descriptor = createRemoteServiceDescriptor(IMixedExposureService, {
+			wireName: "example.reentrant-stream.v1",
+			members: { history: { kind: "stream-method" } },
+		});
+
+		connector.peer
+			.resolve(descriptor)
+			.history("room")
+			.subscribe({
+				next(value) {
+					callbackDepth += 1;
+					maximumCallbackDepth = Math.max(maximumCallbackDepth, callbackDepth);
+					trace.push(`next:${value}:begin`);
+					subscriberSink?.reserveTerminal({ type: "completed" }).commit();
+					trace.push(`next:${value}:end`);
+					callbackDepth -= 1;
+				},
+				complete() {
+					callbackDepth += 1;
+					maximumCallbackDepth = Math.max(maximumCallbackDepth, callbackDepth);
+					trace.push("complete");
+					callbackDepth -= 1;
+				},
+			});
+
+		expect(maximumCallbackDepth).toBe(1);
+		expect(trace).toEqual([
+			"next:first:begin",
+			"next:first:end",
+			"complete",
+			"item:closed",
+			"late:closed",
+		]);
+		await connector.close();
+	});
+
+	it("RPC-STREAM-008 fences late effects after unsubscribe inside next", async () => {
+		const values: string[] = [];
+		let cancels = 0;
+		let itemEffect = "";
+		let sink: IRpcProtocolSubscriberSink | undefined;
+		const session: IRpcProtocolSession = {
+			reserveInvocation: () => undefined,
+			reserveStream() {
+				return {
+					commit(nextSink) {
+						sink = nextSink;
+						return {
+							start() {
+								itemEffect = nextSink
+									.reserveItem({ value: "first", weight: 5 } as never)
+									.commit();
+							},
+							cancel() {
+								cancels += 1;
+							},
+						};
+					},
+					release() {},
+				};
+			},
+			forceClose() {},
+		};
+		const { connector } = await connectProtocolSession(session);
+		const descriptor = createRemoteServiceDescriptor(IMixedExposureService, {
+			wireName: "example.unsubscribe-next.v1",
+			members: { history: { kind: "stream-method" } },
+		});
+		const observer = new Subscriber<string>({
+			next(value) {
+				values.push(value);
+				observer.unsubscribe();
+			},
+			error() {},
+			complete() {},
+		});
+
+		connector.peer.resolve(descriptor).history("room").subscribe(observer);
+		sink?.reserveItem({ value: "late", weight: 4 } as never).commit();
+		sink?.reserveTerminal({ type: "completed" }).commit();
+
+		expect(values).toEqual(["first"]);
+		expect(itemEffect).toBe("closed");
+		expect(cancels).toBe(1);
 		await connector.close();
 	});
 
