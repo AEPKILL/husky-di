@@ -1912,6 +1912,50 @@ describe("exposure registries and remote facades", () => {
 		await connector.close();
 	});
 
+	it("RPC-DESC-008 RPC-SPI-013 subscribes a stream property without arguments", async () => {
+		const requests: unknown[] = [];
+		const session: IRpcProtocolSession = {
+			reserveInvocation: () => undefined,
+			reserveStream(request) {
+				requests.push(request);
+				return {
+					commit(sink) {
+						return {
+							start() {
+								sink.reserveTerminal({ type: "completed" }).commit();
+							},
+							cancel() {},
+						};
+					},
+					release() {},
+				};
+			},
+			forceClose() {},
+		};
+		const { connector } = await connectProtocolSession(session);
+		const descriptor = createRemoteServiceDescriptor(IMixedExposureService, {
+			wireName: "example.property-stream.v1",
+			members: { events$: { kind: "stream-property" } },
+		});
+		let completed = 0;
+
+		connector.peer.resolve(descriptor).events$.subscribe({
+			complete: () => {
+				completed += 1;
+			},
+		});
+
+		expect(requests).toEqual([
+			{
+				service: "example.property-stream.v1",
+				member: "events$",
+				kind: "stream-property",
+			},
+		]);
+		expect(completed).toBe(1);
+		await connector.close();
+	});
+
 	it("RPC-API-007 omits every Remote Service Group facade", () => {
 		const { protocol } = createProtocolHarness();
 		const acceptor = createRpcAcceptor({ protocol });
