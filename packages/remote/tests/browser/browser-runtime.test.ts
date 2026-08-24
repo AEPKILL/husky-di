@@ -43,11 +43,6 @@ test.beforeAll(async () => {
 				private: true,
 				type: "module",
 				packageManager: "pnpm@11.13.1",
-				pnpm: {
-					overrides: {
-						"@husky-di/core": `file:${resolve(supportCoreTarball)}`,
-					},
-				},
 				dependencies: {
 					"@husky-di/core": `file:${resolve(supportCoreTarball)}`,
 					"@husky-di/remote": `file:${resolve(authoritativeTarball)}`,
@@ -55,10 +50,13 @@ test.beforeAll(async () => {
 				},
 			}),
 		);
+		writeFileSync(
+			resolve(outputRoot, "pnpm-workspace.yaml"),
+			`packages:\n  - "."\noverrides:\n  "@husky-di/core": "file:${resolve(supportCoreTarball)}"\n`,
+		);
 		runPnpm(
 			[
 				"install",
-				"--ignore-workspace",
 				"--no-frozen-lockfile",
 				"--ignore-scripts",
 				"--prefer-offline",

@@ -121,6 +121,11 @@ function assertSame(left, right, label) {
 	}
 }
 
+function assertSummary(output, pattern, label) {
+	const plain = output.replaceAll(/\u001B\[[0-9;]*m/gu, "");
+	if (!pattern.test(plain)) throw new Error(`${label} summary is missing.`);
+}
+
 function verifyAllowlist(path) {
 	const actual = canonicalTarTree(path);
 	const expected = JSON.parse(readFileSync(allowlistPath, "utf8"));
@@ -205,7 +210,11 @@ function extractTarFile(archive, expectedPath) {
 
 function createArtifact(path) {
 	mkdirSync(dirname(path), { recursive: true });
-	const output = JSON.parse(runPnpm(["pack", "--pack-destination", dirname(path), "--json"]));
+	const output = JSON.parse(
+		runPnpm(["pack", "--pack-destination", dirname(path), "--json"], packageRoot, {
+			npm_config_ignore_scripts: "true",
+		}),
+	);
 	const created = resolve(output.filename);
 	if (created !== path) renameSync(created, path);
 	return path;
@@ -234,6 +243,8 @@ function release(path) {
 		packageRoot,
 		environment,
 	);
+	assertSummary(nodeOutput, /Tests\s+11 passed \(11\)/u, "Installed consumer 11/11");
+	assertSummary(browserOutput, /3 passed \([^)]*\)/u, "Browser engine 3/3");
 	const corpus = corpusLock(path);
 	const result = {
 		schemaVersion: 1,

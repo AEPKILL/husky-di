@@ -3552,28 +3552,28 @@ this comparison. Because the pinned pnpm exposes script suppression as npm confi
 option, `npm_config_ignore_scripts=true pnpm pack` is the required equivalent invocation.
 <!-- /RPC-RELEASE-022 -->
 
-**RPC-RELEASE-023 — Authoritative, tested, and published byte equality.** The receipt's authoritative, tested,
-and published tarball SHA-256 values **MUST** all equal the accepted final tarball digest. The published value
-**MUST** be computed from bytes downloaded again from the configured registry after publish; a local publish
-input path, npm integrity string, tag, or version alone is not equality evidence.
+**RPC-RELEASE-023 — Authoritative, tested, and workflow-input byte equality.** The receipt's authoritative,
+tested, and `publishedTgzSha256` fields **MUST** all equal the accepted final tarball digest. In this local closure,
+the published field binds only the exact workflow publish-input path to A; the receipt **MUST** record
+`published: false`, **MUST NOT** claim registry publication or download, and no external publish may be executed.
 <!-- /RPC-RELEASE-023 -->
 
-**RPC-RELEASE-024 — Final zero-incomplete gate.** Publication acceptance **MUST** contain zero failed, partial,
+**RPC-RELEASE-024 — Final zero-incomplete gate.** Local release acceptance **MUST** contain zero failed, partial,
 planned, missing, skipped, todo, only, or flaky Requirement, Case, Evidence, corpus, consumer, browser, and
-release results. Candidate creation and designation may precede this post-publish gate, but a nonzero counter
-**MUST** prevent final receipt, tag, and release metadata completion. A provisional receipt **MUST** retain the
-exact A-dependent planned graph boundary. Finalization **MUST** close that boundary through an explicit overlay
-whose exact Requirement, Case, and Evidence IDs are bound to passed fixed release-command evidence; it **MUST
-NOT** manufacture completion by assigning zero to counters. Result counters **MUST** be recomputed from the
-expanded graph after applying and validating that overlay.
+release results. A nonzero counter **MUST** prevent the final local receipt. Finalization **MUST** close the exact
+A-dependent planned graph boundary through an explicit overlay whose Requirement, Case, and Evidence IDs are
+bound to passed fixed release-command evidence; it **MUST NOT** manufacture completion by assigning zero to
+counters or by implying an unexecuted publication. Result counters **MUST** be recomputed from the expanded graph
+after applying and validating that overlay.
 <!-- /RPC-RELEASE-024 -->
 
 **RPC-RELEASE-025 — Receipt provenance binding.** The JCS receipt **MUST** recompute and bind the committed Case
 and Evidence registries, complete offline metaschema closure, validator artifact, raw/KAT/transcript independent
-oracles and installed production runners, and the JCS implementation provenance. Registry URL, package,
-version, downloaded tarball digest, and all three artifact digests **MUST** identify the same published bytes.
-The command log **MUST** contain each fixed command ID exactly once in the required order, with exit zero and the
-command-specific argv shape; each final Evidence overlay entry **MUST** cite its exact required command IDs.
+oracles and installed production runners, and the JCS implementation provenance. Package, version, authoritative
+A digest, tested digest, and workflow publish-input digest **MUST** identify the same local bytes while explicitly
+recording that publication did not occur. The command log **MUST** contain each fixed command ID exactly once in
+the required order, with exit zero and the command-specific argv shape; each final Evidence overlay entry
+**MUST** cite its exact required command IDs.
 <!-- /RPC-RELEASE-025 -->
 
 ### 14.5 Documentation and migration

@@ -768,6 +768,19 @@ describe("cold Topology Owner factories", () => {
 		expect(specification).not.toContain("readonly method: string;");
 	});
 
+	it("RPC-RELEASE-023 RPC-RELEASE-024 RPC-RELEASE-025 binds local workflow input without claiming publication", () => {
+		const specification = readFileSync(
+			fileURLToPath(new URL("../docs/SPECIFICATION.md", import.meta.url)),
+			"utf8",
+		);
+		expect(specification).toContain("workflow publish-input path to A");
+		expect(specification).toContain("`published: false`");
+		expect(specification).toContain("publication did not occur");
+		expect(specification).not.toContain(
+			"downloaded again from the configured registry",
+		);
+	});
+
 	it("RPC-API-001 RPC-SPI-001 constructs only the selected custom Protocol role", () => {
 		const connectorHarness = createProtocolHarness();
 		createRpcConnector({ protocol: connectorHarness.protocol });

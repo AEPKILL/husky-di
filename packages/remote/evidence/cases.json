@@ -10900,7 +10900,7 @@
       "publicSeam": "normative SPECIFICATION requirement block",
       "input": {
         "requirementId": "RPC-RELEASE-023",
-        "propositionSha256": "0636c4d3f8e131b83679ea5a056e54a6e0c540e74623ecf13e2d409478e43888"
+        "propositionSha256": "e04ea9e13fab9aa27a363d93d4d42ce06729d422bcb4e0255d6d90a8e9052427"
       },
       "expected": "The close-delimited raw proposition exactly matches the immutable registry.",
       "failureOwner": "release-evidence",
@@ -10919,7 +10919,7 @@
       "input": {
         "requirementId": "RPC-RELEASE-023"
       },
-      "expected": "**RPC-RELEASE-023 — Authoritative, tested, and published byte equality.** The receipt's authoritative, tested,\nand published tarball SHA-256 values **MUST** all equal the accepted final tarball digest. The published value\n**MUST** be computed from bytes downloaded again from the configured registry after publish; a local publish\ninput path, npm integrity string, tag, or version alone is not equality evidence.",
+      "expected": "**RPC-RELEASE-023 — Authoritative, tested, and workflow-input byte equality.** The receipt's authoritative,\ntested, and `publishedTgzSha256` fields **MUST** all equal the accepted final tarball digest. In this local closure,\nthe published field binds only the exact workflow publish-input path to A; the receipt **MUST** record\n`published: false`, **MUST NOT** claim registry publication or download, and no external publish may be executed.",
       "failureOwner": "package-release",
       "evidence": [],
       "status": "planned"
@@ -10933,7 +10933,7 @@
       "publicSeam": "normative SPECIFICATION requirement block",
       "input": {
         "requirementId": "RPC-RELEASE-024",
-        "propositionSha256": "e1d4eb2e09229320bd26eb133b8c8abacfb78761a25dc97ab51e8ea9c41b9808"
+        "propositionSha256": "f54cf5f8e145c6390b27bcc9575b8c58042f2a1fb55bc3cc93a6c010c530b51e"
       },
       "expected": "The close-delimited raw proposition exactly matches the immutable registry.",
       "failureOwner": "release-evidence",
@@ -10952,7 +10952,7 @@
       "input": {
         "requirementId": "RPC-RELEASE-024"
       },
-      "expected": "**RPC-RELEASE-024 — Final zero-incomplete gate.** Publication acceptance **MUST** contain zero failed, partial,\nplanned, missing, skipped, todo, only, or flaky Requirement, Case, Evidence, corpus, consumer, browser, and\nrelease results. Candidate creation and designation may precede this post-publish gate, but a nonzero counter\n**MUST** prevent final receipt, tag, and release metadata completion. A provisional receipt **MUST** retain the\nexact A-dependent planned graph boundary. Finalization **MUST** close that boundary through an explicit overlay\nwhose exact Requirement, Case, and Evidence IDs are bound to passed fixed release-command evidence; it **MUST\nNOT** manufacture completion by assigning zero to counters. Result counters **MUST** be recomputed from the\nexpanded graph after applying and validating that overlay.",
+      "expected": "**RPC-RELEASE-024 — Final zero-incomplete gate.** Local release acceptance **MUST** contain zero failed, partial,\nplanned, missing, skipped, todo, only, or flaky Requirement, Case, Evidence, corpus, consumer, browser, and\nrelease results. A nonzero counter **MUST** prevent the final local receipt. Finalization **MUST** close the exact\nA-dependent planned graph boundary through an explicit overlay whose Requirement, Case, and Evidence IDs are\nbound to passed fixed release-command evidence; it **MUST NOT** manufacture completion by assigning zero to\ncounters or by implying an unexecuted publication. Result counters **MUST** be recomputed from the expanded graph\nafter applying and validating that overlay.",
       "failureOwner": "package-release",
       "evidence": [],
       "status": "planned"
@@ -10966,7 +10966,7 @@
       "publicSeam": "normative SPECIFICATION requirement block",
       "input": {
         "requirementId": "RPC-RELEASE-025",
-        "propositionSha256": "a60702ad64611276f8ef22bc94db461ac8c3e2eae2e43cb5a45d6f6aaf889017"
+        "propositionSha256": "02739d7c8a42a7145005adc1ff9c0a47c68502df29e99e0525693908efe258d6"
       },
       "expected": "The close-delimited raw proposition exactly matches the immutable registry.",
       "failureOwner": "release-evidence",
@@ -10985,7 +10985,7 @@
       "input": {
         "requirementId": "RPC-RELEASE-025"
       },
-      "expected": "**RPC-RELEASE-025 — Receipt provenance binding.** The JCS receipt **MUST** recompute and bind the committed Case\nand Evidence registries, complete offline metaschema closure, validator artifact, raw/KAT/transcript independent\noracles and installed production runners, and the JCS implementation provenance. Registry URL, package,\nversion, downloaded tarball digest, and all three artifact digests **MUST** identify the same published bytes.\nThe command log **MUST** contain each fixed command ID exactly once in the required order, with exit zero and the\ncommand-specific argv shape; each final Evidence overlay entry **MUST** cite its exact required command IDs.",
+      "expected": "**RPC-RELEASE-025 — Receipt provenance binding.** The JCS receipt **MUST** recompute and bind the committed Case\nand Evidence registries, complete offline metaschema closure, validator artifact, raw/KAT/transcript independent\noracles and installed production runners, and the JCS implementation provenance. Package, version, authoritative\nA digest, tested digest, and workflow publish-input digest **MUST** identify the same local bytes while explicitly\nrecording that publication did not occur. The command log **MUST** contain each fixed command ID exactly once in\nthe required order, with exit zero and the command-specific argv shape; each final Evidence overlay entry\n**MUST** cite its exact required command IDs.",
       "failureOwner": "package-release",
       "evidence": [],
       "status": "planned"

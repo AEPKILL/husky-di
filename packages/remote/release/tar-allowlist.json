@@ -2777,7 +2777,7 @@
       "path": "package/docs/SPECIFICATION.md",
       "type": "file",
       "mode": "0644",
-      "contentSha256": "300ead7195e4ee00bab561a01632c31f254ae52fc2d18685be1528f615f6135f"
+      "contentSha256": "21a2fffae5d76856261aec240912847071a714b434df67807052417d0c626070"
     },
     {
       "path": "package/docs/TRANSPORT.md",

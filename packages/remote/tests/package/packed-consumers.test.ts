@@ -214,7 +214,6 @@ function createConsumer(
 			private: true,
 			type,
 			packageManager: "pnpm@11.13.1",
-			pnpm: { overrides: { "@husky-di/core": `file:${coreTarballPath}` } },
 			dependencies: {
 				"@husky-di/core": `file:${coreTarballPath}`,
 				"@husky-di/remote": `file:${tarballPath}`,
@@ -222,14 +221,12 @@ function createConsumer(
 			},
 		}),
 	);
+	writeFileSync(
+		resolve(consumerRoot, "pnpm-workspace.yaml"),
+		`packages:\n  - "."\noverrides:\n  "@husky-di/core": "file:${coreTarballPath}"\n`,
+	);
 	runPnpm(
-		[
-			"install",
-			"--ignore-workspace",
-			"--no-frozen-lockfile",
-			"--ignore-scripts",
-			"--prefer-offline",
-		],
+		["install", "--no-frozen-lockfile", "--ignore-scripts", "--prefer-offline"],
 		consumerRoot,
 	);
 	return consumerRoot;
