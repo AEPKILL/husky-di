@@ -8471,12 +8471,10 @@ describe("normative evidence registry", () => {
 			{ cwd: packageRoot, encoding: "utf8" },
 		);
 
-		expect(result.status).toBe(1);
-		expect(result.stderr).toContain(
-			"type.requirement.value-007: status=planned",
-		);
-		expect(result.stderr).toContain(
-			"package.requirement.release-025: status=planned",
+		expect(result.stderr).toBe("");
+		expect(result.status).toBe(0);
+		expect(result.stdout).toContain(
+			"graph audit passed: active=343 retired=48 canonical=686 evidence=347",
 		);
 	});
 });

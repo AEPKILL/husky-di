@@ -27,7 +27,7 @@ function audit(command: "ledger" | "graph", ...args: readonly string[]) {
 	});
 }
 
-describe("Remote RPC evidence registry scaffold", () => {
+describe("Remote RPC final evidence registries", () => {
 	it("RPC-EVIDENCE-004 preserves the immutable legacy requirement and verdict ledgers", () => {
 		const result = audit(
 			"ledger",
@@ -47,13 +47,19 @@ describe("Remote RPC evidence registry scaffold", () => {
 			readonly nodes: readonly { readonly selector: string }[];
 		}>("evidence");
 		const selectors = evidence.nodes.map(({ selector }) => selector);
-		expect(selectors).toHaveLength(343);
+		expect(selectors).toHaveLength(347);
 		expect(new Set(selectors).size).toBe(selectors.length);
 		expect(
-			selectors.every((selector) =>
-				/^specification:RPC-[A-Z]+-[0-9]{3}$/u.test(selector),
-			),
-		).toBe(true);
+			selectors.filter((selector) => selector.startsWith("specification:")),
+		).toHaveLength(343);
+		expect(
+			selectors.filter((selector) => selector.startsWith("result:")).sort(),
+		).toEqual([
+			"result:browser",
+			"result:corpus",
+			"result:installed-node",
+			"result:pack",
+		]);
 	});
 
 	it("RPC-EVIDENCE-008 keeps every canonical cover nonempty and active", () => {
@@ -102,15 +108,13 @@ describe("Remote RPC evidence registry scaffold", () => {
 		expect(result.status).toBe(0);
 	});
 
-	it("RPC-EVIDENCE-011 reports later production verification Cases as RED", () => {
+	it("RPC-EVIDENCE-011 proves zero unfinished production verification Cases", () => {
 		for (const command of ["ledger", "graph"] as const) {
 			const result = audit(command, "--zero-incomplete");
-			expect(result.status).toBe(1);
-			expect(result.stderr).toContain(
-				"type.requirement.value-007: status=planned",
-			);
-			expect(result.stderr).toContain(
-				"package.requirement.release-025: status=planned",
+			expect(result.stderr).toBe("");
+			expect(result.status).toBe(0);
+			expect(result.stdout).toContain(
+				`${command} audit passed: active=343 retired=48 canonical=686 evidence=347`,
 			);
 		}
 	});
