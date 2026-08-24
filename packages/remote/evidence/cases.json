@@ -5686,7 +5686,7 @@
       "publicSeam": "normative SPECIFICATION requirement block",
       "input": {
         "requirementId": "RPC-STREAM-001",
-        "propositionSha256": "93b53f72913392819cbb2bdccbed9631f032972182019d6b3cc24556a98b8e61"
+        "propositionSha256": "43343f5412e7c57e8f4f0d716a1ce3095129be0d243e9c0c573ec612653e58c1"
       },
       "expected": "The close-delimited raw proposition exactly matches the immutable registry.",
       "failureOwner": "release-evidence",
@@ -5705,7 +5705,7 @@
       "input": {
         "requirementId": "RPC-STREAM-001"
       },
-      "expected": "**RPC-STREAM-001 — Independent cold roots.** Every subscription to a remote service Observable **MUST** create\none independent Caller Stream Subscription root. The Framework **MUST NOT** implicitly share, cache, or replay\napplication items or one subscription's terminal state into another subscription, including when both subscribe\nto the same retained Observable object.",
+      "expected": "**RPC-STREAM-001 — Independent cold roots.** Every subscription to a remote service Observable **MUST** create\none independent Caller Stream Subscription root. The Framework **MUST NOT** implicitly share, cache, or replay\napplication items or one subscription's terminal state into another subscription, including when both subscribe\nto the same retained Observable object. Creating or retaining that Observable **MUST NOT** reserve Protocol work;\neach subscription **MUST** obtain its own outgoing stream reservation.",
       "failureOwner": "Framework",
       "evidence": [],
       "status": "planned"

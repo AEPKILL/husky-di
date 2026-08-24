@@ -3441,6 +3441,8 @@ describe("custom Protocol outgoing invocations", () => {
 			handlerFailed: "handler-failed",
 			unknownService: "unknown-service",
 			unknownMethod: "unknown-method",
+			unknownMember: "unknown-member",
+			overflow: "overflow",
 			protocol: "protocol",
 		});
 		expect(RpcCloseReasonEnum.cleanupFailed).toBe("cleanup-failed");

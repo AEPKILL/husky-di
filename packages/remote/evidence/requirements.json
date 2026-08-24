@@ -1385,8 +1385,8 @@
     {
       "id": "RPC-STREAM-001",
       "status": "active",
-      "proposition": "**RPC-STREAM-001 — Independent cold roots.** Every subscription to a remote service Observable **MUST** create\none independent Caller Stream Subscription root. The Framework **MUST NOT** implicitly share, cache, or replay\napplication items or one subscription's terminal state into another subscription, including when both subscribe\nto the same retained Observable object.",
-      "propositionSha256": "93b53f72913392819cbb2bdccbed9631f032972182019d6b3cc24556a98b8e61",
+      "proposition": "**RPC-STREAM-001 — Independent cold roots.** Every subscription to a remote service Observable **MUST** create\none independent Caller Stream Subscription root. The Framework **MUST NOT** implicitly share, cache, or replay\napplication items or one subscription's terminal state into another subscription, including when both subscribe\nto the same retained Observable object. Creating or retaining that Observable **MUST NOT** reserve Protocol work;\neach subscription **MUST** obtain its own outgoing stream reservation.",
+      "propositionSha256": "43343f5412e7c57e8f4f0d716a1ce3095129be0d243e9c0c573ec612653e58c1",
       "specificationCaseId": "specification.rpc-stream-001",
       "verificationCaseId": "runtime.requirement.stream-001"
     },
