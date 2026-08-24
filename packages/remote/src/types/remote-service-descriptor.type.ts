@@ -173,14 +173,6 @@ export type IsCancelableMethod<Definition> = Definition extends {
 	? true
 	: false;
 
-export type RemoteMethodKey<T> = {
-	[K in keyof T]-?: K extends string
-		? T[K] extends AnyMethod
-			? K
-			: never
-		: never;
-}[keyof T];
-
 type RemoteUnaryMethod<F, Definition> = F extends (
 	...args: infer Args
 ) => infer Result
@@ -206,14 +198,6 @@ type RemoteMember<T, K extends keyof T, Definition> = Definition extends {
 				? Observable<Item>
 				: never
 			: never;
-
-export type SelectedUnaryMemberKey<Members> = {
-	[K in SelectedMemberKey<Members>]: Members[K] extends {
-		readonly kind: "unary";
-	}
-		? K
-		: never;
-}[SelectedMemberKey<Members>];
 
 export type RemoteService<T, Members extends RpcMemberDefinitions<T>> = {
 	readonly [K in Extract<SelectedMemberKey<Members>, keyof T>]: RemoteMember<

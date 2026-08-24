@@ -287,8 +287,13 @@ export class RpcPeerImpl implements IRpcPeerRuntime {
 		descriptor: IRemoteServiceDescriptor<T, Definitions>,
 	): RemoteService<T, Definitions> {
 		const service = getRemoteServiceDescriptorData(descriptor).wireName;
-		return createRpcFacade(descriptor, (method, cancelable, actualArguments) =>
-			this.#invoke(service, method, cancelable, actualArguments),
+		return createRpcFacade(
+			descriptor,
+			(method, cancelable, actualArguments) =>
+				this.#invoke(service, method, cancelable, actualArguments),
+			(_member, _actualArguments, subscriber) => {
+				subscriber.error(createRpcException(RpcExceptionCodeEnum.unavailable));
+			},
 		);
 	}
 

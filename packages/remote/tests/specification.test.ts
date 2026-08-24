@@ -1733,30 +1733,101 @@ describe("exposure registries and remote facades", () => {
 		expect(getterCalls).toBe(0);
 	});
 
-	it("RPC-CALL-001 creates frozen non-thenable single and group facades", async () => {
+	it("RPC-CALL-010 creates a frozen non-thenable single-peer facade", async () => {
 		const connectorHarness = createProtocolHarness();
 		const connector = createRpcConnector({
 			protocol: connectorHarness.protocol,
 		});
-		const acceptorHarness = createProtocolHarness();
-		const acceptor = createRpcAcceptor({ protocol: acceptorHarness.protocol });
-		const descriptor = createRemoteServiceDescriptor(ICalculatorService, {
-			wireName: "example.calculator.v1",
-			members: { add: { kind: "unary" } },
+		const descriptor = createRemoteServiceDescriptor(IMixedExposureService, {
+			wireName: "example.mixed-facade.v1",
+			members: {
+				add: { kind: "unary" },
+				cancel: { kind: "unary", cancelable: true },
+				history: { kind: "stream-method" },
+				events$: { kind: "stream-property" },
+				lazy$: { kind: "stream-property" },
+			},
 		});
 
 		const remote = connector.peer.resolve(descriptor);
-		const group = acceptor.resolveAll(descriptor);
-		for (const facade of [remote, group]) {
-			expect(Object.getPrototypeOf(facade)).toBeNull();
-			expect(Object.isFrozen(facade)).toBe(true);
-			expect(Object.keys(facade)).toEqual(["add"]);
-			expect(facade.then).toBeUndefined();
-			expect(await Promise.resolve(facade)).toBe(facade);
-		}
+		expect(Object.getPrototypeOf(remote)).toBeNull();
+		expect(Object.isFrozen(remote)).toBe(true);
+		expect(Object.keys(remote)).toEqual([
+			"add",
+			"cancel",
+			"history",
+			"events$",
+			"lazy$",
+		]);
+		expect(remote.then).toBeUndefined();
+		expect(await Promise.resolve(remote)).toBe(remote);
+		expect(remote.add).toBe(remote.add);
+		expect(remote.cancel).toBe(remote.cancel);
+		expect(remote.history).toBe(remote.history);
+		expect(remote.events$).toBe(remote.events$);
+		expect(remote.lazy$).toBe(remote.lazy$);
+		expect(remote.history("first")).not.toBe(remote.history("first"));
+		expect(Reflect.get(remote.events$, "then")).toBeUndefined();
 
-		const { add } = remote;
+		const { add, history } = remote;
+		expect(history("destructured")).toBeInstanceOf(Observable);
 		await expect(add(1, 2)).rejects.toMatchObject({ code: "unavailable" });
+	});
+
+	it("RPC-CALL-011 keeps facade creation reads and retention state-neutral", async () => {
+		let reservationCalls = 0;
+		const { connector } = await connectProtocolSession({
+			reserveInvocation() {
+				reservationCalls += 1;
+				return undefined;
+			},
+			forceClose() {},
+		});
+		const descriptor = createRemoteServiceDescriptor(IMixedExposureService, {
+			wireName: "example.state-neutral-facade.v1",
+			members: {
+				add: { kind: "unary" },
+				history: { kind: "stream-method" },
+				events$: { kind: "stream-property" },
+			},
+		});
+		let argumentReads = 0;
+		const argument = Object.defineProperty({}, "room", {
+			enumerable: true,
+			get() {
+				argumentReads += 1;
+				return "room";
+			},
+		});
+
+		const remote = connector.peer.resolve(descriptor);
+		const history$ = remote.history(argument as unknown as string);
+		const events$ = remote.events$;
+		expect(await Promise.resolve(remote)).toBe(remote);
+		expect(argumentReads).toBe(0);
+		expect(reservationCalls).toBe(0);
+		expect(history$).toBeInstanceOf(Observable);
+		expect(events$).toBeInstanceOf(Observable);
+		expect(Object.getOwnPropertyDescriptor(remote, "events$")).toMatchObject({
+			value: events$,
+			enumerable: true,
+		});
+
+		await connector.close();
+		expect(() => connector.peer.resolve(descriptor)).not.toThrow();
+		expect(() => remote.history("after-close")).not.toThrow();
+		expect(() => remote.events$).not.toThrow();
+		expect(history$).toBeDefined();
+	});
+
+	it("RPC-API-007 omits every Remote Service Group facade", () => {
+		const { protocol } = createProtocolHarness();
+		const acceptor = createRpcAcceptor({ protocol });
+
+		expect("resolveAll" in acceptor).toBe(false);
+		expect(
+			Object.getOwnPropertyNames(Object.getPrototypeOf(acceptor)),
+		).not.toContain("resolveAll");
 	});
 
 	it("RPC-DESC-005 RPC-DESC-009 applies the same duplicate and cleanup rules to Acceptor owner exposure", () => {
@@ -2801,14 +2872,16 @@ describe("custom Protocol outgoing invocations", () => {
 	});
 });
 
-describe("stable remote service groups", () => {
-	it("RPC-GROUP-001 RPC-GROUP-002 RPC-GROUP-003 reserves and commits every child before ordered start", async () => {
+describe("explicit peer composition", () => {
+	it("RPC-API-008 RPC-STREAM-011 exposes stable peers with independent child work", async () => {
 		const harness = createProtocolHarness();
 		const acceptor = createRpcAcceptor({ protocol: harness.protocol });
 		const host = harness.acceptorHosts[0];
 		if (host === undefined) {
 			throw new Error("Expected an Acceptor Protocol host.");
 		}
+		const membershipSnapshots: Array<readonly unknown[]> = [];
+		acceptor.peers$.subscribe((peers) => membershipSnapshots.push(peers));
 		const operations: string[] = [];
 		const createSession = (
 			name: string,
@@ -2866,77 +2939,56 @@ describe("stable remote service groups", () => {
 				}),
 			),
 		).toBeDefined();
-		const descriptor = createRemoteServiceDescriptor(ICalculatorService, {
-			wireName: "example.calculator.v1",
-			members: { add: { kind: "unary" } },
+		const descriptor = createRemoteServiceDescriptor(IMixedExposureService, {
+			wireName: "example.explicit-composition.v1",
+			members: {
+				add: { kind: "unary" },
+				history: { kind: "stream-method" },
+				events$: { kind: "stream-property" },
+			},
 		});
+		const peers = acceptor.peers;
+		const lateMembershipSnapshots: Array<readonly unknown[]> = [];
+		acceptor.peers$.subscribe((snapshot) =>
+			lateMembershipSnapshots.push(snapshot),
+		);
+		const facades = peers.map((peer) => peer.resolve(descriptor));
+		const streams = facades.map((facade) => facade.history("room"));
+		const results = await Promise.allSettled(
+			facades.map((facade) => facade.add(1, 2)),
+		);
 
-		const results = await acceptor.resolveAll(descriptor).add(1, 2);
+		expect(Object.isFrozen(peers)).toBe(true);
+		expect(membershipSnapshots).toHaveLength(3);
+		expect(membershipSnapshots.every(Object.isFrozen)).toBe(true);
+		expect(membershipSnapshots.at(-1)).toBe(peers);
+		expect(lateMembershipSnapshots).toEqual([peers]);
+		expect(acceptor.peers[0]).toBe(peers[0]);
+		expect(acceptor.peers[1]).toBe(peers[1]);
+		expect(streams[0]).not.toBe(streams[1]);
 		expect(operations).toEqual([
 			"reserve-first",
-			"reserve-second",
 			"commit-first",
-			"commit-second",
 			"start-first",
+			"reserve-second",
+			"commit-second",
 			"start-second",
 		]);
-		expect(Object.isFrozen(results)).toBe(true);
 		expect(results).toHaveLength(2);
 		expect(results[0]).toMatchObject({
-			peer: acceptor.peers[0],
 			status: "fulfilled",
 			value: 3,
 		});
 		expect(results[1]).toMatchObject({
-			peer: acceptor.peers[1],
 			status: "rejected",
-			reason: { code: "handler-failed" },
+			reason: expect.objectContaining({ code: "handler-failed" }),
 		});
 		if (results[1]?.status !== "rejected") {
-			throw new Error("Expected the second group child to reject.");
+			throw new Error(
+				"Expected the second independently composed child to reject.",
+			);
 		}
 		expect(results[1].reason).toBeInstanceOf(RpcException);
-	});
-
-	it("RPC-GROUP-002 rolls back every reservation when one child lacks capacity", async () => {
-		const harness = createProtocolHarness();
-		const acceptor = createRpcAcceptor({ protocol: harness.protocol });
-		const host = harness.acceptorHosts[0];
-		if (host === undefined) {
-			throw new Error("Expected an Acceptor Protocol host.");
-		}
-		let releaseCalls = 0;
-		let commitCalls = 0;
-		host.admitSession({
-			reserveInvocation() {
-				return {
-					commit() {
-						commitCalls += 1;
-						return { start() {}, cancel() {} };
-					},
-					release() {
-						releaseCalls += 1;
-					},
-				};
-			},
-			forceClose() {},
-		});
-		host.admitSession({
-			reserveInvocation: () => undefined,
-			forceClose() {},
-		});
-		const descriptor = createRemoteServiceDescriptor(ICalculatorService, {
-			wireName: "example.calculator.v1",
-			members: { add: { kind: "unary" } },
-		});
-
-		await expect(
-			acceptor.resolveAll(descriptor).add(1, 2),
-		).rejects.toMatchObject({
-			code: "unavailable",
-		});
-		expect(releaseCalls).toBe(1);
-		expect(commitCalls).toBe(0);
 	});
 });
 

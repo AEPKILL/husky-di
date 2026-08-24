@@ -40,7 +40,6 @@ export type {
 	IRpcConnector,
 	IRpcPeer,
 	RpcEvent,
-	RpcPeerResult,
 } from "@/interfaces/rpc-caller.interface";
 export type { IRpcConnection } from "@/interfaces/rpc-connection.interface";
 export type { IRpcConnectorReconnection } from "@/interfaces/rpc-connector-reconnection.interface";

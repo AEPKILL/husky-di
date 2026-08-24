@@ -13,18 +13,13 @@ import type { RpcCloseOutcomeEnum } from "@/enums/rpc-close-outcome.enum";
 import type { RpcCloseReasonEnum } from "@/enums/rpc-close-reason.enum";
 import type { RpcEventTypeEnum } from "@/enums/rpc-event-type.enum";
 import type { RpcExceptionCodeEnum } from "@/enums/rpc-exception-code.enum";
-import type { RpcException } from "@/exceptions/rpc.exception";
 import type { RpcCallFailure } from "@/interfaces/protocol/rpc-protocol.interface";
 import type { IRemoteServiceDescriptor } from "@/interfaces/remote-service-descriptor.interface";
 import type { IRpcAcceptorAdapter } from "@/interfaces/rpc-adapter.interface";
 import type {
-	AnyMethod,
-	IsCancelableMethod,
-	RemoteMethodKey,
 	RemoteService,
 	RemoteServiceImplementation,
 	RpcMemberDefinitions,
-	SelectedUnaryMemberKey,
 } from "@/types/remote-service-descriptor.type";
 import type {
 	RpcAcceptorState,
@@ -32,40 +27,6 @@ import type {
 	RpcConnectorState,
 	RpcPeerState,
 } from "@/types/rpc-caller.type";
-
-export type RpcPeerResult<T> =
-	| {
-			readonly peer: IRpcPeer;
-			readonly status: RpcCallStatusEnum.fulfilled;
-			readonly value: T;
-	  }
-	| {
-			readonly peer: IRpcPeer;
-			readonly status: RpcCallStatusEnum.rejected;
-			readonly reason: RpcException;
-	  };
-
-type RemoteGroupMethod<F, Definition> = F extends (
-	...args: infer Arguments
-) => infer Result
-	? IsCancelableMethod<Definition> extends true
-		? Arguments extends [...infer Parameters, AbortSignal]
-			? (
-					...args: [...Parameters, signal: AbortSignal | undefined]
-				) => Promise<readonly RpcPeerResult<Awaited<Result>>[]>
-			: never
-		: (...args: Arguments) => Promise<readonly RpcPeerResult<Awaited<Result>>[]>
-	: never;
-
-export type RemoteServiceGroup<
-	T,
-	Definitions extends RpcMemberDefinitions<T>,
-> = {
-	readonly [K in Extract<
-		SelectedUnaryMemberKey<Definitions>,
-		RemoteMethodKey<T>
-	>]: RemoteGroupMethod<Extract<T[K], AnyMethod>, Definitions[K]>;
-} & { readonly then?: never };
 
 export interface IRpcPeer {
 	readonly state: RpcPeerState;
@@ -250,10 +211,6 @@ export interface IRpcAcceptor {
 	): Cleanup;
 
 	listen(adapter: IRpcAcceptorAdapter): Promise<void>;
-
-	resolveAll<T, Definitions extends RpcMemberDefinitions<T>>(
-		descriptor: IRemoteServiceDescriptor<T, Definitions>,
-	): RemoteServiceGroup<T, Definitions>;
 
 	shutdown(): Promise<void>;
 	close(): Promise<void>;

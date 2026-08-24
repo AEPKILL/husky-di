@@ -290,7 +290,7 @@ assert.throws(
 import { RpcCallTerminalTypeEnum, RpcIncomingCallKindEnum, RpcProtocolSessionTransitionTypeEnum } from "@husky-di/remote/protocol";
 import type {
   IRemoteServiceDescriptor, IRpcPeer, IRpcConnector, IRpcConnectorReconnection,
-  IRpcAcceptor, RpcPeerResult,
+  IRpcAcceptor,
   RpcPeerState, RpcConnectorState, RpcAcceptorListenerState, RpcAcceptorState,
   RpcEvent,
   RpcConnectorOptions, RpcConnectorConnectOptions, RpcAcceptorOptions,
@@ -398,7 +398,7 @@ void [
 type Inventory = [
 	IRemoteServiceDescriptor<unknown, never>, IRpcPeer, IRpcConnector,
 	IRpcConnectorReconnection, IRpcAcceptor,
-	RpcPeerResult<unknown>, RpcPeerState, RpcConnectorState, RpcAcceptorListenerState,
+	RpcPeerState, RpcConnectorState, RpcAcceptorListenerState,
 	RpcAcceptorState, RpcCloseReasonEnum, RpcCallDirectionEnum, RpcEvent, RpcExceptionCodeEnum,
 	RpcConnectorOptions, RpcConnectorConnectOptions, RpcAcceptorOptions,
 	RpcConnectorRuntimePolicyOptions,
@@ -435,6 +435,13 @@ import type { RemoteService, RpcMemberDefinitions } from "@husky-di/remote";
 import type { RpcConnectorImpl as RootRpcConnectorImpl } from "@husky-di/remote";
 // @ts-expect-error Implementation deep imports are private.
 import type { RpcConnectorImpl as DeepRpcConnectorImpl } from "@husky-di/remote/dist/impls/rpc-connector.impl.js";
+// @ts-expect-error RPC-API-007 removes RpcPeerResult from the installed root.
+import type { RpcPeerResult } from "@husky-di/remote";
+// @ts-expect-error RPC-API-007 removes RemoteServiceGroup from the installed root.
+import type { RemoteServiceGroup } from "@husky-di/remote";
+declare const acceptor: IRpcAcceptor;
+// @ts-expect-error RPC-API-007 removes resolveAll from the installed IRpcAcceptor.
+acceptor.resolveAll;
 `,
 		);
 		run(process.execPath, [tscPath, "-p", consumerRoot], consumerRoot);
