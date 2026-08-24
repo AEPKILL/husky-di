@@ -51,7 +51,10 @@ import {
 const CONFORMANCE_POLICY: IRpcProtocolRuntimePolicy = Object.freeze({
 	maxSessions: 4,
 	maxHandshakes: 2,
-	maxPendingInvocationsPerSession: 4,
+	maxApplicationWorkPerSession: 4,
+	maxApplicationWorkTotal: 8,
+	maxActiveStreamsPerSession: 2,
+	maxActiveStreamsTotal: 4,
 	maxRetainedBytesPerSession: 4_194_304,
 	maxRetainedBytesTotal: 5_767_168,
 	maxHandlersPerSession: 2,

@@ -788,7 +788,7 @@ describe("cold Topology Owner factories", () => {
 		expect(Object.isFrozen(acceptor.peers)).toBe(true);
 	});
 
-	it("RPC-POLICY-001 passes exact frozen role defaults to the Protocol", () => {
+	it("RPC-POLICY-005 RPC-POLICY-006 RPC-POLICY-007 RPC-POLICY-008 passes the exact frozen role defaults to the Protocol", () => {
 		const connectorHarness = createProtocolHarness();
 		createRpcConnector({ protocol: connectorHarness.protocol });
 		const acceptorHarness = createProtocolHarness();
@@ -797,7 +797,10 @@ describe("cold Topology Owner factories", () => {
 		expect(connectorHarness.connectorHosts[0]?.policy).toEqual({
 			maxSessions: 1,
 			maxHandshakes: 1,
-			maxPendingInvocationsPerSession: 256,
+			maxApplicationWorkPerSession: 256,
+			maxApplicationWorkTotal: 256,
+			maxActiveStreamsPerSession: 16,
+			maxActiveStreamsTotal: 16,
 			maxRetainedBytesPerSession: 33_554_432,
 			maxRetainedBytesTotal: 33_554_432,
 			maxHandlersPerSession: 16,
@@ -814,6 +817,8 @@ describe("cold Topology Owner factories", () => {
 			...connectorHarness.connectorHosts[0]?.policy,
 			maxSessions: 64,
 			maxHandshakes: 16,
+			maxApplicationWorkTotal: 1_024,
+			maxActiveStreamsTotal: 64,
 			maxRetainedBytesTotal: 67_108_864,
 			maxHandlersTotal: 64,
 		});
@@ -847,10 +852,11 @@ describe("cold Topology Owner factories", () => {
 		replacement?.release();
 	});
 
-	it("RPC-API-001 RPC-POLICY-001 snapshots overrides and derives Connector totals", () => {
+	it("RPC-API-001 RPC-POLICY-005 RPC-POLICY-006 RPC-POLICY-007 snapshots overrides and derives Connector totals", () => {
 		const harness = createProtocolHarness();
 		const runtimePolicy = {
-			maxPendingInvocationsPerSession: 8,
+			maxApplicationWorkPerSession: 8,
+			maxActiveStreamsPerSession: 4,
 			maxRetainedBytesPerSession: 4 * 1024 * 1024,
 			maxHandlersPerSession: 2,
 			ackDelayMs: 25,
@@ -869,7 +875,10 @@ describe("cold Topology Owner factories", () => {
 		expect(harness.connectorHosts[0]?.policy).toMatchObject({
 			maxSessions: 1,
 			maxHandshakes: 1,
-			maxPendingInvocationsPerSession: 8,
+			maxApplicationWorkPerSession: 8,
+			maxApplicationWorkTotal: 8,
+			maxActiveStreamsPerSession: 4,
+			maxActiveStreamsTotal: 4,
 			maxRetainedBytesPerSession: 4 * 1024 * 1024,
 			maxRetainedBytesTotal: 4 * 1024 * 1024,
 			maxHandlersPerSession: 2,
@@ -892,7 +901,7 @@ describe("cold Topology Owner factories", () => {
 			createRpcConnector({
 				protocol: harness.protocol,
 				runtimePolicy: {
-					maxPendingInvocationsPerSession: value,
+					maxApplicationWorkPerSession: value,
 				} as never,
 			}),
 		).toThrow(TypeError);
@@ -975,11 +984,14 @@ describe("cold Topology Owner factories", () => {
 		}
 	});
 
-	it("RPC-API-001 RPC-POLICY-003 rejects closed-schema and cross-field violations before Protocol construction", () => {
+	it("RPC-API-001 RPC-POLICY-008 RPC-POLICY-009 rejects closed-schema and cross-field violations before Protocol construction", () => {
 		const cases: readonly unknown[] = [
 			{ unknown: true },
 			{ runtimePolicy: { unknown: 1 } },
 			{ runtimePolicy: { maxSessions: 2 } },
+			{ runtimePolicy: { maxApplicationWorkTotal: 2 } },
+			{ runtimePolicy: { maxActiveStreamsTotal: 2 } },
+			{ runtimePolicy: { maxPendingInvocationsPerSession: 2 } },
 			{
 				runtimePolicy: {
 					activityProbeIntervalMs: 100,
@@ -1002,7 +1014,7 @@ describe("cold Topology Owner factories", () => {
 			{ runtimePolicy: { maxRetainedBytesPerSession: 4 * 1024 * 1024 - 1 } },
 			{
 				runtimePolicy: {
-					maxPendingInvocationsPerSession: Number.MAX_SAFE_INTEGER,
+					maxApplicationWorkPerSession: 257,
 				},
 			},
 		];
@@ -1082,6 +1094,43 @@ describe("cold Topology Owner factories", () => {
 			}),
 		).toThrow(TypeError);
 		expect(invalidHarness.acceptorHosts).toHaveLength(0);
+	});
+
+	it("RPC-POLICY-009 validates Application Work and Active Stream equality boundaries without repair", () => {
+		const validHarness = createProtocolHarness();
+		createRpcAcceptor({
+			protocol: validHarness.protocol,
+			runtimePolicy: {
+				maxApplicationWorkPerSession: 8,
+				maxApplicationWorkTotal: 8,
+				maxActiveStreamsPerSession: 8,
+				maxActiveStreamsTotal: 8,
+			},
+		});
+		expect(validHarness.acceptorHosts).toHaveLength(1);
+
+		for (const runtimePolicy of [
+			{ maxApplicationWorkPerSession: 8, maxApplicationWorkTotal: 7 },
+			{ maxApplicationWorkPerSession: 8, maxActiveStreamsPerSession: 9 },
+			{
+				maxApplicationWorkPerSession: 8,
+				maxApplicationWorkTotal: 16,
+				maxActiveStreamsPerSession: 8,
+				maxActiveStreamsTotal: 7,
+			},
+			{
+				maxApplicationWorkPerSession: 8,
+				maxApplicationWorkTotal: 16,
+				maxActiveStreamsPerSession: 8,
+				maxActiveStreamsTotal: 17,
+			},
+		]) {
+			const harness = createProtocolHarness();
+			expect(() =>
+				createRpcAcceptor({ protocol: harness.protocol, runtimePolicy }),
+			).toThrow(TypeError);
+			expect(harness.acceptorHosts).toHaveLength(0);
+		}
 	});
 
 	it("RPC-API-001 wraps custom Protocol construction failures", () => {
@@ -3132,20 +3181,23 @@ describe("exposure registries and remote facades", () => {
 		await connector.close();
 	});
 
-	it("RPC-STREAM-004 RPC-VALID-010 reserves capacity before route classification", async () => {
+	it("RPC-RESOURCE-012 RPC-STREAM-004 RPC-VALID-010 reserves capacity before route classification", async () => {
 		const session: IRpcProtocolSession = {
 			reserveInvocation: () => undefined,
 			reserveStream: () => undefined,
 			forceClose() {},
 		};
-		const { connector, sessionHost } = await connectProtocolSession(session);
+		const { connector, sessionHost } = await connectProtocolSession(session, {
+			maxApplicationWorkPerSession: 2,
+			maxActiveStreamsPerSession: 2,
+		});
 		const heldReservations: Array<{ release(): void }> = [];
 		const missingRoute = {
 			service: "example.capacity-before-route.v1",
 			member: "missing$",
 			kind: "stream-property" as const,
 		};
-		for (let index = 0; index < 256; index += 1) {
+		for (let index = 0; index < 2; index += 1) {
 			const held = sessionHost.reserveIncomingStream(missingRoute);
 			expect(held?.kind).toBe("unknown");
 			if (held !== undefined) {
@@ -3163,14 +3215,168 @@ describe("exposure registries and remote facades", () => {
 		await connector.close();
 	});
 
+	it("RPC-RESOURCE-007 RPC-RESOURCE-009 shares Application Work between outgoing unary and stream roots", async () => {
+		let subscriberSink: IRpcProtocolSubscriberSink | undefined;
+		let invocationReservations = 0;
+		let streamReservations = 0;
+		const session: IRpcProtocolSession = {
+			reserveInvocation() {
+				invocationReservations += 1;
+				return {
+					commit: (sink) => ({
+						start: () =>
+							sink.finish({ type: RpcCallTerminalTypeEnum.returnedVoid }),
+						cancel() {},
+					}),
+					release() {},
+				};
+			},
+			reserveStream() {
+				streamReservations += 1;
+				return {
+					commit(sink) {
+						subscriberSink = sink;
+						return { start() {}, cancel() {} };
+					},
+					release() {},
+				};
+			},
+			forceClose() {},
+		};
+		const { connector } = await connectProtocolSession(session, {
+			maxApplicationWorkPerSession: 1,
+			maxActiveStreamsPerSession: 1,
+		});
+		const descriptor = createRemoteServiceDescriptor(IMixedExposureService, {
+			wireName: "example.shared-application-work.v1",
+			members: {
+				add: { kind: "unary" },
+				history: { kind: "stream-method" },
+			},
+		});
+		const remote = connector.peer.resolve(descriptor);
+		const first = remote.history("room").subscribe();
+		const rejectedStreamErrors: unknown[] = [];
+		remote.history("other").subscribe({
+			error: (error) => rejectedStreamErrors.push(error),
+		});
+
+		await expect(remote.add(1, 2)).rejects.toMatchObject({
+			code: RpcExceptionCodeEnum.unavailable,
+		});
+		expect(rejectedStreamErrors).toMatchObject([
+			{ code: RpcExceptionCodeEnum.unavailable },
+		]);
+		expect(streamReservations).toBe(1);
+		expect(invocationReservations).toBe(0);
+
+		subscriberSink?.reserveTerminal({ type: "completed" }).commit();
+		await expect(remote.add(1, 2)).resolves.toBeUndefined();
+		expect(invocationReservations).toBe(1);
+		first.unsubscribe();
+		await connector.close();
+	});
+
+	it("RPC-RESOURCE-007 RPC-RESOURCE-009 applies Active Streams as a subset without blocking unary work", async () => {
+		const streamSinks: IRpcProtocolSubscriberSink[] = [];
+		const session: IRpcProtocolSession = {
+			reserveInvocation: () => ({
+				commit: (sink) => ({
+					start: () =>
+						sink.finish({ type: RpcCallTerminalTypeEnum.returnedVoid }),
+					cancel() {},
+				}),
+				release() {},
+			}),
+			reserveStream: () => ({
+				commit: (sink) => {
+					streamSinks.push(sink);
+					return { start() {}, cancel() {} };
+				},
+				release() {},
+			}),
+			forceClose() {},
+		};
+		const { connector } = await connectProtocolSession(session, {
+			maxApplicationWorkPerSession: 2,
+			maxActiveStreamsPerSession: 1,
+		});
+		const descriptor = createRemoteServiceDescriptor(IMixedExposureService, {
+			wireName: "example.active-stream-subset.v1",
+			members: {
+				add: { kind: "unary" },
+				history: { kind: "stream-method" },
+			},
+		});
+		const remote = connector.peer.resolve(descriptor);
+		const first = remote.history("room").subscribe();
+		const rejectedStreamErrors: unknown[] = [];
+		remote.history("other").subscribe({
+			error: (error) => rejectedStreamErrors.push(error),
+		});
+
+		await expect(remote.add(1, 2)).resolves.toBeUndefined();
+		expect(rejectedStreamErrors).toMatchObject([
+			{ code: RpcExceptionCodeEnum.unavailable },
+		]);
+
+		streamSinks[0]?.reserveTerminal({ type: "completed" }).commit();
+		first.unsubscribe();
+		await connector.close();
+	});
+
+	it("RPC-RESOURCE-007 RPC-RESOURCE-012 shares incoming Application Work while keeping Active Streams a subset", async () => {
+		const session: IRpcProtocolSession = {
+			reserveInvocation: () => undefined,
+			reserveStream: () => undefined,
+			forceClose() {},
+		};
+		const { connector, host, sessionHost } = await connectProtocolSession(
+			session,
+			{
+				maxApplicationWorkPerSession: 2,
+				maxActiveStreamsPerSession: 1,
+			},
+		);
+		const args = host.normalizeApplicationArguments([]);
+		const stream = sessionHost.reserveIncomingStream({
+			service: "missing.service",
+			member: "missing$",
+			kind: "stream-property",
+		});
+		const call = sessionHost.reserveIncomingCall({
+			service: "missing.service",
+			method: "missing",
+			args,
+		});
+
+		expect(stream?.kind).toBe("unknown");
+		expect(call?.kind).toBe("unknown");
+		expect(
+			sessionHost.reserveIncomingStream({
+				service: "missing.service",
+				member: "other$",
+				kind: "stream-property",
+			}),
+		).toBeUndefined();
+		stream?.reservation.release();
+		call?.reservation.release();
+		await connector.close();
+	});
+
 	it("RPC-STREAM-003 RPC-STREAM-014 keeps Source ownership through onReleased", async () => {
 		const session: IRpcProtocolSession = {
 			reserveInvocation: () => undefined,
 			reserveStream: () => undefined,
 			forceClose() {},
 		};
-		const { connector, host, sessionHost } =
-			await connectProtocolSession(session);
+		const { connector, host, sessionHost } = await connectProtocolSession(
+			session,
+			{
+				maxApplicationWorkPerSession: 256,
+				maxActiveStreamsPerSession: 256,
+			},
+		);
 		const descriptor = createRemoteServiceDescriptor(IMixedExposureService, {
 			wireName: "example.source-release-receipt.v1",
 			members: { history: { kind: "stream-method" } },

@@ -140,7 +140,8 @@ export type RpcAcceptorRuntimePolicyOptions =
 
 export type RpcConnectorRuntimePolicyOptions = Pick<
 	RpcAcceptorRuntimePolicyOptions,
-	| "maxPendingInvocationsPerSession"
+	| "maxApplicationWorkPerSession"
+	| "maxActiveStreamsPerSession"
 	| "maxRetainedBytesPerSession"
 	| "maxHandlersPerSession"
 	| "ackDelayMs"

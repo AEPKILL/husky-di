@@ -862,8 +862,7 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 		const cannotReserveInvocation =
 			this._closed ||
 			this._draining ||
-			this._invocationCount >=
-				this._host.policy.maxPendingInvocationsPerSession ||
+			this._invocationCount >= this._host.policy.maxApplicationWorkPerSession ||
 			!Number.isSafeInteger(pendingCharge) ||
 			pendingCharge > maximumPendingBytes - this._pendingInvocationBytes;
 		if (cannotReserveInvocation) {
@@ -1578,8 +1577,7 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 				: resourceClass === "cancel"
 					? 384
 					: ordinaryCharge;
-		const maximumEntries =
-			this._host.policy.maxPendingInvocationsPerSession * 4;
+		const maximumEntries = this._host.policy.maxApplicationWorkPerSession * 4;
 		const maximumBytes = Math.floor(
 			this._host.policy.maxRetainedBytesPerSession / 2,
 		);

@@ -52,7 +52,10 @@ function createPolicy(
 	return {
 		maxSessions: 8,
 		maxHandshakes: 1,
-		maxPendingInvocationsPerSession: 256,
+		maxApplicationWorkPerSession: 256,
+		maxApplicationWorkTotal: 256,
+		maxActiveStreamsPerSession: 16,
+		maxActiveStreamsTotal: 16,
 		maxRetainedBytesPerSession: 32 * 1024 * 1024,
 		maxRetainedBytesTotal: 64 * 1024 * 1024,
 		maxHandlersPerSession: 16,

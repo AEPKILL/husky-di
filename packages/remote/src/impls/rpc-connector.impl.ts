@@ -118,6 +118,7 @@ export class RpcConnectorImpl implements IRpcConnector {
 
 	constructor(options: CreateRpcConnectorImplOptions) {
 		const {
+			applicationWorkLedger,
 			createPeer,
 			custody,
 			eventPublisher,
@@ -145,7 +146,13 @@ export class RpcConnectorImpl implements IRpcConnector {
 			onProtocolFault: (error) =>
 				this.protocolFault(RpcCloseReasonEnum.protocolFault, error),
 			handlerScheduler,
+			maximumActiveStreamsPerSession: policy.maxActiveStreamsPerSession,
+			maximumApplicationWorkPerSession: policy.maxApplicationWorkPerSession,
 			maximumIncomingBytes: Math.floor(policy.maxRetainedBytesPerSession / 4),
+			reserveLocalApplicationWork: (stream) =>
+				applicationWorkLedger.reserveLocal(stream),
+			reserveRemoteApplicationWork: (stream) =>
+				applicationWorkLedger.reserveRemote(stream),
 			reserveRetainedBytes: (bytes) =>
 				reserveRpcSessionRetainedBytes(
 					this.#session ?? this.#attempt?.provisionalSession,

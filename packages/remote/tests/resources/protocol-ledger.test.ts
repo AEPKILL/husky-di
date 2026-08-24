@@ -48,7 +48,7 @@ const ILargeLedgerService = createServiceIdentifier<ILargeLedgerService>(
 describe("Default RPC Protocol retained ledger", () => {
 	it("RPC-CALL-005 RPC-RESOURCE-003 guards replay-rejected payload through reentrant terminal cleanup", async () => {
 		const harness = createRpcDirectSessionHarness({
-			maxPendingInvocationsPerSession: 1,
+			maxApplicationWorkPerSession: 1,
 		});
 		const { session } = harness;
 		for (let ordinal = 1; ordinal <= 4; ordinal += 1) {
@@ -412,7 +412,7 @@ describe("Default RPC Protocol retained ledger", () => {
 		});
 		const policy = {
 			ackDelayMs: 1,
-			maxPendingInvocationsPerSession: 1,
+			maxApplicationWorkPerSession: 1,
 		};
 		const acceptor = createRpcAcceptor({ runtimePolicy: policy });
 		const connector = createRpcConnector({ runtimePolicy: policy });

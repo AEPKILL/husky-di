@@ -39,7 +39,10 @@ const mebibyte = 1024 * 1024;
 const defaultPolicy: IRpcProtocolRuntimePolicy = {
 	maxSessions: 1,
 	maxHandshakes: 1,
-	maxPendingInvocationsPerSession: 256,
+	maxApplicationWorkPerSession: 256,
+	maxApplicationWorkTotal: 256,
+	maxActiveStreamsPerSession: 16,
+	maxActiveStreamsTotal: 16,
 	maxRetainedBytesPerSession: 32 * mebibyte,
 	maxRetainedBytesTotal: 32 * mebibyte,
 	maxHandlersPerSession: 16,
@@ -438,7 +441,7 @@ describe("Default RPC Protocol resource boundaries", () => {
 			session.forceClose();
 		}
 
-		const session = createSession({ maxPendingInvocationsPerSession: 2 });
+		const session = createSession({ maxApplicationWorkPerSession: 2 });
 		const reserve = () =>
 			session.reserveInvocation({
 				service: "example.boundary.v1",
@@ -457,7 +460,7 @@ describe("Default RPC Protocol resource boundaries", () => {
 	});
 
 	it("RPC-CALL-005 RPC-RESOURCE-001 retracts canceled Pending storage without a send slot", () => {
-		const session = createSession({ maxPendingInvocationsPerSession: 1 });
+		const session = createSession({ maxApplicationWorkPerSession: 1 });
 		const finishes: unknown[] = [];
 		for (let index = 0; index < 3; index += 1) {
 			const reservation = session.reserveInvocation({
@@ -496,7 +499,7 @@ describe("Default RPC Protocol resource boundaries", () => {
 	});
 
 	it("RPC-CORPUS-004 executes ordinary replay and protected terminal/cancel entry triplets", () => {
-		const ordinary = createSession({ maxPendingInvocationsPerSession: 1 });
+		const ordinary = createSession({ maxApplicationWorkPerSession: 1 });
 		for (let ordinal = 1; ordinal <= 3; ordinal += 1) {
 			expect(
 				ordinary._queueSemantic({

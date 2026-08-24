@@ -27,6 +27,7 @@ import type {
 import type { IRpcRetainedBytesLedger } from "@/interfaces/protocol/rpc-retained-bytes-ledger.interface";
 import type { IRemoteServiceDescriptor } from "@/interfaces/remote-service-descriptor.interface";
 import type { IRpcAcceptorAdapter } from "@/interfaces/rpc-adapter.interface";
+import type { IRpcApplicationWorkLedger } from "@/interfaces/rpc-application-work-ledger.interface";
 import type {
 	IRpcAcceptor,
 	IRpcPeer,
@@ -97,6 +98,7 @@ type RpcAcceptorClosedState = Extract<
 export class RpcAcceptorImpl implements IRpcAcceptor {
 	readonly #runtime: IRpcProtocolAcceptorRuntime;
 	readonly #policy: IRpcProtocolRuntimePolicy;
+	readonly #applicationWorkLedger: IRpcApplicationWorkLedger;
 	readonly #retainedBytesLedger: IRpcRetainedBytesLedger;
 	readonly #ownerExposureRegistry: RpcExposureRegistry = new Map();
 	readonly #stateSubject = new Subject<RpcAcceptorState>();
@@ -124,6 +126,7 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 
 	constructor(options: CreateRpcAcceptorImplOptions) {
 		const {
+			applicationWorkLedger,
 			createPeer,
 			custody,
 			eventPublisher,
@@ -134,6 +137,7 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 		} = options;
 		this.#runtime = runtime;
 		this.#policy = policy;
+		this.#applicationWorkLedger = applicationWorkLedger;
 		this.#custody = custody;
 		this.#eventPublisher = eventPublisher;
 		this.#retainedBytesLedger = retainedBytesLedger;
@@ -835,9 +839,16 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 			onProtocolFault: (error) =>
 				this.#faultSession(session, RpcCloseReasonEnum.protocolFault, error),
 			handlerScheduler: this.#handlerScheduler,
+			maximumActiveStreamsPerSession: this.#policy.maxActiveStreamsPerSession,
+			maximumApplicationWorkPerSession:
+				this.#policy.maxApplicationWorkPerSession,
 			maximumIncomingBytes: Math.floor(
 				this.#policy.maxRetainedBytesPerSession / 4,
 			),
+			reserveLocalApplicationWork: (stream) =>
+				this.#applicationWorkLedger.reserveLocal(stream),
+			reserveRemoteApplicationWork: (stream) =>
+				this.#applicationWorkLedger.reserveRemote(stream),
 			reserveRetainedBytes: (bytes) =>
 				reserveRpcSessionRetainedBytes(
 					session,

@@ -23,7 +23,8 @@ declare const adapterFactory: RpcConnectorAdapterFactory;
 
 const connector: IRpcConnector = createRpcConnector({
 	runtimePolicy: {
-		maxPendingInvocationsPerSession: 8,
+		maxApplicationWorkPerSession: 8,
+		maxActiveStreamsPerSession: 4,
 		maxRetainedBytesPerSession: 4 * 1024 * 1024,
 		maxHandlersPerSession: 2,
 		ackDelayMs: 25,
@@ -40,7 +41,10 @@ const acceptor: IRpcAcceptor = createRpcAcceptor({
 	runtimePolicy: {
 		maxSessions: 2,
 		maxHandshakes: 1,
-		maxPendingInvocationsPerSession: 8,
+		maxApplicationWorkPerSession: 8,
+		maxApplicationWorkTotal: 16,
+		maxActiveStreamsPerSession: 4,
+		maxActiveStreamsTotal: 8,
 		maxRetainedBytesPerSession: 4 * 1024 * 1024,
 		maxRetainedBytesTotal: 4 * 1024 * 1024 + 512 * 1024,
 		maxHandlersPerSession: 2,
@@ -101,6 +105,27 @@ createRpcConnector({
 	runtimePolicy: {
 		// @ts-expect-error RPC-POLICY-001 derives maxSessions for Connector.
 		maxSessions: 2,
+	},
+});
+
+createRpcConnector({
+	runtimePolicy: {
+		// @ts-expect-error RPC-POLICY-006 derives aggregate Application Work for Connector.
+		maxApplicationWorkTotal: 8,
+	},
+});
+
+createRpcConnector({
+	runtimePolicy: {
+		// @ts-expect-error RPC-POLICY-007 derives aggregate Active Streams for Connector.
+		maxActiveStreamsTotal: 4,
+	},
+});
+
+createRpcConnector({
+	runtimePolicy: {
+		// @ts-expect-error RPC-POLICY-005 removes the legacy Pending Invocation policy name.
+		maxPendingInvocationsPerSession: 8,
 	},
 });
 

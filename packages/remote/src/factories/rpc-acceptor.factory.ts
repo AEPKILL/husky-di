@@ -7,6 +7,7 @@
 import { createRpcProtocol } from "@/factories/rpc-protocol.factory";
 import { RpcRetainedBytesLedgerImpl } from "@/impls/protocol/rpc-retained-bytes-ledger.impl";
 import { RpcAcceptorImpl } from "@/impls/rpc-acceptor.impl";
+import { RpcApplicationWorkLedgerImpl } from "@/impls/rpc-application-work-ledger.impl";
 import { RpcEventPublisherImpl } from "@/impls/rpc-event-publisher.impl";
 import { RpcHandlerSchedulerImpl } from "@/impls/rpc-handler-scheduler.impl";
 import { RpcOwnerCustodyImpl } from "@/impls/rpc-owner-custody.impl";
@@ -34,6 +35,10 @@ export function createRpcAcceptor(options?: RpcAcceptorOptions): IRpcAcceptor {
 		},
 	);
 	acceptor = new RpcAcceptorImpl({
+		applicationWorkLedger: new RpcApplicationWorkLedgerImpl(
+			policy.maxApplicationWorkTotal,
+			policy.maxActiveStreamsTotal,
+		),
 		runtime,
 		policy,
 		retainedBytesLedger: new RpcRetainedBytesLedgerImpl(

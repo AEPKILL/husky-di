@@ -28,7 +28,10 @@ const handshakeTransientBytes = 4 * mebibyte;
 const defaultPolicy: IRpcProtocolRuntimePolicy = Object.freeze({
 	maxSessions: 64,
 	maxHandshakes: 16,
-	maxPendingInvocationsPerSession: 256,
+	maxApplicationWorkPerSession: 256,
+	maxApplicationWorkTotal: 1_024,
+	maxActiveStreamsPerSession: 16,
+	maxActiveStreamsTotal: 64,
 	maxRetainedBytesPerSession: 32 * mebibyte,
 	maxRetainedBytesTotal: 64 * mebibyte,
 	maxHandlersPerSession: 16,
@@ -47,7 +50,8 @@ const policyKeys = Object.freeze(
 );
 
 const connectorPolicyKeys = new Set<keyof IRpcProtocolRuntimePolicy>([
-	"maxPendingInvocationsPerSession",
+	"maxApplicationWorkPerSession",
+	"maxActiveStreamsPerSession",
 	"maxRetainedBytesPerSession",
 	"maxHandlersPerSession",
 	"ackDelayMs",
@@ -175,7 +179,31 @@ function validatePolicy(policy: IRpcProtocolRuntimePolicy): void {
 		throw new TypeError("maxRetainedBytesPerSession must be at least 4 MiB.");
 	}
 
-	multiplySafe(policy.maxPendingInvocationsPerSession, 4, "replay entry limit");
+	if (policy.maxApplicationWorkPerSession > 256) {
+		throw new TypeError("maxApplicationWorkPerSession must not exceed 256.");
+	}
+	if (policy.maxApplicationWorkTotal < policy.maxApplicationWorkPerSession) {
+		throw new TypeError(
+			"maxApplicationWorkTotal must cover one full Session Application Work allowance.",
+		);
+	}
+	if (policy.maxActiveStreamsPerSession > policy.maxApplicationWorkPerSession) {
+		throw new TypeError(
+			"maxActiveStreamsPerSession must not exceed maxApplicationWorkPerSession.",
+		);
+	}
+	if (policy.maxActiveStreamsTotal < policy.maxActiveStreamsPerSession) {
+		throw new TypeError(
+			"maxActiveStreamsTotal must cover one full Session Active Stream allowance.",
+		);
+	}
+	if (policy.maxActiveStreamsTotal > policy.maxApplicationWorkTotal) {
+		throw new TypeError(
+			"maxActiveStreamsTotal must not exceed maxApplicationWorkTotal.",
+		);
+	}
+
+	multiplySafe(policy.maxApplicationWorkPerSession, 4, "replay entry limit");
 	addSafe(
 		policy.maxSessions,
 		multiplySafe(policy.maxHandshakes, 2, "Connection limit"),
@@ -221,12 +249,25 @@ function snapshotPolicy(
 			mutable[key] = validateRpcPositiveSafeInteger(override, key);
 		}
 	}
+	if (record.maxActiveStreamsPerSession === undefined) {
+		mutable.maxActiveStreamsPerSession = Math.min(
+			16,
+			mutable.maxApplicationWorkPerSession,
+		);
+	}
 
 	if (derivedConnectorFields) {
 		mutable.maxSessions = 1;
 		mutable.maxHandshakes = 1;
+		mutable.maxApplicationWorkTotal = mutable.maxApplicationWorkPerSession;
+		mutable.maxActiveStreamsTotal = mutable.maxActiveStreamsPerSession;
 		mutable.maxRetainedBytesTotal = mutable.maxRetainedBytesPerSession;
 		mutable.maxHandlersTotal = mutable.maxHandlersPerSession;
+	} else if (record.maxActiveStreamsTotal === undefined) {
+		mutable.maxActiveStreamsTotal = Math.min(
+			mutable.maxApplicationWorkTotal,
+			Math.max(mutable.maxActiveStreamsPerSession, 64),
+		);
 	}
 
 	validatePolicy(mutable);

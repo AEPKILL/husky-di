@@ -91,7 +91,10 @@ export type RpcIncomingTerminal =
 export interface IRpcProtocolRuntimePolicy {
 	readonly maxSessions: number;
 	readonly maxHandshakes: number;
-	readonly maxPendingInvocationsPerSession: number;
+	readonly maxApplicationWorkPerSession: number;
+	readonly maxApplicationWorkTotal: number;
+	readonly maxActiveStreamsPerSession: number;
+	readonly maxActiveStreamsTotal: number;
 	readonly maxRetainedBytesPerSession: number;
 	readonly maxRetainedBytesTotal: number;
 	readonly maxHandlersPerSession: number;

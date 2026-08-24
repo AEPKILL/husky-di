@@ -434,7 +434,11 @@ describe("Default RPC Protocol remaining requirements", () => {
 			emitEvent: () => {},
 			onProtocolFault: () => {},
 			handlerScheduler: scheduler,
+			maximumActiveStreamsPerSession: 16,
+			maximumApplicationWorkPerSession: 256,
 			maximumIncomingBytes: 1024 * 1024,
+			reserveLocalApplicationWork: () => ({ release() {} }),
+			reserveRemoteApplicationWork: () => ({ release() {} }),
 			reserveRetainedBytes: () => ({ release() {} }),
 		});
 		const descriptor = createRemoteServiceDescriptor(
