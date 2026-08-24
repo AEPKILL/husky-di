@@ -50,6 +50,9 @@
 	"scripts": {
 		"build": "rslib build",
 		"dev": "rslib build --watch",
+		"evidence:generate": "node scripts/evidence-registry.mjs generate",
+		"evidence:graph": "node scripts/evidence-registry.mjs graph",
+		"evidence:ledger": "node scripts/evidence-registry.mjs ledger",
 		"test": "pnpm run typecheck && vitest run && pnpm run test:browser",
 		"test:browser": "playwright test --config playwright.config.ts",
 		"typecheck": "tsc -p tsconfig.json && tsc -p tests/tsconfig.json"

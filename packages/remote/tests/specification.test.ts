@@ -7,6 +7,10 @@
  * @created 2026-08-19 00:00:00
  */
 
+import { spawnSync } from "node:child_process";
+import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+
 import { CodedException, createServiceIdentifier } from "@husky-di/core";
 import { Observable, Subject } from "rxjs";
 import { describe, expect, it, vi } from "vitest";
@@ -5120,5 +5124,46 @@ describe("Acceptor Topology Owner termination", () => {
 			"task-rejected",
 		]);
 		expect(acceptor.shutdown()).toBe(task);
+	});
+});
+
+describe("normative evidence registry", () => {
+	const packageRoot = resolve(fileURLToPath(new URL("../", import.meta.url)));
+	const auditScript = resolve(packageRoot, "scripts/evidence-registry.mjs");
+
+	it("RPC-EVIDENCE-004 RPC-EVIDENCE-013 verifies every close-delimited active and retired identity", () => {
+		const result = spawnSync(
+			process.execPath,
+			[
+				auditScript,
+				"ledger",
+				"--legacy-preserve",
+				"153",
+				"--legacy-retire",
+				"48",
+				"--active",
+				"343",
+			],
+			{ cwd: packageRoot, encoding: "utf8" },
+		);
+
+		expect(result.stderr).toBe("");
+		expect(result.status).toBe(0);
+	});
+
+	it("RPC-EVIDENCE-011 enforces zero unfinished nodes and reports the exact external release boundary", () => {
+		const result = spawnSync(
+			process.execPath,
+			[auditScript, "graph", "--inverse", "--zero-incomplete"],
+			{ cwd: packageRoot, encoding: "utf8" },
+		);
+
+		expect(result.status).toBe(1);
+		expect(result.stderr).toContain(
+			"type.requirement.value-007: status=planned",
+		);
+		expect(result.stderr).toContain(
+			"package.requirement.release-025: status=planned",
+		);
 	});
 });

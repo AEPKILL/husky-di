@@ -2697,9 +2697,7 @@ implementation.
 disposition, state/event staging, and queue publication in Transport emission order. Handler code **MUST NOT**
 run inline in the ingress callback. Synchronous reentrant input **MUST** enter the bounded ingress backlog and be
 fully charged through processing settlement; overflow **MUST** fault rather than drop, skip, or ACK an
-undisposed expected record. A Connection terminal observed after an admitted complete record **MUST** enter the
-same ingress FIFO: the admitted record **MUST** settle before the terminal takes effect, the terminal **MUST NOT**
-discard or overtake that record, and no later record **MAY** be admitted after the terminal is observed.
+undisposed expected record.
 <!-- /RPC-SCHEDULE-005 -->
 
 **RPC-SCHEDULE-006 — Handler fairness.** Handler start order **MUST** be FIFO per Session and round-robin among
@@ -3079,7 +3077,10 @@ or testing a second package build **MUST NOT** satisfy a canonical Case.
 **RPC-EVIDENCE-013 — Complete active proposition registry.** The immutable authority set **MUST** contain
 exactly 343 distinct active IDs and their complete propositions, including the `methods` negative in
 `RPC-DESC-006`, and remain disjoint from exactly 48 retired Requirement IDs. Range shorthand and a regex count of
-current specification markers **MUST NOT** replace the authoritative key comparison.
+current specification markers **MUST NOT** replace the authoritative key comparison. Each proposition **MUST**
+be the unnormalized raw UTF-8 bytes from its column-zero opening marker through the byte before the single
+structural LF that immediately precedes its unique matching `<!-- /RPC-ID -->` close line. BOM, CR, invalid UTF-8,
+missing, mismatched, duplicate, nested, crossed, orphan, or retired markers and closes **MUST** fail closed.
 <!-- /RPC-EVIDENCE-013 -->
 
 **RPC-EVIDENCE-014 — Exact node resolution.** Every Requirement, Case, Evidence, replacement, `covers`,
