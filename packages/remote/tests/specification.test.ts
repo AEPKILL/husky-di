@@ -2514,6 +2514,118 @@ describe("exposure registries and remote facades", () => {
 		expect(forceCloses).toBe(1);
 	});
 
+	it("RPC-VALID-010 classifies missing stream routes without application work", async () => {
+		let acquisitions = 0;
+		let releases = 0;
+		const session: IRpcProtocolSession = {
+			reserveInvocation: () => undefined,
+			reserveStream: () => undefined,
+			forceClose() {},
+		};
+		const { connector, sessionHost } = await connectProtocolSession(session);
+		const descriptor = createRemoteServiceDescriptor(IMixedExposureService, {
+			wireName: "example.route-classification.v1",
+			members: { history: { kind: "stream-method" } },
+		});
+		connector.peer.expose(descriptor, {
+			history() {
+				acquisitions += 1;
+				return of("unexpected");
+			},
+		} as never);
+		const cases = [
+			{
+				request: {
+					service: "example.missing-service.v1",
+					member: "history",
+					kind: "stream-property" as const,
+				},
+				code: RpcExceptionCodeEnum.unknownService,
+			},
+			{
+				request: {
+					service: "example.route-classification.v1",
+					member: "missing$",
+					kind: "stream-property" as const,
+				},
+				code: RpcExceptionCodeEnum.unknownMember,
+			},
+			{
+				request: {
+					service: "example.route-classification.v1",
+					member: "history",
+					kind: "stream-property" as const,
+				},
+				code: RpcExceptionCodeEnum.unknownMember,
+			},
+		] as const;
+
+		for (const routeCase of cases) {
+			const reservation = sessionHost.reserveIncomingStream(routeCase.request);
+			expect(reservation).toMatchObject({
+				kind: "unknown",
+				code: routeCase.code,
+			});
+			if (reservation?.kind === "unknown") {
+				const incoming = reservation.reservation.commit();
+				incoming.finish({ type: "failed", code: routeCase.code }, () => {
+					releases += 1;
+				});
+			}
+		}
+
+		expect(acquisitions).toBe(0);
+		expect(releases).toBe(3);
+		await connector.close();
+	});
+
+	it("RPC-VALID-010 projects a safe unknown-member stream error", async () => {
+		const session: IRpcProtocolSession = {
+			reserveInvocation: () => undefined,
+			reserveStream() {
+				return {
+					commit(sink) {
+						return {
+							start() {
+								sink
+									.reserveTerminal({
+										type: "failed",
+										code: RpcExceptionCodeEnum.unknownMember,
+									})
+									.commit();
+							},
+							cancel() {},
+						};
+					},
+					release() {},
+				};
+			},
+			forceClose() {},
+		};
+		const { connector } = await connectProtocolSession(session);
+		const descriptor = createRemoteServiceDescriptor(IMixedExposureService, {
+			wireName: "example.safe-route-error.v1",
+			members: { history: { kind: "stream-method" } },
+		});
+		let receivedError: unknown;
+
+		connector.peer
+			.resolve(descriptor)
+			.history("room")
+			.subscribe({
+				error: (error) => {
+					receivedError = error;
+				},
+			});
+
+		expect(receivedError).toBeInstanceOf(RpcException);
+		expect(receivedError).toMatchObject({
+			code: RpcExceptionCodeEnum.unknownMember,
+		});
+		expect(receivedError).toHaveProperty("cause", undefined);
+		await connector.close();
+	});
+
 	it("RPC-API-007 omits every Remote Service Group facade", () => {
 		const { protocol } = createProtocolHarness();
 		const acceptor = createRpcAcceptor({ protocol });
