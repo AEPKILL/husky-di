@@ -9,49 +9,111 @@
   "jcs": [
     {
       "id": "rfc8785-section-3.2.2",
-      "covers": ["RPC-CORPUS-001", "RPC-SEC-002"],
+      "covers": [
+        "RPC-CORPUS-001",
+        "RPC-SEC-002"
+      ],
       "input": {
-        "numbers": [333333333.33333329, 1e30, 4.5, 0.002, 1e-27],
+        "numbers": [
+          333333333.3333333,
+          1e+30,
+          4.5,
+          0.002,
+          1e-27
+        ],
         "string": "€$\u000f\nA'B\"\\\\\"/",
-        "literals": [null, true, false]
+        "literals": [
+          null,
+          true,
+          false
+        ]
       },
-      "canonical": "{\"literals\":[null,true,false],\"numbers\":[333333333.3333333,1e+30,4.5,0.002,1e-27],\"string\":\"€$\\u000f\\nA'B\\\"\\\\\\\\\\\"/\"}"
+      "canonical": "{\"literals\":[null,true,false],\"numbers\":[333333333.3333333,1e+30,4.5,0.002,1e-27],\"string\":\"€$\\u000f\\nA'B\\\"\\\\\\\\\\\"/\"}",
+      "provenance": {
+        "source": "RFC 8785",
+        "generatorArtifact": {
+          "path": "scripts/generate-rpc-wire-corpus.mjs",
+          "sha256": "4b538d4c22c3063ff2b9d41b3aee94ba74459842b2c3109d80b660f746060f37"
+        },
+        "inputSha256": "20b3ea98d1dfaa496f2e7cbbf5482e76713bf6ed76e1b823e702ee31015103b3",
+        "outputSha256": "baf6e40a96c153b9d0cec54aca5a30cfcf0a1d28e2ff192c2f43f844f26713e9"
+      }
     },
     {
       "id": "rfc8785-section-3.2.3-utf16-property-order",
-      "covers": ["RPC-CORPUS-001", "RPC-SEC-002"],
+      "covers": [
+        "RPC-CORPUS-001",
+        "RPC-SEC-002"
+      ],
       "input": {
+        "1": "One",
         "€": "Euro Sign",
         "\r": "Carriage Return",
         "דּ": "Hebrew Letter Dalet With Dagesh",
-        "1": "One",
         "😀": "Emoji: Grinning Face",
         "": "Control",
         "ö": "Latin Small Letter O With Diaeresis"
       },
-      "canonical": "{\"\\r\":\"Carriage Return\",\"1\":\"One\",\"\":\"Control\",\"ö\":\"Latin Small Letter O With Diaeresis\",\"€\":\"Euro Sign\",\"😀\":\"Emoji: Grinning Face\",\"דּ\":\"Hebrew Letter Dalet With Dagesh\"}"
+      "canonical": "{\"\\r\":\"Carriage Return\",\"1\":\"One\",\"\":\"Control\",\"ö\":\"Latin Small Letter O With Diaeresis\",\"€\":\"Euro Sign\",\"😀\":\"Emoji: Grinning Face\",\"דּ\":\"Hebrew Letter Dalet With Dagesh\"}",
+      "provenance": {
+        "source": "RFC 8785",
+        "generatorArtifact": {
+          "path": "scripts/generate-rpc-wire-corpus.mjs",
+          "sha256": "4b538d4c22c3063ff2b9d41b3aee94ba74459842b2c3109d80b660f746060f37"
+        },
+        "inputSha256": "55410bfb2c2aa01b116d3ba03dea731cba914b250109ca09502ed0321c8a5147",
+        "outputSha256": "38d3a0605bba422d872e14064c1918b751676b186a5762707f430ee460e2e9c2"
+      }
     }
   ],
   "hkdfSha256": {
     "id": "rfc5869-appendix-a.1",
-    "covers": ["RPC-CORPUS-001", "RPC-SEC-002"],
+    "covers": [
+      "RPC-CORPUS-001",
+      "RPC-SEC-002"
+    ],
     "ikmHex": "0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b",
     "saltHex": "000102030405060708090a0b0c",
     "infoHex": "f0f1f2f3f4f5f6f7f8f9",
     "length": 42,
     "prkHex": "077709362c2e32df0ddc3f0dc47bba6390b6c73bb50f9c3122ec844ad7c2b3e5",
-    "okmHex": "3cb25f25faacd57a90434f64d0362f2a2d2d0a90cf1a5a4c5db02d56ecc4c5bf34007208d5b887185865"
+    "okmHex": "3cb25f25faacd57a90434f64d0362f2a2d2d0a90cf1a5a4c5db02d56ecc4c5bf34007208d5b887185865",
+    "provenance": {
+      "source": "RFC 5869 appendix A.1",
+      "generatorArtifact": {
+        "path": "scripts/generate-rpc-wire-corpus.mjs",
+        "sha256": "4b538d4c22c3063ff2b9d41b3aee94ba74459842b2c3109d80b660f746060f37"
+      },
+      "inputSha256": "b0756cabd4688fc82a410adf94aaa79edeafaf5c92ecde24b93e079f8331dcff",
+      "outputSha256": "763c24015b0c2d7c0bad49c64121691c888bbea451b20f80123027fa258e043f"
+    }
   },
   "hmacSha256": {
     "id": "rfc4231-section-4.2-test-case-1",
-    "covers": ["RPC-CORPUS-001", "RPC-SEC-002"],
+    "covers": [
+      "RPC-CORPUS-001",
+      "RPC-SEC-002"
+    ],
     "keyHex": "0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b",
     "dataHex": "4869205468657265",
-    "tagHex": "b0344c61d8db38535ca8afceaf0bf12b881dc200c9833da726e9376c2e32cff7"
+    "tagHex": "b0344c61d8db38535ca8afceaf0bf12b881dc200c9833da726e9376c2e32cff7",
+    "provenance": {
+      "source": "RFC 4231 section 4.2 test case 1",
+      "generatorArtifact": {
+        "path": "scripts/generate-rpc-wire-corpus.mjs",
+        "sha256": "4b538d4c22c3063ff2b9d41b3aee94ba74459842b2c3109d80b660f746060f37"
+      },
+      "inputSha256": "3fe975e41c9cb38574e24835543706119120501fd061c26a009eb966472b15c9",
+      "outputSha256": "74976b41058beb6424d34c91fab504b4ca0e239ccf17845c959a759e918824ea"
+    }
   },
   "profileTranscript": {
     "id": "husky-di-rpc-1-proof-transcript",
-    "covers": ["RPC-CORPUS-001", "RPC-SEC-002", "RPC-SEC-003"],
+    "covers": [
+      "RPC-CORPUS-001",
+      "RPC-SEC-002",
+      "RPC-SEC-003"
+    ],
     "sessionSecretHex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
     "sessionSecretBase64Url": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8",
     "sessionId": "ICEiIyQlJicoKSorLC0uLzAxMjM0NTY3ODk6Ozw9Pj8",
@@ -66,7 +128,10 @@
     "proofKeyHex": "14f6427f2dfe04a9c0b6689e087de6d28b9c5f130b7db7a2e50eee29c3001a01",
     "freshRequest": {
       "kind": "fresh",
-      "profiles": ["future/2", "husky-di-rpc/1"],
+      "profiles": [
+        "future/2",
+        "husky-di-rpc/1"
+      ],
       "initiatorNonce": "QEFCQ0RFRkdISUpLTE1OT1BRUlNUVVZXWFlaW1xdXl8",
       "zUnknown": {
         "proof": "nested-kept",
@@ -83,7 +148,9 @@
       "bindingEpoch": 1,
       "responderNonce": "YGFiY2RlZmdoaWprbG1ub3BxcnN0dXZ3eHl6e3x9fn8",
       "sessionSecret": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8",
-      "future": ["x"],
+      "future": [
+        "x"
+      ],
       "proof": "IDaiGH9L4FKlDeqZr3opPKl7kTomk2yGH54TzHZYsUk"
     },
     "freshAcceptCanonicalWithoutProof": "{\"bindingEpoch\":1,\"future\":[\"x\"],\"kind\":\"accept\",\"profile\":\"husky-di-rpc/1\",\"responderNonce\":\"YGFiY2RlZmdoaWprbG1ub3BxcnN0dXZ3eHl6e3x9fn8\",\"sessionId\":\"ICEiIyQlJicoKSorLC0uLzAxMjM0NTY3ODk6Ozw9Pj8\",\"sessionSecret\":\"AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8\"}",
@@ -133,6 +200,128 @@
     "authenticatedRejectCanonicalWithoutProof": "{\"code\":\"continuity-failure\",\"future\":{\"proof\":\"nested-kept\"},\"kind\":\"reject\",\"responderNonce\":\"wMHCw8TFxsfIycrLzM3Oz9DR0tPU1dbX2Nna29zd3t8\"}",
     "authenticatedRejectSha256Hex": "9b07816b5f95b6a16789ddc87dc1b23587e3568eb0f953b4c73290219ed68500",
     "authenticatedRejectTranscriptHex": "6875736b792d64692d7270632f3100726573756d652d72656a65637400c825a1920a8ca0274678d65cc13d36f76b9d6389dffa1012765922f2495f12969b07816b5f95b6a16789ddc87dc1b23587e3568eb0f953b4c73290219ed68500",
-    "authenticatedRejectProof": "UN4tSL-lWsIBo7XzUR9aM3HFG6m-ZPpPEwei6HNsOog"
-  }
+    "authenticatedRejectProof": "UN4tSL-lWsIBo7XzUR9aM3HFG6m-ZPpPEwei6HNsOog",
+    "provenance": {
+      "source": "husky-di-rpc/1 RPC-SEC-002 transcript",
+      "generatorArtifact": {
+        "path": "scripts/generate-rpc-wire-corpus.mjs",
+        "sha256": "4b538d4c22c3063ff2b9d41b3aee94ba74459842b2c3109d80b660f746060f37"
+      },
+      "inputSha256": "c54d3d0bdfbb9824213c827e80c34c6b8d08b0d7bda4d48446d44429a431b99a",
+      "outputSha256": "a76f42aa39152da1cfab659524d010659b8c6462ff79f1f8a5c383147d163a5b"
+    }
+  },
+  "provenance": {
+    "jcs": "RFC 8785 sections 3.2.2 and 3.2.3",
+    "hkdfSha256": "RFC 5869 appendix A.1",
+    "hmacSha256": "RFC 4231 section 4.2 test case 1",
+    "profileTranscript": "Independent Python 3 hashlib/hmac/JCS-compatible recomputation"
+  },
+  "securityActions": [
+    {
+      "id": "stream-cursor-lost-ack",
+      "action": "lose item receipt ACK, recover, replay original sequence",
+      "expected": "one Observer item and cumulative ACK convergence",
+      "provenance": {
+        "model": "independent action-prefix oracle",
+        "authority": "RPC-CORPUS-008",
+        "generatorArtifact": {
+          "path": "scripts/generate-rpc-wire-corpus.mjs",
+          "sha256": "4b538d4c22c3063ff2b9d41b3aee94ba74459842b2c3109d80b660f746060f37"
+        },
+        "actionSha256": "b4d5e26172e5cbfeec98f8c10eb88e20258d30964e9aa4e0eb58e3cfc3c3af68",
+        "expectedSha256": "0403709d29548daf18652d8f3a55afcbbdc7c3889f36d213fb0766d91fe10b75"
+      }
+    },
+    {
+      "id": "old-binding-fence",
+      "action": "deliver active bytes on a superseded Connection",
+      "expected": "no Codec, route, Source, Observer, caller, or ACK effect",
+      "provenance": {
+        "model": "independent action-prefix oracle",
+        "authority": "RPC-CORPUS-008",
+        "generatorArtifact": {
+          "path": "scripts/generate-rpc-wire-corpus.mjs",
+          "sha256": "4b538d4c22c3063ff2b9d41b3aee94ba74459842b2c3109d80b660f746060f37"
+        },
+        "actionSha256": "360ee50840218d82d18f852503168a52ec56fdb4e5a3890fe8d4c39491af91ef",
+        "expectedSha256": "3a37934b9f7324e35d8c431fea269f5640cd692c255f5a2e05146cf757107a67"
+      }
+    },
+    {
+      "id": "wrong-proof-retains-stream",
+      "action": "submit a resume proof mutation while a Source is retained",
+      "expected": "generic rejection and the original Source remains retained",
+      "provenance": {
+        "model": "independent action-prefix oracle",
+        "authority": "RPC-CORPUS-008",
+        "generatorArtifact": {
+          "path": "scripts/generate-rpc-wire-corpus.mjs",
+          "sha256": "4b538d4c22c3063ff2b9d41b3aee94ba74459842b2c3109d80b660f746060f37"
+        },
+        "actionSha256": "9b8dd90bde202bb871faba623960faa2848f118d04552ede49f059f41a457fa3",
+        "expectedSha256": "cba457d170eaad132bf9be0ae47042c0308026c33dbd59fcde48595cd9b0516e"
+      }
+    },
+    {
+      "id": "recovery-terminal-no-resubscribe",
+      "action": "Source terminal wins while the binding is recovering",
+      "expected": "one teardown, retained terminal replay, zero reacquisition",
+      "provenance": {
+        "model": "independent action-prefix oracle",
+        "authority": "RPC-CORPUS-008",
+        "generatorArtifact": {
+          "path": "scripts/generate-rpc-wire-corpus.mjs",
+          "sha256": "4b538d4c22c3063ff2b9d41b3aee94ba74459842b2c3109d80b660f746060f37"
+        },
+        "actionSha256": "ff799ed66cd5c29fb869e3cf38154f459f6bc249ec352d0a0a129140c2d92a48",
+        "expectedSha256": "847e9111433b2788e0c67dc1e1acb1bf40dbe43d5ee1cea44ae21edbd02d47d9"
+      }
+    },
+    {
+      "id": "post-g-validation-order",
+      "action": "inject malformed, wrong-binding, gap, and valid starts after G",
+      "expected": "validation faults precede safe unavailable rejection",
+      "provenance": {
+        "model": "independent action-prefix oracle",
+        "authority": "RPC-CORPUS-008",
+        "generatorArtifact": {
+          "path": "scripts/generate-rpc-wire-corpus.mjs",
+          "sha256": "4b538d4c22c3063ff2b9d41b3aee94ba74459842b2c3109d80b660f746060f37"
+        },
+        "actionSha256": "50ec419e6541303dffb76088e63ebf8a82f5548451fc05cb3ae7f79fab89bb82",
+        "expectedSha256": "179626403ecb915ac11c769332821f5dbf0c8583e6bb56e4837e66860d5b8f20"
+      }
+    },
+    {
+      "id": "protected-transport-no-record-mac",
+      "action": "inspect every active record in a protected Transport",
+      "expected": "no record MAC field and unchanged Transport seam",
+      "provenance": {
+        "model": "independent action-prefix oracle",
+        "authority": "RPC-CORPUS-008",
+        "generatorArtifact": {
+          "path": "scripts/generate-rpc-wire-corpus.mjs",
+          "sha256": "4b538d4c22c3063ff2b9d41b3aee94ba74459842b2c3109d80b660f746060f37"
+        },
+        "actionSha256": "245f1f5cdf5d58f8e87347d0be5f428d8268e83b40c77841955ade644c62838f",
+        "expectedSha256": "a2e8850dc32898a15a18d8b5b830694fa4a89feab13de5d997a19c7a079c4f3f"
+      }
+    },
+    {
+      "id": "payload-error-redaction",
+      "action": "fail a Source with an Error carrying private details",
+      "expected": "fixed safe code/message only; no raw detail projection",
+      "provenance": {
+        "model": "independent action-prefix oracle",
+        "authority": "RPC-CORPUS-008",
+        "generatorArtifact": {
+          "path": "scripts/generate-rpc-wire-corpus.mjs",
+          "sha256": "4b538d4c22c3063ff2b9d41b3aee94ba74459842b2c3109d80b660f746060f37"
+        },
+        "actionSha256": "dda1aaee5ffa6efbf22d78fd387045cc93d225ef17c05328390b902f1557ad0d",
+        "expectedSha256": "d9f006e1264304184ed4cb1f4905ccacbcd182f93c24a8feb6401f0cc732c3b6"
+      }
+    }
+  ]
 }

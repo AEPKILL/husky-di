@@ -14,7 +14,10 @@ import type {
 	IRpcApplicationSnapshot,
 	RpcUnknownCallFailure,
 } from "@/interfaces/protocol/rpc-protocol.interface";
-import type { RpcWireErrorCode } from "@/types/protocol/rpc-wire-record.type";
+import type {
+	RpcStreamWireErrorCode,
+	RpcWireErrorCode,
+} from "@/types/protocol/rpc-wire-record.type";
 import {
 	isRpcApplicationArgumentsSnapshot,
 	isRpcApplicationSnapshot,
@@ -92,6 +95,7 @@ export const rpcJsonArraySchema = z.array(z.unknown());
 export const rpcNonEmptyJsonArraySchema = rpcJsonArraySchema.min(1);
 export const rpcBase64Url32Schema = z.string().regex(base64Url32Pattern);
 export const rpcCallOrdinalSchema = z.string().regex(callOrdinalPattern);
+export const rpcStreamOrdinalSchema = rpcCallOrdinalSchema;
 export const rpcFirstBindingEpochSchema = z.literal(1);
 
 export const rpcWireErrorCodeSchema = z.enum([
@@ -99,8 +103,17 @@ export const rpcWireErrorCodeSchema = z.enum([
 	RpcExceptionCodeEnum.unavailable,
 	RpcExceptionCodeEnum.handlerFailed,
 	RpcExceptionCodeEnum.unknownService,
-	RpcExceptionCodeEnum.unknownMethod,
+	RpcExceptionCodeEnum.unknownMember,
 ] satisfies readonly RpcWireErrorCode[]);
+
+export const rpcStreamWireErrorCodeSchema = z.enum([
+	RpcExceptionCodeEnum.canceled,
+	RpcExceptionCodeEnum.unavailable,
+	RpcExceptionCodeEnum.handlerFailed,
+	RpcExceptionCodeEnum.unknownService,
+	RpcExceptionCodeEnum.unknownMember,
+	RpcExceptionCodeEnum.overflow,
+] satisfies readonly RpcStreamWireErrorCode[]);
 
 export const rpcResumeRejectCodeSchema = z.enum([
 	RpcResumeRejectCodeEnum.resumeRejected,
@@ -109,7 +122,7 @@ export const rpcResumeRejectCodeSchema = z.enum([
 ]);
 
 export const rpcErrorPayloadMemberNamesSchema = z.array(
-	z.enum(["code", "message", "details"]),
+	z.enum(["code", "message"]),
 );
 
 export const rpcProfileOfferSchema = z

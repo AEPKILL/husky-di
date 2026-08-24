@@ -114,19 +114,10 @@ function createApplicationMessages(
 			kind: RpcWireRecordKindEnum.call,
 			callId: "1",
 			service: "example.boundary.v1",
-			method: "run",
+			member: "run",
 			args,
 		},
 		{ kind: RpcWireRecordKindEnum.result, callId: "1", value },
-		{
-			kind: RpcWireRecordKindEnum.error,
-			callId: "1",
-			error: {
-				code: RpcExceptionCodeEnum.unavailable,
-				message: "Remote call failed.",
-				details: value,
-			},
-		},
 	];
 }
 

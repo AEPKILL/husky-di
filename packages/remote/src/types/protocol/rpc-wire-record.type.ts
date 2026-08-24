@@ -67,7 +67,7 @@ export type RpcCallMessage = RpcJsonRecord & {
 	readonly kind: RpcWireRecordKindEnum.call;
 	readonly callId: string;
 	readonly service: string;
-	readonly method: string;
+	readonly member: string;
 	readonly args: readonly RpcApplicationValue[];
 };
 
@@ -88,7 +88,7 @@ export type RpcWireErrorCode = Extract<
 	| RpcExceptionCodeEnum.unavailable
 	| RpcExceptionCodeEnum.handlerFailed
 	| RpcExceptionCodeEnum.unknownService
-	| RpcExceptionCodeEnum.unknownMethod
+	| RpcExceptionCodeEnum.unknownMember
 >;
 
 export type RpcErrorMessage = RpcJsonRecord & {
@@ -97,7 +97,67 @@ export type RpcErrorMessage = RpcJsonRecord & {
 	readonly error: {
 		readonly code: RpcWireErrorCode;
 		readonly message: string;
-		readonly details?: RpcApplicationValue;
+	};
+};
+
+export type RpcStreamMethodStartMessage = RpcJsonRecord & {
+	readonly kind: RpcWireRecordKindEnum.streamMethod;
+	readonly streamId: string;
+	readonly service: string;
+	readonly member: string;
+	readonly args: readonly RpcApplicationValue[];
+	readonly creditThrough: 1;
+};
+
+export type RpcStreamPropertyStartMessage = RpcJsonRecord & {
+	readonly kind: RpcWireRecordKindEnum.streamProperty;
+	readonly streamId: string;
+	readonly service: string;
+	readonly member: string;
+	readonly creditThrough: 1;
+};
+
+export type RpcStreamItemMessage = RpcJsonRecord & {
+	readonly kind: RpcWireRecordKindEnum.streamItem;
+	readonly streamId: string;
+	readonly itemOrdinal: number;
+	readonly value: RpcApplicationValue;
+};
+
+export type RpcStreamCreditMessage = RpcJsonRecord & {
+	readonly kind: RpcWireRecordKindEnum.streamCredit;
+	readonly streamId: string;
+	readonly creditThrough: number;
+};
+
+export type RpcStreamCancelMessage = RpcJsonRecord & {
+	readonly kind: RpcWireRecordKindEnum.streamCancel;
+	readonly streamId: string;
+};
+
+export type RpcStreamCompleteMessage = RpcJsonRecord & {
+	readonly kind: RpcWireRecordKindEnum.streamComplete;
+	readonly streamId: string;
+	readonly itemThrough: number;
+};
+
+export type RpcStreamWireErrorCode = Extract<
+	RpcExceptionCodeEnum,
+	| RpcExceptionCodeEnum.canceled
+	| RpcExceptionCodeEnum.unavailable
+	| RpcExceptionCodeEnum.handlerFailed
+	| RpcExceptionCodeEnum.unknownService
+	| RpcExceptionCodeEnum.unknownMember
+	| RpcExceptionCodeEnum.overflow
+>;
+
+export type RpcStreamErrorMessage = RpcJsonRecord & {
+	readonly kind: RpcWireRecordKindEnum.streamError;
+	readonly streamId: string;
+	readonly itemThrough: number;
+	readonly error: {
+		readonly code: RpcStreamWireErrorCode;
+		readonly message: string;
 	};
 };
 
@@ -105,7 +165,14 @@ export type RpcSemanticMessage =
 	| RpcCallMessage
 	| RpcCancelMessage
 	| RpcResultMessage
-	| RpcErrorMessage;
+	| RpcErrorMessage
+	| RpcStreamMethodStartMessage
+	| RpcStreamPropertyStartMessage
+	| RpcStreamItemMessage
+	| RpcStreamCreditMessage
+	| RpcStreamCancelMessage
+	| RpcStreamCompleteMessage
+	| RpcStreamErrorMessage;
 
 export type RpcMessageEnvelope = RpcJsonRecord & {
 	readonly kind: RpcWireRecordKindEnum.message;

@@ -7,7 +7,9 @@
 import {
 	RPC_PROFILE,
 	RPC_PROTECTED_SESSION_BYTES,
+	RPC_RECEIVE_SLOT_BYTES,
 } from "@/constants/protocol/rpc-profile.const";
+import { RPC_WIRE_FAILURE_MESSAGES } from "@/constants/protocol/rpc-wire-failure-message.const";
 import { RpcCallTerminalTypeEnum } from "@/enums/protocol/rpc-call-terminal-type.enum";
 import { RpcDecodePhaseEnum } from "@/enums/protocol/rpc-decode-phase.enum";
 import { RpcEndpointFailureEnum } from "@/enums/protocol/rpc-endpoint-failure.enum";
@@ -20,19 +22,27 @@ import { RpcExceptionCodeEnum } from "@/enums/rpc-exception-code.enum";
 import type { IRpcCodec } from "@/interfaces/protocol/rpc-codec.interface";
 import type { IRpcEndpoint } from "@/interfaces/protocol/rpc-endpoint.interface";
 import type {
+	IRpcApplicationSnapshot,
 	IRpcProtocolHost,
 	IRpcProtocolIncomingCall,
+	IRpcProtocolIncomingStream,
 	IRpcProtocolInvocation,
 	IRpcProtocolInvocationRequest,
 	IRpcProtocolInvocationReservation,
 	IRpcProtocolInvocationSink,
 	IRpcProtocolSessionHost,
+	IRpcProtocolSourceEmissionReservation,
+	IRpcProtocolSourceSink,
+	IRpcProtocolStream,
 	IRpcProtocolStreamReservation,
+	IRpcProtocolSubscriberSink,
 	IRpcRetainedBytesReservation,
 	RpcCallOutcome,
 	RpcHandlerOutcome,
 	RpcIncomingTerminal,
 	RpcProtocolStreamRequest,
+	RpcSourceTerminal,
+	RpcStreamOutcome,
 } from "@/interfaces/protocol/rpc-protocol.interface";
 import type { IRpcRetainedBytesLedger } from "@/interfaces/protocol/rpc-retained-bytes-ledger.interface";
 import type { IRpcSession } from "@/interfaces/protocol/rpc-session.interface";
@@ -59,6 +69,14 @@ import type {
 	RpcMessageEnvelope,
 	RpcResultMessage,
 	RpcSemanticMessage,
+	RpcStreamCancelMessage,
+	RpcStreamCompleteMessage,
+	RpcStreamCreditMessage,
+	RpcStreamErrorMessage,
+	RpcStreamItemMessage,
+	RpcStreamMethodStartMessage,
+	RpcStreamPropertyStartMessage,
+	RpcStreamWireErrorCode,
 	RpcWireErrorCode,
 } from "@/types/protocol/rpc-wire-record.type";
 import {
@@ -157,6 +175,34 @@ interface IRpcIncomingEntry {
 	terminalSelected: boolean;
 }
 
+interface IRpcOutgoingStreamEntry {
+	request?: RpcProtocolStreamRequest;
+	readonly sink: IRpcProtocolSubscriberSink;
+	readonly pendingCharge: number;
+	retainedBytesReservation?: IRpcRetainedBytesReservation;
+	receiveSlotReservation?: IRpcRetainedBytesReservation;
+	pendingCharged: boolean;
+	started: boolean;
+	admitted: boolean;
+	publicFinished: boolean;
+	retired: boolean;
+	streamId?: string;
+	nextItemOrdinal: number;
+	itemOrdinalExhausted: boolean;
+	creditThrough: number;
+}
+
+interface IRpcIncomingStreamEntry {
+	readonly streamId: string;
+	stream?: IRpcProtocolIncomingStream;
+	acceptedCreditThrough: number;
+	admittedItemCount: number;
+	emissionReserved: boolean;
+	released: boolean;
+	terminalSelected: boolean;
+	terminalSequence?: number;
+}
+
 interface IRpcReplayEntry {
 	readonly message: RpcSemanticMessage;
 	readonly charge: number;
@@ -168,6 +214,12 @@ interface IRpcReplayEntry {
 interface IRpcQueuedSemantic {
 	readonly message: RpcSemanticMessage;
 	readonly replay: IRpcReplayEntry;
+	readonly ordinaryFuture: boolean;
+}
+
+interface IRpcTransferredReplayCapacity {
+	readonly charge: number;
+	readonly reservation: IRpcRetainedBytesReservation;
 }
 
 /** Retains one Session Incarnation independently from its current Connection. */
@@ -202,16 +254,26 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 	_outgoingSequenceExhausted = false;
 	_highestSentSequence = 0;
 	_receivedThrough = 0;
+	readonly _receivedFingerprints = new Map<number, RpcSemanticMessage>();
 	_peerReceivedThrough = 0;
 	_nextOutgoingCallOrdinal = 1;
 	_outgoingCallOrdinalExhausted = false;
 	_highestIncomingCallOrdinal = 0;
+	_nextOutgoingStreamOrdinal = 1;
+	_outgoingStreamOrdinalExhausted = false;
+	_highestIncomingStreamOrdinal = 0;
 	_invocationCount = 0;
 	_pendingInvocationBytes = 0;
 	readonly _invocations = new Set<IRpcInvocationEntry>();
 	readonly _pendingInvocations: IRpcInvocationEntry[] = [];
 	readonly _outgoingCalls = new Map<string, IRpcInvocationEntry>();
 	readonly _incomingCalls = new Map<string, IRpcIncomingEntry>();
+	_streamCount = 0;
+	_pendingStreamBytes = 0;
+	readonly _streams = new Set<IRpcOutgoingStreamEntry>();
+	readonly _pendingStreams: IRpcOutgoingStreamEntry[] = [];
+	readonly _outgoingStreams = new Map<string, IRpcOutgoingStreamEntry>();
+	readonly _incomingStreams = new Map<string, IRpcIncomingStreamEntry>();
 	readonly _replay = new Map<number, IRpcReplayEntry>();
 	_replayBytes = 0;
 	_ordinaryReplayCount = 0;
@@ -219,9 +281,11 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 	_terminalPayloadCount = 0;
 	_terminalReplayBytes = 0;
 	_cancelReplayCount = 0;
+	_ordinaryFutureObligations = 0;
 	_replayBarrier: number[] = [];
 	readonly _controlQueue: IRpcQueuedSemantic[] = [];
 	_nextSequencedLane: "control" | "data" = "control";
+	_nextDataKind: "call" | "stream" = "call";
 	_ackDirty = false;
 	_ackDue = false;
 	_ackTimer: ReturnType<typeof setTimeout> | undefined;
@@ -862,7 +926,8 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 		const cannotReserveInvocation =
 			this._closed ||
 			this._draining ||
-			this._invocationCount >= this._host.policy.maxApplicationWorkPerSession ||
+			this._invocationCount + this._streamCount >=
+				this._host.policy.maxApplicationWorkPerSession ||
 			!Number.isSafeInteger(pendingCharge) ||
 			pendingCharge > maximumPendingBytes - this._pendingInvocationBytes;
 		if (cannotReserveInvocation) {
@@ -924,9 +989,85 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 	}
 
 	reserveStream(
-		_request: RpcProtocolStreamRequest,
+		request: RpcProtocolStreamRequest,
 	): IRpcProtocolStreamReservation | undefined {
-		return undefined;
+		const pendingCharge =
+			(request.kind === "stream-method" ? request.args.weight : 0) + 256;
+		const maximumPendingBytes = Math.floor(
+			this._host.policy.maxRetainedBytesPerSession / 4,
+		);
+		const cannotReserveStream =
+			this._closed ||
+			this._draining ||
+			this._streamCount >= this._host.policy.maxActiveStreamsPerSession ||
+			this._streamCount + this._invocationCount >=
+				this._host.policy.maxApplicationWorkPerSession ||
+			!Number.isSafeInteger(pendingCharge) ||
+			pendingCharge > maximumPendingBytes - this._pendingStreamBytes;
+		if (cannotReserveStream) {
+			return undefined;
+		}
+		const retainedBytesReservation = this.reserveRetainedBytes(pendingCharge);
+		if (retainedBytesReservation === undefined) {
+			return undefined;
+		}
+		const receiveSlotReservation = this.reserveRetainedBytes(
+			RPC_RECEIVE_SLOT_BYTES,
+		);
+		if (receiveSlotReservation === undefined) {
+			retainedBytesReservation.release();
+			return undefined;
+		}
+		this._streamCount += 1;
+		this._pendingStreamBytes += pendingCharge;
+		let reservationState: "reserved" | "committed" | "released" = "reserved";
+		let entry: IRpcOutgoingStreamEntry | undefined;
+		return Object.freeze({
+			commit: (sink: IRpcProtocolSubscriberSink): IRpcProtocolStream => {
+				if (reservationState !== "reserved") {
+					this._fault(
+						RpcCloseReasonEnum.protocolFault,
+						new Error("Default RPC stream reservation had multiple winners."),
+					);
+					return Object.freeze({ start() {}, cancel() {} });
+				}
+				reservationState = "committed";
+				entry = {
+					request,
+					sink,
+					pendingCharge,
+					retainedBytesReservation,
+					receiveSlotReservation,
+					pendingCharged: true,
+					started: false,
+					admitted: false,
+					publicFinished: false,
+					retired: false,
+					nextItemOrdinal: 1,
+					itemOrdinalExhausted: false,
+					creditThrough: 1,
+				};
+				this._streams.add(entry);
+				return Object.freeze({
+					start: () => this._startStream(entry as IRpcOutgoingStreamEntry),
+					cancel: () => this._cancelStream(entry as IRpcOutgoingStreamEntry),
+				});
+			},
+			release: (): void => {
+				if (reservationState !== "reserved") {
+					this._fault(
+						RpcCloseReasonEnum.protocolFault,
+						new Error("Default RPC stream reservation had multiple winners."),
+					);
+					return;
+				}
+				reservationState = "released";
+				this._streamCount -= 1;
+				this._pendingStreamBytes -= pendingCharge;
+				retainedBytesReservation.release();
+				receiveSlotReservation.release();
+			},
+		});
 	}
 
 	shutdown(): Promise<void> {
@@ -963,6 +1104,17 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 		}
 		const expected = this._receivedThrough + 1;
 		if (envelope.seq <= this._receivedThrough) {
+			const retained = this._receivedFingerprints.get(envelope.seq);
+			if (
+				retained !== undefined &&
+				!rpcJsonValuesEqual(retained, envelope.message)
+			) {
+				this._fault(
+					RpcCloseReasonEnum.protocolFault,
+					new Error("Default RPC duplicate sequence equivocates."),
+				);
+				return false;
+			}
 			this._markAckDirty();
 			return true;
 		}
@@ -974,8 +1126,9 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 			return false;
 		}
 
+		let effect: (() => void) | undefined;
 		try {
-			this._dispatchSemantic(envelope.message);
+			effect = this._dispatchSemantic(envelope.message);
 		} catch (error) {
 			this._fault(
 				RpcCloseReasonEnum.protocolFault,
@@ -988,28 +1141,49 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 		if (this._closed) {
 			return false;
 		}
+		this._receivedFingerprints.set(envelope.seq, envelope.message);
 		this._receivedThrough = envelope.seq;
+		try {
+			effect?.();
+		} catch (error) {
+			this._fault(
+				RpcCloseReasonEnum.protocolFault,
+				error instanceof Error
+					? error
+					: new Error("Default RPC semantic effect failed."),
+			);
+			return false;
+		}
 		this._markAckDirty();
 		return true;
 	}
 
-	_dispatchSemantic(message: RpcSemanticMessage): void {
-		if (message.kind === RpcWireRecordKindEnum.call) {
-			this._receiveCall(message);
-			return;
+	_dispatchSemantic(message: RpcSemanticMessage): (() => void) | undefined {
+		switch (message.kind) {
+			case RpcWireRecordKindEnum.call:
+				return this._receiveCall(message);
+			case RpcWireRecordKindEnum.cancel:
+				return this._receiveCancel(message.callId);
+			case RpcWireRecordKindEnum.result:
+				return this._receiveResult(message);
+			case RpcWireRecordKindEnum.error:
+				return this._receiveError(message);
+			case RpcWireRecordKindEnum.streamMethod:
+			case RpcWireRecordKindEnum.streamProperty:
+				return this._receiveStreamStart(message);
+			case RpcWireRecordKindEnum.streamItem:
+				return this._receiveStreamItem(message);
+			case RpcWireRecordKindEnum.streamCredit:
+				return this._receiveStreamCredit(message);
+			case RpcWireRecordKindEnum.streamCancel:
+				return this._receiveStreamCancel(message);
+			case RpcWireRecordKindEnum.streamComplete:
+			case RpcWireRecordKindEnum.streamError:
+				return this._receiveStreamTerminal(message);
 		}
-		if (message.kind === RpcWireRecordKindEnum.cancel) {
-			this._receiveCancel(message.callId);
-			return;
-		}
-		if (message.kind === RpcWireRecordKindEnum.result) {
-			this._receiveResult(message);
-			return;
-		}
-		this._receiveError(message);
 	}
 
-	_receiveCall(message: RpcCallMessage): void {
+	_receiveCall(message: RpcCallMessage): (() => void) | undefined {
 		const args = this._host.normalizeApplicationArguments(message.args);
 		const ordinal = Number(message.callId);
 		if (ordinal !== this._highestIncomingCallOrdinal + 1) {
@@ -1021,12 +1195,12 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 		}
 		if (this._draining || this._incomingCalls.size >= 256) {
 			this._highestIncomingCallOrdinal = ordinal;
-			this._queueError(message.callId, RpcExceptionCodeEnum.unavailable);
-			return;
+			return () =>
+				this._queueError(message.callId, RpcExceptionCodeEnum.unavailable);
 		}
 		const reservation = sessionHost.reserveIncomingCall({
 			service: message.service,
-			method: message.method,
+			method: message.member,
 			args,
 		});
 		this._highestIncomingCallOrdinal = ordinal;
@@ -1035,76 +1209,86 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 				callId: message.callId,
 				terminalSelected: true,
 			});
-			this._queueError(message.callId, RpcExceptionCodeEnum.unavailable);
-			return;
+			return () =>
+				this._queueError(message.callId, RpcExceptionCodeEnum.unavailable);
 		}
 
 		if (reservation.kind === RpcIncomingCallKindEnum.unknown) {
-			const incoming = reservation.reservation.commit();
-			if (this._closed) {
-				incoming.finish({
-					type: RpcCallTerminalTypeEnum.failed,
-					code: reservation.code,
-				});
-				return;
-			}
 			const entry: IRpcIncomingEntry = {
 				callId: message.callId,
-				call: incoming,
 				terminalSelected: true,
 			};
 			this._incomingCalls.set(message.callId, entry);
-			this._finishIncomingCall(entry, {
-				type: RpcCallTerminalTypeEnum.failed,
-				code: reservation.code,
-			});
-			this._queueError(message.callId, reservation.code);
-			return;
+			return () => {
+				const incoming = reservation.reservation.commit();
+				entry.call = incoming;
+				this._finishIncomingCall(
+					entry,
+					this._closed
+						? { type: RpcCallTerminalTypeEnum.sessionTerminated }
+						: {
+								type: RpcCallTerminalTypeEnum.failed,
+								code: reservation.code,
+							},
+				);
+				if (!this._closed) {
+					this._queueError(
+						message.callId,
+						reservation.code === RpcExceptionCodeEnum.unknownMethod
+							? RpcExceptionCodeEnum.unknownMember
+							: reservation.code,
+					);
+				}
+			};
 		}
 
-		const incoming = reservation.reservation.commit();
-		if (this._closed) {
-			incoming.finish({
-				type: RpcCallTerminalTypeEnum.sessionTerminated,
-			});
-			return;
-		}
 		const entry: IRpcIncomingEntry = {
 			callId: message.callId,
-			call: incoming,
 			terminalSelected: false,
 		};
 		this._incomingCalls.set(message.callId, entry);
-		void incoming.handlerOutcome.then(
-			(outcome) => this._finishIncomingHandler(entry, outcome),
-			() =>
-				this._finishIncomingHandler(entry, {
-					type: RpcCallTerminalTypeEnum.failed,
-					code: RpcExceptionCodeEnum.handlerFailed,
-				}),
-		);
+		return () => {
+			const incoming = reservation.reservation.commit();
+			entry.call = incoming;
+			if (this._closed) {
+				this._finishIncomingCall(entry, {
+					type: RpcCallTerminalTypeEnum.sessionTerminated,
+				});
+				return;
+			}
+			void incoming.handlerOutcome.then(
+				(outcome) => this._finishIncomingHandler(entry, outcome),
+				() =>
+					this._finishIncomingHandler(entry, {
+						type: RpcCallTerminalTypeEnum.failed,
+						code: RpcExceptionCodeEnum.handlerFailed,
+					}),
+			);
+		};
 	}
 
-	_receiveCancel(callId: string): void {
+	_receiveCancel(callId: string): (() => void) | undefined {
 		const incoming = this._incomingCalls.get(callId);
 		if (incoming === undefined) {
 			if (Number(callId) > this._highestIncomingCallOrdinal) {
 				throw new Error("Default RPC cancel refers to a future Call Ordinal.");
 			}
-			return;
+			return undefined;
 		}
 		if (incoming.terminalSelected || incoming.call === undefined) {
-			return;
+			return undefined;
 		}
 		incoming.terminalSelected = true;
-		this._finishIncomingCall(incoming, {
-			type: RpcCallTerminalTypeEnum.failed,
-			code: RpcExceptionCodeEnum.canceled,
-		});
-		this._queueError(callId, RpcExceptionCodeEnum.canceled);
+		return () => {
+			this._finishIncomingCall(incoming, {
+				type: RpcCallTerminalTypeEnum.failed,
+				code: RpcExceptionCodeEnum.canceled,
+			});
+			this._queueError(callId, RpcExceptionCodeEnum.canceled);
+		};
 	}
 
-	_receiveResult(message: RpcResultMessage): void {
+	_receiveResult(message: RpcResultMessage): (() => void) | undefined {
 		const invocation = this._outgoingCalls.get(message.callId);
 		if (invocation === undefined) {
 			throw new Error("Default RPC result has no matching Logical Call.");
@@ -1118,23 +1302,453 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 		} else {
 			outcome = { type: RpcCallTerminalTypeEnum.returnedVoid };
 		}
-		this._finishInvocation(invocation, outcome);
+		const shouldFinish = !invocation.publicFinished;
+		invocation.publicFinished = true;
 		this._retireInvocation(invocation);
+		return shouldFinish ? () => invocation.sink.finish(outcome) : undefined;
 	}
 
-	_receiveError(message: RpcErrorMessage): void {
+	_receiveError(message: RpcErrorMessage): (() => void) | undefined {
 		const invocation = this._outgoingCalls.get(message.callId);
 		if (invocation === undefined) {
 			throw new Error("Default RPC error has no matching Logical Call.");
 		}
-		if (Object.hasOwn(message.error as RpcJsonRecord, "details")) {
-			this._host.normalizeApplicationValue(message.error.details);
-		}
-		this._finishInvocation(invocation, {
+		const outcome: RpcCallOutcome = {
 			type: RpcCallTerminalTypeEnum.failed,
-			code: message.error.code,
-		});
+			code:
+				message.error.code === RpcExceptionCodeEnum.unknownMember
+					? RpcExceptionCodeEnum.unknownMethod
+					: message.error.code,
+		};
+		const shouldFinish = !invocation.publicFinished;
+		invocation.publicFinished = true;
 		this._retireInvocation(invocation);
+		return shouldFinish ? () => invocation.sink.finish(outcome) : undefined;
+	}
+
+	_receiveStreamStart(
+		message: RpcStreamMethodStartMessage | RpcStreamPropertyStartMessage,
+	): (() => void) | undefined {
+		const ordinal = Number(message.streamId);
+		if (ordinal !== this._highestIncomingStreamOrdinal + 1) {
+			throw new Error("Default RPC Stream Ordinal is not contiguous.");
+		}
+		const request: RpcProtocolStreamRequest =
+			message.kind === RpcWireRecordKindEnum.streamMethod
+				? {
+						kind: "stream-method",
+						service: message.service,
+						member: message.member,
+						args: this._host.normalizeApplicationArguments(message.args),
+					}
+				: {
+						kind: "stream-property",
+						service: message.service,
+						member: message.member,
+					};
+		const sessionHost = this._sessionHost;
+		if (sessionHost === undefined) {
+			throw new Error("Default RPC Session has no Framework host.");
+		}
+		const incomingActiveCount = [...this._incomingStreams.values()].filter(
+			(candidate) => !candidate.released,
+		).length;
+		this._highestIncomingStreamOrdinal = ordinal;
+		const entry: IRpcIncomingStreamEntry = {
+			streamId: message.streamId,
+			acceptedCreditThrough: 1,
+			admittedItemCount: 0,
+			emissionReserved: false,
+			released: true,
+			terminalSelected: false,
+		};
+		this._incomingStreams.set(message.streamId, entry);
+		if (
+			this._draining ||
+			incomingActiveCount >= this._host.policy.maxActiveStreamsPerSession
+		) {
+			entry.terminalSelected = true;
+			return () =>
+				this._queueStreamError(entry, RpcExceptionCodeEnum.unavailable, 0);
+		}
+		const reservation = sessionHost.reserveIncomingStream(request);
+		if (reservation === undefined) {
+			entry.terminalSelected = true;
+			return () =>
+				this._queueStreamError(entry, RpcExceptionCodeEnum.unavailable, 0);
+		}
+		entry.released = false;
+		if (reservation.kind === "unknown") {
+			entry.terminalSelected = true;
+			return () => {
+				const incoming = reservation.reservation.commit();
+				entry.stream = incoming;
+				this._queueStreamError(entry, reservation.code, 0);
+				incoming.finish({ type: "failed", code: reservation.code }, () =>
+					this._releaseIncomingStream(entry),
+				);
+			};
+		}
+		return () => {
+			const incoming = reservation.reservation.commit(
+				this._createSourceSink(entry),
+			);
+			entry.stream = incoming;
+			if (this._closed) {
+				incoming.finish({ type: "session-terminated" }, () =>
+					this._releaseIncomingStream(entry),
+				);
+			}
+		};
+	}
+
+	_createSourceSink(entry: IRpcIncomingStreamEntry): IRpcProtocolSourceSink {
+		return Object.freeze({
+			reserveEmission: ():
+				| IRpcProtocolSourceEmissionReservation
+				| undefined => {
+				if (this._closed || entry.terminalSelected || entry.released) {
+					return undefined;
+				}
+				if (
+					entry.emissionReserved ||
+					entry.admittedItemCount >= entry.acceptedCreditThrough
+				) {
+					this._selectIncomingStreamTerminal(entry, {
+						type: "failed",
+						code: RpcExceptionCodeEnum.overflow,
+					});
+					return undefined;
+				}
+				if (!this._canReserveOrdinaryFuture()) {
+					this._selectIncomingStreamTerminal(entry, {
+						type: "failed",
+						code: RpcExceptionCodeEnum.overflow,
+					});
+					this._beginCounterDrain();
+					return undefined;
+				}
+				const itemCapacity = this.reserveRetainedBytes(RPC_RECEIVE_SLOT_BYTES);
+				if (itemCapacity === undefined) {
+					this._selectIncomingStreamTerminal(entry, {
+						type: "failed",
+						code: RpcExceptionCodeEnum.overflow,
+					});
+					return undefined;
+				}
+				entry.emissionReserved = true;
+				let disposition: "reserved" | "committed" | "failed" = "reserved";
+				return Object.freeze({
+					commit: (value: IRpcApplicationSnapshot): void => {
+						if (disposition !== "reserved") {
+							throw new Error(
+								"Default RPC Source emission had multiple dispositions.",
+							);
+						}
+						disposition = "committed";
+						entry.emissionReserved = false;
+						if (entry.terminalSelected || entry.released || this._closed) {
+							itemCapacity.release();
+							return;
+						}
+						const itemOrdinal = entry.admittedItemCount + 1;
+						const queued = this._queueSemantic(
+							Object.freeze({
+								kind: RpcWireRecordKindEnum.streamItem,
+								streamId: entry.streamId,
+								itemOrdinal,
+								value: value.value,
+							}) as RpcStreamItemMessage,
+							{
+								charge: value.weight + 256,
+								reservation: itemCapacity,
+							},
+						);
+						if (!queued) {
+							if (!this._canReserveOrdinaryFuture()) {
+								this._beginCounterDrain();
+							}
+							this._selectIncomingStreamTerminal(entry, {
+								type: "failed",
+								code: RpcExceptionCodeEnum.overflow,
+							});
+							return;
+						}
+						entry.admittedItemCount = itemOrdinal;
+					},
+					fail: (): void => {
+						if (disposition !== "reserved") {
+							throw new Error(
+								"Default RPC Source emission had multiple dispositions.",
+							);
+						}
+						disposition = "failed";
+						entry.emissionReserved = false;
+						itemCapacity.release();
+						this._selectIncomingStreamTerminal(entry, {
+							type: "failed",
+							code: RpcExceptionCodeEnum.handlerFailed,
+						});
+					},
+				});
+			},
+			finish: (outcome: RpcSourceTerminal): void => {
+				this._selectIncomingStreamTerminal(
+					entry,
+					outcome.type === "completed"
+						? { type: "completed" }
+						: {
+								type: "failed",
+								code: RpcExceptionCodeEnum.handlerFailed,
+							},
+				);
+			},
+		});
+	}
+
+	_selectIncomingStreamTerminal(
+		entry: IRpcIncomingStreamEntry,
+		outcome:
+			| { readonly type: "completed" }
+			| {
+					readonly type: "failed";
+					readonly code:
+						| RpcExceptionCodeEnum.handlerFailed
+						| RpcExceptionCodeEnum.overflow;
+			  },
+	): void {
+		if (entry.terminalSelected || entry.released || this._closed) {
+			return;
+		}
+		entry.terminalSelected = true;
+		const boundary = entry.admittedItemCount;
+		const queued =
+			outcome.type === "completed"
+				? this._queueSemantic(
+						Object.freeze({
+							kind: RpcWireRecordKindEnum.streamComplete,
+							streamId: entry.streamId,
+							itemThrough: boundary,
+						}) as RpcStreamCompleteMessage,
+					)
+				: this._queueStreamError(entry, outcome.code, boundary);
+		if (!queued) {
+			this._fault(
+				RpcCloseReasonEnum.resourceFault,
+				new Error(
+					"Default RPC protected stream terminal reserve is exhausted.",
+				),
+			);
+		}
+		entry.stream?.finish(outcome, () => this._releaseIncomingStream(entry));
+	}
+
+	_queueStreamError(
+		entry: IRpcIncomingStreamEntry,
+		code: RpcStreamWireErrorCode,
+		itemThrough: number,
+	): boolean {
+		const queued = this._queueSemantic(
+			Object.freeze({
+				kind: RpcWireRecordKindEnum.streamError,
+				streamId: entry.streamId,
+				itemThrough,
+				error: Object.freeze({
+					code,
+					message: RPC_WIRE_FAILURE_MESSAGES[code],
+				}),
+			}) as RpcStreamErrorMessage,
+		);
+		if (!queued) {
+			this._fault(
+				RpcCloseReasonEnum.resourceFault,
+				new Error(
+					"Default RPC protected stream terminal reserve is exhausted.",
+				),
+			);
+		}
+		return queued;
+	}
+
+	_releaseIncomingStream(entry: IRpcIncomingStreamEntry): void {
+		if (entry.released) {
+			return;
+		}
+		entry.released = true;
+		entry.stream = undefined;
+		if (
+			entry.terminalSequence !== undefined &&
+			entry.terminalSequence <= this._peerReceivedThrough
+		) {
+			this._incomingStreams.delete(entry.streamId);
+		}
+		this._checkGracefulShutdown();
+	}
+
+	_receiveStreamItem(message: RpcStreamItemMessage): (() => void) | undefined {
+		const entry = this._outgoingStreams.get(message.streamId);
+		if (entry === undefined || entry.retired) {
+			throw new Error("Default RPC stream item has no active Subscriber.");
+		}
+		if (
+			entry.itemOrdinalExhausted ||
+			message.itemOrdinal !== entry.nextItemOrdinal ||
+			message.itemOrdinal > entry.creditThrough
+		) {
+			throw new Error("Default RPC stream Item Ordinal is not credit-backed.");
+		}
+		const snapshot = this._host.normalizeApplicationValue(message.value);
+		const projection = entry.publicFinished
+			? undefined
+			: entry.sink.reserveItem(snapshot);
+		if (message.itemOrdinal === Number.MAX_SAFE_INTEGER) {
+			entry.itemOrdinalExhausted = true;
+		} else {
+			entry.nextItemOrdinal += 1;
+		}
+		if (entry.publicFinished) {
+			return undefined;
+		}
+		return () => {
+			const effect = projection?.commit();
+			if (
+				effect !== "rearm" ||
+				entry.publicFinished ||
+				entry.retired ||
+				this._closed
+			) {
+				return;
+			}
+			if (entry.creditThrough === Number.MAX_SAFE_INTEGER) {
+				return;
+			}
+			if (!this._canReserveOrdinaryFuture()) {
+				const queued = this._queueSemantic(
+					Object.freeze({
+						kind: RpcWireRecordKindEnum.streamCancel,
+						streamId: entry.streamId as string,
+					}) as RpcStreamCancelMessage,
+				);
+				if (!queued) {
+					this._fault(
+						RpcCloseReasonEnum.resourceFault,
+						new Error("Default RPC stream cancel reserve is exhausted."),
+					);
+					return;
+				}
+				this._beginCounterDrain();
+				return;
+			}
+			const creditThrough = entry.creditThrough + 1;
+			const queued = this._queueSemantic(
+				Object.freeze({
+					kind: RpcWireRecordKindEnum.streamCredit,
+					streamId: entry.streamId as string,
+					creditThrough,
+				}) as RpcStreamCreditMessage,
+			);
+			if (!queued) {
+				this._fault(
+					RpcCloseReasonEnum.resourceFault,
+					new Error("Default RPC stream credit could not be retained."),
+				);
+				return;
+			}
+			entry.creditThrough = creditThrough;
+		};
+	}
+
+	_receiveStreamCredit(message: RpcStreamCreditMessage): undefined {
+		const entry = this._incomingStreams.get(message.streamId);
+		if (entry === undefined) {
+			if (Number(message.streamId) > this._highestIncomingStreamOrdinal) {
+				throw new Error(
+					"Default RPC credit refers to a future Stream Ordinal.",
+				);
+			}
+			return undefined;
+		}
+		if (message.creditThrough < entry.acceptedCreditThrough) {
+			throw new Error("Default RPC stream credit regressed after acceptance.");
+		}
+		if (entry.terminalSelected) {
+			return undefined;
+		}
+		if (message.creditThrough === entry.acceptedCreditThrough) {
+			return undefined;
+		}
+		if (
+			message.creditThrough !== entry.acceptedCreditThrough + 1 ||
+			message.creditThrough !== entry.admittedItemCount + 1
+		) {
+			throw new Error("Default RPC stream credit is regressed or over-credit.");
+		}
+		entry.acceptedCreditThrough = message.creditThrough;
+		return undefined;
+	}
+
+	_receiveStreamCancel(
+		message: RpcStreamCancelMessage,
+	): (() => void) | undefined {
+		const entry = this._incomingStreams.get(message.streamId);
+		if (entry === undefined) {
+			if (Number(message.streamId) > this._highestIncomingStreamOrdinal) {
+				throw new Error(
+					"Default RPC cancel refers to a future Stream Ordinal.",
+				);
+			}
+			return undefined;
+		}
+		if (!entry.terminalSelected) {
+			entry.terminalSelected = true;
+			return () => {
+				this._queueStreamError(
+					entry,
+					RpcExceptionCodeEnum.canceled,
+					entry.admittedItemCount,
+				);
+				entry.stream?.finish({ type: "canceled" }, () =>
+					this._releaseIncomingStream(entry),
+				);
+			};
+		}
+		return undefined;
+	}
+
+	_receiveStreamTerminal(
+		message: RpcStreamCompleteMessage | RpcStreamErrorMessage,
+	): (() => void) | undefined {
+		const entry = this._outgoingStreams.get(message.streamId);
+		if (entry === undefined || entry.retired) {
+			throw new Error(
+				"Default RPC stream terminal has no matching Subscriber.",
+			);
+		}
+		const itemThrough = entry.itemOrdinalExhausted
+			? Number.MAX_SAFE_INTEGER
+			: entry.nextItemOrdinal - 1;
+		if (message.itemThrough !== itemThrough) {
+			throw new Error(
+				"Default RPC stream terminal boundary is not contiguous.",
+			);
+		}
+		let effect: (() => void) | undefined;
+		if (!entry.publicFinished) {
+			const outcome: RpcStreamOutcome =
+				message.kind === RpcWireRecordKindEnum.streamComplete
+					? { type: "completed" }
+					: message.error.code === RpcExceptionCodeEnum.canceled
+						? { type: "canceled" }
+						: {
+								type: "failed",
+								code: message.error.code,
+							};
+			const projection = entry.sink.reserveTerminal(outcome);
+			entry.publicFinished = true;
+			effect = () => projection.commit();
+		}
+		this._retireOutgoingStream(entry);
+		return effect;
 	}
 
 	_finishIncomingHandler(
@@ -1208,7 +1822,7 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 				callId,
 				error: Object.freeze({
 					code,
-					message: `Remote call failed with code ${code}.`,
+					message: RPC_WIRE_FAILURE_MESSAGES[code],
 				}),
 			}) as RpcErrorMessage,
 		);
@@ -1221,17 +1835,39 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 		return queued;
 	}
 
-	_queueSemantic(message: RpcSemanticMessage): boolean {
+	_queueSemantic(
+		message: RpcSemanticMessage,
+		transferredCapacity?: IRpcTransferredReplayCapacity,
+	): boolean {
 		if (this._closed) {
+			transferredCapacity?.reservation.release();
 			return false;
 		}
-		const replay = this._reserveReplayEntry(message);
+		const ordinaryFuture =
+			message.kind === RpcWireRecordKindEnum.result ||
+			message.kind === RpcWireRecordKindEnum.streamItem ||
+			message.kind === RpcWireRecordKindEnum.streamCredit;
+		if (ordinaryFuture && !this._canReserveOrdinaryFuture()) {
+			transferredCapacity?.reservation.release();
+			return false;
+		}
+		const replay = this._reserveReplayEntry(message, transferredCapacity);
 		if (replay === undefined) {
 			return false;
 		}
-		this._controlQueue.push({ message, replay });
+		if (ordinaryFuture) {
+			this._ordinaryFutureObligations += 1;
+		}
+		this._controlQueue.push({ message, replay, ordinaryFuture });
 		this._pump();
 		return true;
+	}
+
+	_canReserveOrdinaryFuture(): boolean {
+		return (
+			this._nextOutgoingSequence + this._ordinaryFutureObligations <=
+			RPC_LAST_ORDINARY_SEQUENCE
+		);
 	}
 
 	_startInvocation(entry: IRpcInvocationEntry): void {
@@ -1267,12 +1903,105 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 			this._retireInvocation(entry);
 			return;
 		}
-		this._queueSemantic(
+		const queued = this._queueSemantic(
 			Object.freeze({
 				kind: RpcWireRecordKindEnum.cancel,
 				callId: entry.callId as string,
 			}) as RpcSemanticMessage,
 		);
+		if (!queued) {
+			this._fault(
+				RpcCloseReasonEnum.resourceFault,
+				new Error("Default RPC cancel reserve is exhausted."),
+			);
+		}
+	}
+
+	_startStream(entry: IRpcOutgoingStreamEntry): void {
+		if (entry.started || entry.retired) {
+			this._fault(
+				RpcCloseReasonEnum.protocolFault,
+				new Error("Default RPC stream start was called more than once."),
+			);
+			return;
+		}
+		entry.started = true;
+		if (this._closed) {
+			this._finishOutgoingStream(entry, {
+				type: "failed",
+				code: RpcExceptionCodeEnum.unavailable,
+			});
+			this._retireOutgoingStream(entry);
+			return;
+		}
+		this._pendingStreams.push(entry);
+		this._pump();
+	}
+
+	_cancelStream(entry: IRpcOutgoingStreamEntry): void {
+		if (entry.retired || entry.publicFinished) {
+			return;
+		}
+		this._finishOutgoingStream(entry, { type: "canceled" });
+		if (!entry.admitted) {
+			this._retireOutgoingStream(entry);
+			return;
+		}
+		const queued = this._queueSemantic(
+			Object.freeze({
+				kind: RpcWireRecordKindEnum.streamCancel,
+				streamId: entry.streamId as string,
+			}) as RpcStreamCancelMessage,
+		);
+		if (!queued) {
+			this._fault(
+				RpcCloseReasonEnum.resourceFault,
+				new Error("Default RPC stream cancel reserve is exhausted."),
+			);
+		}
+	}
+
+	_finishOutgoingStream(
+		entry: IRpcOutgoingStreamEntry,
+		outcome: RpcStreamOutcome,
+	): void {
+		if (entry.publicFinished) {
+			return;
+		}
+		const projection = entry.sink.reserveTerminal(outcome);
+		entry.publicFinished = true;
+		projection.commit();
+	}
+
+	_retireOutgoingStream(entry: IRpcOutgoingStreamEntry): void {
+		if (entry.retired) {
+			return;
+		}
+		entry.retired = true;
+		const pendingIndex = this._pendingStreams.indexOf(entry);
+		if (pendingIndex !== -1) {
+			this._pendingStreams.splice(pendingIndex, 1);
+		}
+		entry.request = undefined;
+		this._releasePendingStreamCharge(entry);
+		entry.receiveSlotReservation?.release();
+		entry.receiveSlotReservation = undefined;
+		this._streams.delete(entry);
+		if (entry.streamId !== undefined) {
+			this._outgoingStreams.delete(entry.streamId);
+		}
+		this._streamCount -= 1;
+		this._checkGracefulShutdown();
+	}
+
+	_releasePendingStreamCharge(entry: IRpcOutgoingStreamEntry): void {
+		if (!entry.pendingCharged) {
+			return;
+		}
+		entry.pendingCharged = false;
+		this._pendingStreamBytes -= entry.pendingCharge;
+		entry.retainedBytesReservation?.release();
+		entry.retainedBytesReservation = undefined;
 	}
 
 	_pump(): void {
@@ -1290,15 +2019,20 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 		while (this._pendingInvocations[0]?.retired) {
 			this._pendingInvocations.shift();
 		}
+		while (this._pendingStreams[0]?.retired) {
+			this._pendingStreams.shift();
+		}
 		const replaySequence = this._replayBarrier[0];
 		const control = this._controlQueue[0];
 		const pending = this._pendingInvocations[0];
+		const pendingStream = this._pendingStreams[0];
 		const probeDue = this._pongDue || this._pingDue;
 		const ackDue = this._ackDue && this._ackDirty;
 		const nonProbeDue =
 			replaySequence !== undefined ||
 			control !== undefined ||
 			pending !== undefined ||
+			pendingStream !== undefined ||
 			ackDue;
 		if (probeDue && (!this._probeSentLast || !nonProbeDue)) {
 			this._probeSentLast = true;
@@ -1334,16 +2068,32 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 		// Control traffic wins its turn when present and selected by the lane scheduler.
 		const shouldSendControl =
 			control !== undefined &&
-			(pending === undefined || this._nextSequencedLane === "control");
+			(pending === undefined && pendingStream === undefined
+				? true
+				: this._nextSequencedLane === "control");
 		if (shouldSendControl) {
 			this._controlQueue.shift();
+			if (control.ordinaryFuture) {
+				this._ordinaryFutureObligations -= 1;
+			}
 			this._nextSequencedLane = "data";
 			this._probeSentLast = false;
 			this._admitSemantic(binding, control);
 			return;
 		}
+		const shouldAdmitStream =
+			pendingStream !== undefined &&
+			(pending === undefined || this._nextDataKind === "stream");
+		if (shouldAdmitStream) {
+			this._nextSequencedLane = "control";
+			this._nextDataKind = "call";
+			this._probeSentLast = false;
+			this._admitStream(binding, pendingStream);
+			return;
+		}
 		if (pending !== undefined) {
 			this._nextSequencedLane = "control";
+			this._nextDataKind = "stream";
 			this._probeSentLast = false;
 			this._admitInvocation(binding, pending);
 			return;
@@ -1359,6 +2109,89 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 			});
 		}
 		this._checkGracefulShutdown();
+	}
+
+	_admitStream(
+		binding: RpcBindingEpochImpl<TKey>,
+		entry: IRpcOutgoingStreamEntry,
+	): void {
+		const counterIsExhausted =
+			this._outgoingStreamOrdinalExhausted ||
+			!Number.isSafeInteger(this._nextOutgoingStreamOrdinal) ||
+			this._nextOutgoingSequence > RPC_LAST_ORDINARY_SEQUENCE;
+		if (counterIsExhausted) {
+			this._beginCounterDrain();
+			return;
+		}
+		const request = entry.request;
+		if (request === undefined) {
+			this._fault(
+				RpcCloseReasonEnum.protocolFault,
+				new Error("Default RPC Pending Stream lost its request."),
+			);
+			return;
+		}
+		const streamId = String(this._nextOutgoingStreamOrdinal);
+		const message: RpcStreamMethodStartMessage | RpcStreamPropertyStartMessage =
+			request.kind === "stream-method"
+				? Object.freeze({
+						kind: RpcWireRecordKindEnum.streamMethod,
+						streamId,
+						service: request.service,
+						member: request.member,
+						args: request.args.value,
+						creditThrough: 1,
+					})
+				: Object.freeze({
+						kind: RpcWireRecordKindEnum.streamProperty,
+						streamId,
+						service: request.service,
+						member: request.member,
+						creditThrough: 1,
+					});
+		const replay = this._reserveReplayEntry(message);
+		if (replay === undefined) {
+			this._finishOutgoingStream(entry, {
+				type: "failed",
+				code: RpcExceptionCodeEnum.unavailable,
+			});
+			this._retireOutgoingStream(entry);
+			this._pump();
+			return;
+		}
+		try {
+			this._codec.encode(
+				this._createEnvelope(this._nextOutgoingSequence, message),
+			);
+		} catch {
+			this._releaseReplayEntry(replay);
+			this._finishOutgoingStream(entry, {
+				type: "failed",
+				code: RpcExceptionCodeEnum.unavailable,
+			});
+			this._retireOutgoingStream(entry);
+			this._pump();
+			return;
+		}
+		this._pendingStreams.shift();
+		if (this._nextOutgoingStreamOrdinal === Number.MAX_SAFE_INTEGER) {
+			this._outgoingStreamOrdinalExhausted = true;
+		} else {
+			this._nextOutgoingStreamOrdinal += 1;
+		}
+		entry.admitted = true;
+		entry.streamId = streamId;
+		entry.request = undefined;
+		this._releasePendingStreamCharge(entry);
+		this._outgoingStreams.set(streamId, entry);
+		this._admitSemantic(binding, {
+			message,
+			replay,
+			ordinaryFuture: false,
+		});
+		if (this._outgoingStreamOrdinalExhausted) {
+			this._beginCounterDrain();
+		}
 	}
 
 	_admitInvocation(
@@ -1387,7 +2220,7 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 			kind: RpcWireRecordKindEnum.call,
 			callId,
 			service: request.service,
-			method: request.method,
+			member: request.method,
 			args: request.args.value,
 		}) as RpcCallMessage;
 		const sequence = this._nextOutgoingSequence;
@@ -1525,6 +2358,15 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 				incoming.terminalSequence = sequence;
 			}
 		}
+		if (
+			message.kind === RpcWireRecordKindEnum.streamComplete ||
+			message.kind === RpcWireRecordKindEnum.streamError
+		) {
+			const incoming = this._incomingStreams.get(message.streamId);
+			if (incoming?.terminalSelected) {
+				incoming.terminalSequence = sequence;
+			}
+		}
 		this._consumePiggybackAck();
 		this._sendEncoded(binding, encoded);
 	}
@@ -1552,6 +2394,7 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 
 	_reserveReplayEntry(
 		message: RpcSemanticMessage,
+		transferredCapacity?: IRpcTransferredReplayCapacity,
 	): IRpcReplayEntry | undefined {
 		let maximumEnvelope: Uint8Array;
 		try {
@@ -1562,13 +2405,18 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 				message,
 			});
 		} catch {
+			transferredCapacity?.reservation.release();
 			return undefined;
 		}
-		const ordinaryCharge = maximumEnvelope.byteLength + 256;
+		const ordinaryCharge =
+			transferredCapacity?.charge ?? maximumEnvelope.byteLength + 256;
 		const resourceClass =
-			message.kind === RpcWireRecordKindEnum.error
+			message.kind === RpcWireRecordKindEnum.error ||
+			message.kind === RpcWireRecordKindEnum.streamComplete ||
+			message.kind === RpcWireRecordKindEnum.streamError
 				? "terminal"
-				: message.kind === RpcWireRecordKindEnum.cancel
+				: message.kind === RpcWireRecordKindEnum.cancel ||
+						message.kind === RpcWireRecordKindEnum.streamCancel
 					? "cancel"
 					: "ordinary";
 		const charge =
@@ -1604,9 +2452,11 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 			}
 			this._cancelReplayCount += 1;
 		} else if (ordinaryReplayCapacityExceeded) {
+			transferredCapacity?.reservation.release();
 			return undefined;
 		} else {
-			retainedBytesReservation = this.reserveRetainedBytes(charge);
+			retainedBytesReservation =
+				transferredCapacity?.reservation ?? this.reserveRetainedBytes(charge);
 			if (retainedBytesReservation === undefined) {
 				return undefined;
 			}
@@ -1670,9 +2520,18 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 		}
 		this._ackDirty = false;
 		this._ackDue = false;
+		this._releaseReceivedComparisonEvidence(this._receivedThrough);
 		if (this._ackTimer !== undefined) {
 			clearTimeout(this._ackTimer);
 			this._ackTimer = undefined;
+		}
+	}
+
+	_releaseReceivedComparisonEvidence(ackThrough: number): void {
+		for (const sequence of this._receivedFingerprints.keys()) {
+			if (sequence <= ackThrough) {
+				this._receivedFingerprints.delete(sequence);
+			}
 		}
 	}
 
@@ -1691,6 +2550,9 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 					: new Error("Default RPC control record cannot be encoded."),
 			);
 			return;
+		}
+		if (record.kind === RpcWireRecordKindEnum.ack) {
+			this._releaseReceivedComparisonEvidence(this._receivedThrough);
 		}
 		this._sendEncoded(binding, encoded);
 	}
@@ -1747,6 +2609,15 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 				this._incomingCalls.delete(callId);
 			}
 		}
+		for (const [streamId, incoming] of this._incomingStreams) {
+			const terminalIsAcknowledged =
+				incoming.terminalSequence !== undefined &&
+				incoming.terminalSequence <= ackThrough &&
+				incoming.released;
+			if (terminalIsAcknowledged) {
+				this._incomingStreams.delete(streamId);
+			}
+		}
 		if (checkGracefulShutdown) {
 			this._checkGracefulShutdown();
 		}
@@ -1797,6 +2668,29 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 				});
 			}
 		}
+		for (const entry of [...this._streams]) {
+			this._finishOutgoingStream(
+				entry,
+				entry.admitted
+					? {
+							type: "failed",
+							code: RpcExceptionCodeEnum.outcomeUnknown,
+						}
+					: {
+							type: "failed",
+							code: RpcExceptionCodeEnum.unavailable,
+						},
+			);
+			this._retireOutgoingStream(entry);
+		}
+		for (const incoming of this._incomingStreams.values()) {
+			if (!incoming.released) {
+				incoming.terminalSelected = true;
+				incoming.stream?.finish({ type: "session-terminated" }, () =>
+					this._releaseIncomingStream(incoming),
+				);
+			}
+		}
 	}
 
 	_retireInvocation(entry: IRpcInvocationEntry): void {
@@ -1838,6 +2732,9 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 			this._releaseReplayEntry(replay);
 		}
 		for (const queued of this._controlQueue) {
+			if (queued.ordinaryFuture) {
+				this._ordinaryFutureObligations -= 1;
+			}
 			this._releaseReplayEntry(queued.replay);
 		}
 		this._replay.clear();
@@ -1869,6 +2766,15 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 					code: RpcExceptionCodeEnum.unavailable,
 				});
 				this._retireInvocation(entry);
+			}
+		}
+		for (const entry of [...this._streams]) {
+			if (!entry.admitted) {
+				this._finishOutgoingStream(entry, {
+					type: "failed",
+					code: RpcExceptionCodeEnum.unavailable,
+				});
+				this._retireOutgoingStream(entry);
 			}
 		}
 		this._checkGracefulShutdown();
@@ -1980,6 +2886,7 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 		this._clearTimers();
 		this._terminateOpenCalls();
 		this._releaseReplayState();
+		this._receivedFingerprints.clear();
 		this._protectedRetainedBytesReservation.release();
 		unregisterRpcSessionRetainedBytes(this);
 		this._proofKey = undefined;
@@ -2144,11 +3051,17 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 		const incomingActive = [...this._incomingCalls.values()].some(
 			(entry) => !entry.terminalSelected,
 		);
+		const incomingStreamActive = [...this._incomingStreams.values()].some(
+			(entry) => !entry.released,
+		);
 		// Graceful close waits for all retained work and binding I/O to drain.
 		const drainIsIncomplete =
 			this._invocations.size !== 0 ||
+			this._streams.size !== 0 ||
 			incomingActive ||
+			incomingStreamActive ||
 			this._pendingInvocations.some((entry) => !entry.retired) ||
+			this._pendingStreams.some((entry) => !entry.retired) ||
 			this._controlQueue.length !== 0 ||
 			this._replayBarrier.length !== 0 ||
 			this._replay.size !== 0 ||
@@ -2188,4 +3101,38 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 			},
 		);
 	}
+}
+
+function rpcJsonValuesEqual(left: unknown, right: unknown): boolean {
+	if (Object.is(left, right)) {
+		return true;
+	}
+	if (Array.isArray(left) || Array.isArray(right)) {
+		return (
+			Array.isArray(left) &&
+			Array.isArray(right) &&
+			left.length === right.length &&
+			left.every((value, index) => rpcJsonValuesEqual(value, right[index]))
+		);
+	}
+	if (
+		typeof left !== "object" ||
+		left === null ||
+		typeof right !== "object" ||
+		right === null
+	) {
+		return false;
+	}
+	const leftRecord = left as Readonly<Record<string, unknown>>;
+	const rightRecord = right as Readonly<Record<string, unknown>>;
+	const leftKeys = Object.keys(leftRecord).sort();
+	const rightKeys = Object.keys(rightRecord).sort();
+	return (
+		leftKeys.length === rightKeys.length &&
+		leftKeys.every(
+			(key, index) =>
+				key === rightKeys[index] &&
+				rpcJsonValuesEqual(leftRecord[key], rightRecord[key]),
+		)
+	);
 }

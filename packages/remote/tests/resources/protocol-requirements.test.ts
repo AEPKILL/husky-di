@@ -349,7 +349,7 @@ describe("Default RPC Protocol remaining requirements", () => {
 							kind: "call",
 							callId: String(seq + 1),
 							service: "example.ingress-order.v1",
-							method: "run",
+							member: "run",
 							args: [value],
 						},
 					}),

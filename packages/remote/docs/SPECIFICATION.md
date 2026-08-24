@@ -1830,8 +1830,7 @@ Error = {
   error: {
     code: "canceled" | "unavailable" | "handler-failed" |
           "unknown-service" | "unknown-member",
-    message: string,
-    details?: ApplicationValue
+    message: string
   }
 }
 

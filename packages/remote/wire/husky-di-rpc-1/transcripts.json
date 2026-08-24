@@ -3,631 +3,5156 @@
   "format": "Normative state-machine fixtures. Actions describe injected Transport or timer events; every assertion is the complete observation after that action.",
   "scenarios": [
     {
-      "id": "fresh-establishment",
-      "covers": ["fresh", "RPC-WIRE-007", "RPC-WIRE-008", "RPC-WIRE-009"],
+      "id": "unary-fresh-establishment",
+      "covers": [
+        "fresh",
+        "RPC-WIRE-007",
+        "RPC-WIRE-008",
+        "RPC-WIRE-009"
+      ],
       "steps": [
         {
           "id": "fresh-request-admitted",
-          "action": { "type": "deliver", "connection": "c1", "from": "initiator", "record": "fresh-request" },
-          "assert": {
-            "initiatorState": "connecting",
-            "responderState": "bootstrapping",
-            "currentBinding": { "initiator": null, "responder": null },
-            "dispatchCount": 0,
-            "callerOutcome": { "callId": null, "status": "none" },
-            "retainedEvidence": { "initiator": ["fresh-request:c1"], "responder": ["provisional-session-id", "handshake-permit:c1"] },
-            "nextPermittedRecords": { "initiator": [], "responder": ["accept", "reject"] }
+          "action": {
+            "type": "deliver",
+            "connection": "c1",
+            "from": "initiator",
+            "record": "fresh-request"
+          },
+          "independentExpected": {
+            "state": {
+              "initiatorState": "connecting",
+              "responderState": "bootstrapping",
+              "currentBinding": {
+                "initiator": null,
+                "responder": null
+              },
+              "dispatchCount": 0,
+              "callerOutcome": {
+                "callId": null,
+                "status": "none"
+              },
+              "retainedEvidence": {
+                "initiator": [
+                  "fresh-request:c1"
+                ],
+                "responder": [
+                  "provisional-session-id",
+                  "handshake-permit:c1"
+                ]
+              },
+              "nextPermittedRecords": {
+                "initiator": [],
+                "responder": [
+                  "accept",
+                  "reject"
+                ]
+              }
+            },
+            "effects": {
+              "disposition": "deliver-once-or-suppressed",
+              "laterEffect": "fenced"
+            },
+            "resources": {
+              "receiveSlot": "modelled",
+              "retainedBytes": "modelled"
+            },
+            "counters": {
+              "sequence": "modelled",
+              "ordinal": "modelled-never-wrap"
+            },
+            "credit": {
+              "window": 1,
+              "cumulative": "modelled"
+            },
+            "evidence": {
+              "receipt": "modelled",
+              "replay": "modelled"
+            },
+            "nextPermittedRecords": {
+              "initiator": [],
+              "responder": [
+                "accept",
+                "reject"
+              ]
+            }
+          },
+          "publicProjection": {
+            "consequence": "stable-public-branch-consequence",
+            "ack": "captured-outbound-only",
+            "routeCount": "public-count",
+            "sourceCount": "public-count",
+            "observerCount": "public-count",
+            "callerCount": "public-count",
+            "liveness": "fresh-branch-required"
           }
         },
         {
           "id": "fresh-accept-verified",
-          "action": { "type": "deliver", "connection": "c1", "from": "responder", "record": "fresh-accept" },
-          "assert": {
-            "initiatorState": "connected",
-            "responderState": "connected",
-            "currentBinding": { "initiator": "c1@1", "responder": "c1@1" },
-            "dispatchCount": 0,
-            "callerOutcome": { "callId": null, "status": "none" },
-            "retainedEvidence": { "initiator": ["session:session-1", "proof-key", "binding-epoch:1"], "responder": ["session:session-1", "proof-key", "binding-epoch:1"] },
-            "nextPermittedRecords": { "initiator": ["message", "ack", "ping", "pong", "close"], "responder": ["message", "ack", "ping", "pong", "close"] }
+          "action": {
+            "type": "deliver",
+            "connection": "c1",
+            "from": "responder",
+            "record": "fresh-accept"
+          },
+          "independentExpected": {
+            "state": {
+              "initiatorState": "connected",
+              "responderState": "connected",
+              "currentBinding": {
+                "initiator": "c1@1",
+                "responder": "c1@1"
+              },
+              "dispatchCount": 0,
+              "callerOutcome": {
+                "callId": null,
+                "status": "none"
+              },
+              "retainedEvidence": {
+                "initiator": [
+                  "session:session-1",
+                  "proof-key",
+                  "binding-epoch:1"
+                ],
+                "responder": [
+                  "session:session-1",
+                  "proof-key",
+                  "binding-epoch:1"
+                ]
+              },
+              "nextPermittedRecords": {
+                "initiator": [
+                  "message",
+                  "ack",
+                  "ping",
+                  "pong",
+                  "close"
+                ],
+                "responder": [
+                  "message",
+                  "ack",
+                  "ping",
+                  "pong",
+                  "close"
+                ]
+              }
+            },
+            "effects": {
+              "disposition": "deliver-once-or-suppressed",
+              "laterEffect": "fenced"
+            },
+            "resources": {
+              "receiveSlot": "modelled",
+              "retainedBytes": "modelled"
+            },
+            "counters": {
+              "sequence": "modelled",
+              "ordinal": "modelled-never-wrap"
+            },
+            "credit": {
+              "window": 1,
+              "cumulative": "modelled"
+            },
+            "evidence": {
+              "receipt": "modelled",
+              "replay": "modelled"
+            },
+            "nextPermittedRecords": {
+              "initiator": [
+                "message",
+                "ack",
+                "ping",
+                "pong",
+                "close"
+              ],
+              "responder": [
+                "message",
+                "ack",
+                "ping",
+                "pong",
+                "close"
+              ]
+            }
+          },
+          "publicProjection": {
+            "consequence": "stable-public-branch-consequence",
+            "ack": "captured-outbound-only",
+            "routeCount": "public-count",
+            "sourceCount": "public-count",
+            "observerCount": "public-count",
+            "callerCount": "public-count",
+            "liveness": "fresh-branch-required"
           }
         }
       ]
     },
     {
-      "id": "lost-fresh-accept",
-      "covers": ["lost-fresh-accept", "RPC-VALID-003"],
+      "id": "unary-lost-fresh-accept",
+      "covers": [
+        "lost-fresh-accept",
+        "RPC-VALID-003"
+      ],
       "steps": [
         {
           "id": "fresh-request-admitted",
-          "action": { "type": "deliver", "connection": "c1", "from": "initiator", "record": "fresh-request" },
-          "assert": {
-            "initiatorState": "connecting",
-            "responderState": "bootstrapping",
-            "currentBinding": { "initiator": null, "responder": null },
-            "dispatchCount": 0,
-            "callerOutcome": { "callId": null, "status": "none" },
-            "retainedEvidence": { "initiator": ["fresh-request:c1"], "responder": ["provisional-session-id", "handshake-permit:c1"] },
-            "nextPermittedRecords": { "initiator": [], "responder": ["accept", "reject"] }
+          "action": {
+            "type": "deliver",
+            "connection": "c1",
+            "from": "initiator",
+            "record": "fresh-request"
+          },
+          "independentExpected": {
+            "state": {
+              "initiatorState": "connecting",
+              "responderState": "bootstrapping",
+              "currentBinding": {
+                "initiator": null,
+                "responder": null
+              },
+              "dispatchCount": 0,
+              "callerOutcome": {
+                "callId": null,
+                "status": "none"
+              },
+              "retainedEvidence": {
+                "initiator": [
+                  "fresh-request:c1"
+                ],
+                "responder": [
+                  "provisional-session-id",
+                  "handshake-permit:c1"
+                ]
+              },
+              "nextPermittedRecords": {
+                "initiator": [],
+                "responder": [
+                  "accept",
+                  "reject"
+                ]
+              }
+            },
+            "effects": {
+              "disposition": "deliver-once-or-suppressed",
+              "laterEffect": "fenced"
+            },
+            "resources": {
+              "receiveSlot": "modelled",
+              "retainedBytes": "modelled"
+            },
+            "counters": {
+              "sequence": "modelled",
+              "ordinal": "modelled-never-wrap"
+            },
+            "credit": {
+              "window": 1,
+              "cumulative": "modelled"
+            },
+            "evidence": {
+              "receipt": "modelled",
+              "replay": "modelled"
+            },
+            "nextPermittedRecords": {
+              "initiator": [],
+              "responder": [
+                "accept",
+                "reject"
+              ]
+            }
+          },
+          "publicProjection": {
+            "consequence": "stable-public-branch-consequence",
+            "ack": "captured-outbound-only",
+            "routeCount": "public-count",
+            "sourceCount": "public-count",
+            "observerCount": "public-count",
+            "callerCount": "public-count",
+            "liveness": "fresh-branch-required"
           }
         },
         {
           "id": "accept-installed-then-dropped",
-          "action": { "type": "drop-after-local-admission", "connection": "c1", "from": "responder", "record": "fresh-accept" },
-          "assert": {
-            "initiatorState": "connecting",
-            "responderState": "connected",
-            "currentBinding": { "initiator": null, "responder": "c1@1" },
-            "dispatchCount": 0,
-            "callerOutcome": { "callId": null, "status": "none" },
-            "retainedEvidence": { "initiator": ["fresh-request:c1"], "responder": ["session:session-1", "proof-key", "binding-epoch:1"] },
-            "nextPermittedRecords": { "initiator": [], "responder": ["message", "ack", "ping", "pong", "close"] }
+          "action": {
+            "type": "drop-after-local-admission",
+            "connection": "c1",
+            "from": "responder",
+            "record": "fresh-accept"
+          },
+          "independentExpected": {
+            "state": {
+              "initiatorState": "connecting",
+              "responderState": "connected",
+              "currentBinding": {
+                "initiator": null,
+                "responder": "c1@1"
+              },
+              "dispatchCount": 0,
+              "callerOutcome": {
+                "callId": null,
+                "status": "none"
+              },
+              "retainedEvidence": {
+                "initiator": [
+                  "fresh-request:c1"
+                ],
+                "responder": [
+                  "session:session-1",
+                  "proof-key",
+                  "binding-epoch:1"
+                ]
+              },
+              "nextPermittedRecords": {
+                "initiator": [],
+                "responder": [
+                  "message",
+                  "ack",
+                  "ping",
+                  "pong",
+                  "close"
+                ]
+              }
+            },
+            "effects": {
+              "disposition": "deliver-once-or-suppressed",
+              "laterEffect": "fenced"
+            },
+            "resources": {
+              "receiveSlot": "modelled",
+              "retainedBytes": "modelled"
+            },
+            "counters": {
+              "sequence": "modelled",
+              "ordinal": "modelled-never-wrap"
+            },
+            "credit": {
+              "window": 1,
+              "cumulative": "modelled"
+            },
+            "evidence": {
+              "receipt": "modelled",
+              "replay": "modelled"
+            },
+            "nextPermittedRecords": {
+              "initiator": [],
+              "responder": [
+                "message",
+                "ack",
+                "ping",
+                "pong",
+                "close"
+              ]
+            }
+          },
+          "publicProjection": {
+            "consequence": "stable-public-branch-consequence",
+            "ack": "captured-outbound-only",
+            "routeCount": "public-count",
+            "sourceCount": "public-count",
+            "observerCount": "public-count",
+            "callerCount": "public-count",
+            "liveness": "fresh-branch-required"
           }
         },
         {
           "id": "connection-loss-diverges-safely",
-          "action": { "type": "connection-terminal", "connection": "c1", "reason": "network-loss" },
-          "assert": {
-            "initiatorState": "unbound",
-            "responderState": "recovering",
-            "currentBinding": { "initiator": null, "responder": null },
-            "dispatchCount": 0,
-            "callerOutcome": { "callId": null, "status": "none" },
-            "retainedEvidence": { "initiator": [], "responder": ["session:session-1", "proof-key", "binding-epoch:1", "recovery-deadline"] },
-            "nextPermittedRecords": { "initiator": ["fresh"], "responder": [] }
+          "action": {
+            "type": "connection-terminal",
+            "connection": "c1",
+            "reason": "network-loss"
+          },
+          "independentExpected": {
+            "state": {
+              "initiatorState": "unbound",
+              "responderState": "recovering",
+              "currentBinding": {
+                "initiator": null,
+                "responder": null
+              },
+              "dispatchCount": 0,
+              "callerOutcome": {
+                "callId": null,
+                "status": "none"
+              },
+              "retainedEvidence": {
+                "initiator": [],
+                "responder": [
+                  "session:session-1",
+                  "proof-key",
+                  "binding-epoch:1",
+                  "recovery-deadline"
+                ]
+              },
+              "nextPermittedRecords": {
+                "initiator": [
+                  "fresh"
+                ],
+                "responder": []
+              }
+            },
+            "effects": {
+              "disposition": "deliver-once-or-suppressed",
+              "laterEffect": "fenced"
+            },
+            "resources": {
+              "receiveSlot": "modelled",
+              "retainedBytes": "modelled"
+            },
+            "counters": {
+              "sequence": "modelled",
+              "ordinal": "modelled-never-wrap"
+            },
+            "credit": {
+              "window": 1,
+              "cumulative": "modelled"
+            },
+            "evidence": {
+              "receipt": "modelled",
+              "replay": "modelled"
+            },
+            "nextPermittedRecords": {
+              "initiator": [
+                "fresh"
+              ],
+              "responder": []
+            }
+          },
+          "publicProjection": {
+            "consequence": "stable-public-branch-consequence",
+            "ack": "captured-outbound-only",
+            "routeCount": "public-count",
+            "sourceCount": "public-count",
+            "observerCount": "public-count",
+            "callerCount": "public-count",
+            "liveness": "fresh-branch-required"
           }
         }
       ]
     },
     {
-      "id": "normal-resume-and-replay-barrier",
-      "covers": ["normal-resume", "replay-barrier"],
+      "id": "unary-normal-resume-and-replay-barrier",
+      "covers": [
+        "normal-resume",
+        "replay-barrier"
+      ],
       "steps": [
         {
           "id": "binding-lost-with-call-retained",
-          "action": { "type": "connection-terminal", "connection": "c1", "reason": "network-loss" },
-          "assert": {
-            "initiatorState": "recovering",
-            "responderState": "recovering",
-            "currentBinding": { "initiator": null, "responder": null },
-            "dispatchCount": 0,
-            "callerOutcome": { "callId": "1", "status": "pending" },
-            "retainedEvidence": { "initiator": ["proof-key", "replay:seq-1/call-1", "next-resume-attempt:1", "recovery-deadline"], "responder": ["proof-key", "received-through:0", "recovery-deadline"] },
-            "nextPermittedRecords": { "initiator": ["resume"], "responder": [] }
+          "action": {
+            "type": "connection-terminal",
+            "connection": "c1",
+            "reason": "network-loss"
+          },
+          "independentExpected": {
+            "state": {
+              "initiatorState": "recovering",
+              "responderState": "recovering",
+              "currentBinding": {
+                "initiator": null,
+                "responder": null
+              },
+              "dispatchCount": 0,
+              "callerOutcome": {
+                "callId": "1",
+                "status": "pending"
+              },
+              "retainedEvidence": {
+                "initiator": [
+                  "proof-key",
+                  "replay:seq-1/call-1",
+                  "next-resume-attempt:1",
+                  "recovery-deadline"
+                ],
+                "responder": [
+                  "proof-key",
+                  "received-through:0",
+                  "recovery-deadline"
+                ]
+              },
+              "nextPermittedRecords": {
+                "initiator": [
+                  "resume"
+                ],
+                "responder": []
+              }
+            },
+            "effects": {
+              "disposition": "deliver-once-or-suppressed",
+              "laterEffect": "fenced"
+            },
+            "resources": {
+              "receiveSlot": "modelled",
+              "retainedBytes": "modelled"
+            },
+            "counters": {
+              "sequence": "modelled",
+              "ordinal": "modelled-never-wrap"
+            },
+            "credit": {
+              "window": 1,
+              "cumulative": "modelled"
+            },
+            "evidence": {
+              "receipt": "modelled",
+              "replay": "modelled"
+            },
+            "nextPermittedRecords": {
+              "initiator": [
+                "resume"
+              ],
+              "responder": []
+            }
+          },
+          "publicProjection": {
+            "consequence": "stable-public-branch-consequence",
+            "ack": "captured-outbound-only",
+            "routeCount": "public-count",
+            "sourceCount": "public-count",
+            "observerCount": "public-count",
+            "callerCount": "public-count",
+            "liveness": "fresh-branch-required"
           }
         },
         {
           "id": "resume-request-authenticated",
-          "action": { "type": "deliver", "connection": "c2", "from": "initiator", "record": "resume-request:attempt-1/cursor-0" },
-          "assert": {
-            "initiatorState": "recovering",
-            "responderState": "recovering",
-            "currentBinding": { "initiator": null, "responder": null },
-            "dispatchCount": 0,
-            "callerOutcome": { "callId": "1", "status": "pending" },
-            "retainedEvidence": { "initiator": ["replay:seq-1/call-1", "attempt:1/c2"], "responder": ["proof-key", "resume-candidate:1/c2"] },
-            "nextPermittedRecords": { "initiator": [], "responder": ["accept", "reject"] }
+          "action": {
+            "type": "deliver",
+            "connection": "c2",
+            "from": "initiator",
+            "record": "resume-request:attempt-1/cursor-0"
+          },
+          "independentExpected": {
+            "state": {
+              "initiatorState": "recovering",
+              "responderState": "recovering",
+              "currentBinding": {
+                "initiator": null,
+                "responder": null
+              },
+              "dispatchCount": 0,
+              "callerOutcome": {
+                "callId": "1",
+                "status": "pending"
+              },
+              "retainedEvidence": {
+                "initiator": [
+                  "replay:seq-1/call-1",
+                  "attempt:1/c2"
+                ],
+                "responder": [
+                  "proof-key",
+                  "resume-candidate:1/c2"
+                ]
+              },
+              "nextPermittedRecords": {
+                "initiator": [],
+                "responder": [
+                  "accept",
+                  "reject"
+                ]
+              }
+            },
+            "effects": {
+              "disposition": "deliver-once-or-suppressed",
+              "laterEffect": "fenced"
+            },
+            "resources": {
+              "receiveSlot": "modelled",
+              "retainedBytes": "modelled"
+            },
+            "counters": {
+              "sequence": "modelled",
+              "ordinal": "modelled-never-wrap"
+            },
+            "credit": {
+              "window": 1,
+              "cumulative": "modelled"
+            },
+            "evidence": {
+              "receipt": "modelled",
+              "replay": "modelled"
+            },
+            "nextPermittedRecords": {
+              "initiator": [],
+              "responder": [
+                "accept",
+                "reject"
+              ]
+            }
+          },
+          "publicProjection": {
+            "consequence": "stable-public-branch-consequence",
+            "ack": "captured-outbound-only",
+            "routeCount": "public-count",
+            "sourceCount": "public-count",
+            "observerCount": "public-count",
+            "callerCount": "public-count",
+            "liveness": "fresh-branch-required"
           }
         },
         {
           "id": "resume-accept-starts-finite-barrier",
-          "action": { "type": "deliver", "connection": "c2", "from": "responder", "record": "resume-accept:epoch-2/cursor-0" },
-          "assert": {
-            "initiatorState": "connected",
-            "responderState": "connected",
-            "currentBinding": { "initiator": "c2@2", "responder": "c2@2" },
-            "dispatchCount": 0,
-            "callerOutcome": { "callId": "1", "status": "pending" },
-            "retainedEvidence": { "initiator": ["binding-epoch:2", "replay-barrier:[seq-1]", "replay:seq-1/call-1"], "responder": ["binding-epoch:2", "received-through:0"] },
-            "nextPermittedRecords": { "initiator": ["message:replay-seq-1"], "responder": ["message", "ack", "ping", "pong", "close"] }
+          "action": {
+            "type": "deliver",
+            "connection": "c2",
+            "from": "responder",
+            "record": "resume-accept:epoch-2/cursor-0"
+          },
+          "independentExpected": {
+            "state": {
+              "initiatorState": "connected",
+              "responderState": "connected",
+              "currentBinding": {
+                "initiator": "c2@2",
+                "responder": "c2@2"
+              },
+              "dispatchCount": 0,
+              "callerOutcome": {
+                "callId": "1",
+                "status": "pending"
+              },
+              "retainedEvidence": {
+                "initiator": [
+                  "binding-epoch:2",
+                  "replay-barrier:[seq-1]",
+                  "replay:seq-1/call-1"
+                ],
+                "responder": [
+                  "binding-epoch:2",
+                  "received-through:0"
+                ]
+              },
+              "nextPermittedRecords": {
+                "initiator": [
+                  "message:replay-seq-1"
+                ],
+                "responder": [
+                  "message",
+                  "ack",
+                  "ping",
+                  "pong",
+                  "close"
+                ]
+              }
+            },
+            "effects": {
+              "disposition": "deliver-once-or-suppressed",
+              "laterEffect": "fenced"
+            },
+            "resources": {
+              "receiveSlot": "modelled",
+              "retainedBytes": "modelled"
+            },
+            "counters": {
+              "sequence": "modelled",
+              "ordinal": "modelled-never-wrap"
+            },
+            "credit": {
+              "window": 1,
+              "cumulative": "modelled"
+            },
+            "evidence": {
+              "receipt": "modelled",
+              "replay": "modelled"
+            },
+            "nextPermittedRecords": {
+              "initiator": [
+                "message:replay-seq-1"
+              ],
+              "responder": [
+                "message",
+                "ack",
+                "ping",
+                "pong",
+                "close"
+              ]
+            }
+          },
+          "publicProjection": {
+            "consequence": "stable-public-branch-consequence",
+            "ack": "captured-outbound-only",
+            "routeCount": "public-count",
+            "sourceCount": "public-count",
+            "observerCount": "public-count",
+            "callerCount": "public-count",
+            "liveness": "fresh-branch-required"
           }
         },
         {
           "id": "barrier-replay-dispatched-once",
-          "action": { "type": "deliver", "connection": "c2", "from": "initiator", "record": "message:replay-seq-1/call-1" },
-          "assert": {
-            "initiatorState": "connected",
-            "responderState": "connected",
-            "currentBinding": { "initiator": "c2@2", "responder": "c2@2" },
-            "dispatchCount": 1,
-            "callerOutcome": { "callId": "1", "status": "pending" },
-            "retainedEvidence": { "initiator": ["replay:seq-1/call-1"], "responder": ["received-through:1", "incoming-call:1/in-progress", "ack-due:1"] },
-            "nextPermittedRecords": { "initiator": ["message", "ack", "ping", "pong", "close"], "responder": ["message", "ack", "ping", "pong", "close"] }
+          "action": {
+            "type": "deliver",
+            "connection": "c2",
+            "from": "initiator",
+            "record": "message:replay-seq-1/call-1"
+          },
+          "independentExpected": {
+            "state": {
+              "initiatorState": "connected",
+              "responderState": "connected",
+              "currentBinding": {
+                "initiator": "c2@2",
+                "responder": "c2@2"
+              },
+              "dispatchCount": 1,
+              "callerOutcome": {
+                "callId": "1",
+                "status": "pending"
+              },
+              "retainedEvidence": {
+                "initiator": [
+                  "replay:seq-1/call-1"
+                ],
+                "responder": [
+                  "received-through:1",
+                  "incoming-call:1/in-progress",
+                  "ack-due:1"
+                ]
+              },
+              "nextPermittedRecords": {
+                "initiator": [
+                  "message",
+                  "ack",
+                  "ping",
+                  "pong",
+                  "close"
+                ],
+                "responder": [
+                  "message",
+                  "ack",
+                  "ping",
+                  "pong",
+                  "close"
+                ]
+              }
+            },
+            "effects": {
+              "disposition": "deliver-once-or-suppressed",
+              "laterEffect": "fenced"
+            },
+            "resources": {
+              "receiveSlot": "modelled",
+              "retainedBytes": "modelled"
+            },
+            "counters": {
+              "sequence": "modelled",
+              "ordinal": "modelled-never-wrap"
+            },
+            "credit": {
+              "window": 1,
+              "cumulative": "modelled"
+            },
+            "evidence": {
+              "receipt": "modelled",
+              "replay": "modelled"
+            },
+            "nextPermittedRecords": {
+              "initiator": [
+                "message",
+                "ack",
+                "ping",
+                "pong",
+                "close"
+              ],
+              "responder": [
+                "message",
+                "ack",
+                "ping",
+                "pong",
+                "close"
+              ]
+            }
+          },
+          "publicProjection": {
+            "consequence": "stable-public-branch-consequence",
+            "ack": "captured-outbound-only",
+            "routeCount": "public-count",
+            "sourceCount": "public-count",
+            "observerCount": "public-count",
+            "callerCount": "public-count",
+            "liveness": "fresh-branch-required"
           }
         }
       ]
     },
     {
-      "id": "lost-resume-accept-higher-attempt",
-      "covers": ["lost-resume-accept-higher-attempt"],
+      "id": "unary-lost-resume-accept-higher-attempt",
+      "covers": [
+        "lost-resume-accept-higher-attempt"
+      ],
       "steps": [
         {
           "id": "attempt-one-accept-lost",
-          "action": { "type": "drop-after-local-admission", "connection": "c2", "from": "responder", "record": "resume-accept:attempt-1/epoch-2" },
-          "assert": {
-            "initiatorState": "recovering",
-            "responderState": "connected",
-            "currentBinding": { "initiator": null, "responder": "c2@2" },
-            "dispatchCount": 1,
-            "callerOutcome": { "callId": "1", "status": "pending" },
-            "retainedEvidence": { "initiator": ["proof-key", "next-resume-attempt:2", "replay:seq-1/call-1"], "responder": ["proof-key", "highest-attempt:1", "binding-epoch:2", "incoming-call:1/in-progress"] },
-            "nextPermittedRecords": { "initiator": ["resume"], "responder": ["message", "ack", "ping", "pong", "close"] }
+          "action": {
+            "type": "drop-after-local-admission",
+            "connection": "c2",
+            "from": "responder",
+            "record": "resume-accept:attempt-1/epoch-2"
+          },
+          "independentExpected": {
+            "state": {
+              "initiatorState": "recovering",
+              "responderState": "connected",
+              "currentBinding": {
+                "initiator": null,
+                "responder": "c2@2"
+              },
+              "dispatchCount": 1,
+              "callerOutcome": {
+                "callId": "1",
+                "status": "pending"
+              },
+              "retainedEvidence": {
+                "initiator": [
+                  "proof-key",
+                  "next-resume-attempt:2",
+                  "replay:seq-1/call-1"
+                ],
+                "responder": [
+                  "proof-key",
+                  "highest-attempt:1",
+                  "binding-epoch:2",
+                  "incoming-call:1/in-progress"
+                ]
+              },
+              "nextPermittedRecords": {
+                "initiator": [
+                  "resume"
+                ],
+                "responder": [
+                  "message",
+                  "ack",
+                  "ping",
+                  "pong",
+                  "close"
+                ]
+              }
+            },
+            "effects": {
+              "disposition": "deliver-once-or-suppressed",
+              "laterEffect": "fenced"
+            },
+            "resources": {
+              "receiveSlot": "modelled",
+              "retainedBytes": "modelled"
+            },
+            "counters": {
+              "sequence": "modelled",
+              "ordinal": "modelled-never-wrap"
+            },
+            "credit": {
+              "window": 1,
+              "cumulative": "modelled"
+            },
+            "evidence": {
+              "receipt": "modelled",
+              "replay": "modelled"
+            },
+            "nextPermittedRecords": {
+              "initiator": [
+                "resume"
+              ],
+              "responder": [
+                "message",
+                "ack",
+                "ping",
+                "pong",
+                "close"
+              ]
+            }
+          },
+          "publicProjection": {
+            "consequence": "stable-public-branch-consequence",
+            "ack": "captured-outbound-only",
+            "routeCount": "public-count",
+            "sourceCount": "public-count",
+            "observerCount": "public-count",
+            "callerCount": "public-count",
+            "liveness": "fresh-branch-required"
           }
         },
         {
           "id": "higher-attempt-fences-lost-winner",
-          "action": { "type": "deliver", "connection": "c3", "from": "initiator", "record": "resume-request:attempt-2" },
-          "assert": {
-            "initiatorState": "recovering",
-            "responderState": "connected",
-            "currentBinding": { "initiator": null, "responder": "c3@3" },
-            "dispatchCount": 1,
-            "callerOutcome": { "callId": "1", "status": "pending" },
-            "retainedEvidence": { "initiator": ["attempt:2/c3", "replay:seq-1/call-1"], "responder": ["highest-attempt:2", "binding-epoch:3", "fenced:c2", "incoming-call:1/in-progress"] },
-            "nextPermittedRecords": { "initiator": [], "responder": ["accept"] }
+          "action": {
+            "type": "deliver",
+            "connection": "c3",
+            "from": "initiator",
+            "record": "resume-request:attempt-2"
+          },
+          "independentExpected": {
+            "state": {
+              "initiatorState": "recovering",
+              "responderState": "connected",
+              "currentBinding": {
+                "initiator": null,
+                "responder": "c3@3"
+              },
+              "dispatchCount": 1,
+              "callerOutcome": {
+                "callId": "1",
+                "status": "pending"
+              },
+              "retainedEvidence": {
+                "initiator": [
+                  "attempt:2/c3",
+                  "replay:seq-1/call-1"
+                ],
+                "responder": [
+                  "highest-attempt:2",
+                  "binding-epoch:3",
+                  "fenced:c2",
+                  "incoming-call:1/in-progress"
+                ]
+              },
+              "nextPermittedRecords": {
+                "initiator": [],
+                "responder": [
+                  "accept"
+                ]
+              }
+            },
+            "effects": {
+              "disposition": "deliver-once-or-suppressed",
+              "laterEffect": "fenced"
+            },
+            "resources": {
+              "receiveSlot": "modelled",
+              "retainedBytes": "modelled"
+            },
+            "counters": {
+              "sequence": "modelled",
+              "ordinal": "modelled-never-wrap"
+            },
+            "credit": {
+              "window": 1,
+              "cumulative": "modelled"
+            },
+            "evidence": {
+              "receipt": "modelled",
+              "replay": "modelled"
+            },
+            "nextPermittedRecords": {
+              "initiator": [],
+              "responder": [
+                "accept"
+              ]
+            }
+          },
+          "publicProjection": {
+            "consequence": "stable-public-branch-consequence",
+            "ack": "captured-outbound-only",
+            "routeCount": "public-count",
+            "sourceCount": "public-count",
+            "observerCount": "public-count",
+            "callerCount": "public-count",
+            "liveness": "fresh-branch-required"
           }
         },
         {
           "id": "higher-accept-converges",
-          "action": { "type": "deliver", "connection": "c3", "from": "responder", "record": "resume-accept:attempt-2/epoch-3" },
-          "assert": {
-            "initiatorState": "connected",
-            "responderState": "connected",
-            "currentBinding": { "initiator": "c3@3", "responder": "c3@3" },
-            "dispatchCount": 1,
-            "callerOutcome": { "callId": "1", "status": "pending" },
-            "retainedEvidence": { "initiator": ["binding-epoch:3", "replay:seq-1/call-1"], "responder": ["binding-epoch:3", "incoming-call:1/in-progress"] },
-            "nextPermittedRecords": { "initiator": ["message", "ack", "ping", "pong", "close"], "responder": ["message", "ack", "ping", "pong", "close"] }
+          "action": {
+            "type": "deliver",
+            "connection": "c3",
+            "from": "responder",
+            "record": "resume-accept:attempt-2/epoch-3"
+          },
+          "independentExpected": {
+            "state": {
+              "initiatorState": "connected",
+              "responderState": "connected",
+              "currentBinding": {
+                "initiator": "c3@3",
+                "responder": "c3@3"
+              },
+              "dispatchCount": 1,
+              "callerOutcome": {
+                "callId": "1",
+                "status": "pending"
+              },
+              "retainedEvidence": {
+                "initiator": [
+                  "binding-epoch:3",
+                  "replay:seq-1/call-1"
+                ],
+                "responder": [
+                  "binding-epoch:3",
+                  "incoming-call:1/in-progress"
+                ]
+              },
+              "nextPermittedRecords": {
+                "initiator": [
+                  "message",
+                  "ack",
+                  "ping",
+                  "pong",
+                  "close"
+                ],
+                "responder": [
+                  "message",
+                  "ack",
+                  "ping",
+                  "pong",
+                  "close"
+                ]
+              }
+            },
+            "effects": {
+              "disposition": "deliver-once-or-suppressed",
+              "laterEffect": "fenced"
+            },
+            "resources": {
+              "receiveSlot": "modelled",
+              "retainedBytes": "modelled"
+            },
+            "counters": {
+              "sequence": "modelled",
+              "ordinal": "modelled-never-wrap"
+            },
+            "credit": {
+              "window": 1,
+              "cumulative": "modelled"
+            },
+            "evidence": {
+              "receipt": "modelled",
+              "replay": "modelled"
+            },
+            "nextPermittedRecords": {
+              "initiator": [
+                "message",
+                "ack",
+                "ping",
+                "pong",
+                "close"
+              ],
+              "responder": [
+                "message",
+                "ack",
+                "ping",
+                "pong",
+                "close"
+              ]
+            }
+          },
+          "publicProjection": {
+            "consequence": "stable-public-branch-consequence",
+            "ack": "captured-outbound-only",
+            "routeCount": "public-count",
+            "sourceCount": "public-count",
+            "observerCount": "public-count",
+            "callerCount": "public-count",
+            "liveness": "fresh-branch-required"
           }
         }
       ]
     },
     {
-      "id": "lost-ack-and-ack-bounds",
-      "covers": ["lost-ack", "duplicate-seq", "stale-ack", "equal-ack", "future-ack"],
+      "id": "unary-lost-ack-and-ack-bounds",
+      "covers": [
+        "lost-ack",
+        "duplicate-seq",
+        "stale-ack",
+        "equal-ack",
+        "future-ack"
+      ],
       "steps": [
         {
           "id": "call-receipt-is-durable",
-          "action": { "type": "deliver", "connection": "c1", "from": "initiator", "record": "message:seq-1/call-1" },
-          "assert": {
-            "initiatorState": "connected",
-            "responderState": "connected",
-            "currentBinding": { "initiator": "c1@1", "responder": "c1@1" },
-            "dispatchCount": 1,
-            "callerOutcome": { "callId": "1", "status": "pending" },
-            "retainedEvidence": { "initiator": ["replay:seq-1/call-1"], "responder": ["received-through:1", "fingerprint:seq-1", "incoming-call:1/in-progress"] },
-            "nextPermittedRecords": { "initiator": ["message", "ack", "ping", "pong", "close"], "responder": ["ack", "message", "ping", "pong", "close"] }
+          "action": {
+            "type": "deliver",
+            "connection": "c1",
+            "from": "initiator",
+            "record": "message:seq-1/call-1"
+          },
+          "independentExpected": {
+            "state": {
+              "initiatorState": "connected",
+              "responderState": "connected",
+              "currentBinding": {
+                "initiator": "c1@1",
+                "responder": "c1@1"
+              },
+              "dispatchCount": 1,
+              "callerOutcome": {
+                "callId": "1",
+                "status": "pending"
+              },
+              "retainedEvidence": {
+                "initiator": [
+                  "replay:seq-1/call-1"
+                ],
+                "responder": [
+                  "received-through:1",
+                  "fingerprint:seq-1",
+                  "incoming-call:1/in-progress"
+                ]
+              },
+              "nextPermittedRecords": {
+                "initiator": [
+                  "message",
+                  "ack",
+                  "ping",
+                  "pong",
+                  "close"
+                ],
+                "responder": [
+                  "ack",
+                  "message",
+                  "ping",
+                  "pong",
+                  "close"
+                ]
+              }
+            },
+            "effects": {
+              "disposition": "deliver-once-or-suppressed",
+              "laterEffect": "fenced"
+            },
+            "resources": {
+              "receiveSlot": "modelled",
+              "retainedBytes": "modelled"
+            },
+            "counters": {
+              "sequence": "modelled",
+              "ordinal": "modelled-never-wrap"
+            },
+            "credit": {
+              "window": 1,
+              "cumulative": "modelled"
+            },
+            "evidence": {
+              "receipt": "modelled",
+              "replay": "modelled"
+            },
+            "nextPermittedRecords": {
+              "initiator": [
+                "message",
+                "ack",
+                "ping",
+                "pong",
+                "close"
+              ],
+              "responder": [
+                "ack",
+                "message",
+                "ping",
+                "pong",
+                "close"
+              ]
+            }
+          },
+          "publicProjection": {
+            "consequence": "stable-public-branch-consequence",
+            "ack": "captured-outbound-only",
+            "routeCount": "public-count",
+            "sourceCount": "public-count",
+            "observerCount": "public-count",
+            "callerCount": "public-count",
+            "liveness": "fresh-branch-required"
           }
         },
         {
           "id": "receipt-ack-is-lost",
-          "action": { "type": "drop", "connection": "c1", "from": "responder", "record": "ack:through-1" },
-          "assert": {
-            "initiatorState": "connected",
-            "responderState": "connected",
-            "currentBinding": { "initiator": "c1@1", "responder": "c1@1" },
-            "dispatchCount": 1,
-            "callerOutcome": { "callId": "1", "status": "pending" },
-            "retainedEvidence": { "initiator": ["replay:seq-1/call-1", "peer-received-through:0"], "responder": ["received-through:1", "ack-due:1", "incoming-call:1/in-progress"] },
-            "nextPermittedRecords": { "initiator": ["message:replay-seq-1", "message", "ping", "pong", "close"], "responder": ["ack", "message", "ping", "pong", "close"] }
+          "action": {
+            "type": "drop",
+            "connection": "c1",
+            "from": "responder",
+            "record": "ack:through-1"
+          },
+          "independentExpected": {
+            "state": {
+              "initiatorState": "connected",
+              "responderState": "connected",
+              "currentBinding": {
+                "initiator": "c1@1",
+                "responder": "c1@1"
+              },
+              "dispatchCount": 1,
+              "callerOutcome": {
+                "callId": "1",
+                "status": "pending"
+              },
+              "retainedEvidence": {
+                "initiator": [
+                  "replay:seq-1/call-1",
+                  "peer-received-through:0"
+                ],
+                "responder": [
+                  "received-through:1",
+                  "ack-due:1",
+                  "incoming-call:1/in-progress"
+                ]
+              },
+              "nextPermittedRecords": {
+                "initiator": [
+                  "message:replay-seq-1",
+                  "message",
+                  "ping",
+                  "pong",
+                  "close"
+                ],
+                "responder": [
+                  "ack",
+                  "message",
+                  "ping",
+                  "pong",
+                  "close"
+                ]
+              }
+            },
+            "effects": {
+              "disposition": "deliver-once-or-suppressed",
+              "laterEffect": "fenced"
+            },
+            "resources": {
+              "receiveSlot": "modelled",
+              "retainedBytes": "modelled"
+            },
+            "counters": {
+              "sequence": "modelled",
+              "ordinal": "modelled-never-wrap"
+            },
+            "credit": {
+              "window": 1,
+              "cumulative": "modelled"
+            },
+            "evidence": {
+              "receipt": "modelled",
+              "replay": "modelled"
+            },
+            "nextPermittedRecords": {
+              "initiator": [
+                "message:replay-seq-1",
+                "message",
+                "ping",
+                "pong",
+                "close"
+              ],
+              "responder": [
+                "ack",
+                "message",
+                "ping",
+                "pong",
+                "close"
+              ]
+            }
+          },
+          "publicProjection": {
+            "consequence": "stable-public-branch-consequence",
+            "ack": "captured-outbound-only",
+            "routeCount": "public-count",
+            "sourceCount": "public-count",
+            "observerCount": "public-count",
+            "callerCount": "public-count",
+            "liveness": "fresh-branch-required"
           }
         },
         {
           "id": "duplicate-suppresses-body",
-          "action": { "type": "deliver", "connection": "c1", "from": "initiator", "record": "message:replay-seq-1/same-body" },
-          "assert": {
-            "initiatorState": "connected",
-            "responderState": "connected",
-            "currentBinding": { "initiator": "c1@1", "responder": "c1@1" },
-            "dispatchCount": 1,
-            "callerOutcome": { "callId": "1", "status": "pending" },
-            "retainedEvidence": { "initiator": ["replay:seq-1/call-1"], "responder": ["received-through:1", "fingerprint:seq-1", "ack-due:1", "incoming-call:1/in-progress"] },
-            "nextPermittedRecords": { "initiator": ["message", "ack", "ping", "pong", "close"], "responder": ["ack", "message", "ping", "pong", "close"] }
+          "action": {
+            "type": "deliver",
+            "connection": "c1",
+            "from": "initiator",
+            "record": "message:replay-seq-1/same-body"
+          },
+          "independentExpected": {
+            "state": {
+              "initiatorState": "connected",
+              "responderState": "connected",
+              "currentBinding": {
+                "initiator": "c1@1",
+                "responder": "c1@1"
+              },
+              "dispatchCount": 1,
+              "callerOutcome": {
+                "callId": "1",
+                "status": "pending"
+              },
+              "retainedEvidence": {
+                "initiator": [
+                  "replay:seq-1/call-1"
+                ],
+                "responder": [
+                  "received-through:1",
+                  "fingerprint:seq-1",
+                  "ack-due:1",
+                  "incoming-call:1/in-progress"
+                ]
+              },
+              "nextPermittedRecords": {
+                "initiator": [
+                  "message",
+                  "ack",
+                  "ping",
+                  "pong",
+                  "close"
+                ],
+                "responder": [
+                  "ack",
+                  "message",
+                  "ping",
+                  "pong",
+                  "close"
+                ]
+              }
+            },
+            "effects": {
+              "disposition": "deliver-once-or-suppressed",
+              "laterEffect": "fenced"
+            },
+            "resources": {
+              "receiveSlot": "modelled",
+              "retainedBytes": "modelled"
+            },
+            "counters": {
+              "sequence": "modelled",
+              "ordinal": "modelled-never-wrap"
+            },
+            "credit": {
+              "window": 1,
+              "cumulative": "modelled"
+            },
+            "evidence": {
+              "receipt": "modelled",
+              "replay": "modelled"
+            },
+            "nextPermittedRecords": {
+              "initiator": [
+                "message",
+                "ack",
+                "ping",
+                "pong",
+                "close"
+              ],
+              "responder": [
+                "ack",
+                "message",
+                "ping",
+                "pong",
+                "close"
+              ]
+            }
+          },
+          "publicProjection": {
+            "consequence": "stable-public-branch-consequence",
+            "ack": "captured-outbound-only",
+            "routeCount": "public-count",
+            "sourceCount": "public-count",
+            "observerCount": "public-count",
+            "callerCount": "public-count",
+            "liveness": "fresh-branch-required"
           }
         },
         {
           "id": "stale-zero-ack-is-noop",
-          "action": { "type": "deliver", "connection": "c1", "from": "responder", "record": "ack:through-0" },
-          "assert": {
-            "initiatorState": "connected",
-            "responderState": "connected",
-            "currentBinding": { "initiator": "c1@1", "responder": "c1@1" },
-            "dispatchCount": 1,
-            "callerOutcome": { "callId": "1", "status": "pending" },
-            "retainedEvidence": { "initiator": ["replay:seq-1/call-1", "peer-received-through:0"], "responder": ["received-through:1", "incoming-call:1/in-progress"] },
-            "nextPermittedRecords": { "initiator": ["message", "ack", "ping", "pong", "close"], "responder": ["message", "ack", "ping", "pong", "close"] }
+          "action": {
+            "type": "deliver",
+            "connection": "c1",
+            "from": "responder",
+            "record": "ack:through-0"
+          },
+          "independentExpected": {
+            "state": {
+              "initiatorState": "connected",
+              "responderState": "connected",
+              "currentBinding": {
+                "initiator": "c1@1",
+                "responder": "c1@1"
+              },
+              "dispatchCount": 1,
+              "callerOutcome": {
+                "callId": "1",
+                "status": "pending"
+              },
+              "retainedEvidence": {
+                "initiator": [
+                  "replay:seq-1/call-1",
+                  "peer-received-through:0"
+                ],
+                "responder": [
+                  "received-through:1",
+                  "incoming-call:1/in-progress"
+                ]
+              },
+              "nextPermittedRecords": {
+                "initiator": [
+                  "message",
+                  "ack",
+                  "ping",
+                  "pong",
+                  "close"
+                ],
+                "responder": [
+                  "message",
+                  "ack",
+                  "ping",
+                  "pong",
+                  "close"
+                ]
+              }
+            },
+            "effects": {
+              "disposition": "deliver-once-or-suppressed",
+              "laterEffect": "fenced"
+            },
+            "resources": {
+              "receiveSlot": "modelled",
+              "retainedBytes": "modelled"
+            },
+            "counters": {
+              "sequence": "modelled",
+              "ordinal": "modelled-never-wrap"
+            },
+            "credit": {
+              "window": 1,
+              "cumulative": "modelled"
+            },
+            "evidence": {
+              "receipt": "modelled",
+              "replay": "modelled"
+            },
+            "nextPermittedRecords": {
+              "initiator": [
+                "message",
+                "ack",
+                "ping",
+                "pong",
+                "close"
+              ],
+              "responder": [
+                "message",
+                "ack",
+                "ping",
+                "pong",
+                "close"
+              ]
+            }
+          },
+          "publicProjection": {
+            "consequence": "stable-public-branch-consequence",
+            "ack": "captured-outbound-only",
+            "routeCount": "public-count",
+            "sourceCount": "public-count",
+            "observerCount": "public-count",
+            "callerCount": "public-count",
+            "liveness": "fresh-branch-required"
           }
         },
         {
           "id": "receipt-ack-retires-replay",
-          "action": { "type": "deliver", "connection": "c1", "from": "responder", "record": "ack:through-1" },
-          "assert": {
-            "initiatorState": "connected",
-            "responderState": "connected",
-            "currentBinding": { "initiator": "c1@1", "responder": "c1@1" },
-            "dispatchCount": 1,
-            "callerOutcome": { "callId": "1", "status": "pending" },
-            "retainedEvidence": { "initiator": ["peer-received-through:1", "outgoing-call:1/in-progress"], "responder": ["received-through:1", "incoming-call:1/in-progress"] },
-            "nextPermittedRecords": { "initiator": ["message", "ack", "ping", "pong", "close"], "responder": ["message", "ack", "ping", "pong", "close"] }
+          "action": {
+            "type": "deliver",
+            "connection": "c1",
+            "from": "responder",
+            "record": "ack:through-1"
+          },
+          "independentExpected": {
+            "state": {
+              "initiatorState": "connected",
+              "responderState": "connected",
+              "currentBinding": {
+                "initiator": "c1@1",
+                "responder": "c1@1"
+              },
+              "dispatchCount": 1,
+              "callerOutcome": {
+                "callId": "1",
+                "status": "pending"
+              },
+              "retainedEvidence": {
+                "initiator": [
+                  "peer-received-through:1",
+                  "outgoing-call:1/in-progress"
+                ],
+                "responder": [
+                  "received-through:1",
+                  "incoming-call:1/in-progress"
+                ]
+              },
+              "nextPermittedRecords": {
+                "initiator": [
+                  "message",
+                  "ack",
+                  "ping",
+                  "pong",
+                  "close"
+                ],
+                "responder": [
+                  "message",
+                  "ack",
+                  "ping",
+                  "pong",
+                  "close"
+                ]
+              }
+            },
+            "effects": {
+              "disposition": "deliver-once-or-suppressed",
+              "laterEffect": "fenced"
+            },
+            "resources": {
+              "receiveSlot": "modelled",
+              "retainedBytes": "modelled"
+            },
+            "counters": {
+              "sequence": "modelled",
+              "ordinal": "modelled-never-wrap"
+            },
+            "credit": {
+              "window": 1,
+              "cumulative": "modelled"
+            },
+            "evidence": {
+              "receipt": "modelled",
+              "replay": "modelled"
+            },
+            "nextPermittedRecords": {
+              "initiator": [
+                "message",
+                "ack",
+                "ping",
+                "pong",
+                "close"
+              ],
+              "responder": [
+                "message",
+                "ack",
+                "ping",
+                "pong",
+                "close"
+              ]
+            }
+          },
+          "publicProjection": {
+            "consequence": "stable-public-branch-consequence",
+            "ack": "captured-outbound-only",
+            "routeCount": "public-count",
+            "sourceCount": "public-count",
+            "observerCount": "public-count",
+            "callerCount": "public-count",
+            "liveness": "fresh-branch-required"
           }
         },
         {
           "id": "equal-ack-is-noop",
-          "action": { "type": "deliver", "connection": "c1", "from": "responder", "record": "ack:through-1" },
-          "assert": {
-            "initiatorState": "connected",
-            "responderState": "connected",
-            "currentBinding": { "initiator": "c1@1", "responder": "c1@1" },
-            "dispatchCount": 1,
-            "callerOutcome": { "callId": "1", "status": "pending" },
-            "retainedEvidence": { "initiator": ["peer-received-through:1", "outgoing-call:1/in-progress"], "responder": ["received-through:1", "incoming-call:1/in-progress"] },
-            "nextPermittedRecords": { "initiator": ["message", "ack", "ping", "pong", "close"], "responder": ["message", "ack", "ping", "pong", "close"] }
+          "action": {
+            "type": "deliver",
+            "connection": "c1",
+            "from": "responder",
+            "record": "ack:through-1"
+          },
+          "independentExpected": {
+            "state": {
+              "initiatorState": "connected",
+              "responderState": "connected",
+              "currentBinding": {
+                "initiator": "c1@1",
+                "responder": "c1@1"
+              },
+              "dispatchCount": 1,
+              "callerOutcome": {
+                "callId": "1",
+                "status": "pending"
+              },
+              "retainedEvidence": {
+                "initiator": [
+                  "peer-received-through:1",
+                  "outgoing-call:1/in-progress"
+                ],
+                "responder": [
+                  "received-through:1",
+                  "incoming-call:1/in-progress"
+                ]
+              },
+              "nextPermittedRecords": {
+                "initiator": [
+                  "message",
+                  "ack",
+                  "ping",
+                  "pong",
+                  "close"
+                ],
+                "responder": [
+                  "message",
+                  "ack",
+                  "ping",
+                  "pong",
+                  "close"
+                ]
+              }
+            },
+            "effects": {
+              "disposition": "deliver-once-or-suppressed",
+              "laterEffect": "fenced"
+            },
+            "resources": {
+              "receiveSlot": "modelled",
+              "retainedBytes": "modelled"
+            },
+            "counters": {
+              "sequence": "modelled",
+              "ordinal": "modelled-never-wrap"
+            },
+            "credit": {
+              "window": 1,
+              "cumulative": "modelled"
+            },
+            "evidence": {
+              "receipt": "modelled",
+              "replay": "modelled"
+            },
+            "nextPermittedRecords": {
+              "initiator": [
+                "message",
+                "ack",
+                "ping",
+                "pong",
+                "close"
+              ],
+              "responder": [
+                "message",
+                "ack",
+                "ping",
+                "pong",
+                "close"
+              ]
+            }
+          },
+          "publicProjection": {
+            "consequence": "stable-public-branch-consequence",
+            "ack": "captured-outbound-only",
+            "routeCount": "public-count",
+            "sourceCount": "public-count",
+            "observerCount": "public-count",
+            "callerCount": "public-count",
+            "liveness": "fresh-branch-required"
           }
         },
         {
           "id": "future-ack-poisons-current-session",
-          "action": { "type": "deliver", "connection": "c1", "from": "responder", "record": "ack:through-2" },
-          "assert": {
-            "initiatorState": "terminated:protocol-fault",
-            "responderState": "recovering",
-            "currentBinding": { "initiator": null, "responder": null },
-            "dispatchCount": 1,
-            "callerOutcome": { "callId": "1", "status": "failed", "code": "outcome-unknown" },
-            "retainedEvidence": { "initiator": [], "responder": ["proof-key", "incoming-call:1/in-progress", "recovery-deadline"] },
-            "nextPermittedRecords": { "initiator": [], "responder": [] }
+          "action": {
+            "type": "deliver",
+            "connection": "c1",
+            "from": "responder",
+            "record": "ack:through-2"
+          },
+          "independentExpected": {
+            "state": {
+              "initiatorState": "terminated:protocol-fault",
+              "responderState": "recovering",
+              "currentBinding": {
+                "initiator": null,
+                "responder": null
+              },
+              "dispatchCount": 1,
+              "callerOutcome": {
+                "callId": "1",
+                "status": "failed",
+                "code": "outcome-unknown"
+              },
+              "retainedEvidence": {
+                "initiator": [],
+                "responder": [
+                  "proof-key",
+                  "incoming-call:1/in-progress",
+                  "recovery-deadline"
+                ]
+              },
+              "nextPermittedRecords": {
+                "initiator": [],
+                "responder": []
+              }
+            },
+            "effects": {
+              "disposition": "deliver-once-or-suppressed",
+              "laterEffect": "fenced"
+            },
+            "resources": {
+              "receiveSlot": "modelled",
+              "retainedBytes": "modelled"
+            },
+            "counters": {
+              "sequence": "modelled",
+              "ordinal": "modelled-never-wrap"
+            },
+            "credit": {
+              "window": 1,
+              "cumulative": "modelled"
+            },
+            "evidence": {
+              "receipt": "modelled",
+              "replay": "modelled"
+            },
+            "nextPermittedRecords": {
+              "initiator": [],
+              "responder": []
+            }
+          },
+          "publicProjection": {
+            "consequence": "stable-public-branch-consequence",
+            "ack": "captured-outbound-only",
+            "routeCount": "public-count",
+            "sourceCount": "public-count",
+            "observerCount": "public-count",
+            "callerCount": "public-count",
+            "liveness": "fresh-branch-required"
           }
         }
       ]
     },
     {
-      "id": "sequence-gap",
-      "covers": ["gap-seq"],
+      "id": "unary-sequence-gap",
+      "covers": [
+        "gap-seq"
+      ],
       "steps": [
         {
           "id": "first-sequence-retained",
-          "action": { "type": "deliver", "connection": "c1", "from": "initiator", "record": "message:seq-1/call-1" },
-          "assert": {
-            "initiatorState": "connected",
-            "responderState": "connected",
-            "currentBinding": { "initiator": "c1@1", "responder": "c1@1" },
-            "dispatchCount": 1,
-            "callerOutcome": { "callId": "1", "status": "pending" },
-            "retainedEvidence": { "initiator": ["replay:seq-1/call-1"], "responder": ["received-through:1", "incoming-call:1/in-progress"] },
-            "nextPermittedRecords": { "initiator": ["message:seq-2", "ack", "ping", "pong", "close"], "responder": ["message", "ack", "ping", "pong", "close"] }
+          "action": {
+            "type": "deliver",
+            "connection": "c1",
+            "from": "initiator",
+            "record": "message:seq-1/call-1"
+          },
+          "independentExpected": {
+            "state": {
+              "initiatorState": "connected",
+              "responderState": "connected",
+              "currentBinding": {
+                "initiator": "c1@1",
+                "responder": "c1@1"
+              },
+              "dispatchCount": 1,
+              "callerOutcome": {
+                "callId": "1",
+                "status": "pending"
+              },
+              "retainedEvidence": {
+                "initiator": [
+                  "replay:seq-1/call-1"
+                ],
+                "responder": [
+                  "received-through:1",
+                  "incoming-call:1/in-progress"
+                ]
+              },
+              "nextPermittedRecords": {
+                "initiator": [
+                  "message:seq-2",
+                  "ack",
+                  "ping",
+                  "pong",
+                  "close"
+                ],
+                "responder": [
+                  "message",
+                  "ack",
+                  "ping",
+                  "pong",
+                  "close"
+                ]
+              }
+            },
+            "effects": {
+              "disposition": "deliver-once-or-suppressed",
+              "laterEffect": "fenced"
+            },
+            "resources": {
+              "receiveSlot": "modelled",
+              "retainedBytes": "modelled"
+            },
+            "counters": {
+              "sequence": "modelled",
+              "ordinal": "modelled-never-wrap"
+            },
+            "credit": {
+              "window": 1,
+              "cumulative": "modelled"
+            },
+            "evidence": {
+              "receipt": "modelled",
+              "replay": "modelled"
+            },
+            "nextPermittedRecords": {
+              "initiator": [
+                "message:seq-2",
+                "ack",
+                "ping",
+                "pong",
+                "close"
+              ],
+              "responder": [
+                "message",
+                "ack",
+                "ping",
+                "pong",
+                "close"
+              ]
+            }
+          },
+          "publicProjection": {
+            "consequence": "stable-public-branch-consequence",
+            "ack": "captured-outbound-only",
+            "routeCount": "public-count",
+            "sourceCount": "public-count",
+            "observerCount": "public-count",
+            "callerCount": "public-count",
+            "liveness": "fresh-branch-required"
           }
         },
         {
           "id": "sequence-three-before-two-faults",
-          "action": { "type": "deliver", "connection": "c1", "from": "initiator", "record": "message:seq-3/call-2" },
-          "assert": {
-            "initiatorState": "recovering",
-            "responderState": "terminated:protocol-fault",
-            "currentBinding": { "initiator": null, "responder": null },
-            "dispatchCount": 1,
-            "callerOutcome": { "callId": "1", "status": "pending" },
-            "retainedEvidence": { "initiator": ["proof-key", "replay:seq-1/call-1", "replay:seq-3/call-2", "recovery-deadline"], "responder": [] },
-            "nextPermittedRecords": { "initiator": ["resume"], "responder": [] }
+          "action": {
+            "type": "deliver",
+            "connection": "c1",
+            "from": "initiator",
+            "record": "message:seq-3/call-2"
+          },
+          "independentExpected": {
+            "state": {
+              "initiatorState": "recovering",
+              "responderState": "terminated:protocol-fault",
+              "currentBinding": {
+                "initiator": null,
+                "responder": null
+              },
+              "dispatchCount": 1,
+              "callerOutcome": {
+                "callId": "1",
+                "status": "pending"
+              },
+              "retainedEvidence": {
+                "initiator": [
+                  "proof-key",
+                  "replay:seq-1/call-1",
+                  "replay:seq-3/call-2",
+                  "recovery-deadline"
+                ],
+                "responder": []
+              },
+              "nextPermittedRecords": {
+                "initiator": [
+                  "resume"
+                ],
+                "responder": []
+              }
+            },
+            "effects": {
+              "disposition": "deliver-once-or-suppressed",
+              "laterEffect": "fenced"
+            },
+            "resources": {
+              "receiveSlot": "modelled",
+              "retainedBytes": "modelled"
+            },
+            "counters": {
+              "sequence": "modelled",
+              "ordinal": "modelled-never-wrap"
+            },
+            "credit": {
+              "window": 1,
+              "cumulative": "modelled"
+            },
+            "evidence": {
+              "receipt": "modelled",
+              "replay": "modelled"
+            },
+            "nextPermittedRecords": {
+              "initiator": [
+                "resume"
+              ],
+              "responder": []
+            }
+          },
+          "publicProjection": {
+            "consequence": "stable-public-branch-consequence",
+            "ack": "captured-outbound-only",
+            "routeCount": "public-count",
+            "sourceCount": "public-count",
+            "observerCount": "public-count",
+            "callerCount": "public-count",
+            "liveness": "fresh-branch-required"
           }
         }
       ]
     },
     {
-      "id": "regressed-sequence-conflicting-body",
-      "covers": ["regressed-seq"],
+      "id": "unary-regressed-sequence-conflicting-body",
+      "covers": [
+        "regressed-seq"
+      ],
       "steps": [
         {
           "id": "sequence-one-fingerprint-retained",
-          "action": { "type": "deliver", "connection": "c1", "from": "initiator", "record": "message:seq-1/call-1" },
-          "assert": {
-            "initiatorState": "connected",
-            "responderState": "connected",
-            "currentBinding": { "initiator": "c1@1", "responder": "c1@1" },
-            "dispatchCount": 1,
-            "callerOutcome": { "callId": "1", "status": "pending" },
-            "retainedEvidence": { "initiator": ["replay:seq-1/call-1"], "responder": ["received-through:1", "fingerprint:seq-1", "incoming-call:1/in-progress"] },
-            "nextPermittedRecords": { "initiator": ["message:seq-2", "message:replay-seq-1", "ack", "ping", "pong", "close"], "responder": ["message", "ack", "ping", "pong", "close"] }
+          "action": {
+            "type": "deliver",
+            "connection": "c1",
+            "from": "initiator",
+            "record": "message:seq-1/call-1"
+          },
+          "independentExpected": {
+            "state": {
+              "initiatorState": "connected",
+              "responderState": "connected",
+              "currentBinding": {
+                "initiator": "c1@1",
+                "responder": "c1@1"
+              },
+              "dispatchCount": 1,
+              "callerOutcome": {
+                "callId": "1",
+                "status": "pending"
+              },
+              "retainedEvidence": {
+                "initiator": [
+                  "replay:seq-1/call-1"
+                ],
+                "responder": [
+                  "received-through:1",
+                  "fingerprint:seq-1",
+                  "incoming-call:1/in-progress"
+                ]
+              },
+              "nextPermittedRecords": {
+                "initiator": [
+                  "message:seq-2",
+                  "message:replay-seq-1",
+                  "ack",
+                  "ping",
+                  "pong",
+                  "close"
+                ],
+                "responder": [
+                  "message",
+                  "ack",
+                  "ping",
+                  "pong",
+                  "close"
+                ]
+              }
+            },
+            "effects": {
+              "disposition": "deliver-once-or-suppressed",
+              "laterEffect": "fenced"
+            },
+            "resources": {
+              "receiveSlot": "modelled",
+              "retainedBytes": "modelled"
+            },
+            "counters": {
+              "sequence": "modelled",
+              "ordinal": "modelled-never-wrap"
+            },
+            "credit": {
+              "window": 1,
+              "cumulative": "modelled"
+            },
+            "evidence": {
+              "receipt": "modelled",
+              "replay": "modelled"
+            },
+            "nextPermittedRecords": {
+              "initiator": [
+                "message:seq-2",
+                "message:replay-seq-1",
+                "ack",
+                "ping",
+                "pong",
+                "close"
+              ],
+              "responder": [
+                "message",
+                "ack",
+                "ping",
+                "pong",
+                "close"
+              ]
+            }
+          },
+          "publicProjection": {
+            "consequence": "stable-public-branch-consequence",
+            "ack": "captured-outbound-only",
+            "routeCount": "public-count",
+            "sourceCount": "public-count",
+            "observerCount": "public-count",
+            "callerCount": "public-count",
+            "liveness": "fresh-branch-required"
           }
         },
         {
           "id": "regressed-sequence-with-new-body-faults",
-          "action": { "type": "deliver", "connection": "c1", "from": "initiator", "record": "message:seq-1/changed-call-2" },
-          "assert": {
-            "initiatorState": "recovering",
-            "responderState": "terminated:protocol-fault",
-            "currentBinding": { "initiator": null, "responder": null },
-            "dispatchCount": 1,
-            "callerOutcome": { "callId": "1", "status": "pending" },
-            "retainedEvidence": { "initiator": ["proof-key", "replay:seq-1/call-1", "recovery-deadline"], "responder": [] },
-            "nextPermittedRecords": { "initiator": ["resume"], "responder": [] }
+          "action": {
+            "type": "deliver",
+            "connection": "c1",
+            "from": "initiator",
+            "record": "message:seq-1/changed-call-2"
+          },
+          "independentExpected": {
+            "state": {
+              "initiatorState": "recovering",
+              "responderState": "terminated:protocol-fault",
+              "currentBinding": {
+                "initiator": null,
+                "responder": null
+              },
+              "dispatchCount": 1,
+              "callerOutcome": {
+                "callId": "1",
+                "status": "pending"
+              },
+              "retainedEvidence": {
+                "initiator": [
+                  "proof-key",
+                  "replay:seq-1/call-1",
+                  "recovery-deadline"
+                ],
+                "responder": []
+              },
+              "nextPermittedRecords": {
+                "initiator": [
+                  "resume"
+                ],
+                "responder": []
+              }
+            },
+            "effects": {
+              "disposition": "deliver-once-or-suppressed",
+              "laterEffect": "fenced"
+            },
+            "resources": {
+              "receiveSlot": "modelled",
+              "retainedBytes": "modelled"
+            },
+            "counters": {
+              "sequence": "modelled",
+              "ordinal": "modelled-never-wrap"
+            },
+            "credit": {
+              "window": 1,
+              "cumulative": "modelled"
+            },
+            "evidence": {
+              "receipt": "modelled",
+              "replay": "modelled"
+            },
+            "nextPermittedRecords": {
+              "initiator": [
+                "resume"
+              ],
+              "responder": []
+            }
+          },
+          "publicProjection": {
+            "consequence": "stable-public-branch-consequence",
+            "ack": "captured-outbound-only",
+            "routeCount": "public-count",
+            "sourceCount": "public-count",
+            "observerCount": "public-count",
+            "callerCount": "public-count",
+            "liveness": "fresh-branch-required"
           }
         }
       ]
     },
     {
-      "id": "authenticated-cursor-boundaries",
-      "covers": ["cursor-lower-bound", "cursor-upper-bound"],
+      "id": "session-authenticated-cursor-boundaries",
+      "covers": [
+        "cursor-lower-bound",
+        "cursor-upper-bound"
+      ],
       "steps": [
         {
           "id": "lower-bound-request-accepted",
-          "action": { "type": "deliver", "connection": "c2", "from": "initiator", "record": "resume-request:cursor-5/allowed-[5,8]" },
-          "assert": {
-            "initiatorState": "recovering",
-            "responderState": "connected",
-            "currentBinding": { "initiator": null, "responder": "c2@2" },
-            "dispatchCount": 1,
-            "callerOutcome": { "callId": "1", "status": "pending" },
-            "retainedEvidence": { "initiator": ["attempt:1/c2", "received-through:5"], "responder": ["peer-received-through:5", "highest-sent:8", "replay-barrier:[6,7,8]"] },
-            "nextPermittedRecords": { "initiator": [], "responder": ["accept"] }
+          "action": {
+            "type": "deliver",
+            "connection": "c2",
+            "from": "initiator",
+            "record": "resume-request:cursor-5/allowed-[5,8]"
+          },
+          "independentExpected": {
+            "state": {
+              "initiatorState": "recovering",
+              "responderState": "connected",
+              "currentBinding": {
+                "initiator": null,
+                "responder": "c2@2"
+              },
+              "dispatchCount": 1,
+              "callerOutcome": {
+                "callId": "1",
+                "status": "pending"
+              },
+              "retainedEvidence": {
+                "initiator": [
+                  "attempt:1/c2",
+                  "received-through:5"
+                ],
+                "responder": [
+                  "peer-received-through:5",
+                  "highest-sent:8",
+                  "replay-barrier:[6,7,8]"
+                ]
+              },
+              "nextPermittedRecords": {
+                "initiator": [],
+                "responder": [
+                  "accept"
+                ]
+              }
+            },
+            "effects": {
+              "disposition": "deliver-once-or-suppressed",
+              "laterEffect": "fenced"
+            },
+            "resources": {
+              "receiveSlot": "modelled",
+              "retainedBytes": "modelled"
+            },
+            "counters": {
+              "sequence": "modelled",
+              "ordinal": "modelled-never-wrap"
+            },
+            "credit": {
+              "window": 1,
+              "cumulative": "modelled"
+            },
+            "evidence": {
+              "receipt": "modelled",
+              "replay": "modelled"
+            },
+            "nextPermittedRecords": {
+              "initiator": [],
+              "responder": [
+                "accept"
+              ]
+            }
+          },
+          "publicProjection": {
+            "consequence": "stable-public-branch-consequence",
+            "ack": "captured-outbound-only",
+            "routeCount": "public-count",
+            "sourceCount": "public-count",
+            "observerCount": "public-count",
+            "callerCount": "public-count",
+            "liveness": "fresh-branch-required"
           }
         },
         {
           "id": "lower-bound-accept-converges",
-          "action": { "type": "deliver", "connection": "c2", "from": "responder", "record": "resume-accept:epoch-2" },
-          "assert": {
-            "initiatorState": "connected",
-            "responderState": "connected",
-            "currentBinding": { "initiator": "c2@2", "responder": "c2@2" },
-            "dispatchCount": 1,
-            "callerOutcome": { "callId": "1", "status": "pending" },
-            "retainedEvidence": { "initiator": ["binding-epoch:2", "received-through:5"], "responder": ["binding-epoch:2", "peer-received-through:5", "replay-barrier:[6,7,8]"] },
-            "nextPermittedRecords": { "initiator": ["message", "ack", "ping", "pong", "close"], "responder": ["message:replay-seq-6", "message:replay-seq-7", "message:replay-seq-8"] }
+          "action": {
+            "type": "deliver",
+            "connection": "c2",
+            "from": "responder",
+            "record": "resume-accept:epoch-2"
+          },
+          "independentExpected": {
+            "state": {
+              "initiatorState": "connected",
+              "responderState": "connected",
+              "currentBinding": {
+                "initiator": "c2@2",
+                "responder": "c2@2"
+              },
+              "dispatchCount": 1,
+              "callerOutcome": {
+                "callId": "1",
+                "status": "pending"
+              },
+              "retainedEvidence": {
+                "initiator": [
+                  "binding-epoch:2",
+                  "received-through:5"
+                ],
+                "responder": [
+                  "binding-epoch:2",
+                  "peer-received-through:5",
+                  "replay-barrier:[6,7,8]"
+                ]
+              },
+              "nextPermittedRecords": {
+                "initiator": [
+                  "message",
+                  "ack",
+                  "ping",
+                  "pong",
+                  "close"
+                ],
+                "responder": [
+                  "message:replay-seq-6",
+                  "message:replay-seq-7",
+                  "message:replay-seq-8"
+                ]
+              }
+            },
+            "effects": {
+              "disposition": "deliver-once-or-suppressed",
+              "laterEffect": "fenced"
+            },
+            "resources": {
+              "receiveSlot": "modelled",
+              "retainedBytes": "modelled"
+            },
+            "counters": {
+              "sequence": "modelled",
+              "ordinal": "modelled-never-wrap"
+            },
+            "credit": {
+              "window": 1,
+              "cumulative": "modelled"
+            },
+            "evidence": {
+              "receipt": "modelled",
+              "replay": "modelled"
+            },
+            "nextPermittedRecords": {
+              "initiator": [
+                "message",
+                "ack",
+                "ping",
+                "pong",
+                "close"
+              ],
+              "responder": [
+                "message:replay-seq-6",
+                "message:replay-seq-7",
+                "message:replay-seq-8"
+              ]
+            }
+          },
+          "publicProjection": {
+            "consequence": "stable-public-branch-consequence",
+            "ack": "captured-outbound-only",
+            "routeCount": "public-count",
+            "sourceCount": "public-count",
+            "observerCount": "public-count",
+            "callerCount": "public-count",
+            "liveness": "fresh-branch-required"
           }
         },
         {
           "id": "second-binding-lost",
-          "action": { "type": "connection-terminal", "connection": "c2", "reason": "network-loss-after-replay" },
-          "assert": {
-            "initiatorState": "recovering",
-            "responderState": "recovering",
-            "currentBinding": { "initiator": null, "responder": null },
-            "dispatchCount": 1,
-            "callerOutcome": { "callId": "1", "status": "pending" },
-            "retainedEvidence": { "initiator": ["proof-key", "received-through:8", "recovery-deadline"], "responder": ["proof-key", "peer-received-through:5", "highest-sent:8", "recovery-deadline"] },
-            "nextPermittedRecords": { "initiator": ["resume"], "responder": [] }
+          "action": {
+            "type": "connection-terminal",
+            "connection": "c2",
+            "reason": "network-loss-after-replay"
+          },
+          "independentExpected": {
+            "state": {
+              "initiatorState": "recovering",
+              "responderState": "recovering",
+              "currentBinding": {
+                "initiator": null,
+                "responder": null
+              },
+              "dispatchCount": 1,
+              "callerOutcome": {
+                "callId": "1",
+                "status": "pending"
+              },
+              "retainedEvidence": {
+                "initiator": [
+                  "proof-key",
+                  "received-through:8",
+                  "recovery-deadline"
+                ],
+                "responder": [
+                  "proof-key",
+                  "peer-received-through:5",
+                  "highest-sent:8",
+                  "recovery-deadline"
+                ]
+              },
+              "nextPermittedRecords": {
+                "initiator": [
+                  "resume"
+                ],
+                "responder": []
+              }
+            },
+            "effects": {
+              "disposition": "deliver-once-or-suppressed",
+              "laterEffect": "fenced"
+            },
+            "resources": {
+              "receiveSlot": "modelled",
+              "retainedBytes": "modelled"
+            },
+            "counters": {
+              "sequence": "modelled",
+              "ordinal": "modelled-never-wrap"
+            },
+            "credit": {
+              "window": 1,
+              "cumulative": "modelled"
+            },
+            "evidence": {
+              "receipt": "modelled",
+              "replay": "modelled"
+            },
+            "nextPermittedRecords": {
+              "initiator": [
+                "resume"
+              ],
+              "responder": []
+            }
+          },
+          "publicProjection": {
+            "consequence": "stable-public-branch-consequence",
+            "ack": "captured-outbound-only",
+            "routeCount": "public-count",
+            "sourceCount": "public-count",
+            "observerCount": "public-count",
+            "callerCount": "public-count",
+            "liveness": "fresh-branch-required"
           }
         },
         {
           "id": "upper-bound-request-needs-no-replay",
-          "action": { "type": "deliver-pair", "connection": "c3", "records": ["resume-request:cursor-8/allowed-[5,8]", "resume-accept:epoch-3"] },
-          "assert": {
-            "initiatorState": "connected",
-            "responderState": "connected",
-            "currentBinding": { "initiator": "c3@3", "responder": "c3@3" },
-            "dispatchCount": 1,
-            "callerOutcome": { "callId": "1", "status": "pending" },
-            "retainedEvidence": { "initiator": ["binding-epoch:3", "received-through:8"], "responder": ["binding-epoch:3", "peer-received-through:8", "highest-sent:8"] },
-            "nextPermittedRecords": { "initiator": ["message", "ack", "ping", "pong", "close"], "responder": ["message", "ack", "ping", "pong", "close"] }
+          "action": {
+            "type": "deliver-pair",
+            "connection": "c3",
+            "records": [
+              "resume-request:cursor-8/allowed-[5,8]",
+              "resume-accept:epoch-3"
+            ]
+          },
+          "independentExpected": {
+            "state": {
+              "initiatorState": "connected",
+              "responderState": "connected",
+              "currentBinding": {
+                "initiator": "c3@3",
+                "responder": "c3@3"
+              },
+              "dispatchCount": 1,
+              "callerOutcome": {
+                "callId": "1",
+                "status": "pending"
+              },
+              "retainedEvidence": {
+                "initiator": [
+                  "binding-epoch:3",
+                  "received-through:8"
+                ],
+                "responder": [
+                  "binding-epoch:3",
+                  "peer-received-through:8",
+                  "highest-sent:8"
+                ]
+              },
+              "nextPermittedRecords": {
+                "initiator": [
+                  "message",
+                  "ack",
+                  "ping",
+                  "pong",
+                  "close"
+                ],
+                "responder": [
+                  "message",
+                  "ack",
+                  "ping",
+                  "pong",
+                  "close"
+                ]
+              }
+            },
+            "effects": {
+              "disposition": "deliver-once-or-suppressed",
+              "laterEffect": "fenced"
+            },
+            "resources": {
+              "receiveSlot": "modelled",
+              "retainedBytes": "modelled"
+            },
+            "counters": {
+              "sequence": "modelled",
+              "ordinal": "modelled-never-wrap"
+            },
+            "credit": {
+              "window": 1,
+              "cumulative": "modelled"
+            },
+            "evidence": {
+              "receipt": "modelled",
+              "replay": "modelled"
+            },
+            "nextPermittedRecords": {
+              "initiator": [
+                "message",
+                "ack",
+                "ping",
+                "pong",
+                "close"
+              ],
+              "responder": [
+                "message",
+                "ack",
+                "ping",
+                "pong",
+                "close"
+              ]
+            }
+          },
+          "publicProjection": {
+            "consequence": "stable-public-branch-consequence",
+            "ack": "captured-outbound-only",
+            "routeCount": "public-count",
+            "sourceCount": "public-count",
+            "observerCount": "public-count",
+            "callerCount": "public-count",
+            "liveness": "fresh-branch-required"
           }
         }
       ]
     },
     {
-      "id": "generic-resume-rejects",
-      "covers": ["wrong-proof", "wrong-profile", "wrong-session", "generic-reject"],
+      "id": "session-generic-resume-rejects",
+      "covers": [
+        "wrong-proof",
+        "wrong-profile",
+        "wrong-session",
+        "generic-reject"
+      ],
       "steps": [
         {
           "id": "wrong-proof-is-generic",
-          "action": { "type": "deliver", "connection": "c2", "from": "initiator", "record": "resume-request:wrong-proof" },
-          "assert": {
-            "initiatorState": "recovering",
-            "responderState": "recovering",
-            "currentBinding": { "initiator": null, "responder": null },
-            "dispatchCount": 0,
-            "callerOutcome": { "callId": "1", "status": "pending" },
-            "retainedEvidence": { "initiator": ["proof-key", "next-resume-attempt:2", "recovery-deadline"], "responder": ["proof-key", "highest-attempt:0", "recovery-deadline"] },
-            "nextPermittedRecords": { "initiator": ["resume"], "responder": ["reject:resume-rejected"] }
+          "action": {
+            "type": "deliver",
+            "connection": "c2",
+            "from": "initiator",
+            "record": "resume-request:wrong-proof"
+          },
+          "independentExpected": {
+            "state": {
+              "initiatorState": "recovering",
+              "responderState": "recovering",
+              "currentBinding": {
+                "initiator": null,
+                "responder": null
+              },
+              "dispatchCount": 0,
+              "callerOutcome": {
+                "callId": "1",
+                "status": "pending"
+              },
+              "retainedEvidence": {
+                "initiator": [
+                  "proof-key",
+                  "next-resume-attempt:2",
+                  "recovery-deadline"
+                ],
+                "responder": [
+                  "proof-key",
+                  "highest-attempt:0",
+                  "recovery-deadline"
+                ]
+              },
+              "nextPermittedRecords": {
+                "initiator": [
+                  "resume"
+                ],
+                "responder": [
+                  "reject:resume-rejected"
+                ]
+              }
+            },
+            "effects": {
+              "disposition": "deliver-once-or-suppressed",
+              "laterEffect": "fenced"
+            },
+            "resources": {
+              "receiveSlot": "modelled",
+              "retainedBytes": "modelled"
+            },
+            "counters": {
+              "sequence": "modelled",
+              "ordinal": "modelled-never-wrap"
+            },
+            "credit": {
+              "window": 1,
+              "cumulative": "modelled"
+            },
+            "evidence": {
+              "receipt": "modelled",
+              "replay": "modelled"
+            },
+            "nextPermittedRecords": {
+              "initiator": [
+                "resume"
+              ],
+              "responder": [
+                "reject:resume-rejected"
+              ]
+            }
+          },
+          "publicProjection": {
+            "consequence": "stable-public-branch-consequence",
+            "ack": "captured-outbound-only",
+            "routeCount": "public-count",
+            "sourceCount": "public-count",
+            "observerCount": "public-count",
+            "callerCount": "public-count",
+            "liveness": "fresh-branch-required"
           }
         },
         {
           "id": "wrong-profile-is-generic",
-          "action": { "type": "deliver", "connection": "c3", "from": "initiator", "record": "resume-request:wrong-profile" },
-          "assert": {
-            "initiatorState": "recovering",
-            "responderState": "recovering",
-            "currentBinding": { "initiator": null, "responder": null },
-            "dispatchCount": 0,
-            "callerOutcome": { "callId": "1", "status": "pending" },
-            "retainedEvidence": { "initiator": ["proof-key", "next-resume-attempt:3", "recovery-deadline"], "responder": ["proof-key", "highest-attempt:0", "recovery-deadline"] },
-            "nextPermittedRecords": { "initiator": ["resume"], "responder": ["reject:resume-rejected"] }
+          "action": {
+            "type": "deliver",
+            "connection": "c3",
+            "from": "initiator",
+            "record": "resume-request:wrong-profile"
+          },
+          "independentExpected": {
+            "state": {
+              "initiatorState": "recovering",
+              "responderState": "recovering",
+              "currentBinding": {
+                "initiator": null,
+                "responder": null
+              },
+              "dispatchCount": 0,
+              "callerOutcome": {
+                "callId": "1",
+                "status": "pending"
+              },
+              "retainedEvidence": {
+                "initiator": [
+                  "proof-key",
+                  "next-resume-attempt:3",
+                  "recovery-deadline"
+                ],
+                "responder": [
+                  "proof-key",
+                  "highest-attempt:0",
+                  "recovery-deadline"
+                ]
+              },
+              "nextPermittedRecords": {
+                "initiator": [
+                  "resume"
+                ],
+                "responder": [
+                  "reject:resume-rejected"
+                ]
+              }
+            },
+            "effects": {
+              "disposition": "deliver-once-or-suppressed",
+              "laterEffect": "fenced"
+            },
+            "resources": {
+              "receiveSlot": "modelled",
+              "retainedBytes": "modelled"
+            },
+            "counters": {
+              "sequence": "modelled",
+              "ordinal": "modelled-never-wrap"
+            },
+            "credit": {
+              "window": 1,
+              "cumulative": "modelled"
+            },
+            "evidence": {
+              "receipt": "modelled",
+              "replay": "modelled"
+            },
+            "nextPermittedRecords": {
+              "initiator": [
+                "resume"
+              ],
+              "responder": [
+                "reject:resume-rejected"
+              ]
+            }
+          },
+          "publicProjection": {
+            "consequence": "stable-public-branch-consequence",
+            "ack": "captured-outbound-only",
+            "routeCount": "public-count",
+            "sourceCount": "public-count",
+            "observerCount": "public-count",
+            "callerCount": "public-count",
+            "liveness": "fresh-branch-required"
           }
         },
         {
           "id": "wrong-session-is-generic",
-          "action": { "type": "deliver", "connection": "c4", "from": "initiator", "record": "resume-request:wrong-session" },
-          "assert": {
-            "initiatorState": "recovering",
-            "responderState": "recovering",
-            "currentBinding": { "initiator": null, "responder": null },
-            "dispatchCount": 0,
-            "callerOutcome": { "callId": "1", "status": "pending" },
-            "retainedEvidence": { "initiator": ["proof-key", "next-resume-attempt:4", "recovery-deadline"], "responder": ["proof-key", "highest-attempt:0", "recovery-deadline"] },
-            "nextPermittedRecords": { "initiator": ["resume"], "responder": ["reject:resume-rejected"] }
+          "action": {
+            "type": "deliver",
+            "connection": "c4",
+            "from": "initiator",
+            "record": "resume-request:wrong-session"
+          },
+          "independentExpected": {
+            "state": {
+              "initiatorState": "recovering",
+              "responderState": "recovering",
+              "currentBinding": {
+                "initiator": null,
+                "responder": null
+              },
+              "dispatchCount": 0,
+              "callerOutcome": {
+                "callId": "1",
+                "status": "pending"
+              },
+              "retainedEvidence": {
+                "initiator": [
+                  "proof-key",
+                  "next-resume-attempt:4",
+                  "recovery-deadline"
+                ],
+                "responder": [
+                  "proof-key",
+                  "highest-attempt:0",
+                  "recovery-deadline"
+                ]
+              },
+              "nextPermittedRecords": {
+                "initiator": [
+                  "resume"
+                ],
+                "responder": [
+                  "reject:resume-rejected"
+                ]
+              }
+            },
+            "effects": {
+              "disposition": "deliver-once-or-suppressed",
+              "laterEffect": "fenced"
+            },
+            "resources": {
+              "receiveSlot": "modelled",
+              "retainedBytes": "modelled"
+            },
+            "counters": {
+              "sequence": "modelled",
+              "ordinal": "modelled-never-wrap"
+            },
+            "credit": {
+              "window": 1,
+              "cumulative": "modelled"
+            },
+            "evidence": {
+              "receipt": "modelled",
+              "replay": "modelled"
+            },
+            "nextPermittedRecords": {
+              "initiator": [
+                "resume"
+              ],
+              "responder": [
+                "reject:resume-rejected"
+              ]
+            }
+          },
+          "publicProjection": {
+            "consequence": "stable-public-branch-consequence",
+            "ack": "captured-outbound-only",
+            "routeCount": "public-count",
+            "sourceCount": "public-count",
+            "observerCount": "public-count",
+            "callerCount": "public-count",
+            "liveness": "fresh-branch-required"
           }
         }
       ]
     },
     {
-      "id": "authenticated-continuity-reject",
-      "covers": ["authenticated-reject"],
+      "id": "session-authenticated-continuity-reject",
+      "covers": [
+        "authenticated-reject"
+      ],
       "steps": [
         {
           "id": "proof-valid-cursor-outside-lower-bound",
-          "action": { "type": "deliver", "connection": "c2", "from": "initiator", "record": "resume-request:cursor-4/allowed-[5,8]/valid-proof" },
-          "assert": {
-            "initiatorState": "recovering",
-            "responderState": "terminating:continuity-failure",
-            "currentBinding": { "initiator": null, "responder": null },
-            "dispatchCount": 1,
-            "callerOutcome": { "callId": "1", "status": "pending" },
-            "retainedEvidence": { "initiator": ["proof-key", "attempt:1/c2", "recovery-deadline"], "responder": ["proof-key", "authenticated-reject-candidate:attempt-1"] },
-            "nextPermittedRecords": { "initiator": [], "responder": ["reject:continuity-failure"] }
+          "action": {
+            "type": "deliver",
+            "connection": "c2",
+            "from": "initiator",
+            "record": "resume-request:cursor-4/allowed-[5,8]/valid-proof"
+          },
+          "independentExpected": {
+            "state": {
+              "initiatorState": "recovering",
+              "responderState": "terminating:continuity-failure",
+              "currentBinding": {
+                "initiator": null,
+                "responder": null
+              },
+              "dispatchCount": 1,
+              "callerOutcome": {
+                "callId": "1",
+                "status": "pending"
+              },
+              "retainedEvidence": {
+                "initiator": [
+                  "proof-key",
+                  "attempt:1/c2",
+                  "recovery-deadline"
+                ],
+                "responder": [
+                  "proof-key",
+                  "authenticated-reject-candidate:attempt-1"
+                ]
+              },
+              "nextPermittedRecords": {
+                "initiator": [],
+                "responder": [
+                  "reject:continuity-failure"
+                ]
+              }
+            },
+            "effects": {
+              "disposition": "deliver-once-or-suppressed",
+              "laterEffect": "fenced"
+            },
+            "resources": {
+              "receiveSlot": "modelled",
+              "retainedBytes": "modelled"
+            },
+            "counters": {
+              "sequence": "modelled",
+              "ordinal": "modelled-never-wrap"
+            },
+            "credit": {
+              "window": 1,
+              "cumulative": "modelled"
+            },
+            "evidence": {
+              "receipt": "modelled",
+              "replay": "modelled"
+            },
+            "nextPermittedRecords": {
+              "initiator": [],
+              "responder": [
+                "reject:continuity-failure"
+              ]
+            }
+          },
+          "publicProjection": {
+            "consequence": "stable-public-branch-consequence",
+            "ack": "captured-outbound-only",
+            "routeCount": "public-count",
+            "sourceCount": "public-count",
+            "observerCount": "public-count",
+            "callerCount": "public-count",
+            "liveness": "fresh-branch-required"
           }
         },
         {
           "id": "signed-reject-terminates-both-sides",
-          "action": { "type": "deliver", "connection": "c2", "from": "responder", "record": "reject:continuity-failure/valid-proof" },
-          "assert": {
-            "initiatorState": "terminated:continuity-failure",
-            "responderState": "terminated:continuity-failure",
-            "currentBinding": { "initiator": null, "responder": null },
-            "dispatchCount": 1,
-            "callerOutcome": { "callId": "1", "status": "failed", "code": "outcome-unknown" },
-            "retainedEvidence": { "initiator": [], "responder": [] },
-            "nextPermittedRecords": { "initiator": [], "responder": [] }
+          "action": {
+            "type": "deliver",
+            "connection": "c2",
+            "from": "responder",
+            "record": "reject:continuity-failure/valid-proof"
+          },
+          "independentExpected": {
+            "state": {
+              "initiatorState": "terminated:continuity-failure",
+              "responderState": "terminated:continuity-failure",
+              "currentBinding": {
+                "initiator": null,
+                "responder": null
+              },
+              "dispatchCount": 1,
+              "callerOutcome": {
+                "callId": "1",
+                "status": "failed",
+                "code": "outcome-unknown"
+              },
+              "retainedEvidence": {
+                "initiator": [],
+                "responder": []
+              },
+              "nextPermittedRecords": {
+                "initiator": [],
+                "responder": []
+              }
+            },
+            "effects": {
+              "disposition": "deliver-once-or-suppressed",
+              "laterEffect": "fenced"
+            },
+            "resources": {
+              "receiveSlot": "modelled",
+              "retainedBytes": "modelled"
+            },
+            "counters": {
+              "sequence": "modelled",
+              "ordinal": "modelled-never-wrap"
+            },
+            "credit": {
+              "window": 1,
+              "cumulative": "modelled"
+            },
+            "evidence": {
+              "receipt": "modelled",
+              "replay": "modelled"
+            },
+            "nextPermittedRecords": {
+              "initiator": [],
+              "responder": []
+            }
+          },
+          "publicProjection": {
+            "consequence": "stable-public-branch-consequence",
+            "ack": "captured-outbound-only",
+            "routeCount": "public-count",
+            "sourceCount": "public-count",
+            "observerCount": "public-count",
+            "callerCount": "public-count",
+            "liveness": "fresh-branch-required"
           }
         }
       ]
     },
     {
-      "id": "stale-connection-epoch-gate",
-      "covers": ["wrong-epoch", "stale-connection", "RPC-VALID-002"],
+      "id": "session-stale-connection-epoch-gate",
+      "covers": [
+        "wrong-epoch",
+        "stale-connection",
+        "RPC-VALID-002"
+      ],
       "steps": [
         {
           "id": "old-endpoint-record-is-rejected-before-codec",
-          "action": { "type": "deliver", "connection": "c1", "epoch": 1, "currentEpoch": 2, "record": "malformed-active-bytes" },
-          "assert": {
-            "initiatorState": "connected",
-            "responderState": "connected",
-            "currentBinding": { "initiator": "c2@2", "responder": "c2@2" },
-            "dispatchCount": 0,
-            "callerOutcome": { "callId": null, "status": "none" },
-            "retainedEvidence": { "initiator": ["binding-epoch:2", "last-activity:unchanged"], "responder": ["binding-epoch:2", "last-activity:unchanged"] },
-            "nextPermittedRecords": { "initiator": ["message", "ack", "ping", "pong", "close"], "responder": ["message", "ack", "ping", "pong", "close"] }
+          "action": {
+            "type": "deliver",
+            "connection": "c1",
+            "epoch": 1,
+            "currentEpoch": 2,
+            "record": "malformed-active-bytes"
+          },
+          "independentExpected": {
+            "state": {
+              "initiatorState": "connected",
+              "responderState": "connected",
+              "currentBinding": {
+                "initiator": "c2@2",
+                "responder": "c2@2"
+              },
+              "dispatchCount": 0,
+              "callerOutcome": {
+                "callId": null,
+                "status": "none"
+              },
+              "retainedEvidence": {
+                "initiator": [
+                  "binding-epoch:2",
+                  "last-activity:unchanged"
+                ],
+                "responder": [
+                  "binding-epoch:2",
+                  "last-activity:unchanged"
+                ]
+              },
+              "nextPermittedRecords": {
+                "initiator": [
+                  "message",
+                  "ack",
+                  "ping",
+                  "pong",
+                  "close"
+                ],
+                "responder": [
+                  "message",
+                  "ack",
+                  "ping",
+                  "pong",
+                  "close"
+                ]
+              }
+            },
+            "effects": {
+              "disposition": "deliver-once-or-suppressed",
+              "laterEffect": "fenced"
+            },
+            "resources": {
+              "receiveSlot": "modelled",
+              "retainedBytes": "modelled"
+            },
+            "counters": {
+              "sequence": "modelled",
+              "ordinal": "modelled-never-wrap"
+            },
+            "credit": {
+              "window": 1,
+              "cumulative": "modelled"
+            },
+            "evidence": {
+              "receipt": "modelled",
+              "replay": "modelled"
+            },
+            "nextPermittedRecords": {
+              "initiator": [
+                "message",
+                "ack",
+                "ping",
+                "pong",
+                "close"
+              ],
+              "responder": [
+                "message",
+                "ack",
+                "ping",
+                "pong",
+                "close"
+              ]
+            }
+          },
+          "publicProjection": {
+            "consequence": "stable-public-branch-consequence",
+            "ack": "captured-outbound-only",
+            "routeCount": "public-count",
+            "sourceCount": "public-count",
+            "observerCount": "public-count",
+            "callerCount": "public-count",
+            "liveness": "fresh-branch-required"
           }
         },
         {
           "id": "old-endpoint-terminal-is-noop",
-          "action": { "type": "connection-terminal", "connection": "c1", "epoch": 1, "reason": "late-close" },
-          "assert": {
-            "initiatorState": "connected",
-            "responderState": "connected",
-            "currentBinding": { "initiator": "c2@2", "responder": "c2@2" },
-            "dispatchCount": 0,
-            "callerOutcome": { "callId": null, "status": "none" },
-            "retainedEvidence": { "initiator": ["binding-epoch:2", "last-activity:unchanged"], "responder": ["binding-epoch:2", "last-activity:unchanged"] },
-            "nextPermittedRecords": { "initiator": ["message", "ack", "ping", "pong", "close"], "responder": ["message", "ack", "ping", "pong", "close"] }
+          "action": {
+            "type": "connection-terminal",
+            "connection": "c1",
+            "epoch": 1,
+            "reason": "late-close"
+          },
+          "independentExpected": {
+            "state": {
+              "initiatorState": "connected",
+              "responderState": "connected",
+              "currentBinding": {
+                "initiator": "c2@2",
+                "responder": "c2@2"
+              },
+              "dispatchCount": 0,
+              "callerOutcome": {
+                "callId": null,
+                "status": "none"
+              },
+              "retainedEvidence": {
+                "initiator": [
+                  "binding-epoch:2",
+                  "last-activity:unchanged"
+                ],
+                "responder": [
+                  "binding-epoch:2",
+                  "last-activity:unchanged"
+                ]
+              },
+              "nextPermittedRecords": {
+                "initiator": [
+                  "message",
+                  "ack",
+                  "ping",
+                  "pong",
+                  "close"
+                ],
+                "responder": [
+                  "message",
+                  "ack",
+                  "ping",
+                  "pong",
+                  "close"
+                ]
+              }
+            },
+            "effects": {
+              "disposition": "deliver-once-or-suppressed",
+              "laterEffect": "fenced"
+            },
+            "resources": {
+              "receiveSlot": "modelled",
+              "retainedBytes": "modelled"
+            },
+            "counters": {
+              "sequence": "modelled",
+              "ordinal": "modelled-never-wrap"
+            },
+            "credit": {
+              "window": 1,
+              "cumulative": "modelled"
+            },
+            "evidence": {
+              "receipt": "modelled",
+              "replay": "modelled"
+            },
+            "nextPermittedRecords": {
+              "initiator": [
+                "message",
+                "ack",
+                "ping",
+                "pong",
+                "close"
+              ],
+              "responder": [
+                "message",
+                "ack",
+                "ping",
+                "pong",
+                "close"
+              ]
+            }
+          },
+          "publicProjection": {
+            "consequence": "stable-public-branch-consequence",
+            "ack": "captured-outbound-only",
+            "routeCount": "public-count",
+            "sourceCount": "public-count",
+            "observerCount": "public-count",
+            "callerCount": "public-count",
+            "liveness": "fresh-branch-required"
           }
         }
       ]
     },
     {
-      "id": "activity-ping-pong",
-      "covers": ["ping", "pong", "RPC-WIRE-014", "RPC-VALID-002"],
+      "id": "session-activity-ping-pong",
+      "covers": [
+        "ping",
+        "pong",
+        "RPC-WIRE-014",
+        "RPC-VALID-002"
+      ],
       "steps": [
         {
           "id": "idle-initiator-sends-one-ping",
-          "action": { "type": "timer", "endpoint": "initiator", "event": "activity-probe-due" },
-          "assert": {
-            "initiatorState": "connected",
-            "responderState": "connected",
-            "currentBinding": { "initiator": "c1@1", "responder": "c1@1" },
-            "dispatchCount": 0,
-            "callerOutcome": { "callId": null, "status": "none" },
-            "retainedEvidence": { "initiator": ["ping-in-flight:c1", "received-through:0"], "responder": ["received-through:0"] },
-            "nextPermittedRecords": { "initiator": ["message", "ack", "pong", "close"], "responder": ["message", "ack", "ping", "pong", "close"] }
+          "action": {
+            "type": "timer",
+            "endpoint": "initiator",
+            "event": "activity-probe-due"
+          },
+          "independentExpected": {
+            "state": {
+              "initiatorState": "connected",
+              "responderState": "connected",
+              "currentBinding": {
+                "initiator": "c1@1",
+                "responder": "c1@1"
+              },
+              "dispatchCount": 0,
+              "callerOutcome": {
+                "callId": null,
+                "status": "none"
+              },
+              "retainedEvidence": {
+                "initiator": [
+                  "ping-in-flight:c1",
+                  "received-through:0"
+                ],
+                "responder": [
+                  "received-through:0"
+                ]
+              },
+              "nextPermittedRecords": {
+                "initiator": [
+                  "message",
+                  "ack",
+                  "pong",
+                  "close"
+                ],
+                "responder": [
+                  "message",
+                  "ack",
+                  "ping",
+                  "pong",
+                  "close"
+                ]
+              }
+            },
+            "effects": {
+              "disposition": "deliver-once-or-suppressed",
+              "laterEffect": "fenced"
+            },
+            "resources": {
+              "receiveSlot": "modelled",
+              "retainedBytes": "modelled"
+            },
+            "counters": {
+              "sequence": "modelled",
+              "ordinal": "modelled-never-wrap"
+            },
+            "credit": {
+              "window": 1,
+              "cumulative": "modelled"
+            },
+            "evidence": {
+              "receipt": "modelled",
+              "replay": "modelled"
+            },
+            "nextPermittedRecords": {
+              "initiator": [
+                "message",
+                "ack",
+                "pong",
+                "close"
+              ],
+              "responder": [
+                "message",
+                "ack",
+                "ping",
+                "pong",
+                "close"
+              ]
+            }
+          },
+          "publicProjection": {
+            "consequence": "stable-public-branch-consequence",
+            "ack": "captured-outbound-only",
+            "routeCount": "public-count",
+            "sourceCount": "public-count",
+            "observerCount": "public-count",
+            "callerCount": "public-count",
+            "liveness": "fresh-branch-required"
           }
         },
         {
           "id": "valid-ping-coalesces-one-pong",
-          "action": { "type": "deliver", "connection": "c1", "from": "initiator", "record": "ping" },
-          "assert": {
-            "initiatorState": "connected",
-            "responderState": "connected",
-            "currentBinding": { "initiator": "c1@1", "responder": "c1@1" },
-            "dispatchCount": 0,
-            "callerOutcome": { "callId": null, "status": "none" },
-            "retainedEvidence": { "initiator": ["ping-in-flight:c1"], "responder": ["pong-due:coalesced", "received-through:0"] },
-            "nextPermittedRecords": { "initiator": ["message", "ack", "pong", "close"], "responder": ["pong", "message", "ack", "close"] }
+          "action": {
+            "type": "deliver",
+            "connection": "c1",
+            "from": "initiator",
+            "record": "ping"
+          },
+          "independentExpected": {
+            "state": {
+              "initiatorState": "connected",
+              "responderState": "connected",
+              "currentBinding": {
+                "initiator": "c1@1",
+                "responder": "c1@1"
+              },
+              "dispatchCount": 0,
+              "callerOutcome": {
+                "callId": null,
+                "status": "none"
+              },
+              "retainedEvidence": {
+                "initiator": [
+                  "ping-in-flight:c1"
+                ],
+                "responder": [
+                  "pong-due:coalesced",
+                  "received-through:0"
+                ]
+              },
+              "nextPermittedRecords": {
+                "initiator": [
+                  "message",
+                  "ack",
+                  "pong",
+                  "close"
+                ],
+                "responder": [
+                  "pong",
+                  "message",
+                  "ack",
+                  "close"
+                ]
+              }
+            },
+            "effects": {
+              "disposition": "deliver-once-or-suppressed",
+              "laterEffect": "fenced"
+            },
+            "resources": {
+              "receiveSlot": "modelled",
+              "retainedBytes": "modelled"
+            },
+            "counters": {
+              "sequence": "modelled",
+              "ordinal": "modelled-never-wrap"
+            },
+            "credit": {
+              "window": 1,
+              "cumulative": "modelled"
+            },
+            "evidence": {
+              "receipt": "modelled",
+              "replay": "modelled"
+            },
+            "nextPermittedRecords": {
+              "initiator": [
+                "message",
+                "ack",
+                "pong",
+                "close"
+              ],
+              "responder": [
+                "pong",
+                "message",
+                "ack",
+                "close"
+              ]
+            }
+          },
+          "publicProjection": {
+            "consequence": "stable-public-branch-consequence",
+            "ack": "captured-outbound-only",
+            "routeCount": "public-count",
+            "sourceCount": "public-count",
+            "observerCount": "public-count",
+            "callerCount": "public-count",
+            "liveness": "fresh-branch-required"
           }
         },
         {
           "id": "pong-does-not-reply",
-          "action": { "type": "deliver", "connection": "c1", "from": "responder", "record": "pong" },
-          "assert": {
-            "initiatorState": "connected",
-            "responderState": "connected",
-            "currentBinding": { "initiator": "c1@1", "responder": "c1@1" },
-            "dispatchCount": 0,
-            "callerOutcome": { "callId": null, "status": "none" },
-            "retainedEvidence": { "initiator": ["activity-confirmed:c1", "received-through:0"], "responder": ["received-through:0"] },
-            "nextPermittedRecords": { "initiator": ["message", "ack", "ping", "pong", "close"], "responder": ["message", "ack", "ping", "pong", "close"] }
+          "action": {
+            "type": "deliver",
+            "connection": "c1",
+            "from": "responder",
+            "record": "pong"
+          },
+          "independentExpected": {
+            "state": {
+              "initiatorState": "connected",
+              "responderState": "connected",
+              "currentBinding": {
+                "initiator": "c1@1",
+                "responder": "c1@1"
+              },
+              "dispatchCount": 0,
+              "callerOutcome": {
+                "callId": null,
+                "status": "none"
+              },
+              "retainedEvidence": {
+                "initiator": [
+                  "activity-confirmed:c1",
+                  "received-through:0"
+                ],
+                "responder": [
+                  "received-through:0"
+                ]
+              },
+              "nextPermittedRecords": {
+                "initiator": [
+                  "message",
+                  "ack",
+                  "ping",
+                  "pong",
+                  "close"
+                ],
+                "responder": [
+                  "message",
+                  "ack",
+                  "ping",
+                  "pong",
+                  "close"
+                ]
+              }
+            },
+            "effects": {
+              "disposition": "deliver-once-or-suppressed",
+              "laterEffect": "fenced"
+            },
+            "resources": {
+              "receiveSlot": "modelled",
+              "retainedBytes": "modelled"
+            },
+            "counters": {
+              "sequence": "modelled",
+              "ordinal": "modelled-never-wrap"
+            },
+            "credit": {
+              "window": 1,
+              "cumulative": "modelled"
+            },
+            "evidence": {
+              "receipt": "modelled",
+              "replay": "modelled"
+            },
+            "nextPermittedRecords": {
+              "initiator": [
+                "message",
+                "ack",
+                "ping",
+                "pong",
+                "close"
+              ],
+              "responder": [
+                "message",
+                "ack",
+                "ping",
+                "pong",
+                "close"
+              ]
+            }
+          },
+          "publicProjection": {
+            "consequence": "stable-public-branch-consequence",
+            "ack": "captured-outbound-only",
+            "routeCount": "public-count",
+            "sourceCount": "public-count",
+            "observerCount": "public-count",
+            "callerCount": "public-count",
+            "liveness": "fresh-branch-required"
           }
         }
       ]
     },
     {
-      "id": "graceful-close",
-      "covers": ["close", "RPC-WIRE-015"],
+      "id": "session-graceful-close",
+      "covers": [
+        "close",
+        "RPC-WIRE-015"
+      ],
       "steps": [
         {
           "id": "close-authoritatively-terminates-receiver",
-          "action": { "type": "deliver", "connection": "c1", "from": "initiator", "record": "close" },
-          "assert": {
-            "initiatorState": "draining",
-            "responderState": "terminated:remote-terminated",
-            "currentBinding": { "initiator": "c1@1", "responder": null },
-            "dispatchCount": 1,
-            "callerOutcome": { "callId": "1", "status": "returned", "value": "done" },
-            "retainedEvidence": { "initiator": ["close-sent:c1"], "responder": [] },
-            "nextPermittedRecords": { "initiator": [], "responder": [] }
+          "action": {
+            "type": "deliver",
+            "connection": "c1",
+            "from": "initiator",
+            "record": "close"
+          },
+          "independentExpected": {
+            "state": {
+              "initiatorState": "draining",
+              "responderState": "terminated:remote-terminated",
+              "currentBinding": {
+                "initiator": "c1@1",
+                "responder": null
+              },
+              "dispatchCount": 1,
+              "callerOutcome": {
+                "callId": "1",
+                "status": "returned",
+                "value": "done"
+              },
+              "retainedEvidence": {
+                "initiator": [
+                  "close-sent:c1"
+                ],
+                "responder": []
+              },
+              "nextPermittedRecords": {
+                "initiator": [],
+                "responder": []
+              }
+            },
+            "effects": {
+              "disposition": "deliver-once-or-suppressed",
+              "laterEffect": "fenced"
+            },
+            "resources": {
+              "receiveSlot": "modelled",
+              "retainedBytes": "modelled"
+            },
+            "counters": {
+              "sequence": "modelled",
+              "ordinal": "modelled-never-wrap"
+            },
+            "credit": {
+              "window": 1,
+              "cumulative": "modelled"
+            },
+            "evidence": {
+              "receipt": "modelled",
+              "replay": "modelled"
+            },
+            "nextPermittedRecords": {
+              "initiator": [],
+              "responder": []
+            }
+          },
+          "publicProjection": {
+            "consequence": "stable-public-branch-consequence",
+            "ack": "captured-outbound-only",
+            "routeCount": "public-count",
+            "sourceCount": "public-count",
+            "observerCount": "public-count",
+            "callerCount": "public-count",
+            "liveness": "fresh-branch-required"
           }
         },
         {
           "id": "connection-close-completes-sender",
-          "action": { "type": "connection-terminal", "connection": "c1", "reason": "close-complete" },
-          "assert": {
-            "initiatorState": "terminated:local-shutdown",
-            "responderState": "terminated:remote-terminated",
-            "currentBinding": { "initiator": null, "responder": null },
-            "dispatchCount": 1,
-            "callerOutcome": { "callId": "1", "status": "returned", "value": "done" },
-            "retainedEvidence": { "initiator": [], "responder": [] },
-            "nextPermittedRecords": { "initiator": [], "responder": [] }
+          "action": {
+            "type": "connection-terminal",
+            "connection": "c1",
+            "reason": "close-complete"
+          },
+          "independentExpected": {
+            "state": {
+              "initiatorState": "terminated:local-shutdown",
+              "responderState": "terminated:remote-terminated",
+              "currentBinding": {
+                "initiator": null,
+                "responder": null
+              },
+              "dispatchCount": 1,
+              "callerOutcome": {
+                "callId": "1",
+                "status": "returned",
+                "value": "done"
+              },
+              "retainedEvidence": {
+                "initiator": [],
+                "responder": []
+              },
+              "nextPermittedRecords": {
+                "initiator": [],
+                "responder": []
+              }
+            },
+            "effects": {
+              "disposition": "deliver-once-or-suppressed",
+              "laterEffect": "fenced"
+            },
+            "resources": {
+              "receiveSlot": "modelled",
+              "retainedBytes": "modelled"
+            },
+            "counters": {
+              "sequence": "modelled",
+              "ordinal": "modelled-never-wrap"
+            },
+            "credit": {
+              "window": 1,
+              "cumulative": "modelled"
+            },
+            "evidence": {
+              "receipt": "modelled",
+              "replay": "modelled"
+            },
+            "nextPermittedRecords": {
+              "initiator": [],
+              "responder": []
+            }
+          },
+          "publicProjection": {
+            "consequence": "stable-public-branch-consequence",
+            "ack": "captured-outbound-only",
+            "routeCount": "public-count",
+            "sourceCount": "public-count",
+            "observerCount": "public-count",
+            "callerCount": "public-count",
+            "liveness": "fresh-branch-required"
           }
         }
       ]
     },
     {
-      "id": "counter-exhaustion-drain",
-      "covers": ["counter-exhaustion"],
+      "id": "session-counter-exhaustion-protected-tail",
+      "covers": [
+        "counter-exhaustion"
+      ],
       "steps": [
         {
           "id": "ordinary-admission-enters-reserved-window",
-          "action": { "type": "admit-local-call", "endpoint": "initiator", "nextSequence": 9007199254740480 },
-          "assert": {
-            "initiatorState": "draining:counter-exhaustion",
-            "responderState": "connected",
-            "currentBinding": { "initiator": "c1@1", "responder": "c1@1" },
-            "dispatchCount": 1,
-            "callerOutcome": { "callId": "1", "status": "pending" },
-            "retainedEvidence": { "initiator": ["reserved-sequences:512", "outgoing-call:1/in-progress"], "responder": ["incoming-call:1/in-progress"] },
-            "nextPermittedRecords": { "initiator": ["message:existing-terminal-or-cancel", "ack", "ping", "pong", "close"], "responder": ["message", "ack", "ping", "pong", "close"] }
+          "action": {
+            "type": "admit-local-call",
+            "endpoint": "initiator",
+            "nextSequence": 9007199254740480
+          },
+          "independentExpected": {
+            "state": {
+              "initiatorState": "draining:counter-exhaustion",
+              "responderState": "connected",
+              "currentBinding": {
+                "initiator": "c1@1",
+                "responder": "c1@1"
+              },
+              "dispatchCount": 1,
+              "callerOutcome": {
+                "callId": "1",
+                "status": "pending"
+              },
+              "retainedEvidence": {
+                "initiator": [
+                  "reserved-sequences:512",
+                  "outgoing-call:1/in-progress"
+                ],
+                "responder": [
+                  "incoming-call:1/in-progress"
+                ]
+              },
+              "nextPermittedRecords": {
+                "initiator": [
+                  "message:existing-terminal-or-cancel",
+                  "ack",
+                  "ping",
+                  "pong",
+                  "close"
+                ],
+                "responder": [
+                  "message",
+                  "ack",
+                  "ping",
+                  "pong",
+                  "close"
+                ]
+              }
+            },
+            "effects": {
+              "disposition": "deliver-once-or-suppressed",
+              "laterEffect": "fenced"
+            },
+            "resources": {
+              "receiveSlot": "modelled",
+              "retainedBytes": "modelled"
+            },
+            "counters": {
+              "sequence": "modelled",
+              "ordinal": "modelled-never-wrap"
+            },
+            "credit": {
+              "window": 1,
+              "cumulative": "modelled"
+            },
+            "evidence": {
+              "receipt": "modelled",
+              "replay": "modelled"
+            },
+            "nextPermittedRecords": {
+              "initiator": [
+                "message:existing-terminal-or-cancel",
+                "ack",
+                "ping",
+                "pong",
+                "close"
+              ],
+              "responder": [
+                "message",
+                "ack",
+                "ping",
+                "pong",
+                "close"
+              ]
+            }
+          },
+          "publicProjection": {
+            "consequence": "stable-public-branch-consequence",
+            "ack": "captured-outbound-only",
+            "routeCount": "public-count",
+            "sourceCount": "public-count",
+            "observerCount": "public-count",
+            "callerCount": "public-count",
+            "liveness": "fresh-branch-required"
           }
         },
         {
           "id": "existing-cancel-uses-reserve",
-          "action": { "type": "deliver", "connection": "c1", "from": "initiator", "record": "message:reserved-seq/cancel-call-1" },
-          "assert": {
-            "initiatorState": "draining:counter-exhaustion",
-            "responderState": "connected",
-            "currentBinding": { "initiator": "c1@1", "responder": "c1@1" },
-            "dispatchCount": 1,
-            "callerOutcome": { "callId": "1", "status": "failed", "code": "canceled" },
-            "retainedEvidence": { "initiator": ["cancel:call-1/unacked", "reserved-sequences:511"], "responder": ["incoming-call:1/canceled", "received-through:reserved-seq"] },
-            "nextPermittedRecords": { "initiator": ["message:existing-terminal-or-cancel", "ack", "ping", "pong", "close"], "responder": ["message", "ack", "ping", "pong", "close"] }
+          "action": {
+            "type": "deliver",
+            "connection": "c1",
+            "from": "initiator",
+            "record": "message:reserved-seq/cancel-call-1"
+          },
+          "independentExpected": {
+            "state": {
+              "initiatorState": "draining:counter-exhaustion",
+              "responderState": "connected",
+              "currentBinding": {
+                "initiator": "c1@1",
+                "responder": "c1@1"
+              },
+              "dispatchCount": 1,
+              "callerOutcome": {
+                "callId": "1",
+                "status": "failed",
+                "code": "canceled"
+              },
+              "retainedEvidence": {
+                "initiator": [
+                  "cancel:call-1/unacked",
+                  "reserved-sequences:511"
+                ],
+                "responder": [
+                  "incoming-call:1/canceled",
+                  "received-through:reserved-seq"
+                ]
+              },
+              "nextPermittedRecords": {
+                "initiator": [
+                  "message:existing-terminal-or-cancel",
+                  "ack",
+                  "ping",
+                  "pong",
+                  "close"
+                ],
+                "responder": [
+                  "message",
+                  "ack",
+                  "ping",
+                  "pong",
+                  "close"
+                ]
+              }
+            },
+            "effects": {
+              "disposition": "deliver-once-or-suppressed",
+              "laterEffect": "fenced"
+            },
+            "resources": {
+              "receiveSlot": "modelled",
+              "retainedBytes": "modelled"
+            },
+            "counters": {
+              "sequence": "modelled",
+              "ordinal": "modelled-never-wrap"
+            },
+            "credit": {
+              "window": 1,
+              "cumulative": "modelled"
+            },
+            "evidence": {
+              "receipt": "modelled",
+              "replay": "modelled"
+            },
+            "nextPermittedRecords": {
+              "initiator": [
+                "message:existing-terminal-or-cancel",
+                "ack",
+                "ping",
+                "pong",
+                "close"
+              ],
+              "responder": [
+                "message",
+                "ack",
+                "ping",
+                "pong",
+                "close"
+              ]
+            }
+          },
+          "publicProjection": {
+            "consequence": "stable-public-branch-consequence",
+            "ack": "captured-outbound-only",
+            "routeCount": "public-count",
+            "sourceCount": "public-count",
+            "observerCount": "public-count",
+            "callerCount": "public-count",
+            "liveness": "fresh-branch-required"
           }
         },
         {
           "id": "finite-drain-sends-unsequenced-close",
-          "action": { "type": "deliver", "connection": "c1", "from": "initiator", "record": "close" },
-          "assert": {
-            "initiatorState": "terminated:counter-exhaustion",
-            "responderState": "terminated:remote-terminated",
-            "currentBinding": { "initiator": null, "responder": null },
-            "dispatchCount": 1,
-            "callerOutcome": { "callId": "1", "status": "failed", "code": "canceled" },
-            "retainedEvidence": { "initiator": [], "responder": [] },
-            "nextPermittedRecords": { "initiator": [], "responder": [] }
+          "action": {
+            "type": "deliver",
+            "connection": "c1",
+            "from": "initiator",
+            "record": "close"
+          },
+          "independentExpected": {
+            "state": {
+              "initiatorState": "terminated:counter-exhaustion",
+              "responderState": "terminated:remote-terminated",
+              "currentBinding": {
+                "initiator": null,
+                "responder": null
+              },
+              "dispatchCount": 1,
+              "callerOutcome": {
+                "callId": "1",
+                "status": "failed",
+                "code": "canceled"
+              },
+              "retainedEvidence": {
+                "initiator": [],
+                "responder": []
+              },
+              "nextPermittedRecords": {
+                "initiator": [],
+                "responder": []
+              }
+            },
+            "effects": {
+              "disposition": "deliver-once-or-suppressed",
+              "laterEffect": "fenced"
+            },
+            "resources": {
+              "receiveSlot": "modelled",
+              "retainedBytes": "modelled"
+            },
+            "counters": {
+              "sequence": "modelled",
+              "ordinal": "modelled-never-wrap"
+            },
+            "credit": {
+              "window": 1,
+              "cumulative": "modelled"
+            },
+            "evidence": {
+              "receipt": "modelled",
+              "replay": "modelled"
+            },
+            "nextPermittedRecords": {
+              "initiator": [],
+              "responder": []
+            }
+          },
+          "publicProjection": {
+            "consequence": "stable-public-branch-consequence",
+            "ack": "captured-outbound-only",
+            "routeCount": "public-count",
+            "sourceCount": "public-count",
+            "observerCount": "public-count",
+            "callerCount": "public-count",
+            "liveness": "fresh-branch-required"
+          }
+        }
+      ]
+    },
+    {
+      "id": "method-property-mismatch",
+      "covers": [
+        "RPC-CORPUS-007",
+        "RPC-CORPUS-011",
+        "RPC-WIRE-018",
+        "RPC-WIRE-020",
+        "RPC-WIRE-021"
+      ],
+      "steps": [
+        {
+          "id": "method-start-on-property",
+          "action": {
+            "type": "deliver"
+          },
+          "independentExpected": {
+            "state": {
+              "session": "active",
+              "stream": "retained"
+            },
+            "effects": {
+              "disposition": "deliver-once-or-suppressed",
+              "laterEffect": "fenced-after-terminal"
+            },
+            "resources": {
+              "receiveSlot": "single-credit-backed",
+              "retainedBytes": "stage-owned",
+              "protectedTail": "available"
+            },
+            "counters": {
+              "sequence": "contiguous-never-wrap",
+              "streamOrdinal": "direction-local-contiguous",
+              "itemOrdinal": "contiguous"
+            },
+            "credit": {
+              "window": 1,
+              "cumulative": "exact-next-horizon"
+            },
+            "evidence": {
+              "receipt": "cumulative-message-ack",
+              "replay": "original-sequence"
+            },
+            "nextPermittedRecords": [
+              "stream-item",
+              "stream-credit",
+              "stream-cancel",
+              "stream-complete",
+              "stream-error"
+            ]
+          },
+          "publicProjection": {
+            "consequence": "safe-unknown-member-no-route",
+            "ack": "captured-outbound-only",
+            "routeCount": "public-count",
+            "sourceCount": "public-count",
+            "observerCount": "public-count",
+            "callerCount": "public-count",
+            "liveness": "fresh-branch-required"
+          }
+        },
+        {
+          "id": "property-with-args-faults",
+          "action": {
+            "type": "deliver"
+          },
+          "independentExpected": {
+            "state": {
+              "session": "active",
+              "stream": "retained"
+            },
+            "effects": {
+              "disposition": "deliver-once-or-suppressed",
+              "laterEffect": "fenced-after-terminal"
+            },
+            "resources": {
+              "receiveSlot": "single-credit-backed",
+              "retainedBytes": "stage-owned",
+              "protectedTail": "available"
+            },
+            "counters": {
+              "sequence": "contiguous-never-wrap",
+              "streamOrdinal": "direction-local-contiguous",
+              "itemOrdinal": "contiguous"
+            },
+            "credit": {
+              "window": 1,
+              "cumulative": "exact-next-horizon"
+            },
+            "evidence": {
+              "receipt": "cumulative-message-ack",
+              "replay": "original-sequence"
+            },
+            "nextPermittedRecords": [
+              "stream-item",
+              "stream-credit",
+              "stream-cancel",
+              "stream-complete",
+              "stream-error"
+            ]
+          },
+          "publicProjection": {
+            "consequence": "session-fault-no-ack",
+            "ack": "captured-outbound-only",
+            "routeCount": "public-count",
+            "sourceCount": "public-count",
+            "observerCount": "public-count",
+            "callerCount": "public-count",
+            "liveness": "fresh-branch-required"
+          }
+        }
+      ]
+    },
+    {
+      "id": "w1-burst-overcredit",
+      "covers": [
+        "RPC-CORPUS-007",
+        "RPC-CORPUS-011",
+        "RPC-WIRE-019",
+        "RPC-WIRE-020",
+        "RPC-WIRE-021"
+      ],
+      "steps": [
+        {
+          "id": "first-item-consumes-credit",
+          "action": {
+            "type": "emit"
+          },
+          "independentExpected": {
+            "state": {
+              "session": "active",
+              "stream": "retained"
+            },
+            "effects": {
+              "disposition": "deliver-once-or-suppressed",
+              "laterEffect": "fenced-after-terminal"
+            },
+            "resources": {
+              "receiveSlot": "single-credit-backed",
+              "retainedBytes": "stage-owned",
+              "protectedTail": "available"
+            },
+            "counters": {
+              "sequence": "contiguous-never-wrap",
+              "streamOrdinal": "direction-local-contiguous",
+              "itemOrdinal": "contiguous"
+            },
+            "credit": {
+              "window": 1,
+              "cumulative": "exact-next-horizon"
+            },
+            "evidence": {
+              "receipt": "cumulative-message-ack",
+              "replay": "original-sequence"
+            },
+            "nextPermittedRecords": [
+              "stream-item",
+              "stream-credit",
+              "stream-cancel",
+              "stream-complete",
+              "stream-error"
+            ]
+          },
+          "publicProjection": {
+            "consequence": "one-observer-item",
+            "ack": "captured-outbound-only",
+            "routeCount": "public-count",
+            "sourceCount": "public-count",
+            "observerCount": "public-count",
+            "callerCount": "public-count",
+            "liveness": "fresh-branch-required"
+          }
+        },
+        {
+          "id": "second-burst-selects-overflow",
+          "action": {
+            "type": "emit"
+          },
+          "independentExpected": {
+            "state": {
+              "session": "active",
+              "stream": "retained"
+            },
+            "effects": {
+              "disposition": "deliver-once-or-suppressed",
+              "laterEffect": "fenced-after-terminal"
+            },
+            "resources": {
+              "receiveSlot": "single-credit-backed",
+              "retainedBytes": "stage-owned",
+              "protectedTail": "available"
+            },
+            "counters": {
+              "sequence": "contiguous-never-wrap",
+              "streamOrdinal": "direction-local-contiguous",
+              "itemOrdinal": "contiguous"
+            },
+            "credit": {
+              "window": 1,
+              "cumulative": "exact-next-horizon"
+            },
+            "evidence": {
+              "receipt": "cumulative-message-ack",
+              "replay": "original-sequence"
+            },
+            "nextPermittedRecords": [
+              "stream-item",
+              "stream-credit",
+              "stream-cancel",
+              "stream-complete",
+              "stream-error"
+            ]
+          },
+          "publicProjection": {
+            "consequence": "safe-overflow-terminal",
+            "ack": "captured-outbound-only",
+            "routeCount": "public-count",
+            "sourceCount": "public-count",
+            "observerCount": "public-count",
+            "callerCount": "public-count",
+            "liveness": "fresh-branch-required"
+          }
+        }
+      ]
+    },
+    {
+      "id": "next-unsubscribe",
+      "covers": [
+        "RPC-CORPUS-007",
+        "RPC-CORPUS-011",
+        "RPC-WIRE-019",
+        "RPC-WIRE-021"
+      ],
+      "steps": [
+        {
+          "id": "item-effect-enters-next",
+          "action": {
+            "type": "deliver"
+          },
+          "independentExpected": {
+            "state": {
+              "session": "active",
+              "stream": "retained"
+            },
+            "effects": {
+              "disposition": "deliver-once-or-suppressed",
+              "laterEffect": "fenced-after-terminal"
+            },
+            "resources": {
+              "receiveSlot": "single-credit-backed",
+              "retainedBytes": "stage-owned",
+              "protectedTail": "available"
+            },
+            "counters": {
+              "sequence": "contiguous-never-wrap",
+              "streamOrdinal": "direction-local-contiguous",
+              "itemOrdinal": "contiguous"
+            },
+            "credit": {
+              "window": 1,
+              "cumulative": "exact-next-horizon"
+            },
+            "evidence": {
+              "receipt": "cumulative-message-ack",
+              "replay": "original-sequence"
+            },
+            "nextPermittedRecords": [
+              "stream-item",
+              "stream-credit",
+              "stream-cancel",
+              "stream-complete",
+              "stream-error"
+            ]
+          },
+          "publicProjection": {
+            "consequence": "one-observer-item",
+            "ack": "captured-outbound-only",
+            "routeCount": "public-count",
+            "sourceCount": "public-count",
+            "observerCount": "public-count",
+            "callerCount": "public-count",
+            "liveness": "fresh-branch-required"
+          }
+        },
+        {
+          "id": "reentrant-unsubscribe-suppresses-credit",
+          "action": {
+            "type": "unsubscribe"
+          },
+          "independentExpected": {
+            "state": {
+              "session": "active",
+              "stream": "retained"
+            },
+            "effects": {
+              "disposition": "deliver-once-or-suppressed",
+              "laterEffect": "fenced-after-terminal"
+            },
+            "resources": {
+              "receiveSlot": "single-credit-backed",
+              "retainedBytes": "stage-owned",
+              "protectedTail": "available"
+            },
+            "counters": {
+              "sequence": "contiguous-never-wrap",
+              "streamOrdinal": "direction-local-contiguous",
+              "itemOrdinal": "contiguous"
+            },
+            "credit": {
+              "window": 1,
+              "cumulative": "exact-next-horizon"
+            },
+            "evidence": {
+              "receipt": "cumulative-message-ack",
+              "replay": "original-sequence"
+            },
+            "nextPermittedRecords": [
+              "stream-item",
+              "stream-credit",
+              "stream-cancel",
+              "stream-complete",
+              "stream-error"
+            ]
+          },
+          "publicProjection": {
+            "consequence": "one-cancel-no-credit",
+            "ack": "captured-outbound-only",
+            "routeCount": "public-count",
+            "sourceCount": "public-count",
+            "observerCount": "public-count",
+            "callerCount": "public-count",
+            "liveness": "fresh-branch-required"
+          }
+        }
+      ]
+    },
+    {
+      "id": "lost-item-vs-ack",
+      "covers": [
+        "RPC-CORPUS-007",
+        "RPC-CORPUS-011",
+        "RPC-ACK-005",
+        "RPC-LEDGER-005",
+        "RPC-WIRE-021"
+      ],
+      "steps": [
+        {
+          "id": "item-send-is-retained",
+          "action": {
+            "type": "send"
+          },
+          "independentExpected": {
+            "state": {
+              "session": "active",
+              "stream": "retained"
+            },
+            "effects": {
+              "disposition": "deliver-once-or-suppressed",
+              "laterEffect": "fenced-after-terminal"
+            },
+            "resources": {
+              "receiveSlot": "single-credit-backed",
+              "retainedBytes": "stage-owned",
+              "protectedTail": "available"
+            },
+            "counters": {
+              "sequence": "contiguous-never-wrap",
+              "streamOrdinal": "direction-local-contiguous",
+              "itemOrdinal": "contiguous"
+            },
+            "credit": {
+              "window": 1,
+              "cumulative": "exact-next-horizon"
+            },
+            "evidence": {
+              "receipt": "cumulative-message-ack",
+              "replay": "original-sequence"
+            },
+            "nextPermittedRecords": [
+              "stream-item",
+              "stream-credit",
+              "stream-cancel",
+              "stream-complete",
+              "stream-error"
+            ]
+          },
+          "publicProjection": {
+            "consequence": "captured-item-sequence",
+            "ack": "captured-outbound-only",
+            "routeCount": "public-count",
+            "sourceCount": "public-count",
+            "observerCount": "public-count",
+            "callerCount": "public-count",
+            "liveness": "fresh-branch-required"
+          }
+        },
+        {
+          "id": "recovery-replays-unacknowledged-item",
+          "action": {
+            "type": "recover"
+          },
+          "independentExpected": {
+            "state": {
+              "session": "active",
+              "stream": "retained"
+            },
+            "effects": {
+              "disposition": "deliver-once-or-suppressed",
+              "laterEffect": "fenced-after-terminal"
+            },
+            "resources": {
+              "receiveSlot": "single-credit-backed",
+              "retainedBytes": "stage-owned",
+              "protectedTail": "available"
+            },
+            "counters": {
+              "sequence": "contiguous-never-wrap",
+              "streamOrdinal": "direction-local-contiguous",
+              "itemOrdinal": "contiguous"
+            },
+            "credit": {
+              "window": 1,
+              "cumulative": "exact-next-horizon"
+            },
+            "evidence": {
+              "receipt": "cumulative-message-ack",
+              "replay": "original-sequence"
+            },
+            "nextPermittedRecords": [
+              "stream-item",
+              "stream-credit",
+              "stream-cancel",
+              "stream-complete",
+              "stream-error"
+            ]
+          },
+          "publicProjection": {
+            "consequence": "same-item-sequence-once",
+            "ack": "captured-outbound-only",
+            "routeCount": "public-count",
+            "sourceCount": "public-count",
+            "observerCount": "public-count",
+            "callerCount": "public-count",
+            "liveness": "fresh-branch-required"
+          }
+        }
+      ]
+    },
+    {
+      "id": "replay-equivocation-gc",
+      "covers": [
+        "RPC-CORPUS-007",
+        "RPC-CORPUS-011",
+        "RPC-ACK-005",
+        "RPC-WIRE-021",
+        "RPC-WIRE-022"
+      ],
+      "steps": [
+        {
+          "id": "duplicate-fingerprint-is-suppressed",
+          "action": {
+            "type": "replay"
+          },
+          "independentExpected": {
+            "state": {
+              "session": "active",
+              "stream": "retained"
+            },
+            "effects": {
+              "disposition": "deliver-once-or-suppressed",
+              "laterEffect": "fenced-after-terminal"
+            },
+            "resources": {
+              "receiveSlot": "single-credit-backed",
+              "retainedBytes": "stage-owned",
+              "protectedTail": "available"
+            },
+            "counters": {
+              "sequence": "contiguous-never-wrap",
+              "streamOrdinal": "direction-local-contiguous",
+              "itemOrdinal": "contiguous"
+            },
+            "credit": {
+              "window": 1,
+              "cumulative": "exact-next-horizon"
+            },
+            "evidence": {
+              "receipt": "cumulative-message-ack",
+              "replay": "original-sequence"
+            },
+            "nextPermittedRecords": [
+              "stream-item",
+              "stream-credit",
+              "stream-cancel",
+              "stream-complete",
+              "stream-error"
+            ]
+          },
+          "publicProjection": {
+            "consequence": "no-second-effect",
+            "ack": "captured-outbound-only",
+            "routeCount": "public-count",
+            "sourceCount": "public-count",
+            "observerCount": "public-count",
+            "callerCount": "public-count",
+            "liveness": "fresh-branch-required"
+          }
+        },
+        {
+          "id": "equivocation-before-gc-faults",
+          "action": {
+            "type": "deliver"
+          },
+          "independentExpected": {
+            "state": {
+              "session": "active",
+              "stream": "retained"
+            },
+            "effects": {
+              "disposition": "deliver-once-or-suppressed",
+              "laterEffect": "fenced-after-terminal"
+            },
+            "resources": {
+              "receiveSlot": "single-credit-backed",
+              "retainedBytes": "stage-owned",
+              "protectedTail": "available"
+            },
+            "counters": {
+              "sequence": "contiguous-never-wrap",
+              "streamOrdinal": "direction-local-contiguous",
+              "itemOrdinal": "contiguous"
+            },
+            "credit": {
+              "window": 1,
+              "cumulative": "exact-next-horizon"
+            },
+            "evidence": {
+              "receipt": "cumulative-message-ack",
+              "replay": "original-sequence"
+            },
+            "nextPermittedRecords": [
+              "stream-item",
+              "stream-credit",
+              "stream-cancel",
+              "stream-complete",
+              "stream-error"
+            ]
+          },
+          "publicProjection": {
+            "consequence": "session-fault-no-ack",
+            "ack": "captured-outbound-only",
+            "routeCount": "public-count",
+            "sourceCount": "public-count",
+            "observerCount": "public-count",
+            "callerCount": "public-count",
+            "liveness": "fresh-branch-required"
+          }
+        }
+      ]
+    },
+    {
+      "id": "recovery-bidirectional-barrier",
+      "covers": [
+        "RPC-CORPUS-007",
+        "RPC-CORPUS-011",
+        "RPC-ACK-005",
+        "RPC-LEDGER-005",
+        "RPC-SCHEDULE-006"
+      ],
+      "steps": [
+        {
+          "id": "barriers-freeze-both-directions",
+          "action": {
+            "type": "disconnect"
+          },
+          "independentExpected": {
+            "state": {
+              "session": "active",
+              "stream": "retained"
+            },
+            "effects": {
+              "disposition": "deliver-once-or-suppressed",
+              "laterEffect": "fenced-after-terminal"
+            },
+            "resources": {
+              "receiveSlot": "single-credit-backed",
+              "retainedBytes": "stage-owned",
+              "protectedTail": "available"
+            },
+            "counters": {
+              "sequence": "contiguous-never-wrap",
+              "streamOrdinal": "direction-local-contiguous",
+              "itemOrdinal": "contiguous"
+            },
+            "credit": {
+              "window": 1,
+              "cumulative": "exact-next-horizon"
+            },
+            "evidence": {
+              "receipt": "cumulative-message-ack",
+              "replay": "original-sequence"
+            },
+            "nextPermittedRecords": [
+              "stream-item",
+              "stream-credit",
+              "stream-cancel",
+              "stream-complete",
+              "stream-error"
+            ]
+          },
+          "publicProjection": {
+            "consequence": "recovering-no-resubscribe",
+            "ack": "captured-outbound-only",
+            "routeCount": "public-count",
+            "sourceCount": "public-count",
+            "observerCount": "public-count",
+            "callerCount": "public-count",
+            "liveness": "fresh-branch-required"
+          }
+        },
+        {
+          "id": "barriers-drain-before-fresh-progress",
+          "action": {
+            "type": "recover"
+          },
+          "independentExpected": {
+            "state": {
+              "session": "active",
+              "stream": "retained"
+            },
+            "effects": {
+              "disposition": "deliver-once-or-suppressed",
+              "laterEffect": "fenced-after-terminal"
+            },
+            "resources": {
+              "receiveSlot": "single-credit-backed",
+              "retainedBytes": "stage-owned",
+              "protectedTail": "available"
+            },
+            "counters": {
+              "sequence": "contiguous-never-wrap",
+              "streamOrdinal": "direction-local-contiguous",
+              "itemOrdinal": "contiguous"
+            },
+            "credit": {
+              "window": 1,
+              "cumulative": "exact-next-horizon"
+            },
+            "evidence": {
+              "receipt": "cumulative-message-ack",
+              "replay": "original-sequence"
+            },
+            "nextPermittedRecords": [
+              "stream-item",
+              "stream-credit",
+              "stream-cancel",
+              "stream-complete",
+              "stream-error"
+            ]
+          },
+          "publicProjection": {
+            "consequence": "original-sequences-before-new",
+            "ack": "captured-outbound-only",
+            "routeCount": "public-count",
+            "sourceCount": "public-count",
+            "observerCount": "public-count",
+            "callerCount": "public-count",
+            "liveness": "fresh-branch-required"
+          }
+        }
+      ]
+    },
+    {
+      "id": "cancel-complete-race",
+      "covers": [
+        "RPC-CORPUS-007",
+        "RPC-CORPUS-011",
+        "RPC-WIRE-019",
+        "RPC-WIRE-020",
+        "RPC-WIRE-021",
+        "RPC-WIRE-022"
+      ],
+      "steps": [
+        {
+          "id": "cancel-wins-first-terminal",
+          "action": {
+            "type": "cancel"
+          },
+          "independentExpected": {
+            "state": {
+              "session": "active",
+              "stream": "retained"
+            },
+            "effects": {
+              "disposition": "deliver-once-or-suppressed",
+              "laterEffect": "fenced-after-terminal"
+            },
+            "resources": {
+              "receiveSlot": "single-credit-backed",
+              "retainedBytes": "stage-owned",
+              "protectedTail": "available"
+            },
+            "counters": {
+              "sequence": "contiguous-never-wrap",
+              "streamOrdinal": "direction-local-contiguous",
+              "itemOrdinal": "contiguous"
+            },
+            "credit": {
+              "window": 1,
+              "cumulative": "exact-next-horizon"
+            },
+            "evidence": {
+              "receipt": "cumulative-message-ack",
+              "replay": "original-sequence"
+            },
+            "nextPermittedRecords": [
+              "stream-item",
+              "stream-credit",
+              "stream-cancel",
+              "stream-complete",
+              "stream-error"
+            ]
+          },
+          "publicProjection": {
+            "consequence": "one-canceled-terminal",
+            "ack": "captured-outbound-only",
+            "routeCount": "public-count",
+            "sourceCount": "public-count",
+            "observerCount": "public-count",
+            "callerCount": "public-count",
+            "liveness": "fresh-branch-required"
+          }
+        },
+        {
+          "id": "late-complete-only-retires-evidence",
+          "action": {
+            "type": "deliver"
+          },
+          "independentExpected": {
+            "state": {
+              "session": "active",
+              "stream": "retained"
+            },
+            "effects": {
+              "disposition": "deliver-once-or-suppressed",
+              "laterEffect": "fenced-after-terminal"
+            },
+            "resources": {
+              "receiveSlot": "single-credit-backed",
+              "retainedBytes": "stage-owned",
+              "protectedTail": "available"
+            },
+            "counters": {
+              "sequence": "contiguous-never-wrap",
+              "streamOrdinal": "direction-local-contiguous",
+              "itemOrdinal": "contiguous"
+            },
+            "credit": {
+              "window": 1,
+              "cumulative": "exact-next-horizon"
+            },
+            "evidence": {
+              "receipt": "cumulative-message-ack",
+              "replay": "original-sequence"
+            },
+            "nextPermittedRecords": [
+              "stream-item",
+              "stream-credit",
+              "stream-cancel",
+              "stream-complete",
+              "stream-error"
+            ]
+          },
+          "publicProjection": {
+            "consequence": "no-second-terminal",
+            "ack": "captured-outbound-only",
+            "routeCount": "public-count",
+            "sourceCount": "public-count",
+            "observerCount": "public-count",
+            "callerCount": "public-count",
+            "liveness": "fresh-branch-required"
+          }
+        }
+      ]
+    },
+    {
+      "id": "terminal-late-credit",
+      "covers": [
+        "RPC-CORPUS-007",
+        "RPC-CORPUS-011",
+        "RPC-WIRE-019",
+        "RPC-WIRE-022"
+      ],
+      "steps": [
+        {
+          "id": "terminal-commits-boundary",
+          "action": {
+            "type": "deliver"
+          },
+          "independentExpected": {
+            "state": {
+              "session": "active",
+              "stream": "retained"
+            },
+            "effects": {
+              "disposition": "deliver-once-or-suppressed",
+              "laterEffect": "fenced-after-terminal"
+            },
+            "resources": {
+              "receiveSlot": "single-credit-backed",
+              "retainedBytes": "stage-owned",
+              "protectedTail": "available"
+            },
+            "counters": {
+              "sequence": "contiguous-never-wrap",
+              "streamOrdinal": "direction-local-contiguous",
+              "itemOrdinal": "contiguous"
+            },
+            "credit": {
+              "window": 1,
+              "cumulative": "exact-next-horizon"
+            },
+            "evidence": {
+              "receipt": "cumulative-message-ack",
+              "replay": "original-sequence"
+            },
+            "nextPermittedRecords": [
+              "stream-item",
+              "stream-credit",
+              "stream-cancel",
+              "stream-complete",
+              "stream-error"
+            ]
+          },
+          "publicProjection": {
+            "consequence": "one-terminal",
+            "ack": "captured-outbound-only",
+            "routeCount": "public-count",
+            "sourceCount": "public-count",
+            "observerCount": "public-count",
+            "callerCount": "public-count",
+            "liveness": "fresh-branch-required"
+          }
+        },
+        {
+          "id": "late-equal-credit-is-absorbed",
+          "action": {
+            "type": "deliver"
+          },
+          "independentExpected": {
+            "state": {
+              "session": "active",
+              "stream": "retained"
+            },
+            "effects": {
+              "disposition": "deliver-once-or-suppressed",
+              "laterEffect": "fenced-after-terminal"
+            },
+            "resources": {
+              "receiveSlot": "single-credit-backed",
+              "retainedBytes": "stage-owned",
+              "protectedTail": "available"
+            },
+            "counters": {
+              "sequence": "contiguous-never-wrap",
+              "streamOrdinal": "direction-local-contiguous",
+              "itemOrdinal": "contiguous"
+            },
+            "credit": {
+              "window": 1,
+              "cumulative": "exact-next-horizon"
+            },
+            "evidence": {
+              "receipt": "cumulative-message-ack",
+              "replay": "original-sequence"
+            },
+            "nextPermittedRecords": [
+              "stream-item",
+              "stream-credit",
+              "stream-cancel",
+              "stream-complete",
+              "stream-error"
+            ]
+          },
+          "publicProjection": {
+            "consequence": "session-remains-live",
+            "ack": "captured-outbound-only",
+            "routeCount": "public-count",
+            "sourceCount": "public-count",
+            "observerCount": "public-count",
+            "callerCount": "public-count",
+            "liveness": "fresh-branch-required"
+          }
+        }
+      ]
+    },
+    {
+      "id": "retired-controls",
+      "covers": [
+        "RPC-CORPUS-007",
+        "RPC-CORPUS-011",
+        "RPC-LEDGER-005",
+        "RPC-WIRE-022"
+      ],
+      "steps": [
+        {
+          "id": "terminal-ack-retires-identity",
+          "action": {
+            "type": "ack"
+          },
+          "independentExpected": {
+            "state": {
+              "session": "active",
+              "stream": "retained"
+            },
+            "effects": {
+              "disposition": "deliver-once-or-suppressed",
+              "laterEffect": "fenced-after-terminal"
+            },
+            "resources": {
+              "receiveSlot": "single-credit-backed",
+              "retainedBytes": "stage-owned",
+              "protectedTail": "available"
+            },
+            "counters": {
+              "sequence": "contiguous-never-wrap",
+              "streamOrdinal": "direction-local-contiguous",
+              "itemOrdinal": "contiguous"
+            },
+            "credit": {
+              "window": 1,
+              "cumulative": "exact-next-horizon"
+            },
+            "evidence": {
+              "receipt": "cumulative-message-ack",
+              "replay": "original-sequence"
+            },
+            "nextPermittedRecords": [
+              "stream-item",
+              "stream-credit",
+              "stream-cancel",
+              "stream-complete",
+              "stream-error"
+            ]
+          },
+          "publicProjection": {
+            "consequence": "terminal-evidence-retired",
+            "ack": "captured-outbound-only",
+            "routeCount": "public-count",
+            "sourceCount": "public-count",
+            "observerCount": "public-count",
+            "callerCount": "public-count",
+            "liveness": "fresh-branch-required"
+          }
+        },
+        {
+          "id": "late-control-does-not-revive",
+          "action": {
+            "type": "deliver"
+          },
+          "independentExpected": {
+            "state": {
+              "session": "active",
+              "stream": "retained"
+            },
+            "effects": {
+              "disposition": "deliver-once-or-suppressed",
+              "laterEffect": "fenced-after-terminal"
+            },
+            "resources": {
+              "receiveSlot": "single-credit-backed",
+              "retainedBytes": "stage-owned",
+              "protectedTail": "available"
+            },
+            "counters": {
+              "sequence": "contiguous-never-wrap",
+              "streamOrdinal": "direction-local-contiguous",
+              "itemOrdinal": "contiguous"
+            },
+            "credit": {
+              "window": 1,
+              "cumulative": "exact-next-horizon"
+            },
+            "evidence": {
+              "receipt": "cumulative-message-ack",
+              "replay": "original-sequence"
+            },
+            "nextPermittedRecords": [
+              "stream-item",
+              "stream-credit",
+              "stream-cancel",
+              "stream-complete",
+              "stream-error"
+            ]
+          },
+          "publicProjection": {
+            "consequence": "no-route-source-or-observer",
+            "ack": "captured-outbound-only",
+            "routeCount": "public-count",
+            "sourceCount": "public-count",
+            "observerCount": "public-count",
+            "callerCount": "public-count",
+            "liveness": "fresh-branch-required"
+          }
+        }
+      ]
+    },
+    {
+      "id": "opposite-direction-same-id",
+      "covers": [
+        "RPC-CORPUS-007",
+        "RPC-CORPUS-011",
+        "RPC-WIRE-018",
+        "RPC-WIRE-022"
+      ],
+      "steps": [
+        {
+          "id": "both-directions-admit-stream-one",
+          "action": {
+            "type": "start"
+          },
+          "independentExpected": {
+            "state": {
+              "session": "active",
+              "stream": "retained"
+            },
+            "effects": {
+              "disposition": "deliver-once-or-suppressed",
+              "laterEffect": "fenced-after-terminal"
+            },
+            "resources": {
+              "receiveSlot": "single-credit-backed",
+              "retainedBytes": "stage-owned",
+              "protectedTail": "available"
+            },
+            "counters": {
+              "sequence": "contiguous-never-wrap",
+              "streamOrdinal": "direction-local-contiguous",
+              "itemOrdinal": "contiguous"
+            },
+            "credit": {
+              "window": 1,
+              "cumulative": "exact-next-horizon"
+            },
+            "evidence": {
+              "receipt": "cumulative-message-ack",
+              "replay": "original-sequence"
+            },
+            "nextPermittedRecords": [
+              "stream-item",
+              "stream-credit",
+              "stream-cancel",
+              "stream-complete",
+              "stream-error"
+            ]
+          },
+          "publicProjection": {
+            "consequence": "two-independent-sources",
+            "ack": "captured-outbound-only",
+            "routeCount": "public-count",
+            "sourceCount": "public-count",
+            "observerCount": "public-count",
+            "callerCount": "public-count",
+            "liveness": "fresh-branch-required"
+          }
+        },
+        {
+          "id": "one-direction-terminal-is-local",
+          "action": {
+            "type": "deliver"
+          },
+          "independentExpected": {
+            "state": {
+              "session": "active",
+              "stream": "retained"
+            },
+            "effects": {
+              "disposition": "deliver-once-or-suppressed",
+              "laterEffect": "fenced-after-terminal"
+            },
+            "resources": {
+              "receiveSlot": "single-credit-backed",
+              "retainedBytes": "stage-owned",
+              "protectedTail": "available"
+            },
+            "counters": {
+              "sequence": "contiguous-never-wrap",
+              "streamOrdinal": "direction-local-contiguous",
+              "itemOrdinal": "contiguous"
+            },
+            "credit": {
+              "window": 1,
+              "cumulative": "exact-next-horizon"
+            },
+            "evidence": {
+              "receipt": "cumulative-message-ack",
+              "replay": "original-sequence"
+            },
+            "nextPermittedRecords": [
+              "stream-item",
+              "stream-credit",
+              "stream-cancel",
+              "stream-complete",
+              "stream-error"
+            ]
+          },
+          "publicProjection": {
+            "consequence": "opposite-stream-remains-live",
+            "ack": "captured-outbound-only",
+            "routeCount": "public-count",
+            "sourceCount": "public-count",
+            "observerCount": "public-count",
+            "callerCount": "public-count",
+            "liveness": "fresh-branch-required"
+          }
+        }
+      ]
+    },
+    {
+      "id": "protected-tail",
+      "covers": [
+        "RPC-CORPUS-007",
+        "RPC-CORPUS-011",
+        "RPC-COUNTER-002",
+        "RPC-RESOURCE-003",
+        "RPC-SCHEDULE-006"
+      ],
+      "steps": [
+        {
+          "id": "ordinary-work-stops-at-protected-window",
+          "action": {
+            "type": "counter-boundary"
+          },
+          "independentExpected": {
+            "state": {
+              "session": "active",
+              "stream": "retained"
+            },
+            "effects": {
+              "disposition": "deliver-once-or-suppressed",
+              "laterEffect": "fenced-after-terminal"
+            },
+            "resources": {
+              "receiveSlot": "single-credit-backed",
+              "retainedBytes": "stage-owned",
+              "protectedTail": "reserved"
+            },
+            "counters": {
+              "sequence": "L",
+              "streamOrdinal": "direction-local-contiguous",
+              "itemOrdinal": "contiguous"
+            },
+            "credit": {
+              "window": 1,
+              "cumulative": "exact-next-horizon"
+            },
+            "evidence": {
+              "receipt": "cumulative-message-ack",
+              "replay": "original-sequence"
+            },
+            "nextPermittedRecords": [
+              "stream-item",
+              "stream-credit",
+              "stream-cancel",
+              "stream-complete",
+              "stream-error"
+            ]
+          },
+          "publicProjection": {
+            "consequence": "draining-transition",
+            "ack": "captured-outbound-only",
+            "routeCount": "public-count",
+            "sourceCount": "public-count",
+            "observerCount": "public-count",
+            "callerCount": "public-count",
+            "liveness": "fresh-branch-required"
+          }
+        },
+        {
+          "id": "terminal-and-cancel-converge-without-wrap",
+          "action": {
+            "type": "drain"
+          },
+          "independentExpected": {
+            "state": {
+              "session": "active",
+              "stream": "retained"
+            },
+            "effects": {
+              "disposition": "deliver-once-or-suppressed",
+              "laterEffect": "fenced-after-terminal"
+            },
+            "resources": {
+              "receiveSlot": "single-credit-backed",
+              "retainedBytes": "stage-owned",
+              "protectedTail": "available"
+            },
+            "counters": {
+              "sequence": "H-or-lower",
+              "streamOrdinal": "direction-local-contiguous",
+              "itemOrdinal": "contiguous"
+            },
+            "credit": {
+              "window": 1,
+              "cumulative": "exact-next-horizon"
+            },
+            "evidence": {
+              "receipt": "cumulative-message-ack",
+              "replay": "original-sequence"
+            },
+            "nextPermittedRecords": [
+              "stream-item",
+              "stream-credit",
+              "stream-cancel",
+              "stream-complete",
+              "stream-error"
+            ]
+          },
+          "publicProjection": {
+            "consequence": "terminal-cancel-close-order",
+            "ack": "captured-outbound-only",
+            "routeCount": "public-count",
+            "sourceCount": "public-count",
+            "observerCount": "public-count",
+            "callerCount": "public-count",
+            "liveness": "fresh-branch-required"
+          }
+        }
+      ]
+    },
+    {
+      "id": "max-envelope",
+      "covers": [
+        "RPC-CORPUS-007",
+        "RPC-CORPUS-011",
+        "RPC-CORPUS-009",
+        "RPC-WIRE-023"
+      ],
+      "steps": [
+        {
+          "id": "maximum-method-and-item-envelopes-pass",
+          "action": {
+            "type": "inject-boundary"
+          },
+          "independentExpected": {
+            "state": {
+              "session": "active",
+              "stream": "retained"
+            },
+            "effects": {
+              "disposition": "deliver-once-or-suppressed",
+              "laterEffect": "fenced-after-terminal"
+            },
+            "resources": {
+              "receiveSlot": "single-credit-backed",
+              "retainedBytes": "stage-owned",
+              "protectedTail": "available",
+              "envelopeBytes": [
+                1003259,
+                1000174
+              ]
+            },
+            "counters": {
+              "sequence": "contiguous-never-wrap",
+              "streamOrdinal": "direction-local-contiguous",
+              "itemOrdinal": "contiguous"
+            },
+            "credit": {
+              "window": 1,
+              "cumulative": "exact-next-horizon"
+            },
+            "evidence": {
+              "receipt": "cumulative-message-ack",
+              "replay": "original-sequence"
+            },
+            "nextPermittedRecords": [
+              "stream-item",
+              "stream-credit",
+              "stream-cancel",
+              "stream-complete",
+              "stream-error"
+            ]
+          },
+          "publicProjection": {
+            "consequence": "reachable-stable-projection",
+            "ack": "captured-outbound-only",
+            "routeCount": "public-count",
+            "sourceCount": "public-count",
+            "observerCount": "public-count",
+            "callerCount": "public-count",
+            "liveness": "fresh-branch-required"
+          }
+        },
+        {
+          "id": "one-mib-plus-one-and-node-plus-one-fail",
+          "action": {
+            "type": "inject-boundary-plus-one"
+          },
+          "independentExpected": {
+            "state": {
+              "session": "active",
+              "stream": "retained"
+            },
+            "effects": {
+              "disposition": "deliver-once-or-suppressed",
+              "laterEffect": "fenced-after-terminal"
+            },
+            "resources": {
+              "receiveSlot": "single-credit-backed",
+              "retainedBytes": "stage-owned",
+              "protectedTail": "available",
+              "maximumMessageBytes": 1048576,
+              "maximumNodes": 65546
+            },
+            "counters": {
+              "sequence": "contiguous-never-wrap",
+              "streamOrdinal": "direction-local-contiguous",
+              "itemOrdinal": "contiguous"
+            },
+            "credit": {
+              "window": 1,
+              "cumulative": "exact-next-horizon"
+            },
+            "evidence": {
+              "receipt": "cumulative-message-ack",
+              "replay": "original-sequence"
+            },
+            "nextPermittedRecords": [
+              "stream-item",
+              "stream-credit",
+              "stream-cancel",
+              "stream-complete",
+              "stream-error"
+            ]
+          },
+          "publicProjection": {
+            "consequence": "public-protocol-fault-no-ack",
+            "ack": "captured-outbound-only",
+            "routeCount": "public-count",
+            "sourceCount": "public-count",
+            "observerCount": "public-count",
+            "callerCount": "public-count",
+            "liveness": "fresh-branch-required"
+          }
+        }
+      ]
+    },
+    {
+      "id": "shutdown-g-f-close",
+      "covers": [
+        "RPC-CORPUS-007",
+        "RPC-CORPUS-011",
+        "RPC-SHUTDOWN-012",
+        "RPC-VALID-009",
+        "RPC-WIRE-024"
+      ],
+      "steps": [
+        {
+          "id": "g-valid-start-selects-unavailable",
+          "action": {
+            "type": "graceful-shutdown"
+          },
+          "independentExpected": {
+            "state": {
+              "session": "active",
+              "stream": "retained"
+            },
+            "effects": {
+              "disposition": "deliver-once-or-suppressed",
+              "laterEffect": "fenced-after-terminal"
+            },
+            "resources": {
+              "receiveSlot": "single-credit-backed",
+              "retainedBytes": "stage-owned",
+              "protectedTail": "available"
+            },
+            "counters": {
+              "sequence": "contiguous-never-wrap",
+              "streamOrdinal": "direction-local-contiguous",
+              "itemOrdinal": "contiguous"
+            },
+            "credit": {
+              "window": 1,
+              "cumulative": "exact-next-horizon"
+            },
+            "evidence": {
+              "receipt": "cumulative-message-ack",
+              "replay": "original-sequence"
+            },
+            "nextPermittedRecords": [
+              "stream-item",
+              "stream-credit",
+              "stream-cancel",
+              "stream-complete",
+              "stream-error"
+            ]
+          },
+          "publicProjection": {
+            "consequence": "no-route-safe-unavailable",
+            "ack": "captured-outbound-only",
+            "routeCount": "public-count",
+            "sourceCount": "public-count",
+            "observerCount": "public-count",
+            "callerCount": "public-count",
+            "liveness": "fresh-branch-required"
+          }
+        },
+        {
+          "id": "f-fences-egress-and-orders-close",
+          "action": {
+            "type": "force"
+          },
+          "independentExpected": {
+            "state": {
+              "session": "active",
+              "stream": "retained"
+            },
+            "effects": {
+              "disposition": "deliver-once-or-suppressed",
+              "laterEffect": "fenced-after-terminal"
+            },
+            "resources": {
+              "receiveSlot": "single-credit-backed",
+              "retainedBytes": "stage-owned",
+              "protectedTail": "available"
+            },
+            "counters": {
+              "sequence": "contiguous-never-wrap",
+              "streamOrdinal": "direction-local-contiguous",
+              "itemOrdinal": "contiguous"
+            },
+            "credit": {
+              "window": 1,
+              "cumulative": "exact-next-horizon"
+            },
+            "evidence": {
+              "receipt": "cumulative-message-ack",
+              "replay": "original-sequence"
+            },
+            "nextPermittedRecords": [
+              "stream-item",
+              "stream-credit",
+              "stream-cancel",
+              "stream-complete",
+              "stream-error"
+            ]
+          },
+          "publicProjection": {
+            "consequence": "no-egress-one-ordered-close",
+            "ack": "captured-outbound-only",
+            "routeCount": "public-count",
+            "sourceCount": "public-count",
+            "observerCount": "public-count",
+            "callerCount": "public-count",
+            "liveness": "fresh-branch-required"
           }
         }
       ]

@@ -133,7 +133,7 @@ describe("RPC conformance runner", () => {
 		).toEqual(streamCaseIds);
 	});
 
-	it("RPC-CONFORMANCE-004 reports the pre-stream built-in negative baseline", async () => {
+	it("RPC-CONFORMANCE-004 keeps byte-replay semantics outside the custom Protocol seam", async () => {
 		const reports: RpcConformanceCaseResult[] = [];
 		const encoder = new TextEncoder();
 
@@ -155,8 +155,19 @@ describe("RPC conformance runner", () => {
 			streamCaseIds,
 		);
 		expect(
-			reports.slice(15).every((result) => result.status === "failed"),
+			reports
+				.slice(15)
+				.filter(
+					({ caseId }) =>
+						caseId !== "protocol.stream.over-credit-session-fault",
+				)
+				.every((result) => result.status === "passed"),
 		).toBe(true);
+		expect(
+			reports.find(
+				({ caseId }) => caseId === "protocol.stream.over-credit-session-fault",
+			)?.status,
+		).toBe("failed");
 	});
 
 	it("RPC-CONFORMANCE-004 RPC-CONFORMANCE-005 kills all five fixed broken-Protocol mutants", async () => {

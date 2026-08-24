@@ -357,7 +357,7 @@ describe("Default RPC Protocol", () => {
 				kind: "call",
 				callId: "1",
 				service: "example.shutdown-ingress.v1",
-				method: "add",
+				member: "add",
 				args: [20, 22],
 			},
 		});
@@ -848,7 +848,7 @@ describe("Default RPC Protocol", () => {
 				kind: "call",
 				callId: "1",
 				service: "example.calculator.v1",
-				method: "add",
+				member: "add",
 				args: [19, 23],
 			},
 		});

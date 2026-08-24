@@ -1327,12 +1327,14 @@ describe("Default Protocol aggregate retained capacity", () => {
 				const message = record.value.message as { readonly kind?: unknown };
 				if (
 					record.direction === "connector" &&
-					record.value.kind === "message" &&
-					message.kind === "call"
+					record.value.kind === "message"
 				) {
 					return {
 						message: new TextEncoder().encode(
-							JSON.stringify({ ...record.value, ackThrough: 0 }),
+							JSON.stringify({
+								...record.value,
+								ackThrough: message.kind === "error" ? 1 : 0,
+							}),
 						),
 					};
 				}
@@ -5201,6 +5203,73 @@ describe("Adapter startup and Protocol handoff", () => {
 			},
 		});
 		await expect(startup).resolves.toBeUndefined();
+	});
+});
+
+describe("built-in final streaming profile", () => {
+	it("RPC-WIRE-016 RPC-WIRE-017 RPC-WIRE-018 RPC-WIRE-019 streams method and property members over husky-di-rpc/1", async () => {
+		const descriptor = createRemoteServiceDescriptor(IMixedExposureService, {
+			wireName: "example.final-stream.v1",
+			members: {
+				add: { kind: "unary" },
+				cancel: { kind: "unary", cancelable: true },
+				history: { kind: "stream-method" },
+				events$: { kind: "stream-property" },
+				lazy$: { kind: "stream-property" },
+			},
+		});
+		const network = createRpcTestNetwork();
+		const acceptor = createRpcAcceptor();
+		const connector = createRpcConnector();
+		acceptor.expose(descriptor, {
+			add: (left, right) => left + right,
+			cancel: async (value) => value,
+			history: (room) => of(`history:${room}`),
+			events$: of("property:event"),
+			lazy$: of("property:lazy"),
+		});
+		const collect = (source: Observable<string>): Promise<readonly string[]> =>
+			new Promise((resolveValues, reject) => {
+				const values: string[] = [];
+				source.subscribe({
+					next: (value) => values.push(value),
+					error: reject,
+					complete: () => resolveValues(values),
+				});
+			});
+
+		await acceptor.listen(network.acceptorAdapter);
+		await connector.connect({ adapter: network.createConnectorAdapter() });
+		const remote = connector.peer.resolve(descriptor);
+		await expect(collect(remote.history("room"))).resolves.toEqual([
+			"history:room",
+		]);
+		await expect(collect(remote.events$)).resolves.toEqual(["property:event"]);
+
+		const semanticKinds = network.records.flatMap((record) => {
+			const message = record.value.message as
+				| Readonly<Record<string, unknown>>
+				| undefined;
+			return typeof message?.kind === "string" ? [message.kind] : [];
+		});
+		expect(semanticKinds).toEqual(
+			expect.arrayContaining([
+				"stream-method",
+				"stream-property",
+				"stream-item",
+				"stream-complete",
+			]),
+		);
+		expect(
+			network.records.some((record) => {
+				const message = record.value.message as
+					| Readonly<Record<string, unknown>>
+					| undefined;
+				return message?.kind === "stream-method" && message.creditThrough === 1;
+			}),
+		).toBe(true);
+
+		await Promise.all([connector.close(), acceptor.close()]);
 	});
 });
 
