@@ -6,54 +6,54 @@
         <mxCell id="0" />
         <mxCell id="1" parent="0" />
 
-        <mxCell id="title" value="@husky-di/remote 架构概要" style="text;html=1;align=left;verticalAlign=middle;fontFamily=PingFang SC;fontSize=24;fontStyle=1;fontColor=#1f2937;" vertex="1" parent="1">
+        <mxCell id="title" value="@husky-di/remote mixed Observable RPC 架构概要" style="text;html=1;align=left;verticalAlign=middle;fontFamily=PingFang SC;fontSize=24;fontStyle=1;fontColor=#1f2937;" vertex="1" parent="1">
           <mxGeometry x="50" y="20" width="850" height="40" as="geometry" />
         </mxCell>
-        <mxCell id="subtitle" value="Stable Peer · recoverable Session · replaceable Transport" style="text;html=1;align=right;verticalAlign=middle;fontFamily=Helvetica;fontSize=13;fontColor=#6b7280;" vertex="1" parent="1">
+        <mxCell id="subtitle" value="stable Peer · recoverable Session · independent subscription roots" style="text;html=1;align=right;verticalAlign=middle;fontFamily=Helvetica;fontSize=13;fontColor=#6b7280;" vertex="1" parent="1">
           <mxGeometry x="900" y="25" width="850" height="30" as="geometry" />
         </mxCell>
 
         <mxCell id="context-layer" value="调用者（包外）" style="swimlane;startSize=36;horizontal=1;rounded=1;whiteSpace=wrap;html=1;container=1;pointerEvents=0;fillColor=#f5f5f5;swimlaneFillColor=#ffffff;strokeColor=#666666;fontFamily=PingFang SC;fontSize=14;fontStyle=1;fontColor=#333333;" vertex="1" parent="1">
           <mxGeometry x="50" y="80" width="1700" height="150" as="geometry" />
         </mxCell>
-        <mxCell id="application" value="业务应用与共享契约&#xa;ServiceIdentifier&lt;T&gt; · expose / resolve · 发起调用" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontFamily=PingFang SC;fontSize=13;" vertex="1" parent="context-layer">
+        <mxCell id="application" value="业务应用与共享契约&#xa;ServiceIdentifier&lt;T&gt; · unary + cold Observable&#xa;应用显式组合独立 Peer 子任务" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontFamily=PingFang SC;fontSize=13;" vertex="1" parent="context-layer">
           <mxGeometry x="550" y="55" width="600" height="70" as="geometry" />
         </mxCell>
 
         <mxCell id="public-layer" value="Public API 与 Topology Owners" style="swimlane;startSize=36;horizontal=1;rounded=1;whiteSpace=wrap;html=1;container=1;pointerEvents=0;fillColor=#dae8fc;swimlaneFillColor=#f7fbff;strokeColor=#6c8ebf;fontFamily=PingFang SC;fontSize=14;fontStyle=1;fontColor=#1f3a5f;" vertex="1" parent="1">
           <mxGeometry x="50" y="290" width="1700" height="190" as="geometry" />
         </mxCell>
-        <mxCell id="public-api" value="@husky-di/remote&#xa;Descriptor：wireName + method allowlist&#xa;Connector：1 个稳定 Peer　·　Acceptor：0..N Peers" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontFamily=PingFang SC;fontSize=14;fontStyle=1;" vertex="1" parent="public-layer">
+        <mxCell id="public-api" value="@husky-di/remote&#xa;Descriptor：wireName + mixed members&#xa;unary / stream method / stream $ property&#xa;Connector：1 个 stable Peer　·　Acceptor：0..N independent Peers" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontFamily=PingFang SC;fontSize=14;fontStyle=1;" vertex="1" parent="public-layer">
           <mxGeometry x="250" y="60" width="1200" height="95" as="geometry" />
         </mxCell>
 
         <mxCell id="framework-layer" value="Framework Core" style="swimlane;startSize=36;horizontal=1;rounded=1;whiteSpace=wrap;html=1;container=1;pointerEvents=0;fillColor=#d5e8d4;swimlaneFillColor=#f7fcf7;strokeColor=#82b366;fontFamily=PingFang SC;fontSize=14;fontStyle=1;fontColor=#2f5d32;" vertex="1" parent="1">
           <mxGeometry x="50" y="550" width="1700" height="240" as="geometry" />
         </mxCell>
-        <mxCell id="peer-runtime" value="RpcPeerImpl&#xa;稳定逻辑身份 · exposure registry · 类型代理&#xa;双向调用 · state$ / event$" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontFamily=PingFang SC;fontSize=14;fontStyle=1;" vertex="1" parent="framework-layer">
+        <mxCell id="peer-runtime" value="RpcPeerImpl&#xa;stable Peer · exposure registry · typed facade&#xa;bidirectional unary + independent subscription roots&#xa;state$ / event$" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontFamily=PingFang SC;fontSize=14;fontStyle=1;" vertex="1" parent="framework-layer">
           <mxGeometry x="150" y="70" width="600" height="120" as="geometry" />
         </mxCell>
-        <mxCell id="protocol-runtime" value="Protocol Runtime 与 Policy&#xa;内置 husky-di-rpc/1 或自定义 IRpcProtocol&#xa;规范化 · 调用事务 · 资源边界 · 生命周期" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontFamily=PingFang SC;fontSize=14;" vertex="1" parent="framework-layer">
+        <mxCell id="protocol-runtime" value="Protocol Runtime 与 Policy&#xa;内置 husky-di-rpc/1 或自定义 IRpcProtocol&#xa;W=1 · ordinary/protected resources&#xa;control / progress fairness · G/F lifecycle" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontFamily=PingFang SC;fontSize=14;" vertex="1" parent="framework-layer">
           <mxGeometry x="950" y="70" width="600" height="120" as="geometry" />
         </mxCell>
 
         <mxCell id="protocol-layer" value="Protocol State" style="swimlane;startSize=36;horizontal=1;rounded=1;whiteSpace=wrap;html=1;container=1;pointerEvents=0;fillColor=#e1d5e7;swimlaneFillColor=#fbf8fc;strokeColor=#9673a6;fontFamily=PingFang SC;fontSize=14;fontStyle=1;fontColor=#543a63;" vertex="1" parent="1">
           <mxGeometry x="50" y="860" width="1700" height="230" as="geometry" />
         </mxCell>
-        <mxCell id="logical-session" value="RpcSessionImpl · 逻辑 Session&#xa;call ledger · sequence / ACK / replay&#xa;fresh establishment · recovery / resume" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontFamily=PingFang SC;fontSize=14;fontStyle=1;" vertex="1" parent="protocol-layer">
+        <mxCell id="logical-session" value="RpcSessionImpl · stable logical Session&#xa;unary/stream ledger · sequence / ACK / replay&#xa;fresh establishment · Recovery / resume&#xa;credit / terminal / generation authority" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontFamily=PingFang SC;fontSize=14;fontStyle=1;" vertex="1" parent="protocol-layer">
           <mxGeometry x="150" y="65" width="600" height="125" as="geometry" />
         </mxCell>
-        <mxCell id="endpoint" value="RpcEndpointImpl&#xa;当前物理 binding&#xa;message$ · send · fenceAndClose" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontFamily=PingFang SC;fontSize=14;" vertex="1" parent="protocol-layer">
+        <mxCell id="endpoint" value="RpcEndpointImpl&#xa;current replaceable binding&#xa;ordered ingress · one unsettled send&#xa;fence before Recovery / Direct Close" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontFamily=PingFang SC;fontSize=14;" vertex="1" parent="protocol-layer">
           <mxGeometry x="950" y="65" width="600" height="125" as="geometry" />
         </mxCell>
 
         <mxCell id="transport-layer" value="Transport Boundary（包外）" style="swimlane;startSize=36;horizontal=1;rounded=1;whiteSpace=wrap;html=1;container=1;pointerEvents=0;fillColor=#ffe6cc;swimlaneFillColor=#fffaf5;strokeColor=#d79b00;fontFamily=PingFang SC;fontSize=14;fontStyle=1;fontColor=#754c00;" vertex="1" parent="1">
           <mxGeometry x="50" y="1160" width="1700" height="190" as="geometry" />
         </mxCell>
-        <mxCell id="transport-adapter" value="Transport Adapter&#xa;connect / listen · connection$" style="rounded=1;whiteSpace=wrap;html=1;dashed=1;fillColor=#f5f5f5;strokeColor=#666666;fontFamily=PingFang SC;fontSize=13;" vertex="1" parent="transport-layer">
+        <mxCell id="transport-adapter" value="Transport Adapter（stream-unaware）&#xa;connect / listen · connection$&#xa;finite native frame / queue limits" style="rounded=1;whiteSpace=wrap;html=1;dashed=1;fillColor=#f5f5f5;strokeColor=#666666;fontFamily=PingFang SC;fontSize=13;" vertex="1" parent="transport-layer">
           <mxGeometry x="100" y="60" width="400" height="90" as="geometry" />
         </mxCell>
-        <mxCell id="connection" value="IRpcConnection&#xa;完整、有序的 Uint8Array 消息&#xa;message$ · send() · close()" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontFamily=PingFang SC;fontSize=13;fontStyle=1;" vertex="1" parent="transport-layer">
+        <mxCell id="connection" value="IRpcConnection（unchanged 3-member seam）&#xa;完整、有序的 Uint8Array 消息&#xa;message$ · send(Uint8Array) · close()" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontFamily=PingFang SC;fontSize=13;fontStyle=1;" vertex="1" parent="transport-layer">
           <mxGeometry x="700" y="55" width="400" height="100" as="geometry" />
         </mxCell>
         <mxCell id="physical-channel" value="物理双工通道&#xa;WebSocket / 自定义 Transport" style="rounded=1;whiteSpace=wrap;html=1;dashed=1;fillColor=#f5f5f5;strokeColor=#666666;fontFamily=PingFang SC;fontSize=13;" vertex="1" parent="transport-layer">
@@ -117,7 +117,7 @@
         <mxCell id="legend-external-text" value="包外" style="text;whiteSpace=wrap;html=1;align=left;verticalAlign=middle;fontFamily=PingFang SC;fontSize=11;fontColor=#374151;" vertex="1" parent="legend">
           <mxGeometry x="910" y="34" width="80" height="26" as="geometry" />
         </mxCell>
-        <mxCell id="note" value="核心边界：Peer 和逻辑 Session 保持稳定，物理 Connection 可替换。" style="text;html=1;align=right;verticalAlign=middle;fontFamily=PingFang SC;fontSize=12;fontColor=#4b5563;fontStyle=2;" vertex="1" parent="1">
+        <mxCell id="note" value="核心边界：stable Peer / Session 保持 authority，Connection 可替换；应用独立组合每个 Peer。" style="text;html=1;align=right;verticalAlign=middle;fontFamily=PingFang SC;fontSize=12;fontColor=#4b5563;fontStyle=2;" vertex="1" parent="1">
           <mxGeometry x="1130" y="1400" width="620" height="40" as="geometry" />
         </mxCell>
       </root>

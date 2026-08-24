@@ -1,0 +1,7 @@
+{
+	"extends": "./tsconfig.json",
+	"compilerOptions": {
+		"types": []
+	},
+	"include": ["browser-consumer.ts", "final-stream-interface.prototype.ts"]
+}
