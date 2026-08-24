@@ -24,9 +24,11 @@ import type {
 	IRpcProtocolInvocationSink,
 	IRpcProtocolSession,
 	IRpcProtocolSessionHost,
+	IRpcProtocolStreamReservation,
 	RpcApplicationValue,
 	RpcCallFailure,
 	RpcHandlerOutcome,
+	RpcProtocolStreamRequest,
 } from "../../src/interfaces/protocol/rpc-protocol.interface";
 import type {
 	IRpcAcceptorAdapter,
@@ -214,6 +216,12 @@ class MemoryProtocolRuntime
 		};
 	}
 
+	public reserveStream(
+		_request: RpcProtocolStreamRequest,
+	): IRpcProtocolStreamReservation | undefined {
+		return undefined;
+	}
+
 	public forceSession(): void {
 		this.close();
 	}
@@ -378,6 +386,12 @@ class MemoryProtocolSession implements IRpcProtocolSession {
 		request: IRpcProtocolInvocationRequest,
 	): IRpcProtocolInvocationReservation | undefined {
 		return this.#runtime.reserveInvocation(request);
+	}
+
+	public reserveStream(
+		request: RpcProtocolStreamRequest,
+	): IRpcProtocolStreamReservation | undefined {
+		return this.#runtime.reserveStream(request);
 	}
 
 	public forceClose(): void {

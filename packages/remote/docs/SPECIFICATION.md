@@ -690,7 +690,8 @@ public code set **MUST** be `canceled`, `unavailable`, `outcome-unknown`, `handl
 **RPC-STREAM-001 — Independent cold roots.** Every subscription to a remote service Observable **MUST** create
 one independent Caller Stream Subscription root. The Framework **MUST NOT** implicitly share, cache, or replay
 application items or one subscription's terminal state into another subscription, including when both subscribe
-to the same retained Observable object.
+to the same retained Observable object. Creating or retaining that Observable **MUST NOT** reserve Protocol work;
+each subscription **MUST** obtain its own outgoing stream reservation.
 <!-- /RPC-STREAM-001 -->
 
 **RPC-STREAM-002 — Subscriber admission order.** Each subscription **MUST** establish its local Subscriber, then

@@ -68,6 +68,8 @@ function isProtocolSession(value: unknown): value is IRpcProtocolSession {
 	return (
 		rpcCallableSchema.safeParse(Reflect.get(session, "reserveInvocation"))
 			.success &&
+		rpcCallableSchema.safeParse(Reflect.get(session, "reserveStream"))
+			.success &&
 		rpcCallableSchema.safeParse(Reflect.get(session, "forceClose")).success
 	);
 }

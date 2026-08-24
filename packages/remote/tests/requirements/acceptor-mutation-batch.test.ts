@@ -75,6 +75,7 @@ function admitEmptySession(
 ): IRpcProtocolSessionHost {
 	const session: IRpcProtocolSession = {
 		reserveInvocation: () => undefined,
+		reserveStream: () => undefined,
 		forceClose() {},
 	};
 	const sessionHost = host.admitSession(session);
@@ -175,6 +176,7 @@ describe("Acceptor mutation batches", () => {
 					release() {},
 				};
 			},
+			reserveStream: () => undefined,
 			forceClose() {
 				invocationSink?.finish({
 					type: RpcCallTerminalTypeEnum.failed,
@@ -313,6 +315,7 @@ describe("Acceptor mutation batches", () => {
 					release() {},
 				};
 			},
+			reserveStream: () => undefined,
 			forceClose() {},
 		};
 		if (host.admitSession(session) === undefined) {

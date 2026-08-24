@@ -21,6 +21,7 @@ export type RpcFacadeInvocation = (
 
 type RpcFacadeStreamSubscription = (
 	member: string,
+	kind: "stream-method" | "stream-property",
 	actualArguments: readonly unknown[],
 	subscriber: Subscriber<unknown>,
 ) => TeardownLogic;
@@ -33,22 +34,19 @@ export function createRpcFacade<T, Definitions extends RpcMemberDefinitions<T>>(
 ): RemoteService<T, Definitions> {
 	const data = getRemoteServiceDescriptorData(descriptor);
 	const facade = Object.create(null) as Record<string, unknown>;
-	const createRemoteObservable = (
-		member: string,
-		actualArguments: readonly unknown[],
-	): Observable<unknown> =>
-		new Observable((subscriber) =>
-			subscribe(member, actualArguments, subscriber),
-		);
 
 	for (const [member, interaction] of Object.entries(data.members)) {
 		if (interaction.kind === "stream-property") {
-			facade[member] = createRemoteObservable(member, []);
+			facade[member] = new Observable((subscriber) =>
+				subscribe(member, "stream-property", [], subscriber),
+			);
 			continue;
 		}
 		if (interaction.kind === "stream-method") {
 			facade[member] = (...actualArguments: unknown[]) =>
-				createRemoteObservable(member, actualArguments);
+				new Observable((subscriber) =>
+					subscribe(member, "stream-method", actualArguments, subscriber),
+				);
 			continue;
 		}
 		const cancelable = interaction.cancelable;

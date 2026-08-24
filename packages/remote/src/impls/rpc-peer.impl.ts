@@ -5,7 +5,7 @@
  */
 
 import type { Cleanup } from "@husky-di/core";
-import { Observable, Subject } from "rxjs";
+import { Observable, Subject, type Subscriber, type TeardownLogic } from "rxjs";
 import { RpcCallTerminalTypeEnum } from "@/enums/protocol/rpc-call-terminal-type.enum";
 import { RpcIncomingCallKindEnum } from "@/enums/protocol/rpc-incoming-call-kind.enum";
 import { RpcCallDirectionEnum } from "@/enums/rpc-call-direction.enum";
@@ -22,11 +22,15 @@ import type {
 	IRpcProtocolIncomingCallRequest,
 	IRpcProtocolIncomingHandlerCall,
 	IRpcProtocolSession,
+	IRpcProtocolStream,
+	IRpcProtocolSubscriberSink,
 	IRpcRetainedBytesReservation,
 	RpcCallOutcome,
 	RpcHandlerOutcome,
 	RpcIncomingTerminal,
 	RpcProtocolIncomingCallReservation,
+	RpcProtocolStreamRequest,
+	RpcStreamOutcome,
 	RpcUnknownCallFailure,
 } from "@/interfaces/protocol/rpc-protocol.interface";
 import type { IRemoteServiceDescriptor } from "@/interfaces/remote-service-descriptor.interface";
@@ -291,10 +295,177 @@ export class RpcPeerImpl implements IRpcPeerRuntime {
 			descriptor,
 			(method, cancelable, actualArguments) =>
 				this.#invoke(service, method, cancelable, actualArguments),
-			(_member, _actualArguments, subscriber) => {
-				subscriber.error(createRpcException(RpcExceptionCodeEnum.unavailable));
-			},
+			(member, kind, actualArguments, subscriber) =>
+				this.#subscribe(service, member, kind, actualArguments, subscriber),
 		);
+	}
+
+	#subscribe(
+		service: string,
+		member: string,
+		kind: "stream-method" | "stream-property",
+		actualArguments: readonly unknown[],
+		subscriber: Subscriber<unknown>,
+	): TeardownLogic {
+		const session = this.#session;
+		// Subscription preflight rejects state before inspecting application arguments.
+		const cannotSubscribe =
+			!this.#isOwnerActive() ||
+			(this.state.status !== RpcStateStatusEnum.connected &&
+				this.state.status !== RpcStateStatusEnum.recovering) ||
+			session === undefined;
+		if (cannotSubscribe) {
+			subscriber.error(createRpcException(RpcExceptionCodeEnum.unavailable));
+			return;
+		}
+
+		let request: RpcProtocolStreamRequest;
+		try {
+			request =
+				kind === "stream-method"
+					? {
+							service,
+							member,
+							kind,
+							args: normalizeRpcApplicationArguments(actualArguments),
+						}
+					: { service, member, kind };
+		} catch (error) {
+			subscriber.error(error);
+			return;
+		}
+		if (subscriber.closed) {
+			return;
+		}
+
+		let reservation: ReturnType<IRpcProtocolSession["reserveStream"]>;
+		try {
+			reservation = session.reserveStream(request);
+		} catch (error) {
+			subscriber.error(this.#protocolFailure(error));
+			return;
+		}
+		if (reservation === undefined) {
+			subscriber.error(createRpcException(RpcExceptionCodeEnum.unavailable));
+			return;
+		}
+		if (!rpcInvocationReservationSchema.safeParse(reservation).success) {
+			subscriber.error(
+				this.#protocolFailure(new Error("Invalid stream reservation.")),
+			);
+			return;
+		}
+		if (subscriber.closed) {
+			try {
+				reservation.release();
+			} catch (error) {
+				this.#protocolFailure(error);
+			}
+			return;
+		}
+
+		let terminalCommitted = false;
+		let dispatching = false;
+		let deferredTerminal: (() => void) | undefined;
+		const commitTerminal = (outcome: RpcStreamOutcome): void => {
+			if (terminalCommitted) {
+				return;
+			}
+			terminalCommitted = true;
+			const effect = (): void => {
+				if (subscriber.closed) {
+					return;
+				}
+				if (outcome.type === "completed") {
+					subscriber.complete();
+					return;
+				}
+				const code =
+					outcome.type === "canceled"
+						? RpcExceptionCodeEnum.canceled
+						: outcome.code;
+				subscriber.error(createRpcException(code));
+			};
+			if (dispatching) {
+				deferredTerminal = effect;
+				return;
+			}
+			effect();
+		};
+		const sink: IRpcProtocolSubscriberSink = Object.freeze({
+			reserveItem: (snapshot: IRpcApplicationSnapshot) => {
+				let committed = false;
+				return Object.freeze({
+					commit: () => {
+						if (committed || terminalCommitted || subscriber.closed) {
+							return "closed" as const;
+						}
+						committed = true;
+						dispatching = true;
+						try {
+							subscriber.next(snapshot.value);
+						} finally {
+							dispatching = false;
+							const terminal = deferredTerminal;
+							deferredTerminal = undefined;
+							terminal?.();
+						}
+						return terminalCommitted || subscriber.closed
+							? ("closed" as const)
+							: ("rearm" as const);
+					},
+				});
+			},
+			reserveTerminal: (outcome: RpcStreamOutcome) => {
+				let committed = false;
+				return Object.freeze({
+					commit: () => {
+						if (committed) {
+							return;
+						}
+						committed = true;
+						commitTerminal(outcome);
+					},
+				});
+			},
+		});
+
+		let stream: IRpcProtocolStream;
+		try {
+			stream = reservation.commit(sink);
+		} catch (error) {
+			subscriber.error(this.#protocolFailure(error));
+			return;
+		}
+		if (!rpcCommittedInvocationSchema.safeParse(stream).success) {
+			subscriber.error(this.#protocolFailure(new Error("Invalid stream.")));
+			return;
+		}
+
+		let canceled = false;
+		const cancel = (): void => {
+			if (terminalCommitted || canceled) {
+				return;
+			}
+			canceled = true;
+			try {
+				stream.cancel();
+			} catch (error) {
+				this.#protocolFailure(error);
+			}
+		};
+		if (subscriber.closed) {
+			cancel();
+			return;
+		}
+		try {
+			stream.start();
+		} catch (error) {
+			terminalCommitted = true;
+			subscriber.error(this.#protocolFailure(error));
+			return;
+		}
+		return cancel;
 	}
 
 	#invoke(

@@ -66,6 +66,7 @@ const requirementDescriptor = createRemoteServiceDescriptor(
 function createEmptySession(): IRpcProtocolSession {
 	return {
 		reserveInvocation: () => undefined,
+		reserveStream: () => undefined,
 		forceClose() {},
 	};
 }
@@ -324,6 +325,7 @@ describe("Framework requirement evidence", () => {
 					release() {},
 				};
 			},
+			reserveStream: () => undefined,
 			forceClose() {},
 		};
 		const harness = createConnectorHarness({ session });
@@ -513,6 +515,7 @@ describe("Framework requirement evidence", () => {
 				reservationCalls += 1;
 				return undefined;
 			},
+			reserveStream: () => undefined,
 			forceClose() {},
 		};
 		const harness = createConnectorHarness({ session });
@@ -653,6 +656,7 @@ describe("Framework requirement evidence", () => {
 					release() {},
 				};
 			},
+			reserveStream: () => undefined,
 			forceClose() {},
 		};
 		const harness = createConnectorHarness({ session });

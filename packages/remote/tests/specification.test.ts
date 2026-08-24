@@ -47,6 +47,8 @@ import type {
 	IRpcProtocolInvocationSink,
 	IRpcProtocolSession,
 	IRpcProtocolSessionHost,
+	IRpcProtocolStreamReservation,
+	IRpcProtocolSubscriberSink,
 } from "../src/protocol";
 import {
 	createRpcProtocol,
@@ -234,6 +236,7 @@ function createReconnectionProtocolHarness(): {
 } {
 	const session: IRpcProtocolSession = {
 		reserveInvocation: () => undefined,
+		reserveStream: () => undefined,
 		forceClose() {},
 	};
 	let retainedSessionHost: IRpcProtocolSessionHost | undefined;
@@ -1781,6 +1784,7 @@ describe("exposure registries and remote facades", () => {
 				reservationCalls += 1;
 				return undefined;
 			},
+			reserveStream: () => undefined,
 			forceClose() {},
 		});
 		const descriptor = createRemoteServiceDescriptor(IMixedExposureService, {
@@ -1818,6 +1822,94 @@ describe("exposure registries and remote facades", () => {
 		expect(() => remote.history("after-close")).not.toThrow();
 		expect(() => remote.events$).not.toThrow();
 		expect(history$).toBeDefined();
+	});
+
+	it("RPC-STREAM-001 creates an independent cold root for every subscription", async () => {
+		const requests: unknown[] = [];
+		const sinks: IRpcProtocolSubscriberSink[] = [];
+		const session: IRpcProtocolSession = {
+			reserveInvocation: () => undefined,
+			reserveStream(request): IRpcProtocolStreamReservation {
+				requests.push(request);
+				return {
+					commit(sink) {
+						sinks.push(sink);
+						return {
+							start() {
+								sink
+									.reserveItem({
+										value: `item-${sinks.length}`,
+										weight: 6,
+									} as never)
+									.commit();
+								sink.reserveTerminal({ type: "completed" }).commit();
+							},
+							cancel() {},
+						};
+					},
+					release() {},
+				};
+			},
+			forceClose() {},
+		};
+		const { connector } = await connectProtocolSession(session);
+		const descriptor = createRemoteServiceDescriptor(IMixedExposureService, {
+			wireName: "example.cold-stream.v1",
+			members: { history: { kind: "stream-method" } },
+		});
+		const history$ = connector.peer.resolve(descriptor).history("room");
+		const first: string[] = [];
+		const second: string[] = [];
+
+		expect(requests).toEqual([]);
+		history$.subscribe((value) => first.push(value));
+		history$.subscribe((value) => second.push(value));
+
+		expect(requests).toHaveLength(2);
+		expect(sinks).toHaveLength(2);
+		expect(first).toEqual(["item-1"]);
+		expect(second).toEqual(["item-2"]);
+		await connector.close();
+	});
+
+	it("RPC-STREAM-002 RPC-STREAM-008 sends one cancel only for explicit unsubscription", async () => {
+		let starts = 0;
+		let cancels = 0;
+		const session: IRpcProtocolSession = {
+			reserveInvocation: () => undefined,
+			reserveStream() {
+				return {
+					commit() {
+						return {
+							start() {
+								starts += 1;
+							},
+							cancel() {
+								cancels += 1;
+							},
+						};
+					},
+					release() {},
+				};
+			},
+			forceClose() {},
+		};
+		const { connector } = await connectProtocolSession(session);
+		const descriptor = createRemoteServiceDescriptor(IMixedExposureService, {
+			wireName: "example.cancel-stream.v1",
+			members: { history: { kind: "stream-method" } },
+		});
+		const subscription = connector.peer
+			.resolve(descriptor)
+			.history("room")
+			.subscribe();
+
+		expect(starts).toBe(1);
+		expect(cancels).toBe(0);
+		subscription.unsubscribe();
+		subscription.unsubscribe();
+		expect(cancels).toBe(1);
+		await connector.close();
 	});
 
 	it("RPC-API-007 omits every Remote Service Group facade", () => {
@@ -1983,6 +2075,7 @@ describe("Adapter startup and Protocol handoff", () => {
 	it("RPC-START-005 ignores a reentrant abort after binding success", async () => {
 		const session: IRpcProtocolSession = {
 			reserveInvocation: () => undefined,
+			reserveStream: () => undefined,
 			forceClose() {},
 		};
 		const protocol: IRpcProtocol = {
@@ -2074,6 +2167,7 @@ describe("Adapter startup and Protocol handoff", () => {
 	it("RPC-START-005 lets reentrant Owner termination win before startup settles", async () => {
 		const session: IRpcProtocolSession = {
 			reserveInvocation: () => undefined,
+			reserveStream: () => undefined,
 			forceClose() {},
 		};
 		const protocol: IRpcProtocol = {
@@ -2143,6 +2237,7 @@ describe("Adapter startup and Protocol handoff", () => {
 		let connectorHost: IRpcProtocolConnectorHost | undefined;
 		const session: IRpcProtocolSession = {
 			reserveInvocation: () => undefined,
+			reserveStream: () => undefined,
 			forceClose() {},
 		};
 		const connection: IRpcConnection = {
@@ -2283,6 +2378,7 @@ describe("Adapter startup and Protocol handoff", () => {
 		let releaseAcceptance: (() => void) | undefined;
 		const session: IRpcProtocolSession = {
 			reserveInvocation: () => undefined,
+			reserveStream: () => undefined,
 			forceClose() {},
 		};
 		const connection: IRpcConnection = {
@@ -2576,6 +2672,7 @@ describe("custom Protocol outgoing invocations", () => {
 					release() {},
 				};
 			},
+			reserveStream: () => undefined,
 			forceClose() {},
 		};
 		const { connector, events, sessionHost } =
@@ -2650,12 +2747,14 @@ describe("custom Protocol outgoing invocations", () => {
 		acceptor.event$.subscribe((event) => events.push(event));
 		const first = protocolHost?.admitSession({
 			reserveInvocation: () => undefined,
+			reserveStream: () => undefined,
 			forceClose() {
 				operations.push("first-force");
 			},
 		});
 		const second = protocolHost?.admitSession({
 			reserveInvocation: () => undefined,
+			reserveStream: () => undefined,
 			forceClose() {
 				operations.push("second-force");
 			},
@@ -2735,6 +2834,7 @@ describe("custom Protocol outgoing invocations", () => {
 					},
 				};
 			},
+			reserveStream: () => undefined,
 			forceClose() {},
 		};
 		const { connector, host, events } = await connectProtocolSession(session);
@@ -2812,6 +2912,7 @@ describe("custom Protocol outgoing invocations", () => {
 					release() {},
 				};
 			},
+			reserveStream: () => undefined,
 			forceClose() {},
 		};
 		const { connector, events } = await connectProtocolSession(session);
@@ -2852,6 +2953,7 @@ describe("custom Protocol outgoing invocations", () => {
 	it("RPC-SPI-004 maps reservation capacity failure to unavailable without call events", async () => {
 		const session: IRpcProtocolSession = {
 			reserveInvocation: () => undefined,
+			reserveStream: () => undefined,
 			forceClose() {},
 		};
 		const { connector, events } = await connectProtocolSession(session);
@@ -2921,6 +3023,7 @@ describe("explicit peer composition", () => {
 					},
 				};
 			},
+			reserveStream: () => undefined,
 			forceClose() {},
 		});
 		expect(
@@ -2997,6 +3100,7 @@ describe("custom Protocol incoming calls", () => {
 		let forceCalls = 0;
 		const session: IRpcProtocolSession = {
 			reserveInvocation: () => undefined,
+			reserveStream: () => undefined,
 			forceClose() {
 				forceCalls += 1;
 			},
@@ -3032,6 +3136,7 @@ describe("custom Protocol incoming calls", () => {
 					release() {},
 				};
 			},
+			reserveStream: () => undefined,
 			forceClose() {
 				forceCalls += 1;
 				sink?.finish({
@@ -3075,6 +3180,7 @@ describe("custom Protocol incoming calls", () => {
 					release() {},
 				};
 			},
+			reserveStream: () => undefined,
 			forceClose() {
 				forceCalls += 1;
 				sink?.finish({
@@ -3110,6 +3216,7 @@ describe("custom Protocol incoming calls", () => {
 		let forceCalls = 0;
 		const session: IRpcProtocolSession = {
 			reserveInvocation: () => undefined,
+			reserveStream: () => undefined,
 			forceClose() {
 				forceCalls += 1;
 			},
@@ -3144,6 +3251,7 @@ describe("custom Protocol incoming calls", () => {
 		let forceCalls = 0;
 		const session: IRpcProtocolSession = {
 			reserveInvocation: () => undefined,
+			reserveStream: () => undefined,
 			forceClose() {
 				forceCalls += 1;
 			},
@@ -3185,6 +3293,7 @@ describe("custom Protocol incoming calls", () => {
 		let forceCalls = 0;
 		const session: IRpcProtocolSession = {
 			reserveInvocation: () => undefined,
+			reserveStream: () => undefined,
 			forceClose() {
 				forceCalls += 1;
 			},
@@ -3218,6 +3327,7 @@ describe("custom Protocol incoming calls", () => {
 		let forceCalls = 0;
 		const session: IRpcProtocolSession = {
 			reserveInvocation: () => undefined,
+			reserveStream: () => undefined,
 			forceClose() {
 				forceCalls += 1;
 			},
@@ -3252,6 +3362,7 @@ describe("custom Protocol incoming calls", () => {
 	it("RPC-SPI-006 RPC-SPI-007 RPC-EVENT-001 RPC-EVENT-002 RPC-EVENT-003 captures a known route, defers dispatch, and publishes a paired observation", async () => {
 		const session: IRpcProtocolSession = {
 			reserveInvocation: () => undefined,
+			reserveStream: () => undefined,
 			forceClose() {},
 		};
 		const { connector, host, sessionHost, events } =
@@ -3320,6 +3431,7 @@ describe("custom Protocol incoming calls", () => {
 	it("RPC-SPI-006 RPC-SPI-007 RPC-EVENT-001 RPC-EVENT-002 RPC-EVENT-003 emits safe correlated unknown-service and unknown-method pairs", async () => {
 		const session: IRpcProtocolSession = {
 			reserveInvocation: () => undefined,
+			reserveStream: () => undefined,
 			forceClose() {},
 		};
 		const { connector, host, sessionHost, events } =
@@ -3387,6 +3499,7 @@ describe("custom Protocol incoming calls", () => {
 	it("RPC-CALL-008 holds the Session and Owner permits until real handler settlement", async () => {
 		const session: IRpcProtocolSession = {
 			reserveInvocation: () => undefined,
+			reserveStream: () => undefined,
 			forceClose() {},
 		};
 		const { connector, host, sessionHost } = await connectProtocolSession(
@@ -3450,6 +3563,7 @@ describe("custom Protocol incoming calls", () => {
 	it("RPC-RESOURCE-001 rejects incoming work before route lookup when the args subcap is reserved", async () => {
 		const session: IRpcProtocolSession = {
 			reserveInvocation: () => undefined,
+			reserveStream: () => undefined,
 			forceClose() {},
 		};
 		const { host, sessionHost, events } = await connectProtocolSession(
@@ -3488,6 +3602,7 @@ describe("custom Protocol incoming calls", () => {
 	it("RPC-CLOSE-001 consumes a terminal handler result without normalizing it", async () => {
 		const session: IRpcProtocolSession = {
 			reserveInvocation: () => undefined,
+			reserveStream: () => undefined,
 			forceClose() {},
 		};
 		const { connector, host, sessionHost } =
@@ -3611,6 +3726,7 @@ describe("Protocol Session state projection", () => {
 	it("RPC-STATE-001 RPC-SPI-010 projects Connector recovery and terminal ordering on stable streams", async () => {
 		const session: IRpcProtocolSession = {
 			reserveInvocation: () => undefined,
+			reserveStream: () => undefined,
 			forceClose() {},
 		};
 		const { connector, sessionHost, events } =
@@ -3744,6 +3860,7 @@ describe("Connector Reconnection", () => {
 	it("RPC-RECONNECT-001 owns one initial connection and publishes its orchestration state", async () => {
 		const session: IRpcProtocolSession = {
 			reserveInvocation: () => undefined,
+			reserveStream: () => undefined,
 			forceClose() {},
 		};
 		const protocol: IRpcProtocol = {
@@ -3943,6 +4060,7 @@ describe("Connector Reconnection", () => {
 	it("RPC-RECONNECT-002 immediately reconnects a recovering Peer with a fresh Adapter", async () => {
 		const session: IRpcProtocolSession = {
 			reserveInvocation: () => undefined,
+			reserveStream: () => undefined,
 			forceClose() {},
 		};
 		let sessionHost: IRpcProtocolSessionHost | undefined;
@@ -4088,6 +4206,7 @@ describe("Connector Reconnection", () => {
 		try {
 			const session: IRpcProtocolSession = {
 				reserveInvocation: () => undefined,
+				reserveStream: () => undefined,
 				forceClose() {},
 			};
 			let sessionHost: IRpcProtocolSessionHost | undefined;
@@ -4952,10 +5071,12 @@ describe("Acceptor Topology Owner termination", () => {
 		const acceptor = createRpcAcceptor({ protocol });
 		const connectedSession: IRpcProtocolSession = {
 			reserveInvocation: () => undefined,
+			reserveStream: () => undefined,
 			forceClose() {},
 		};
 		const recoveringSession: IRpcProtocolSession = {
 			reserveInvocation: () => undefined,
+			reserveStream: () => undefined,
 			forceClose() {
 				recoveringForceCalls += 1;
 			},
@@ -5061,6 +5182,7 @@ describe("Acceptor Topology Owner termination", () => {
 		const acceptor = createRpcAcceptor({ protocol });
 		const session: IRpcProtocolSession = {
 			reserveInvocation: () => undefined,
+			reserveStream: () => undefined,
 			forceClose() {},
 		};
 		if (acceptorHost?.admitSession(session) === undefined) {

@@ -27,10 +27,12 @@ import type {
 	IRpcProtocolInvocationReservation,
 	IRpcProtocolInvocationSink,
 	IRpcProtocolSessionHost,
+	IRpcProtocolStreamReservation,
 	IRpcRetainedBytesReservation,
 	RpcCallOutcome,
 	RpcHandlerOutcome,
 	RpcIncomingTerminal,
+	RpcProtocolStreamRequest,
 } from "@/interfaces/protocol/rpc-protocol.interface";
 import type { IRpcRetainedBytesLedger } from "@/interfaces/protocol/rpc-retained-bytes-ledger.interface";
 import type { IRpcSession } from "@/interfaces/protocol/rpc-session.interface";
@@ -920,6 +922,12 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 				retainedBytesReservation.release();
 			},
 		});
+	}
+
+	reserveStream(
+		_request: RpcProtocolStreamRequest,
+	): IRpcProtocolStreamReservation | undefined {
+		return undefined;
 	}
 
 	shutdown(): Promise<void> {
