@@ -46,3 +46,5 @@ export type RpcExposureRegistry = Map<string, RpcExposure>;
 
 /** Current unary Protocol bridge route until the streaming SPI is implemented. */
 export type RpcHandlerRoute = RpcUnaryRoute;
+
+export type RpcStreamRoute = RpcStreamMethodRoute | RpcStreamPropertyRoute;

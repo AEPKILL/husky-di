@@ -846,6 +846,8 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 		return Object.freeze<IRpcProtocolSessionHost>({
 			reserveIncomingCall: (request) =>
 				peer.reserveIncomingProtocolCall(request),
+			reserveIncomingStream: (request) =>
+				peer.reserveIncomingProtocolStream(request),
 			transition: (transition) => this.#transitionSession(session, transition),
 			fault: (reason, error) => this.#faultSession(session, reason, error),
 		});

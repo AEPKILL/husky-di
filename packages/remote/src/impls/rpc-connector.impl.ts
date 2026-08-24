@@ -463,6 +463,8 @@ export class RpcConnectorImpl implements IRpcConnector {
 		return Object.freeze<IRpcProtocolSessionHost>({
 			reserveIncomingCall: (request) =>
 				this.peer.reserveIncomingProtocolCall(request),
+			reserveIncomingStream: (request) =>
+				this.peer.reserveIncomingProtocolStream(request),
 			transition: (transition) => this.#transitionSession(session, transition),
 			fault: (reason, error) => this.#faultSession(session, reason, error),
 		});

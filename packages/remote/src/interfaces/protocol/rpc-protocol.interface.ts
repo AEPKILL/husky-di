@@ -199,6 +199,63 @@ export interface IRpcProtocolStream {
 	cancel(): void;
 }
 
+export type RpcSourceTerminal =
+	| { readonly type: "completed" }
+	| {
+			readonly type: "failed";
+			readonly code: RpcExceptionCodeEnum.handlerFailed;
+	  };
+
+export interface IRpcProtocolSourceEmissionReservation {
+	commit(value: IRpcApplicationSnapshot): void;
+	fail(): void;
+}
+
+export interface IRpcProtocolSourceSink {
+	reserveEmission(): IRpcProtocolSourceEmissionReservation | undefined;
+	finish(outcome: RpcSourceTerminal): void;
+}
+
+export type RpcIncomingStreamTerminal =
+	| { readonly type: "completed" }
+	| { readonly type: "canceled" }
+	| {
+			readonly type: "failed";
+			readonly code:
+				| RpcExceptionCodeEnum.handlerFailed
+				| RpcExceptionCodeEnum.unknownService
+				| RpcExceptionCodeEnum.unknownMember
+				| RpcExceptionCodeEnum.overflow;
+	  }
+	| { readonly type: "session-terminated" };
+
+export interface IRpcProtocolIncomingStream {
+	finish(outcome: RpcIncomingStreamTerminal, onReleased: () => void): void;
+}
+
+export interface IRpcProtocolIncomingSourceReservation {
+	commit(source: IRpcProtocolSourceSink): IRpcProtocolIncomingStream;
+	release(): void;
+}
+
+export interface IRpcProtocolIncomingUnknownStreamReservation {
+	commit(): IRpcProtocolIncomingStream;
+	release(): void;
+}
+
+export type RpcProtocolIncomingStreamReservation =
+	| {
+			readonly kind: "source";
+			readonly reservation: IRpcProtocolIncomingSourceReservation;
+	  }
+	| {
+			readonly kind: "unknown";
+			readonly code:
+				| RpcExceptionCodeEnum.unknownService
+				| RpcExceptionCodeEnum.unknownMember;
+			readonly reservation: IRpcProtocolIncomingUnknownStreamReservation;
+	  };
+
 export interface IRpcProtocolSession {
 	reserveInvocation(
 		request: IRpcProtocolInvocationRequest,
@@ -272,6 +329,9 @@ export interface IRpcProtocolSessionHost {
 	reserveIncomingCall(
 		request: IRpcProtocolIncomingCallRequest,
 	): RpcProtocolIncomingCallReservation | undefined;
+	reserveIncomingStream(
+		request: RpcProtocolStreamRequest,
+	): RpcProtocolIncomingStreamReservation | undefined;
 	transition(transition: RpcProtocolSessionTransition): void;
 	fault(reason: RpcProtocolFaultReason, error: Error): void;
 }

@@ -223,6 +223,7 @@ describe("Default RPC Protocol retained ledger", () => {
 					release() {},
 				},
 			}),
+			reserveIncomingStream: () => undefined,
 			transition() {},
 			fault() {},
 		};

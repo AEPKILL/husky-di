@@ -44,9 +44,11 @@ import type {
 	IRpcConnection,
 	IRpcProtocolAcceptorHost,
 	IRpcProtocolConnectorHost,
+	IRpcProtocolIncomingStream,
 	IRpcProtocolInvocationSink,
 	IRpcProtocolSession,
 	IRpcProtocolSessionHost,
+	IRpcProtocolSourceSink,
 	IRpcProtocolStreamReservation,
 	IRpcProtocolSubscriberSink,
 } from "../src/protocol";
@@ -2073,6 +2075,82 @@ describe("exposure registries and remote facades", () => {
 		expect(values).toEqual(["first"]);
 		expect(itemEffect).toBe("closed");
 		expect(cancels).toBe(1);
+		await connector.close();
+	});
+
+	it("RPC-STREAM-005 RPC-STREAM-012 RPC-STREAM-013 runs one synchronous Source lifecycle", async () => {
+		const trace: string[] = [];
+		let sourceSubscriptions = 0;
+		let sourceTeardowns = 0;
+		const session: IRpcProtocolSession = {
+			reserveInvocation: () => undefined,
+			reserveStream: () => undefined,
+			forceClose() {},
+		};
+		const { connector, host, sessionHost } =
+			await connectProtocolSession(session);
+		const descriptor = createRemoteServiceDescriptor(IMixedExposureService, {
+			wireName: "example.source-lifecycle.v1",
+			members: { history: { kind: "stream-method" } },
+		});
+		connector.peer.expose(descriptor, {
+			history(room: string) {
+				trace.push(`acquire:${room}`);
+				return new Observable<string>((subscriber) => {
+					sourceSubscriptions += 1;
+					trace.push("source:subscribe");
+					subscriber.next("first");
+					subscriber.complete();
+					return () => {
+						sourceTeardowns += 1;
+						trace.push("source:teardown");
+					};
+				});
+			},
+		} as never);
+		const reservation = sessionHost.reserveIncomingStream({
+			service: "example.source-lifecycle.v1",
+			member: "history",
+			kind: "stream-method",
+			args: host.normalizeApplicationArguments(["room"]),
+		});
+		expect(reservation?.kind).toBe("source");
+		let incoming: IRpcProtocolIncomingStream | undefined;
+		const sourceSink: IRpcProtocolSourceSink = {
+			reserveEmission() {
+				trace.push("protocol:reserve-emission");
+				return {
+					commit(snapshot) {
+						trace.push(`protocol:item:${snapshot.value}`);
+					},
+					fail() {
+						trace.push("protocol:item-failed");
+					},
+				};
+			},
+			finish(outcome) {
+				trace.push(`protocol:terminal:${outcome.type}`);
+				incoming?.finish(outcome, () => trace.push("protocol:on-released"));
+			},
+		};
+		if (reservation?.kind === "source") {
+			incoming = reservation.reservation.commit(sourceSink);
+		}
+
+		await Promise.resolve();
+		await Promise.resolve();
+
+		expect(sourceSubscriptions).toBe(1);
+		expect(sourceTeardowns).toBe(1);
+		expect(trace).toEqual([
+			"acquire:room",
+			"source:subscribe",
+			"protocol:reserve-emission",
+			"protocol:item:first",
+			"protocol:terminal:completed",
+			"source:teardown",
+			"protocol:on-released",
+		]);
 		await connector.close();
 	});
 

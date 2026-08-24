@@ -760,6 +760,7 @@ function createSessionHostProbe(
 				},
 			};
 		},
+		reserveIncomingStream: () => undefined,
 		transition: (transition) => transitions.push(transition),
 		fault(reason, error) {
 			sessionFaults.push({ reason, error });

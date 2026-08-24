@@ -93,6 +93,7 @@ function createAcceptorRuntime(
 			admittedSessions.push(1);
 			return {
 				reserveIncomingCall: () => undefined,
+				reserveIncomingStream: () => undefined,
 				transition: onTransition,
 				fault: (reason) => ownerFaults.push(reason),
 			};
@@ -127,6 +128,7 @@ function createConnectorRuntime(policy: IRpcProtocolRuntimePolicy): {
 			attachedSessions.push(1);
 			return {
 				reserveIncomingCall: () => undefined,
+				reserveIncomingStream: () => undefined,
 				transition() {},
 				fault: (reason) => ownerFaults.push(reason),
 			};

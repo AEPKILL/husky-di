@@ -157,6 +157,7 @@ export function createRpcDirectSessionHarness(
 	});
 	const sessionHost: IRpcProtocolSessionHost = {
 		reserveIncomingCall: () => undefined,
+		reserveIncomingStream: () => undefined,
 		transition: (transition) => transitions.push(transition),
 		fault: (reason) => faults.push(reason),
 	};

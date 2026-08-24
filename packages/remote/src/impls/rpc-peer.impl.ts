@@ -15,13 +15,16 @@ import { RpcExceptionCodeEnum } from "@/enums/rpc-exception-code.enum";
 import { RpcStateStatusEnum } from "@/enums/rpc-state-status.enum";
 import { getRemoteServiceDescriptorData } from "@/factories/remote-service-descriptor.factory";
 import { createRpcException } from "@/factories/rpc-exception.factory";
+import { RpcSourceSubscriptionImpl } from "@/impls/rpc-source-subscription.impl";
 import type {
 	IRpcApplicationArgumentsSnapshot,
 	IRpcApplicationSnapshot,
 	IRpcProtocolIncomingCall,
 	IRpcProtocolIncomingCallRequest,
 	IRpcProtocolIncomingHandlerCall,
+	IRpcProtocolIncomingStream,
 	IRpcProtocolSession,
+	IRpcProtocolSourceSink,
 	IRpcProtocolStream,
 	IRpcProtocolSubscriberSink,
 	IRpcRetainedBytesReservation,
@@ -29,6 +32,7 @@ import type {
 	RpcHandlerOutcome,
 	RpcIncomingTerminal,
 	RpcProtocolIncomingCallReservation,
+	RpcProtocolIncomingStreamReservation,
 	RpcProtocolStreamRequest,
 	RpcStreamOutcome,
 	RpcUnknownCallFailure,
@@ -50,9 +54,11 @@ import type { RpcPeerState } from "@/types/rpc-caller.type";
 import type {
 	RpcExposureRegistry,
 	RpcHandlerRoute,
+	RpcStreamRoute,
 } from "@/types/rpc-exposure.type";
 import type { CreateRpcPeerOptions } from "@/types/rpc-peer.type";
 import {
+	isRpcApplicationArgumentsSnapshot,
 	normalizeRpcApplicationArguments,
 	normalizeRpcApplicationValue,
 } from "@/utils/rpc-application-value.util";
@@ -180,6 +186,39 @@ function isIncomingCallRequest(
 	return (
 		fields !== undefined &&
 		rpcIncomingCallRequestSchema.safeParse(fields).success
+	);
+}
+
+function isIncomingStreamRequest(
+	value: unknown,
+): value is RpcProtocolStreamRequest {
+	const fields = readProtocolFields(value);
+	if (fields === undefined) {
+		return false;
+	}
+	const { fieldNames, fields: values } = fields;
+	const baseIsValid =
+		typeof values.service === "string" &&
+		values.service.length > 0 &&
+		typeof values.member === "string" &&
+		values.member.length > 0 &&
+		values.member !== "then";
+	if (!baseIsValid) {
+		return false;
+	}
+	if (values.kind === "stream-property") {
+		return (
+			fieldNames.length === 3 &&
+			fieldNames.every((name) => ["service", "member", "kind"].includes(name))
+		);
+	}
+	return (
+		values.kind === "stream-method" &&
+		fieldNames.length === 4 &&
+		fieldNames.every((name) =>
+			["service", "member", "kind", "args"].includes(name),
+		) &&
+		isRpcApplicationArgumentsSnapshot(values.args)
 	);
 }
 
@@ -754,6 +793,174 @@ export class RpcPeerImpl implements IRpcPeerRuntime {
 			charge,
 			retainedBytesReservation,
 		);
+	}
+
+	/** Package-private Framework reservation port for one validated remote stream. */
+	reserveIncomingProtocolStream(
+		request: RpcProtocolStreamRequest,
+	): RpcProtocolIncomingStreamReservation | undefined {
+		if (!isIncomingStreamRequest(request)) {
+			this.#onProtocolFault(
+				new Error("Protocol supplied an invalid incoming stream request."),
+			);
+			return undefined;
+		}
+		const charge =
+			(request.kind === "stream-method" ? request.args.weight : 0) + 256;
+		// Incoming capacity is reserved before any service or member route lookup.
+		const cannotReserveIncomingStream =
+			this.state.status !== RpcStateStatusEnum.connected ||
+			this.#incomingReservationCount >= 256 ||
+			charge > this.#maximumIncomingBytes - this.#incomingReservationBytes;
+		if (cannotReserveIncomingStream) {
+			return undefined;
+		}
+		const retainedBytesReservation = this.#reserveRetainedBytes(charge);
+		if (retainedBytesReservation === undefined) {
+			return undefined;
+		}
+		this.#incomingReservationCount += 1;
+		this.#incomingReservationBytes += charge;
+		const exposure =
+			this.#localExposureRegistry.get(request.service) ??
+			this.#ownerExposureRegistry.get(request.service);
+		if (exposure === undefined) {
+			return this.#reserveUnknownIncomingStream(
+				RpcExceptionCodeEnum.unknownService,
+				charge,
+				retainedBytesReservation,
+			);
+		}
+		const route = exposure.members.get(request.member);
+		if (route === undefined || route.kind !== request.kind) {
+			return this.#reserveUnknownIncomingStream(
+				RpcExceptionCodeEnum.unknownMember,
+				charge,
+				retainedBytesReservation,
+			);
+		}
+		return this.#reserveSourceIncomingStream(
+			request,
+			route,
+			charge,
+			retainedBytesReservation,
+		);
+	}
+
+	#reserveUnknownIncomingStream(
+		code:
+			| RpcExceptionCodeEnum.unknownService
+			| RpcExceptionCodeEnum.unknownMember,
+		charge: number,
+		retainedBytesReservation: IRpcRetainedBytesReservation,
+	): RpcProtocolIncomingStreamReservation {
+		let state: "pending" | "committed" | "released" = "pending";
+		let finished = false;
+		const stream = Object.freeze<IRpcProtocolIncomingStream>({
+			finish: (outcome, onReleased) => {
+				if (finished || state !== "committed") {
+					return;
+				}
+				const outcomeMatchesRoute =
+					outcome.type === "failed" && outcome.code === code;
+				if (!outcomeMatchesRoute) {
+					this.#onProtocolFault(
+						new Error("Protocol supplied the wrong unknown-stream terminal."),
+					);
+					return;
+				}
+				finished = true;
+				this.#releaseIncomingCapacity(charge, retainedBytesReservation);
+				try {
+					onReleased();
+				} catch (error) {
+					this.#onProtocolFault(
+						error instanceof Error
+							? error
+							: new Error("Protocol stream release callback failed."),
+					);
+				}
+			},
+		});
+		return {
+			kind: "unknown",
+			code,
+			reservation: Object.freeze({
+				commit: () => {
+					if (state !== "pending") {
+						this.#onProtocolFault(
+							new Error("Incoming stream reservation had multiple winners."),
+						);
+						return stream;
+					}
+					state = "committed";
+					return stream;
+				},
+				release: () => {
+					if (state !== "pending") {
+						this.#onProtocolFault(
+							new Error("Incoming stream reservation had multiple winners."),
+						);
+						return;
+					}
+					state = "released";
+					this.#releaseIncomingCapacity(charge, retainedBytesReservation);
+				},
+			}),
+		};
+	}
+
+	#reserveSourceIncomingStream(
+		request: RpcProtocolStreamRequest,
+		route: RpcStreamRoute,
+		charge: number,
+		retainedBytesReservation: IRpcRetainedBytesReservation,
+	): RpcProtocolIncomingStreamReservation {
+		let state: "pending" | "committed" | "released" = "pending";
+		let capturedRoute: RpcStreamRoute | undefined = route;
+		let argumentsSnapshot =
+			request.kind === "stream-method" ? request.args : undefined;
+		return {
+			kind: "source",
+			reservation: Object.freeze({
+				commit: (source: IRpcProtocolSourceSink) => {
+					if (state !== "pending" || capturedRoute === undefined) {
+						throw this.#protocolFailure(
+							new Error("Incoming stream reservation had multiple winners."),
+						);
+					}
+					state = "committed";
+					const adapter = new RpcSourceSubscriptionImpl(
+						capturedRoute,
+						argumentsSnapshot,
+						source,
+						(error) => this.#protocolFailure(error),
+						() =>
+							this.#releaseIncomingCapacity(charge, retainedBytesReservation),
+					);
+					capturedRoute = undefined;
+					argumentsSnapshot = undefined;
+					const removeQueuedJob = this.#handlerScheduler.enqueue(
+						this,
+						(releasePermit) => adapter.start(releasePermit),
+					);
+					adapter.setQueuedJobRemoval(removeQueuedJob);
+					return adapter;
+				},
+				release: () => {
+					if (state !== "pending") {
+						this.#onProtocolFault(
+							new Error("Incoming stream reservation had multiple winners."),
+						);
+						return;
+					}
+					state = "released";
+					capturedRoute = undefined;
+					argumentsSnapshot = undefined;
+					this.#releaseIncomingCapacity(charge, retainedBytesReservation);
+				},
+			}),
+		};
 	}
 
 	#releaseIncomingCapacity(
