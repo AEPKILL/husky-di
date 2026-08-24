@@ -5,7 +5,7 @@
  */
 
 import type { Cleanup } from "@husky-di/core";
-import { Observable, Subject, type Subscriber, type TeardownLogic } from "rxjs";
+import { Observable, type Subscriber, type TeardownLogic } from "rxjs";
 import { RpcCallTerminalTypeEnum } from "@/enums/protocol/rpc-call-terminal-type.enum";
 import { RpcIncomingCallKindEnum } from "@/enums/protocol/rpc-incoming-call-kind.enum";
 import { RpcCallDirectionEnum } from "@/enums/rpc-call-direction.enum";
@@ -224,7 +224,7 @@ function isIncomingStreamRequest(
 
 /** Retains one stable Peer identity and its replay-latest state snapshot. */
 export class RpcPeerImpl implements IRpcPeerRuntime {
-	readonly #stateSubject = new Subject<RpcPeerState>();
+	readonly #stateSubscribers = new Set<Subscriber<RpcPeerState>>();
 	readonly #localExposureRegistry: RpcExposureRegistry = new Map();
 	readonly #ownerExposureRegistry: RpcExposureRegistry;
 	readonly #isOwnerActive: () => boolean;
@@ -237,6 +237,8 @@ export class RpcPeerImpl implements IRpcPeerRuntime {
 	) => IRpcRetainedBytesReservation | undefined;
 	#state: RpcPeerState;
 	#stateDirty = false;
+	#stateCompleted = false;
+	#stateGeneration = 0;
 	#session: IRpcProtocolSession | undefined;
 	#incomingReservationCount = 0;
 	#incomingReservationBytes = 0;
@@ -262,11 +264,15 @@ export class RpcPeerImpl implements IRpcPeerRuntime {
 		this.#maximumIncomingBytes = maximumIncomingBytes;
 		this.#reserveRetainedBytes = reserveRetainedBytes;
 		this.state$ = new Observable((subscriber) => {
-			const subscription = this.#stateSubject.subscribe(subscriber);
+			if (this.#stateCompleted) {
+				subscriber.complete();
+				return;
+			}
+			this.#stateSubscribers.add(subscriber);
 			if (!subscriber.closed) {
 				subscriber.next(this.#state);
 			}
-			return subscription;
+			return () => this.#stateSubscribers.delete(subscriber);
 		});
 	}
 
@@ -287,6 +293,7 @@ export class RpcPeerImpl implements IRpcPeerRuntime {
 		}
 		this.#state = Object.freeze(state);
 		this.#stateDirty = true;
+		this.#stateGeneration += 1;
 	}
 
 	/** Package-private notification flush for a previously staged state. */
@@ -295,15 +302,30 @@ export class RpcPeerImpl implements IRpcPeerRuntime {
 			return;
 		}
 		this.#stateDirty = false;
-		this.#stateSubject.next(this.#state);
+		const generation = this.#stateGeneration;
+		const state = this.#state;
+		for (const subscriber of [...this.#stateSubscribers]) {
+			if (generation !== this.#stateGeneration) {
+				return;
+			}
+			subscriber.next(state);
+		}
 	}
 
 	/** Package-private terminal cleanup after the final snapshot is committed. */
 	completeState(): void {
+		if (this.#stateCompleted) {
+			return;
+		}
 		this.flushState();
+		this.#stateCompleted = true;
 		this.#localExposureRegistry.clear();
 		this.#session = undefined;
-		this.#stateSubject.complete();
+		this.#stateGeneration += 1;
+		for (const subscriber of [...this.#stateSubscribers]) {
+			subscriber.complete();
+		}
+		this.#stateSubscribers.clear();
 	}
 
 	expose<T, Definitions extends RpcMemberDefinitions<T>>(

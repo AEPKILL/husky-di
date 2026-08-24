@@ -4,12 +4,7 @@
  * @created 2026-08-19 00:00:00
  */
 
-import {
-	BehaviorSubject,
-	type Observable,
-	Subject,
-	type Subscription,
-} from "rxjs";
+import { BehaviorSubject, type Observable, type Subscription } from "rxjs";
 import { RpcProtocolSessionTransitionTypeEnum } from "@/enums/protocol/rpc-protocol-session-transition-type.enum";
 import { RpcCloseOutcomeEnum } from "@/enums/rpc-close-outcome.enum";
 import { RpcCloseReasonEnum } from "@/enums/rpc-close-reason.enum";
@@ -34,6 +29,7 @@ import type {
 	RpcEvent,
 } from "@/interfaces/rpc-caller.interface";
 import type { IRpcConnection } from "@/interfaces/rpc-connection.interface";
+import type { IRpcEventPublisher } from "@/interfaces/rpc-event-publisher.interface";
 import type { IRpcOwnerCustody } from "@/interfaces/rpc-owner-custody.interface";
 import type { IRpcPeerRuntime } from "@/interfaces/rpc-peer.interface";
 import type {
@@ -106,7 +102,7 @@ export class RpcConnectorImpl implements IRpcConnector {
 	readonly #policy: IRpcProtocolRuntimePolicy;
 	readonly #retainedBytesLedger: IRpcRetainedBytesLedger;
 	readonly #stateSubject: BehaviorSubject<RpcConnectorState>;
-	readonly #eventSubject = new Subject<RpcEvent>();
+	readonly #eventPublisher: IRpcEventPublisher;
 	readonly #faultingSessions = new Set<IRpcProtocolSession>();
 	readonly #custody: IRpcOwnerCustody;
 	readonly #connectionLimit: number;
@@ -124,6 +120,7 @@ export class RpcConnectorImpl implements IRpcConnector {
 		const {
 			createPeer,
 			custody,
+			eventPublisher,
 			handlerScheduler,
 			policy,
 			retainedBytesLedger,
@@ -132,18 +129,19 @@ export class RpcConnectorImpl implements IRpcConnector {
 		this.#runtime = runtime;
 		this.#policy = policy;
 		this.#custody = custody;
+		this.#eventPublisher = eventPublisher;
 		this.#retainedBytesLedger = retainedBytesLedger;
 		this.#connectionLimit = policy.maxSessions + 2 * policy.maxHandshakes;
 		this.#stateSubject = new BehaviorSubject(
 			Object.freeze<RpcConnectorState>({ status: RpcStateStatusEnum.active }),
 		);
 		this.state$ = this.#stateSubject.asObservable();
-		this.event$ = this.#eventSubject.asObservable();
+		this.event$ = this.#eventPublisher.event$;
 		this.peer = createPeer({
 			initialState: { status: RpcStateStatusEnum.unbound },
 			ownerExposureRegistry: new Map(),
 			isOwnerActive: () => this.state.status === RpcStateStatusEnum.active,
-			emitEvent: (event) => this.#eventSubject.next(event),
+			emitEvent: (event) => this.#eventPublisher.publish(event),
 			onProtocolFault: (error) =>
 				this.protocolFault(RpcCloseReasonEnum.protocolFault, error),
 			handlerScheduler,
@@ -371,10 +369,16 @@ export class RpcConnectorImpl implements IRpcConnector {
 							"Connector terminated before startup could settle.",
 						);
 					}
-					this.#eventSubject.next({
-						type: RpcEventTypeEnum.peerOpened,
-						peer: this.peer,
-					});
+					this.#eventPublisher.publish(
+						{
+							type: RpcEventTypeEnum.peerOpened,
+							peer: this.peer,
+						},
+						() =>
+							this.#session === session &&
+							this.state.status === RpcStateStatusEnum.active &&
+							this.peer.state.status === RpcStateStatusEnum.connected,
+					);
 					return;
 				}
 				// Resume startup must leave the retained Session connected.
@@ -538,18 +542,30 @@ export class RpcConnectorImpl implements IRpcConnector {
 		}
 		if (transition.type === RpcProtocolSessionTransitionTypeEnum.recovering) {
 			this.peer.commitState({ status: RpcStateStatusEnum.recovering });
-			this.#eventSubject.next({
-				type: RpcEventTypeEnum.peerRecovering,
-				peer: this.peer,
-			});
+			this.#eventPublisher.publish(
+				{
+					type: RpcEventTypeEnum.peerRecovering,
+					peer: this.peer,
+				},
+				() =>
+					this.#session === session &&
+					this.state.status === RpcStateStatusEnum.active &&
+					this.peer.state.status === RpcStateStatusEnum.recovering,
+			);
 			return;
 		}
 		if (transition.type === RpcProtocolSessionTransitionTypeEnum.recovered) {
 			this.peer.commitState({ status: RpcStateStatusEnum.connected });
-			this.#eventSubject.next({
-				type: RpcEventTypeEnum.peerRecovered,
-				peer: this.peer,
-			});
+			this.#eventPublisher.publish(
+				{
+					type: RpcEventTypeEnum.peerRecovered,
+					peer: this.peer,
+				},
+				() =>
+					this.#session === session &&
+					this.state.status === RpcStateStatusEnum.active &&
+					this.peer.state.status === RpcStateStatusEnum.connected,
+			);
 			return;
 		}
 		if (transition.type === RpcProtocolSessionTransitionTypeEnum.draining) {
@@ -557,11 +573,16 @@ export class RpcConnectorImpl implements IRpcConnector {
 				status: RpcStateStatusEnum.draining,
 				reason: RpcCloseReasonEnum.counterExhaustion,
 			});
-			this.#eventSubject.next({
-				type: RpcEventTypeEnum.peerDraining,
-				peer: this.peer,
-				reason: RpcCloseReasonEnum.counterExhaustion,
-			});
+			this.#eventPublisher.publish(
+				{
+					type: RpcEventTypeEnum.peerDraining,
+					peer: this.peer,
+					reason: RpcCloseReasonEnum.counterExhaustion,
+				},
+				() =>
+					this.#session === session &&
+					this.peer.state.status === RpcStateStatusEnum.draining,
+			);
 			return;
 		}
 		this.#closeFromSession(transition.reason, transition.cause);
@@ -638,9 +659,9 @@ export class RpcConnectorImpl implements IRpcConnector {
 			Object.freeze({ status: RpcStateStatusEnum.closing }),
 		);
 		this.peer.flushState();
-		this.#eventSubject.next(peerEvent);
+		this.#eventPublisher.publish(peerEvent);
 		this.peer.completeState();
-		this.#eventSubject.next({ type: RpcEventTypeEnum.ownerClosing });
+		this.#eventPublisher.publish({ type: RpcEventTypeEnum.ownerClosing });
 		this.#startCleanup(finalState);
 	}
 
@@ -732,15 +753,18 @@ export class RpcConnectorImpl implements IRpcConnector {
 				reason: terminalPeerReason,
 			});
 		}
-		this.#eventSubject.next({ type: RpcEventTypeEnum.ownerDraining });
+		this.#eventPublisher.publish(
+			{ type: RpcEventTypeEnum.ownerDraining },
+			() => this.state.status === RpcStateStatusEnum.draining,
+		);
 		if (this.peer.state.status === RpcStateStatusEnum.draining) {
-			this.#eventSubject.next({
+			this.#eventPublisher.publish({
 				type: RpcEventTypeEnum.peerDraining,
 				peer: this.peer,
 				reason: this.peer.state.reason,
 			});
 		} else if (terminalPeerReason !== undefined) {
-			this.#eventSubject.next({
+			this.#eventPublisher.publish({
 				type: RpcEventTypeEnum.peerClosed,
 				peer: this.peer,
 				outcome: RpcCloseOutcomeEnum.normal,
@@ -819,10 +843,10 @@ export class RpcConnectorImpl implements IRpcConnector {
 		);
 		this.peer.flushState();
 		if (closure.event !== undefined) {
-			this.#eventSubject.next(closure.event);
+			this.#eventPublisher.publish(closure.event);
 		}
 		this.peer.completeState();
-		this.#eventSubject.next({ type: RpcEventTypeEnum.ownerClosing });
+		this.#eventPublisher.publish({ type: RpcEventTypeEnum.ownerClosing });
 		this.#startCleanup(closure.finalState);
 	}
 
@@ -896,19 +920,19 @@ export class RpcConnectorImpl implements IRpcConnector {
 		this.#stateSubject.next(finalState);
 		this.#stateSubject.complete();
 		if (finalState.outcome === RpcCloseOutcomeEnum.normal) {
-			this.#eventSubject.next({
+			this.#eventPublisher.publish({
 				type: RpcEventTypeEnum.topologyClosed,
 				outcome: RpcCloseOutcomeEnum.normal,
 				reason: finalState.reason,
 			});
 		} else {
-			this.#eventSubject.next({
+			this.#eventPublisher.publish({
 				type: RpcEventTypeEnum.topologyClosed,
 				outcome: RpcCloseOutcomeEnum.failed,
 				reason: finalState.reason,
 			});
 		}
-		this.#eventSubject.complete();
+		this.#eventPublisher.complete();
 		this.#resolveTermination?.();
 	}
 
@@ -927,12 +951,12 @@ export class RpcConnectorImpl implements IRpcConnector {
 			}),
 		);
 		this.#stateSubject.complete();
-		this.#eventSubject.next({
+		this.#eventPublisher.publish({
 			type: RpcEventTypeEnum.topologyClosed,
 			outcome: RpcCloseOutcomeEnum.failed,
 			reason: RpcCloseReasonEnum.cleanupFailed,
 		});
-		this.#eventSubject.complete();
+		this.#eventPublisher.complete();
 		this.#rejectTermination?.(error);
 	}
 }

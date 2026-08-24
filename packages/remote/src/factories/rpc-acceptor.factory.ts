@@ -7,6 +7,7 @@
 import { createRpcProtocol } from "@/factories/rpc-protocol.factory";
 import { RpcRetainedBytesLedgerImpl } from "@/impls/protocol/rpc-retained-bytes-ledger.impl";
 import { RpcAcceptorImpl } from "@/impls/rpc-acceptor.impl";
+import { RpcEventPublisherImpl } from "@/impls/rpc-event-publisher.impl";
 import { RpcHandlerSchedulerImpl } from "@/impls/rpc-handler-scheduler.impl";
 import { RpcOwnerCustodyImpl } from "@/impls/rpc-owner-custody.impl";
 import { RpcPeerImpl } from "@/impls/rpc-peer.impl";
@@ -41,6 +42,7 @@ export function createRpcAcceptor(options?: RpcAcceptorOptions): IRpcAcceptor {
 		custody: new RpcOwnerCustodyImpl(policy.shutdownDeadlineMs, () =>
 			runtime.cleanup(),
 		),
+		eventPublisher: new RpcEventPublisherImpl(),
 		handlerScheduler: new RpcHandlerSchedulerImpl(
 			policy.maxHandlersTotal,
 			policy.maxHandlersPerSession,

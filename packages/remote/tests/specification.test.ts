@@ -2073,6 +2073,351 @@ describe("exposure registries and remote facades", () => {
 		});
 	});
 
+	it("RPC-STREAM-010 RPC-RECOVERY-004 preserves one admitted outgoing stream through Recovery", async () => {
+		let committedSink: IRpcProtocolSubscriberSink | undefined;
+		let retainedItem:
+			| ReturnType<IRpcProtocolSubscriberSink["reserveItem"]>
+			| undefined;
+		let reservationCalls = 0;
+		let starts = 0;
+		const session: IRpcProtocolSession = {
+			reserveInvocation: () => undefined,
+			reserveStream() {
+				reservationCalls += 1;
+				return {
+					commit(sink) {
+						committedSink = sink;
+						return {
+							start() {
+								starts += 1;
+								retainedItem = sink.reserveItem({
+									value: "retained",
+									weight: 10,
+								} as never);
+								retainedItem.commit();
+							},
+							cancel() {},
+						};
+					},
+					release() {},
+				};
+			},
+			forceClose() {},
+		};
+		const { connector, sessionHost } = await connectProtocolSession(session);
+		const descriptor = createRemoteServiceDescriptor(IMixedExposureService, {
+			wireName: "example.recovery-continuity.v1",
+			members: { history: { kind: "stream-method" } },
+		});
+		const facade = connector.peer.resolve(descriptor);
+		const history = facade.history;
+		const history$ = facade.history("room");
+		const values: string[] = [];
+
+		history$.subscribe((value) => values.push(value));
+		const originalSink = committedSink;
+		sessionHost.transition({
+			type: RpcProtocolSessionTransitionTypeEnum.recovering,
+		});
+		sessionHost.transition({
+			type: RpcProtocolSessionTransitionTypeEnum.recovered,
+		});
+		retainedItem?.commit();
+
+		expect(facade.history).toBe(history);
+		expect(committedSink).toBe(originalSink);
+		expect({ reservationCalls, starts }).toEqual({
+			reservationCalls: 1,
+			starts: 1,
+		});
+		expect(values).toEqual(["retained"]);
+		expect(connector.peer.state).toEqual({ status: "connected" });
+		await connector.close();
+	});
+
+	it("RPC-STREAM-010 RPC-RECOVERY-008 RPC-SEC-011 RPC-RESOURCE-015 RPC-CONFORMANCE-004 publishes Recovery without Source resubscription", async () => {
+		const flow = createW1SemanticStreamHarness();
+		const { connector, sessionHost } = await connectProtocolSession(
+			flow.session,
+		);
+		flow.attachIncomingHost(sessionHost);
+		const descriptor = createRemoteServiceDescriptor(IMixedExposureService, {
+			wireName: "example.recovery-source.v1",
+			members: { history: { kind: "stream-method" } },
+		});
+		const source = new Subject<string>();
+		let methodCalls = 0;
+		let sourceSubscriptions = 0;
+		let sourceTeardowns = 0;
+		connector.peer.expose(descriptor, {
+			history() {
+				methodCalls += 1;
+				return new Observable<string>((subscriber) => {
+					sourceSubscriptions += 1;
+					const subscription = source.subscribe(subscriber);
+					return () => {
+						sourceTeardowns += 1;
+						subscription.unsubscribe();
+					};
+				});
+			},
+		} as never);
+		const values: string[] = [];
+		const history$ = connector.peer.resolve(descriptor).history("room");
+		history$.subscribe((value) => values.push(value));
+		await Promise.resolve();
+		await Promise.resolve();
+
+		sessionHost.transition({
+			type: RpcProtocolSessionTransitionTypeEnum.recovering,
+		});
+		sessionHost.transition({
+			type: RpcProtocolSessionTransitionTypeEnum.recovered,
+		});
+		source.next("after-recovery");
+		flow.flush();
+		source.complete();
+		flow.flush();
+
+		expect(values).toEqual(["after-recovery"]);
+		expect({ methodCalls, sourceSubscriptions, sourceTeardowns }).toEqual({
+			methodCalls: 1,
+			sourceSubscriptions: 1,
+			sourceTeardowns: 1,
+		});
+		expect(flow.released).toBe(true);
+		await connector.close();
+	});
+
+	it("RPC-RECOVERY-009 fences a recovered state publication superseded by graceful cutoff", async () => {
+		const session: IRpcProtocolSession = {
+			reserveInvocation: () => undefined,
+			reserveStream: () => undefined,
+			forceClose() {},
+		};
+		const { connector, sessionHost } = await connectProtocolSession(session);
+		const earlierStates: string[] = [];
+		const laterStates: string[] = [];
+		let recoveryStarted = false;
+		let terminationTask: Promise<void> | undefined;
+		connector.peer.state$.subscribe((state) => {
+			earlierStates.push(state.status);
+			if (state.status === RpcStateStatusEnum.recovering) {
+				recoveryStarted = true;
+			} else if (
+				recoveryStarted &&
+				state.status === RpcStateStatusEnum.connected
+			) {
+				terminationTask = connector.shutdown();
+			}
+		});
+		connector.peer.state$.subscribe((state) => laterStates.push(state.status));
+		earlierStates.length = 0;
+		laterStates.length = 0;
+
+		sessionHost.transition({
+			type: RpcProtocolSessionTransitionTypeEnum.recovering,
+		});
+		sessionHost.transition({
+			type: RpcProtocolSessionTransitionTypeEnum.recovered,
+		});
+
+		expect(earlierStates).toEqual(["recovering", "connected", "draining"]);
+		expect(laterStates).toEqual(["recovering", "draining"]);
+		expect(connector.peer.state).toEqual({
+			status: RpcStateStatusEnum.draining,
+			reason: RpcCloseReasonEnum.gracefulShutdown,
+		});
+		await terminationTask;
+		let lateStateCount = 0;
+		let lateCompletionCount = 0;
+		connector.peer.state$.subscribe({
+			next: () => {
+				lateStateCount += 1;
+			},
+			complete: () => {
+				lateCompletionCount += 1;
+			},
+		});
+		expect({ lateCompletionCount, lateStateCount }).toEqual({
+			lateCompletionCount: 1,
+			lateStateCount: 0,
+		});
+	});
+
+	it("RPC-RECOVERY-009 RPC-EVENT-014 RPC-LIFE-003 suppresses a recovered event revoked by reentrant close", async () => {
+		const session: IRpcProtocolSession = {
+			reserveInvocation: () => undefined,
+			reserveStream: () => undefined,
+			forceClose() {},
+		};
+		const { connector, sessionHost } = await connectProtocolSession(session);
+		const laterEvents: string[] = [];
+		let terminationTask: Promise<void> | undefined;
+		connector.event$.subscribe((event) => {
+			if (event.type === RpcEventTypeEnum.peerRecovered) {
+				terminationTask = connector.close();
+			}
+		});
+		connector.event$.subscribe((event) => laterEvents.push(event.type));
+
+		sessionHost.transition({
+			type: RpcProtocolSessionTransitionTypeEnum.recovering,
+		});
+		laterEvents.length = 0;
+		sessionHost.transition({
+			type: RpcProtocolSessionTransitionTypeEnum.recovered,
+		});
+
+		expect(laterEvents).not.toContain(RpcEventTypeEnum.peerRecovered);
+		expect(laterEvents.slice(0, 2)).toEqual([
+			RpcEventTypeEnum.peerClosed,
+			RpcEventTypeEnum.ownerClosing,
+		]);
+		await terminationTask;
+	});
+
+	it("RPC-EVENT-014 RPC-LIFE-003 suppresses an owner-draining event revoked by reentrant close through the same task", async () => {
+		const session: IRpcProtocolSession = {
+			reserveInvocation: () => undefined,
+			reserveStream: () => undefined,
+			forceClose() {},
+		};
+		const { connector } = await connectProtocolSession(session);
+		const laterEvents: string[] = [];
+		let closeTask: Promise<void> | undefined;
+		connector.event$.subscribe((event) => {
+			if (event.type === RpcEventTypeEnum.ownerDraining) {
+				closeTask = connector.close();
+			}
+		});
+		connector.event$.subscribe((event) => laterEvents.push(event.type));
+
+		const shutdownTask = connector.shutdown();
+
+		expect(closeTask).toBe(shutdownTask);
+		expect(laterEvents).not.toContain(RpcEventTypeEnum.ownerDraining);
+		expect(laterEvents.slice(0, 2)).toEqual([
+			RpcEventTypeEnum.peerClosed,
+			RpcEventTypeEnum.ownerClosing,
+		]);
+		await shutdownTask;
+	});
+
+	it("RPC-STREAM-010 RPC-RECOVERY-007 hands an identity-free Pending stream off once after Recovery", async () => {
+		let incomingHost: IRpcProtocolSessionHost | undefined;
+		let recovering = false;
+		let admissionHandoffs = 0;
+		const pendingAdmissions = new Set<() => void>();
+		const session: IRpcProtocolSession = {
+			reserveInvocation: () => undefined,
+			reserveStream(request) {
+				return {
+					commit(subscriberSink) {
+						let admitted = false;
+						let canceled = false;
+						const admit = (): void => {
+							if (admitted || canceled) {
+								return;
+							}
+							admitted = true;
+							pendingAdmissions.delete(admit);
+							admissionHandoffs += 1;
+							const reservation = incomingHost?.reserveIncomingStream(request);
+							if (reservation?.kind !== "source") {
+								subscriberSink
+									.reserveTerminal({
+										type: "failed",
+										code: RpcExceptionCodeEnum.unavailable,
+									})
+									.commit();
+								return;
+							}
+							let incomingStream: IRpcProtocolIncomingStream | undefined;
+							const sourceSink: IRpcProtocolSourceSink = {
+								reserveEmission: () => undefined,
+								finish: (outcome) => {
+									if (outcome.type === "completed") {
+										subscriberSink.reserveTerminal(outcome).commit();
+										incomingStream?.finish(outcome, () => {});
+										return;
+									}
+									const failure: Extract<
+										RpcIncomingStreamTerminal,
+										{ readonly type: "failed" }
+									> = {
+										type: "failed",
+										code: RpcExceptionCodeEnum.handlerFailed,
+									};
+									subscriberSink.reserveTerminal(failure).commit();
+									incomingStream?.finish(failure, () => {});
+								},
+							};
+							incomingStream = reservation.reservation.commit(sourceSink);
+						};
+						return {
+							start() {
+								if (recovering) {
+									pendingAdmissions.add(admit);
+								} else {
+									admit();
+								}
+							},
+							cancel() {
+								if (!admitted) {
+									canceled = true;
+									pendingAdmissions.delete(admit);
+								}
+							},
+						};
+					},
+					release() {},
+				};
+			},
+			forceClose() {},
+		};
+		const { connector, sessionHost } = await connectProtocolSession(session);
+		incomingHost = sessionHost;
+		const descriptor = createRemoteServiceDescriptor(IMixedExposureService, {
+			wireName: "example.pending-recovery.v1",
+			members: { history: { kind: "stream-method" } },
+		});
+		let methodCalls = 0;
+		connector.peer.expose(descriptor, {
+			history: () => {
+				methodCalls += 1;
+				return of("done");
+			},
+		} as never);
+		recovering = true;
+		sessionHost.transition({
+			type: RpcProtocolSessionTransitionTypeEnum.recovering,
+		});
+		const history$ = connector.peer.resolve(descriptor).history("room");
+		const retracted = history$.subscribe();
+		history$.subscribe();
+		expect(pendingAdmissions.size).toBe(2);
+		retracted.unsubscribe();
+
+		recovering = false;
+		sessionHost.transition({
+			type: RpcProtocolSessionTransitionTypeEnum.recovered,
+		});
+		for (const admit of [...pendingAdmissions]) {
+			admit();
+			admit();
+		}
+		await Promise.resolve();
+		await Promise.resolve();
+
+		expect({ admissionHandoffs, methodCalls }).toEqual({
+			admissionHandoffs: 1,
+			methodCalls: 1,
+		});
+		expect(pendingAdmissions.size).toBe(0);
+		await connector.close();
+	});
+
 	it("RPC-STREAM-002 RPC-STREAM-003 RPC-STREAM-008 sends one cancel only for explicit unsubscription", async () => {
 		let starts = 0;
 		let cancels = 0;
