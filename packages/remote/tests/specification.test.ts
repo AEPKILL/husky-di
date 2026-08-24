@@ -2154,6 +2154,65 @@ describe("exposure registries and remote facades", () => {
 		await connector.close();
 	});
 
+	it("RPC-DESC-008 keeps the captured stream-property route after cleanup and re-exposure", async () => {
+		const session: IRpcProtocolSession = {
+			reserveInvocation: () => undefined,
+			reserveStream: () => undefined,
+			forceClose() {},
+		};
+		const { connector, sessionHost } = await connectProtocolSession(session);
+		const descriptor = createRemoteServiceDescriptor(IMixedExposureService, {
+			wireName: "example.captured-property.v1",
+			members: { lazy$: { kind: "stream-property" } },
+		});
+		let oldGetterCalls = 0;
+		let newGetterCalls = 0;
+		const oldImplementation = Object.create(null);
+		Object.defineProperty(oldImplementation, "lazy$", {
+			get() {
+				oldGetterCalls += 1;
+				return of("old");
+			},
+		});
+		const newImplementation = Object.create(null);
+		Object.defineProperty(newImplementation, "lazy$", {
+			get() {
+				newGetterCalls += 1;
+				return of("new");
+			},
+		});
+		const cleanup = connector.peer.expose(descriptor, oldImplementation);
+		const reservation = sessionHost.reserveIncomingStream({
+			service: "example.captured-property.v1",
+			member: "lazy$",
+			kind: "stream-property",
+		});
+		expect(oldGetterCalls).toBe(0);
+		cleanup();
+		connector.peer.expose(descriptor, newImplementation);
+		const items: unknown[] = [];
+		let incoming: IRpcProtocolIncomingStream | undefined;
+		if (reservation?.kind === "source") {
+			incoming = reservation.reservation.commit({
+				reserveEmission: () => ({
+					commit: (snapshot) => items.push(snapshot.value),
+					fail() {},
+				}),
+				finish(outcome) {
+					incoming?.finish(outcome, () => undefined);
+				},
+			});
+		}
+
+		await Promise.resolve();
+		await Promise.resolve();
+
+		expect(oldGetterCalls).toBe(1);
+		expect(newGetterCalls).toBe(0);
+		expect(items).toEqual(["old"]);
+		await connector.close();
+	});
+
 	it("RPC-API-007 omits every Remote Service Group facade", () => {
 		const { protocol } = createProtocolHarness();
 		const acceptor = createRpcAcceptor({ protocol });
