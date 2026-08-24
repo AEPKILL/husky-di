@@ -13,7 +13,7 @@ import { fileURLToPath } from "node:url";
 import { queryObjects } from "node:v8";
 
 import { CodedException, createServiceIdentifier } from "@husky-di/core";
-import { Observable, of, Subject, Subscriber } from "rxjs";
+import { config, Observable, of, Subject, Subscriber } from "rxjs";
 import { describe, expect, it, vi } from "vitest";
 
 import packageManifest from "../package.json";
@@ -1827,13 +1827,17 @@ describe("exposure registries and remote facades", () => {
 		expect(history$).toBeDefined();
 	});
 
-	it("RPC-STREAM-001 creates an independent cold root for every subscription", async () => {
+	it("RPC-STREAM-001 RPC-STREAM-002 creates an independent cold root for every subscription", async () => {
 		const requests: unknown[] = [];
+		const argumentSnapshots: unknown[] = [];
 		const sinks: IRpcProtocolSubscriberSink[] = [];
 		const session: IRpcProtocolSession = {
 			reserveInvocation: () => undefined,
 			reserveStream(request): IRpcProtocolStreamReservation {
 				requests.push(request);
+				if (request.kind === "stream-method") {
+					argumentSnapshots.push(request.args);
+				}
 				return {
 					commit(sink) {
 						sinks.push(sink);
@@ -1860,7 +1864,8 @@ describe("exposure registries and remote facades", () => {
 			wireName: "example.cold-stream.v1",
 			members: { history: { kind: "stream-method" } },
 		});
-		const history$ = connector.peer.resolve(descriptor).history("room");
+		const remote = connector.peer.resolve(descriptor);
+		const history$ = remote.history("room");
 		const first: string[] = [];
 		const second: string[] = [];
 
@@ -1869,13 +1874,34 @@ describe("exposure registries and remote facades", () => {
 		history$.subscribe((value) => second.push(value));
 
 		expect(requests).toHaveLength(2);
+		expect(argumentSnapshots).toHaveLength(2);
+		expect(argumentSnapshots[0]).not.toBe(argumentSnapshots[1]);
 		expect(sinks).toHaveLength(2);
 		expect(first).toEqual(["item-1"]);
 		expect(second).toEqual(["item-2"]);
 		await connector.close();
+		let argumentReads = 0;
+		const rejectedArgument = Object.defineProperty({}, "room", {
+			enumerable: true,
+			get() {
+				argumentReads += 1;
+				return "rejected";
+			},
+		});
+		let rejectedError: unknown;
+		remote.history(rejectedArgument as never).subscribe({
+			error: (error) => {
+				rejectedError = error;
+			},
+		});
+		expect(argumentReads).toBe(0);
+		expect(requests).toHaveLength(2);
+		expect(rejectedError).toMatchObject({
+			code: RpcExceptionCodeEnum.unavailable,
+		});
 	});
 
-	it("RPC-STREAM-002 RPC-STREAM-008 sends one cancel only for explicit unsubscription", async () => {
+	it("RPC-STREAM-002 RPC-STREAM-003 RPC-STREAM-008 sends one cancel only for explicit unsubscription", async () => {
 		let starts = 0;
 		let cancels = 0;
 		const session: IRpcProtocolSession = {
@@ -2028,6 +2054,66 @@ describe("exposure registries and remote facades", () => {
 		await connector.close();
 	});
 
+	it("RPC-STREAM-007 keeps a committed item when its Observer throws", async () => {
+		const reported: unknown[] = [];
+		const previousUnhandledError = config.onUnhandledError;
+		config.onUnhandledError = (error) => reported.push(error);
+		let forceCloses = 0;
+		let itemEffect = "";
+		let completed = 0;
+		const observerFailure = new Error("local observer failure");
+		const session: IRpcProtocolSession = {
+			reserveInvocation: () => undefined,
+			reserveStream() {
+				return {
+					commit(sink) {
+						return {
+							start() {
+								itemEffect = sink
+									.reserveItem({ value: "item", weight: 4 } as never)
+									.commit();
+								sink.reserveTerminal({ type: "completed" }).commit();
+							},
+							cancel() {},
+						};
+					},
+					release() {},
+				};
+			},
+			forceClose() {
+				forceCloses += 1;
+			},
+		};
+		try {
+			const { connector } = await connectProtocolSession(session);
+			const descriptor = createRemoteServiceDescriptor(IMixedExposureService, {
+				wireName: "example.observer-throw.v1",
+				members: { history: { kind: "stream-method" } },
+			});
+
+			connector.peer
+				.resolve(descriptor)
+				.history("room")
+				.subscribe({
+					next() {
+						throw observerFailure;
+					},
+					complete() {
+						completed += 1;
+					},
+				});
+			await vi.waitFor(() => expect(reported).toContain(observerFailure));
+
+			expect(itemEffect).toBe("rearm");
+			expect(completed).toBe(1);
+			expect(forceCloses).toBe(0);
+			expect(reported).toEqual([observerFailure]);
+			await connector.close();
+		} finally {
+			config.onUnhandledError = previousUnhandledError;
+		}
+	});
+
 	it("RPC-STREAM-008 fences late effects after unsubscribe inside next", async () => {
 		const values: string[] = [];
 		let cancels = 0;
@@ -2079,7 +2165,7 @@ describe("exposure registries and remote facades", () => {
 		await connector.close();
 	});
 
-	it("RPC-STREAM-005 RPC-STREAM-012 RPC-STREAM-013 runs one synchronous Source lifecycle", async () => {
+	it("RPC-STREAM-005 RPC-STREAM-012 RPC-STREAM-013 RPC-STREAM-014 runs one synchronous Source lifecycle", async () => {
 		const trace: string[] = [];
 		let sourceSubscriptions = 0;
 		let sourceTeardowns = 0;
@@ -2152,6 +2238,154 @@ describe("exposure registries and remote facades", () => {
 			"source:teardown",
 			"protocol:on-released",
 		]);
+		await connector.close();
+	});
+
+	it("RPC-STREAM-012 tears down the returned Source Subscription handle once", async () => {
+		let returnedTeardowns = 0;
+		let releases = 0;
+		const session: IRpcProtocolSession = {
+			reserveInvocation: () => undefined,
+			reserveStream: () => undefined,
+			forceClose() {},
+		};
+		const { connector, host, sessionHost } =
+			await connectProtocolSession(session);
+		const descriptor = createRemoteServiceDescriptor(IMixedExposureService, {
+			wireName: "example.returned-source-subscription.v1",
+			members: { history: { kind: "stream-method" } },
+		});
+		connector.peer.expose(descriptor, {
+			history() {
+				return {
+					lift() {},
+					subscribe(subscriber: Subscriber<unknown>) {
+						subscriber.complete();
+						return {
+							closed: false,
+							unsubscribe() {
+								returnedTeardowns += 1;
+							},
+						};
+					},
+				};
+			},
+		} as never);
+		const reservation = sessionHost.reserveIncomingStream({
+			service: "example.returned-source-subscription.v1",
+			member: "history",
+			kind: "stream-method",
+			args: host.normalizeApplicationArguments(["room"]),
+		});
+		let incoming: IRpcProtocolIncomingStream | undefined;
+		if (reservation?.kind === "source") {
+			incoming = reservation.reservation.commit({
+				reserveEmission: () => undefined,
+				finish(outcome) {
+					incoming?.finish(outcome, () => {
+						releases += 1;
+					});
+				},
+			});
+		}
+		await Promise.resolve();
+		await Promise.resolve();
+		incoming?.finish({ type: "canceled" }, () => {
+			releases += 100;
+		});
+
+		expect(returnedTeardowns).toBe(1);
+		expect(releases).toBe(1);
+		await connector.close();
+	});
+
+	it("RPC-STREAM-004 RPC-VALID-010 reserves capacity before route classification", async () => {
+		const session: IRpcProtocolSession = {
+			reserveInvocation: () => undefined,
+			reserveStream: () => undefined,
+			forceClose() {},
+		};
+		const { connector, sessionHost } = await connectProtocolSession(session);
+		const heldReservations: Array<{ release(): void }> = [];
+		const missingRoute = {
+			service: "example.capacity-before-route.v1",
+			member: "missing$",
+			kind: "stream-property" as const,
+		};
+		for (let index = 0; index < 256; index += 1) {
+			const held = sessionHost.reserveIncomingStream(missingRoute);
+			expect(held?.kind).toBe("unknown");
+			if (held !== undefined) {
+				heldReservations.push(held.reservation);
+			}
+		}
+
+		expect(sessionHost.reserveIncomingStream(missingRoute)).toBeUndefined();
+		for (const heldReservation of heldReservations) {
+			heldReservation.release();
+		}
+		const reopened = sessionHost.reserveIncomingStream(missingRoute);
+		expect(reopened?.kind).toBe("unknown");
+		reopened?.reservation.release();
+		await connector.close();
+	});
+
+	it("RPC-STREAM-003 RPC-STREAM-014 keeps Source ownership through onReleased", async () => {
+		const session: IRpcProtocolSession = {
+			reserveInvocation: () => undefined,
+			reserveStream: () => undefined,
+			forceClose() {},
+		};
+		const { connector, host, sessionHost } =
+			await connectProtocolSession(session);
+		const descriptor = createRemoteServiceDescriptor(IMixedExposureService, {
+			wireName: "example.source-release-receipt.v1",
+			members: { history: { kind: "stream-method" } },
+		});
+		connector.peer.expose(descriptor, {
+			history: () => new Observable(() => undefined),
+		} as never);
+		const source = sessionHost.reserveIncomingStream({
+			service: "example.source-release-receipt.v1",
+			member: "history",
+			kind: "stream-method",
+			args: host.normalizeApplicationArguments(["room"]),
+		});
+		let incoming: IRpcProtocolIncomingStream | undefined;
+		if (source?.kind === "source") {
+			incoming = source.reservation.commit({
+				reserveEmission: () => undefined,
+				finish() {},
+			});
+		}
+		await Promise.resolve();
+		await Promise.resolve();
+		const heldReservations: Array<{ release(): void }> = [];
+		const missingRoute = {
+			service: "example.source-release-capacity.v1",
+			member: "missing$",
+			kind: "stream-property" as const,
+		};
+		for (let index = 0; index < 255; index += 1) {
+			const held = sessionHost.reserveIncomingStream(missingRoute);
+			expect(held?.kind).toBe("unknown");
+			if (held !== undefined) {
+				heldReservations.push(held.reservation);
+			}
+		}
+		let capacityHeldThroughReceipt = false;
+		incoming?.finish({ type: "canceled" }, () => {
+			capacityHeldThroughReceipt =
+				sessionHost.reserveIncomingStream(missingRoute) === undefined;
+		});
+
+		expect(capacityHeldThroughReceipt).toBe(true);
+		const reopened = sessionHost.reserveIncomingStream(missingRoute);
+		expect(reopened?.kind).toBe("unknown");
+		reopened?.reservation.release();
+		for (const heldReservation of heldReservations) {
+			heldReservation.release();
+		}
 		await connector.close();
 	});
 
@@ -2340,6 +2574,15 @@ describe("exposure registries and remote facades", () => {
 				lift() {},
 				subscribe() {
 					throw new Error("raw subscribe failure");
+				},
+			}),
+		],
+		[
+			"invalid returned subscription",
+			() => ({
+				lift() {},
+				subscribe() {
+					return {};
 				},
 			}),
 		],

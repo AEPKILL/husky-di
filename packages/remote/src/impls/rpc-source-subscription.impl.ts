@@ -151,7 +151,6 @@ export class RpcSourceSubscriptionImpl implements IRpcProtocolIncomingStream {
 		this.#argumentsSnapshot = undefined;
 		this.#removeQueuedJob?.();
 		this.#removeQueuedJob = undefined;
-		this.#attemptTeardown(this.#sourceSubscriber);
 		if (!this.#starting) {
 			this.#teardownAndRelease();
 		}
