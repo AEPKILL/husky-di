@@ -20,6 +20,7 @@ export enum CodeStandardRuleIdEnum {
 	PlacementSourceDirectorySuffix = "placement/source-directory-suffix",
 	ExportsNoDefaultExport = "exports/no-default-export",
 	EntrypointExportOnly = "entrypoint/export-only",
+	ImportsImplementationOnlyInFactories = "imports/implementation-only-in-factories",
 	ImportsNoInternalPackagePath = "imports/no-internal-package-path",
 	CommentsBiomeIgnoreReason = "comments/biome-ignore-reason",
 	TypeFileExportsOnly = "type-file/exports-only",
