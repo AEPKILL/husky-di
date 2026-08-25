@@ -52,10 +52,7 @@ function createPolicy(
 	return {
 		maxSessions: 8,
 		maxHandshakes: 1,
-		maxApplicationWorkPerSession: 256,
-		maxApplicationWorkTotal: 256,
-		maxActiveStreamsPerSession: 16,
-		maxActiveStreamsTotal: 16,
+		maxPendingInvocationsPerSession: 256,
 		maxRetainedBytesPerSession: 32 * 1024 * 1024,
 		maxRetainedBytesTotal: 64 * 1024 * 1024,
 		maxHandlersPerSession: 16,
@@ -96,7 +93,6 @@ function createAcceptorRuntime(
 			admittedSessions.push(1);
 			return {
 				reserveIncomingCall: () => undefined,
-				reserveIncomingStream: () => undefined,
 				transition: onTransition,
 				fault: (reason) => ownerFaults.push(reason),
 			};
@@ -131,7 +127,6 @@ function createConnectorRuntime(policy: IRpcProtocolRuntimePolicy): {
 			attachedSessions.push(1);
 			return {
 				reserveIncomingCall: () => undefined,
-				reserveIncomingStream: () => undefined,
 				transition() {},
 				fault: (reason) => ownerFaults.push(reason),
 			};

@@ -7,22 +7,12 @@
  * @created 2026-08-19 00:00:00
  */
 
-import { spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
-import { fileURLToPath } from "node:url";
-import { queryObjects } from "node:v8";
-
 import { CodedException, createServiceIdentifier } from "@husky-di/core";
-import { config, Observable, of, Subject, Subscriber } from "rxjs";
+import { Observable, Subject } from "rxjs";
 import { describe, expect, it, vi } from "vitest";
 
 import packageManifest from "../package.json";
-import {
-	type RpcConformanceCaseResult,
-	RpcConformanceStatusEnum,
-	runRpcProtocolConformance,
-} from "../src/conformance";
+import { RpcConformanceStatusEnum } from "../src/conformance";
 import {
 	createRemoteServiceDescriptor,
 	createRpcAcceptor,
@@ -32,6 +22,7 @@ import {
 	type IRpcConnectorAdapter,
 	type IRpcProtocol,
 	RpcAcceptorListenerStopReasonEnum,
+	RpcCallDirectionEnum,
 	RpcCallStatusEnum,
 	RpcCloseOutcomeEnum,
 	RpcCloseReasonEnum,
@@ -40,26 +31,18 @@ import {
 	RpcConnectorReconnectionStopReasonEnum,
 	type RpcConnectorRuntimePolicyOptions,
 	type RpcEvent,
-	RpcEventDirectionEnum,
 	RpcEventTypeEnum,
 	RpcException,
 	RpcExceptionCodeEnum,
 	RpcStateStatusEnum,
-	RpcStreamStatusEnum,
 } from "../src/index";
 import type {
-	IRpcApplicationSnapshot,
 	IRpcConnection,
 	IRpcProtocolAcceptorHost,
 	IRpcProtocolConnectorHost,
-	IRpcProtocolIncomingStream,
 	IRpcProtocolInvocationSink,
 	IRpcProtocolSession,
 	IRpcProtocolSessionHost,
-	IRpcProtocolSourceSink,
-	IRpcProtocolStreamReservation,
-	IRpcProtocolSubscriberSink,
-	RpcIncomingStreamTerminal,
 } from "../src/protocol";
 import {
 	createRpcProtocol,
@@ -67,18 +50,11 @@ import {
 	RpcIncomingCallKindEnum,
 	RpcProtocolSessionTransitionTypeEnum,
 } from "../src/protocol";
-import { createMemoryProtocolFixture } from "./conformance/test.utils";
 import { createRpcTestNetwork } from "./protocol/test.utils";
 
 interface CalculatorService {
 	add(left: number, right: number): number;
 	cancel(value: string, signal: AbortSignal): Promise<string>;
-}
-
-interface MixedExposureService extends CalculatorService {
-	history(room: string): Observable<string>;
-	readonly events$: Observable<string>;
-	readonly lazy$: Observable<string>;
 }
 
 interface CaseSensitiveService {
@@ -95,9 +71,6 @@ interface RetainedReplayService {
 
 const ICalculatorService =
 	createServiceIdentifier<CalculatorService>("ICalculatorService");
-const IMixedExposureService = createServiceIdentifier<MixedExposureService>(
-	"IMixedExposureService",
-);
 const ICaseSensitiveService = createServiceIdentifier<CaseSensitiveService>(
 	"ICaseSensitiveService",
 );
@@ -114,31 +87,6 @@ const sessionCapacityPolicy = {
 	bindingAttemptTimeoutMs: 100,
 	recoveryGraceMs: 1_000,
 };
-
-let streamingConformanceReportTask:
-	| Promise<readonly RpcConformanceCaseResult[]>
-	| undefined;
-
-function getStreamingConformanceReport(): Promise<
-	readonly RpcConformanceCaseResult[]
-> {
-	streamingConformanceReportTask ??= (async () => {
-		const reports: RpcConformanceCaseResult[] = [];
-		await runRpcProtocolConformance(createMemoryProtocolFixture(), {
-			report: (result) => reports.push(result),
-		});
-		return reports;
-	})();
-	return streamingConformanceReportTask;
-}
-
-async function expectStreamingConformanceCase(caseId: string): Promise<void> {
-	const reports = await getStreamingConformanceReport();
-	expect(reports.find((result) => result.caseId === caseId)).toEqual({
-		caseId,
-		status: RpcConformanceStatusEnum.passed,
-	});
-}
 
 function createProtocolHarness(): {
 	readonly protocol: IRpcProtocol;
@@ -267,191 +215,12 @@ async function connectProtocolSession(
 	return { connector, host: connectorHost, sessionHost, events };
 }
 
-function createW1SemanticStreamHarness(): {
-	readonly session: IRpcProtocolSession;
-	attachIncomingHost(host: IRpcProtocolSessionHost): void;
-	flush(): void;
-	setOrdinaryCapacityAvailable(available: boolean): void;
-	readonly admittedItemCount: number;
-	readonly creditThrough: number;
-	readonly forceCloseCount: number;
-	readonly released: boolean;
-	readonly terminal: RpcIncomingStreamTerminal | undefined;
-} {
-	let incomingHost: IRpcProtocolSessionHost | undefined;
-	let subscriberSink: IRpcProtocolSubscriberSink | undefined;
-	let incomingStream: IRpcProtocolIncomingStream | undefined;
-	let admittedItemCount = 0;
-	let consumedCreditCount = 0;
-	let creditThrough = 1;
-	let forceCloseCount = 0;
-	let terminal: RpcIncomingStreamTerminal | undefined;
-	let terminalProjected = false;
-	let released = false;
-	let ordinaryCapacityAvailable = true;
-	const pendingItems: IRpcApplicationSnapshot[] = [];
-
-	const projectTerminal = (): void => {
-		const selectedTerminal = terminal;
-		const selectedSink = subscriberSink;
-		// The protected terminal follows every previously admitted item.
-		const terminalProjectionIsBlocked =
-			selectedTerminal === undefined ||
-			terminalProjected ||
-			pendingItems.length > 0 ||
-			selectedSink === undefined;
-		if (terminalProjectionIsBlocked) {
-			return;
-		}
-		terminalProjected = true;
-		if (selectedTerminal.type === "session-terminated") {
-			selectedSink
-				.reserveTerminal({
-					type: "failed",
-					code: RpcExceptionCodeEnum.outcomeUnknown,
-				})
-				.commit();
-			return;
-		}
-		selectedSink.reserveTerminal(selectedTerminal).commit();
-	};
-	const selectTerminal = (outcome: RpcIncomingStreamTerminal): void => {
-		if (terminal !== undefined) {
-			return;
-		}
-		terminal = outcome;
-		incomingStream?.finish(outcome, () => {
-			released = true;
-		});
-		projectTerminal();
-	};
-	const sourceSink: IRpcProtocolSourceSink = {
-		reserveEmission() {
-			if (terminal !== undefined) {
-				return undefined;
-			}
-			if (consumedCreditCount >= creditThrough) {
-				selectTerminal({
-					type: "failed",
-					code: RpcExceptionCodeEnum.overflow,
-				});
-				return undefined;
-			}
-			consumedCreditCount += 1;
-			if (!ordinaryCapacityAvailable) {
-				selectTerminal({
-					type: "failed",
-					code: RpcExceptionCodeEnum.overflow,
-				});
-				return undefined;
-			}
-			let open = true;
-			return {
-				commit(snapshot) {
-					if (!open || terminal !== undefined) {
-						return;
-					}
-					open = false;
-					admittedItemCount += 1;
-					pendingItems.push(snapshot);
-				},
-				fail() {
-					if (!open || terminal !== undefined) {
-						return;
-					}
-					open = false;
-					selectTerminal({
-						type: "failed",
-						code: RpcExceptionCodeEnum.handlerFailed,
-					});
-				},
-			};
-		},
-		finish(outcome) {
-			selectTerminal(outcome);
-		},
-	};
-	const session: IRpcProtocolSession = {
-		reserveInvocation: () => undefined,
-		reserveStream(nextRequest) {
-			return {
-				commit(nextSubscriberSink) {
-					subscriberSink = nextSubscriberSink;
-					return {
-						start() {
-							const reservation =
-								incomingHost?.reserveIncomingStream(nextRequest);
-							if (reservation?.kind !== "source") {
-								nextSubscriberSink
-									.reserveTerminal({
-										type: "failed",
-										code: RpcExceptionCodeEnum.unavailable,
-									})
-									.commit();
-								return;
-							}
-							incomingStream = reservation.reservation.commit(sourceSink);
-						},
-						cancel() {
-							selectTerminal({ type: "canceled" });
-						},
-					};
-				},
-				release() {},
-			};
-		},
-		forceClose() {
-			forceCloseCount += 1;
-			selectTerminal({ type: "session-terminated" });
-		},
-	};
-
-	return {
-		session,
-		attachIncomingHost(host) {
-			incomingHost = host;
-		},
-		flush() {
-			while (pendingItems.length > 0) {
-				const snapshot = pendingItems.shift();
-				if (snapshot === undefined || subscriberSink === undefined) {
-					break;
-				}
-				const effect = subscriberSink.reserveItem(snapshot).commit();
-				if (effect === "rearm" && terminal === undefined) {
-					creditThrough += 1;
-				}
-			}
-			projectTerminal();
-		},
-		setOrdinaryCapacityAvailable(available) {
-			ordinaryCapacityAvailable = available;
-		},
-		get admittedItemCount() {
-			return admittedItemCount;
-		},
-		get creditThrough() {
-			return creditThrough;
-		},
-		get forceCloseCount() {
-			return forceCloseCount;
-		},
-		get released() {
-			return released;
-		},
-		get terminal() {
-			return terminal;
-		},
-	};
-}
-
 function createReconnectionProtocolHarness(): {
 	readonly protocol: IRpcProtocol;
 	readonly sessionHost: () => IRpcProtocolSessionHost;
 } {
 	const session: IRpcProtocolSession = {
 		reserveInvocation: () => undefined,
-		reserveStream: () => undefined,
 		forceClose() {},
 	};
 	let retainedSessionHost: IRpcProtocolSessionHost | undefined;
@@ -514,212 +283,61 @@ function createSuccessfulConnectorAdapter(): IRpcConnectorAdapter {
 }
 
 describe("Remote Service Descriptor", () => {
-	it("RPC-DESC-001 RPC-DESC-006 creates an opaque mixed-member Descriptor", () => {
-		const descriptor = createRemoteServiceDescriptor(IMixedExposureService, {
-			wireName: "example.mixed.v1",
-			members: {
-				add: { kind: "unary" },
-				cancel: { kind: "unary", cancelable: true },
-				history: { kind: "stream-method" },
-				events$: { kind: "stream-property" },
-				lazy$: { kind: "stream-property" },
+	it("RPC-DESC-001 creates an opaque Descriptor from local and wire identities", () => {
+		const descriptor = createRemoteServiceDescriptor(ICalculatorService, {
+			wireName: "example.calculator.v1",
+			methods: {
+				add: true,
+				cancel: { cancelable: true },
 			},
 		});
 
 		expect(descriptor).toBeTypeOf("object");
-		expect(Object.getPrototypeOf(descriptor)).toBeNull();
-		expect(Object.isFrozen(descriptor)).toBe(true);
 		expect("serviceIdentifier" in descriptor).toBe(false);
 		expect("wireName" in descriptor).toBe(false);
-		expect("members" in descriptor).toBe(false);
+		expect("methods" in descriptor).toBe(false);
 	});
 
 	it.each([
+		["an empty wire name", { wireName: "", methods: { add: true } }],
+		["an empty allowlist", { wireName: "example.calculator.v1", methods: {} }],
 		[
-			"an empty wire name",
-			{ wireName: "", members: { add: { kind: "unary" } } },
-		],
-		["an empty allowlist", { wireName: "example.calculator.v1", members: {} }],
-		[
-			"the retired methods option",
-			{ wireName: "example.calculator.v1", methods: { add: true } },
+			"an empty method name",
+			{ wireName: "example.calculator.v1", methods: { "": true } },
 		],
 		[
-			"an empty member name",
+			"the reserved then method",
 			{
 				wireName: "example.calculator.v1",
-				members: { "": { kind: "unary" } },
-			},
-		],
-		[
-			"the reserved then member",
-			{
-				wireName: "example.calculator.v1",
-				members: {
+				methods: {
 					// biome-ignore lint/suspicious/noThenProperty: verifies the reserved method rejection.
-					then: { kind: "unary" },
+					then: true,
 				},
 			},
 		],
 		[
-			"a boolean shorthand",
-			{ wireName: "example.calculator.v1", members: { add: true } },
+			"an invalid method definition",
+			{ wireName: "example.calculator.v1", methods: { add: false } },
 		],
-		[
-			"an extra definition field",
-			{
-				wireName: "example.calculator.v1",
-				members: { add: { kind: "unary", extra: true } },
-			},
-		],
-		[
-			"cancelable false",
-			{
-				wireName: "example.calculator.v1",
-				members: { cancel: { kind: "unary", cancelable: false } },
-			},
-		],
-		[
-			"an unknown interaction kind",
-			{
-				wireName: "example.calculator.v1",
-				members: { add: { kind: "batch" } },
-			},
-		],
-		[
-			"an extra stream definition field",
-			{
-				wireName: "example.calculator.v1",
-				members: { events$: { kind: "stream-property", extra: true } },
-			},
-		],
-		[
-			"a non-dollar stream property",
-			{
-				wireName: "example.calculator.v1",
-				members: { events: { kind: "stream-property" } },
-			},
-		],
-		[
-			"an extra outer option",
-			{
-				wireName: "example.calculator.v1",
-				members: { add: { kind: "unary" } },
-				extra: true,
-			},
-		],
-	])("RPC-DESC-006 RPC-DESC-009 rejects %s", (_label, options) => {
-		expect(() =>
-			createRemoteServiceDescriptor(ICalculatorService, options as never),
-		).toThrow(TypeError);
-	});
-
-	it("RPC-DESC-006 rejects accessors without invoking them", () => {
-		let getterCalls = 0;
-		const accessorOptions = Object.defineProperty(
-			{ members: { add: { kind: "unary" } } },
-			"wireName",
-			{
-				enumerable: true,
-				get() {
-					getterCalls += 1;
-					return "example.accessor.v1";
-				},
-			},
-		);
-
+	])("RPC-DESC-002 RPC-DESC-003 rejects %s", (_label, options) => {
 		expect(() =>
 			createRemoteServiceDescriptor(
 				ICalculatorService,
-				accessorOptions as never,
+				options as unknown as {
+					readonly wireName: string;
+					readonly methods: { readonly add: true };
+				},
 			),
 		).toThrow(TypeError);
-		expect(getterCalls).toBe(0);
 	});
 
-	it("RPC-DESC-006 rejects member and definition accessors or symbol fields without invoking application code", () => {
-		let getterCalls = 0;
-		const accessorMembers = Object.defineProperty({}, "add", {
-			enumerable: true,
-			get() {
-				getterCalls += 1;
-				return { kind: "unary" };
-			},
-		});
-		const accessorDefinition = Object.defineProperty({}, "kind", {
-			enumerable: true,
-			get() {
-				getterCalls += 1;
-				return "unary";
-			},
-		});
-		const symbol = Symbol("extra");
-		const symbolMembers = {
-			add: { kind: "unary" },
-			[symbol]: { kind: "unary" },
-		};
-		const symbolDefinition = {
-			kind: "unary",
-			[symbol]: true,
-		};
-
-		for (const members of [
-			accessorMembers,
-			{ add: accessorDefinition },
-			symbolMembers,
-			{ add: symbolDefinition },
-		]) {
-			expect(() =>
-				createRemoteServiceDescriptor(ICalculatorService, {
-					wireName: "example.invalid-members.v1",
-					members,
-				} as never),
-			).toThrow(TypeError);
-		}
-		expect(getterCalls).toBe(0);
-	});
-
-	it("RPC-DESC-009 compares member names exactly", () => {
+	it("RPC-DESC-003 compares the reserved method name exactly", () => {
 		expect(() =>
 			createRemoteServiceDescriptor(ICaseSensitiveService, {
 				wireName: "example.case-sensitive.v1",
-				members: { Then: { kind: "unary" } },
+				methods: { Then: true },
 			}),
 		).not.toThrow();
-	});
-
-	it("RPC-DESC-001 RPC-DESC-006 retains a detached normalized snapshot", () => {
-		const members = { add: { kind: "unary" as const } };
-		const options = {
-			wireName: "example.snapshot.v1",
-			members,
-		};
-		const descriptor = createRemoteServiceDescriptor(
-			ICalculatorService,
-			options,
-		);
-		options.wireName = "example.replacement.v1";
-		(members.add as { kind: string }).kind = "stream-property";
-
-		const connector = createRpcConnector({
-			protocol: createProtocolHarness().protocol,
-		});
-		const implementation = {
-			add: (left: number, right: number) => left + right,
-		};
-		const cleanup = connector.peer.expose(descriptor, implementation);
-		const originalNameDescriptor = createRemoteServiceDescriptor(
-			ICalculatorService,
-			{
-				wireName: "example.snapshot.v1",
-				members: { add: { kind: "unary" } },
-			},
-		);
-
-		expect(() =>
-			connector.peer.expose(originalNameDescriptor, implementation),
-		).toThrow(TypeError);
-		cleanup();
 	});
 });
 
@@ -753,32 +371,6 @@ describe("cold Topology Owner factories", () => {
 				"LICENSE",
 			],
 		});
-	});
-
-	it("RPC-DOC-001 RPC-SPI-021 documents the final mixed member contract", () => {
-		const specification = readFileSync(
-			fileURLToPath(new URL("../docs/SPECIFICATION.md", import.meta.url)),
-			"utf8",
-		);
-		expect(specification).toContain("**Status:** Normative");
-		expect(specification).toContain(
-			"bidirectional mixed unary and Observable\nstream RPC Framework",
-		);
-		expect(specification).toContain("readonly member: string;");
-		expect(specification).not.toContain("readonly method: string;");
-	});
-
-	it("RPC-RELEASE-023 RPC-RELEASE-024 RPC-RELEASE-025 binds local workflow input without claiming publication", () => {
-		const specification = readFileSync(
-			fileURLToPath(new URL("../docs/SPECIFICATION.md", import.meta.url)),
-			"utf8",
-		);
-		expect(specification).toContain("workflow publish-input path to A");
-		expect(specification).toContain("`published: false`");
-		expect(specification).toContain("publication did not occur");
-		expect(specification).not.toContain(
-			"downloaded again from the configured registry",
-		);
 	});
 
 	it("RPC-API-001 RPC-SPI-001 constructs only the selected custom Protocol role", () => {
@@ -854,7 +446,7 @@ describe("cold Topology Owner factories", () => {
 		expect(Object.isFrozen(acceptor.peers)).toBe(true);
 	});
 
-	it("RPC-POLICY-005 RPC-POLICY-006 RPC-POLICY-007 RPC-POLICY-008 passes the exact frozen role defaults to the Protocol", () => {
+	it("RPC-POLICY-001 passes exact frozen role defaults to the Protocol", () => {
 		const connectorHarness = createProtocolHarness();
 		createRpcConnector({ protocol: connectorHarness.protocol });
 		const acceptorHarness = createProtocolHarness();
@@ -863,10 +455,7 @@ describe("cold Topology Owner factories", () => {
 		expect(connectorHarness.connectorHosts[0]?.policy).toEqual({
 			maxSessions: 1,
 			maxHandshakes: 1,
-			maxApplicationWorkPerSession: 256,
-			maxApplicationWorkTotal: 256,
-			maxActiveStreamsPerSession: 16,
-			maxActiveStreamsTotal: 16,
+			maxPendingInvocationsPerSession: 256,
 			maxRetainedBytesPerSession: 33_554_432,
 			maxRetainedBytesTotal: 33_554_432,
 			maxHandlersPerSession: 16,
@@ -883,8 +472,6 @@ describe("cold Topology Owner factories", () => {
 			...connectorHarness.connectorHosts[0]?.policy,
 			maxSessions: 64,
 			maxHandshakes: 16,
-			maxApplicationWorkTotal: 1_024,
-			maxActiveStreamsTotal: 64,
 			maxRetainedBytesTotal: 67_108_864,
 			maxHandlersTotal: 64,
 		});
@@ -918,11 +505,10 @@ describe("cold Topology Owner factories", () => {
 		replacement?.release();
 	});
 
-	it("RPC-API-001 RPC-POLICY-005 RPC-POLICY-006 RPC-POLICY-007 snapshots overrides and derives Connector totals", () => {
+	it("RPC-API-001 RPC-POLICY-001 snapshots overrides and derives Connector totals", () => {
 		const harness = createProtocolHarness();
 		const runtimePolicy = {
-			maxApplicationWorkPerSession: 8,
-			maxActiveStreamsPerSession: 4,
+			maxPendingInvocationsPerSession: 8,
 			maxRetainedBytesPerSession: 4 * 1024 * 1024,
 			maxHandlersPerSession: 2,
 			ackDelayMs: 25,
@@ -941,10 +527,7 @@ describe("cold Topology Owner factories", () => {
 		expect(harness.connectorHosts[0]?.policy).toMatchObject({
 			maxSessions: 1,
 			maxHandshakes: 1,
-			maxApplicationWorkPerSession: 8,
-			maxApplicationWorkTotal: 8,
-			maxActiveStreamsPerSession: 4,
-			maxActiveStreamsTotal: 4,
+			maxPendingInvocationsPerSession: 8,
 			maxRetainedBytesPerSession: 4 * 1024 * 1024,
 			maxRetainedBytesTotal: 4 * 1024 * 1024,
 			maxHandlersPerSession: 2,
@@ -967,7 +550,7 @@ describe("cold Topology Owner factories", () => {
 			createRpcConnector({
 				protocol: harness.protocol,
 				runtimePolicy: {
-					maxApplicationWorkPerSession: value,
+					maxPendingInvocationsPerSession: value,
 				} as never,
 			}),
 		).toThrow(TypeError);
@@ -1050,14 +633,11 @@ describe("cold Topology Owner factories", () => {
 		}
 	});
 
-	it("RPC-API-001 RPC-POLICY-008 RPC-POLICY-009 rejects closed-schema and cross-field violations before Protocol construction", () => {
+	it("RPC-API-001 RPC-POLICY-003 rejects closed-schema and cross-field violations before Protocol construction", () => {
 		const cases: readonly unknown[] = [
 			{ unknown: true },
 			{ runtimePolicy: { unknown: 1 } },
 			{ runtimePolicy: { maxSessions: 2 } },
-			{ runtimePolicy: { maxApplicationWorkTotal: 2 } },
-			{ runtimePolicy: { maxActiveStreamsTotal: 2 } },
-			{ runtimePolicy: { maxPendingInvocationsPerSession: 2 } },
 			{
 				runtimePolicy: {
 					activityProbeIntervalMs: 100,
@@ -1080,7 +660,7 @@ describe("cold Topology Owner factories", () => {
 			{ runtimePolicy: { maxRetainedBytesPerSession: 4 * 1024 * 1024 - 1 } },
 			{
 				runtimePolicy: {
-					maxApplicationWorkPerSession: 257,
+					maxPendingInvocationsPerSession: Number.MAX_SAFE_INTEGER,
 				},
 			},
 		];
@@ -1162,43 +742,6 @@ describe("cold Topology Owner factories", () => {
 		expect(invalidHarness.acceptorHosts).toHaveLength(0);
 	});
 
-	it("RPC-POLICY-009 validates Application Work and Active Stream equality boundaries without repair", () => {
-		const validHarness = createProtocolHarness();
-		createRpcAcceptor({
-			protocol: validHarness.protocol,
-			runtimePolicy: {
-				maxApplicationWorkPerSession: 8,
-				maxApplicationWorkTotal: 8,
-				maxActiveStreamsPerSession: 8,
-				maxActiveStreamsTotal: 8,
-			},
-		});
-		expect(validHarness.acceptorHosts).toHaveLength(1);
-
-		for (const runtimePolicy of [
-			{ maxApplicationWorkPerSession: 8, maxApplicationWorkTotal: 7 },
-			{ maxApplicationWorkPerSession: 8, maxActiveStreamsPerSession: 9 },
-			{
-				maxApplicationWorkPerSession: 8,
-				maxApplicationWorkTotal: 16,
-				maxActiveStreamsPerSession: 8,
-				maxActiveStreamsTotal: 7,
-			},
-			{
-				maxApplicationWorkPerSession: 8,
-				maxApplicationWorkTotal: 16,
-				maxActiveStreamsPerSession: 8,
-				maxActiveStreamsTotal: 17,
-			},
-		]) {
-			const harness = createProtocolHarness();
-			expect(() =>
-				createRpcAcceptor({ protocol: harness.protocol, runtimePolicy }),
-			).toThrow(TypeError);
-			expect(harness.acceptorHosts).toHaveLength(0);
-		}
-	});
-
 	it("RPC-API-001 wraps custom Protocol construction failures", () => {
 		const cause = new Error("construction failed");
 		const throwingProtocol: IRpcProtocol = {
@@ -1228,7 +771,7 @@ describe("Default Protocol aggregate retained capacity", () => {
 		const mebibyte = 1024 * 1024;
 		const descriptor = createRemoteServiceDescriptor(IRetainedReplayService, {
 			wireName: "example.retained-replay.v1",
-			members: { run: { kind: "unary" } },
+			methods: { run: true },
 		});
 		const network = createRpcTestNetwork();
 		const acceptor = createRpcAcceptor({
@@ -1299,7 +842,7 @@ describe("Default Protocol aggregate retained capacity", () => {
 		const mebibyte = 1024 * 1024;
 		const descriptor = createRemoteServiceDescriptor(IRetainedReplayService, {
 			wireName: "example.session-retained.v1",
-			members: { run: { kind: "unary" } },
+			methods: { run: true },
 		});
 		const acceptedCalls: string[] = [];
 		const network = createRpcTestNetwork();
@@ -1354,14 +897,12 @@ describe("Default Protocol aggregate retained capacity", () => {
 				const message = record.value.message as { readonly kind?: unknown };
 				if (
 					record.direction === "connector" &&
-					record.value.kind === "message"
+					record.value.kind === "message" &&
+					message.kind === "call"
 				) {
 					return {
 						message: new TextEncoder().encode(
-							JSON.stringify({
-								...record.value,
-								ackThrough: message.kind === "error" ? 1 : 0,
-							}),
+							JSON.stringify({ ...record.value, ackThrough: 0 }),
 						),
 					};
 				}
@@ -1883,14 +1424,14 @@ describe("Application Value normalization", () => {
 });
 
 describe("exposure registries and remote facades", () => {
-	it("RPC-DESC-005 RPC-DESC-009 installs exposures atomically and cleans them up idempotently", () => {
+	it("RPC-DESC-004 RPC-DESC-005 installs exposures atomically and cleans them up idempotently", () => {
 		const { protocol } = createProtocolHarness();
 		const connector = createRpcConnector({ protocol });
 		const descriptor = createRemoteServiceDescriptor(ICalculatorService, {
 			wireName: "example.calculator.v1",
-			members: {
-				add: { kind: "unary" },
-				cancel: { kind: "unary", cancelable: true },
+			methods: {
+				add: true,
+				cancel: { cancelable: true },
 			},
 		});
 		const invalidImplementation = {
@@ -1922,2589 +1463,38 @@ describe("exposure registries and remote facades", () => {
 		).not.toThrow();
 	});
 
-	it("RPC-DESC-008 captures mixed method routes and data-property sources without reading getters", () => {
-		const { protocol } = createProtocolHarness();
-		const connector = createRpcConnector({ protocol });
-		const descriptor = createRemoteServiceDescriptor(IMixedExposureService, {
-			wireName: "example.mixed-exposure.v1",
-			members: {
-				add: { kind: "unary" },
-				cancel: { kind: "unary", cancelable: true },
-				history: { kind: "stream-method" },
-				events$: { kind: "stream-property" },
-				lazy$: { kind: "stream-property" },
-			},
-		});
-		const source = new Subject<string>();
-		let getterCalls = 0;
-		const implementation = {
-			add: (left: number, right: number) => left + right,
-			async cancel(value: string) {
-				return value;
-			},
-			history: (room: string) => of(room),
-			events$: source,
-		};
-		Object.defineProperty(implementation, "lazy$", {
-			enumerable: true,
-			get() {
-				getterCalls += 1;
-				return of("lazy");
-			},
-		});
-
-		const cleanup = connector.peer.expose(
-			descriptor,
-			implementation as unknown as MixedExposureService,
-		);
-		expect(getterCalls).toBe(0);
-		implementation.history = () => of("replacement");
-		implementation.events$ = {} as Subject<string>;
-		expect(cleanup()).toBeUndefined();
-		expect(cleanup()).toBeUndefined();
-	});
-
-	it("RPC-DESC-008 rejects invalid mixed routes before installing any route", () => {
-		const { protocol } = createProtocolHarness();
-		const connector = createRpcConnector({ protocol });
-		const descriptor = createRemoteServiceDescriptor(IMixedExposureService, {
-			wireName: "example.invalid-mixed-exposure.v1",
-			members: {
-				history: { kind: "stream-method" },
-				events$: { kind: "stream-property" },
-			},
-		});
-		const validImplementation = {
-			history: () => of("valid"),
-			events$: of("valid"),
-		};
-		const invalidImplementation = {
-			history: () => of("invalid"),
-			events$: {},
-		};
-
-		expect(() =>
-			connector.peer.expose(descriptor, invalidImplementation as never),
-		).toThrow(TypeError);
-		expect(() =>
-			connector.peer.expose(descriptor, validImplementation as never),
-		).not.toThrow();
-	});
-
-	it("RPC-DESC-008 rejects method accessors and stream-property setters without invoking getters", () => {
-		const { protocol } = createProtocolHarness();
-		const connector = createRpcConnector({ protocol });
-		const descriptor = createRemoteServiceDescriptor(IMixedExposureService, {
-			wireName: "example.invalid-accessor-exposure.v1",
-			members: {
-				history: { kind: "stream-method" },
-				events$: { kind: "stream-property" },
-			},
-		});
-		let getterCalls = 0;
-		const methodAccessor = { events$: of("event") };
-		Object.defineProperty(methodAccessor, "history", {
-			enumerable: true,
-			get() {
-				getterCalls += 1;
-				return () => of("history");
-			},
-		});
-		const propertySetter = { history: () => of("history") };
-		Object.defineProperty(propertySetter, "events$", {
-			enumerable: true,
-			get() {
-				getterCalls += 1;
-				return of("event");
-			},
-			set(_value: Observable<string>) {},
-		});
-
-		for (const implementation of [methodAccessor, propertySetter]) {
-			expect(() =>
-				connector.peer.expose(descriptor, implementation as never),
-			).toThrow(TypeError);
-		}
-		expect(getterCalls).toBe(0);
-	});
-
-	it("RPC-CALL-010 creates a frozen non-thenable single-peer facade", async () => {
+	it("RPC-CALL-001 creates frozen non-thenable single and group facades", async () => {
 		const connectorHarness = createProtocolHarness();
 		const connector = createRpcConnector({
 			protocol: connectorHarness.protocol,
 		});
-		const descriptor = createRemoteServiceDescriptor(IMixedExposureService, {
-			wireName: "example.mixed-facade.v1",
-			members: {
-				add: { kind: "unary" },
-				cancel: { kind: "unary", cancelable: true },
-				history: { kind: "stream-method" },
-				events$: { kind: "stream-property" },
-				lazy$: { kind: "stream-property" },
-			},
+		const acceptorHarness = createProtocolHarness();
+		const acceptor = createRpcAcceptor({ protocol: acceptorHarness.protocol });
+		const descriptor = createRemoteServiceDescriptor(ICalculatorService, {
+			wireName: "example.calculator.v1",
+			methods: { add: true },
 		});
 
 		const remote = connector.peer.resolve(descriptor);
-		expect(Object.getPrototypeOf(remote)).toBeNull();
-		expect(Object.isFrozen(remote)).toBe(true);
-		expect(Object.keys(remote)).toEqual([
-			"add",
-			"cancel",
-			"history",
-			"events$",
-			"lazy$",
-		]);
-		expect(remote.then).toBeUndefined();
-		expect(await Promise.resolve(remote)).toBe(remote);
-		expect(remote.add).toBe(remote.add);
-		expect(remote.cancel).toBe(remote.cancel);
-		expect(remote.history).toBe(remote.history);
-		expect(remote.events$).toBe(remote.events$);
-		expect(remote.lazy$).toBe(remote.lazy$);
-		expect(remote.history("first")).not.toBe(remote.history("first"));
-		expect(Reflect.get(remote.events$, "then")).toBeUndefined();
+		const group = acceptor.resolveAll(descriptor);
+		for (const facade of [remote, group]) {
+			expect(Object.getPrototypeOf(facade)).toBeNull();
+			expect(Object.isFrozen(facade)).toBe(true);
+			expect(Object.keys(facade)).toEqual(["add"]);
+			expect(facade.then).toBeUndefined();
+			expect(await Promise.resolve(facade)).toBe(facade);
+		}
 
-		const { add, history } = remote;
-		expect(history("destructured")).toBeInstanceOf(Observable);
+		const { add } = remote;
 		await expect(add(1, 2)).rejects.toMatchObject({ code: "unavailable" });
 	});
 
-	it("RPC-CALL-011 keeps facade creation reads and retention state-neutral", async () => {
-		let reservationCalls = 0;
-		const { connector } = await connectProtocolSession({
-			reserveInvocation() {
-				reservationCalls += 1;
-				return undefined;
-			},
-			reserveStream: () => undefined,
-			forceClose() {},
-		});
-		const descriptor = createRemoteServiceDescriptor(IMixedExposureService, {
-			wireName: "example.state-neutral-facade.v1",
-			members: {
-				add: { kind: "unary" },
-				history: { kind: "stream-method" },
-				events$: { kind: "stream-property" },
-			},
-		});
-		let argumentReads = 0;
-		const argument = Object.defineProperty({}, "room", {
-			enumerable: true,
-			get() {
-				argumentReads += 1;
-				return "room";
-			},
-		});
-
-		const remote = connector.peer.resolve(descriptor);
-		const history$ = remote.history(argument as unknown as string);
-		const events$ = remote.events$;
-		expect(await Promise.resolve(remote)).toBe(remote);
-		expect(argumentReads).toBe(0);
-		expect(reservationCalls).toBe(0);
-		expect(history$).toBeInstanceOf(Observable);
-		expect(events$).toBeInstanceOf(Observable);
-		expect(Object.getOwnPropertyDescriptor(remote, "events$")).toMatchObject({
-			value: events$,
-			enumerable: true,
-		});
-
-		await connector.close();
-		expect(() => connector.peer.resolve(descriptor)).not.toThrow();
-		expect(() => remote.history("after-close")).not.toThrow();
-		expect(() => remote.events$).not.toThrow();
-		expect(history$).toBeDefined();
-	});
-
-	it("RPC-STREAM-001 RPC-STREAM-002 creates an independent cold root for every subscription", async () => {
-		const requests: unknown[] = [];
-		const argumentSnapshots: unknown[] = [];
-		const sinks: IRpcProtocolSubscriberSink[] = [];
-		const session: IRpcProtocolSession = {
-			reserveInvocation: () => undefined,
-			reserveStream(request): IRpcProtocolStreamReservation {
-				requests.push(request);
-				if (request.kind === "stream-method") {
-					argumentSnapshots.push(request.args);
-				}
-				return {
-					commit(sink) {
-						sinks.push(sink);
-						return {
-							start() {
-								sink
-									.reserveItem({
-										value: `item-${sinks.length}`,
-										weight: 6,
-									} as never)
-									.commit();
-								sink.reserveTerminal({ type: "completed" }).commit();
-							},
-							cancel() {},
-						};
-					},
-					release() {},
-				};
-			},
-			forceClose() {},
-		};
-		const { connector } = await connectProtocolSession(session);
-		const descriptor = createRemoteServiceDescriptor(IMixedExposureService, {
-			wireName: "example.cold-stream.v1",
-			members: { history: { kind: "stream-method" } },
-		});
-		const remote = connector.peer.resolve(descriptor);
-		const history$ = remote.history("room");
-		const first: string[] = [];
-		const second: string[] = [];
-
-		expect(requests).toEqual([]);
-		history$.subscribe((value) => first.push(value));
-		history$.subscribe((value) => second.push(value));
-
-		expect(requests).toHaveLength(2);
-		expect(argumentSnapshots).toHaveLength(2);
-		expect(argumentSnapshots[0]).not.toBe(argumentSnapshots[1]);
-		expect(sinks).toHaveLength(2);
-		expect(first).toEqual(["item-1"]);
-		expect(second).toEqual(["item-2"]);
-		await connector.close();
-		let argumentReads = 0;
-		const rejectedArgument = Object.defineProperty({}, "room", {
-			enumerable: true,
-			get() {
-				argumentReads += 1;
-				return "rejected";
-			},
-		});
-		let rejectedError: unknown;
-		remote.history(rejectedArgument as never).subscribe({
-			error: (error) => {
-				rejectedError = error;
-			},
-		});
-		expect(argumentReads).toBe(0);
-		expect(requests).toHaveLength(2);
-		expect(rejectedError).toMatchObject({
-			code: RpcExceptionCodeEnum.unavailable,
-		});
-	});
-
-	it("RPC-EVENT-008 RPC-EVENT-009 RPC-EVENT-010 RPC-EVENT-011 RPC-EVENT-012 RPC-EVENT-017 publishes one payload-free outgoing pair", async () => {
-		const trace: string[] = [];
-		const session: IRpcProtocolSession = {
-			reserveInvocation: () => undefined,
-			reserveStream() {
-				return {
-					commit(sink) {
-						return {
-							start() {
-								sink
-									.reserveItem({ value: "private-item", weight: 14 } as never)
-									.commit();
-								sink.reserveTerminal({ type: "completed" }).commit();
-							},
-							cancel() {},
-						};
-					},
-					release() {},
-				};
-			},
-			forceClose() {},
-		};
-		const { connector, events } = await connectProtocolSession(session);
-		const descriptor = createRemoteServiceDescriptor(IMixedExposureService, {
-			wireName: "example.outgoing-telemetry.v1",
-			members: { history: { kind: "stream-method" } },
-		});
-		connector.event$.subscribe((event) => {
-			if (event.type === RpcEventTypeEnum.streamStarted) {
-				trace.push("stream-started");
-			}
-			if (event.type === RpcEventTypeEnum.streamFinished) {
-				trace.push("stream-finished");
-			}
-		});
-
-		connector.peer
-			.resolve(descriptor)
-			.history("room")
-			.subscribe({ complete: () => trace.push("observer-complete") });
-
-		const streamEvents = events.filter(
-			(event) =>
-				event.type === RpcEventTypeEnum.streamStarted ||
-				event.type === RpcEventTypeEnum.streamFinished,
-		);
-		expect(trace).toEqual([
-			"stream-started",
-			"stream-finished",
-			"observer-complete",
-		]);
-		expect(streamEvents).toHaveLength(2);
-		expect(streamEvents[0]).toMatchObject({
-			type: RpcEventTypeEnum.streamStarted,
-			direction: RpcEventDirectionEnum.outgoing,
-			service: "example.outgoing-telemetry.v1",
-			member: "history",
-		});
-		expect(streamEvents[1]).toMatchObject({
-			type: RpcEventTypeEnum.streamFinished,
-			observationId: Reflect.get(streamEvents[0] as object, "observationId"),
-			direction: RpcEventDirectionEnum.outgoing,
-			service: "example.outgoing-telemetry.v1",
-			member: "history",
-			outcome: RpcStreamStatusEnum.completed,
-			deliveredItemCount: 1,
-			durationMs: expect.any(Number),
-		});
-		expect(JSON.stringify(streamEvents)).not.toContain("private-item");
-		await connector.close();
-	});
-
-	it("RPC-EVENT-008 RPC-EVENT-009 emits no pair before Local Stream Subscription Admission", async () => {
-		let reservations = 0;
-		const session: IRpcProtocolSession = {
-			reserveInvocation: () => undefined,
-			reserveStream() {
-				reservations += 1;
-				return undefined;
-			},
-			forceClose() {},
-		};
-		const { connector, events } = await connectProtocolSession(session);
-		const descriptor = createRemoteServiceDescriptor(IMixedExposureService, {
-			wireName: "example.pre-admission-telemetry.v1",
-			members: { history: { kind: "stream-method" } },
-		});
-		const remote = connector.peer.resolve(descriptor);
-
-		remote.history(Symbol("invalid") as never).subscribe({ error() {} });
-		remote.history("capacity-rejected").subscribe({ error() {} });
-
-		expect(reservations).toBe(1);
-		expect(
-			events.filter(
-				(event) =>
-					event.type === RpcEventTypeEnum.streamStarted ||
-					event.type === RpcEventTypeEnum.streamFinished,
-			),
-		).toEqual([]);
-		await connector.close();
-	});
-
-	it("RPC-EVENT-009 emits one canceled outgoing finish and suppresses a late terminal", async () => {
-		let sink: IRpcProtocolSubscriberSink | undefined;
-		let cancels = 0;
-		const session: IRpcProtocolSession = {
-			reserveInvocation: () => undefined,
-			reserveStream() {
-				return {
-					commit(nextSink) {
-						sink = nextSink;
-						return {
-							start() {},
-							cancel() {
-								cancels += 1;
-							},
-						};
-					},
-					release() {},
-				};
-			},
-			forceClose() {},
-		};
-		const { connector, events } = await connectProtocolSession(session);
-		const descriptor = createRemoteServiceDescriptor(IMixedExposureService, {
-			wireName: "example.canceled-telemetry.v1",
-			members: { events$: { kind: "stream-property" } },
-		});
-		const subscription = connector.peer.resolve(descriptor).events$.subscribe();
-
-		subscription.unsubscribe();
-		subscription.unsubscribe();
-		sink?.reserveTerminal({ type: "completed" }).commit();
-
-		const finished = events.filter(
-			(event) => event.type === RpcEventTypeEnum.streamFinished,
-		);
-		expect(cancels).toBe(1);
-		expect(finished).toHaveLength(1);
-		expect(finished[0]).toMatchObject({
-			direction: RpcEventDirectionEnum.outgoing,
-			outcome: RpcStreamStatusEnum.canceled,
-			deliveredItemCount: 0,
-		});
-		await connector.close();
-	});
-
-	it("RPC-EVENT-009 RPC-EVENT-013 RPC-LIFE-003 preserves stream FIFO under reentrant force", async () => {
-		let sink: IRpcProtocolSubscriberSink | undefined;
-		const session: IRpcProtocolSession = {
-			reserveInvocation: () => undefined,
-			reserveStream() {
-				return {
-					commit(nextSink) {
-						sink = nextSink;
-						return { start() {}, cancel() {} };
-					},
-					release() {},
-				};
-			},
-			forceClose() {
-				sink
-					?.reserveTerminal({
-						type: "failed",
-						code: RpcExceptionCodeEnum.outcomeUnknown,
-					})
-					.commit();
-			},
-		};
-		const { connector } = await connectProtocolSession(session);
-		const descriptor = createRemoteServiceDescriptor(IMixedExposureService, {
-			wireName: "example.reentrant-stream-event.v1",
-			members: { events$: { kind: "stream-property" } },
-		});
-		connector.event$.subscribe((event) => {
-			if (event.type === RpcEventTypeEnum.streamStarted) {
-				sink
-					?.reserveTerminal({
-						type: "failed",
-						code: RpcExceptionCodeEnum.outcomeUnknown,
-					})
-					.commit();
-				void connector.close();
-			}
-		});
-		const trace: string[] = [];
-		connector.event$.subscribe((event) => trace.push(event.type));
-
-		connector.peer.resolve(descriptor).events$.subscribe({ error() {} });
-		await connector.close();
-
-		expect(trace).toEqual([
-			RpcEventTypeEnum.streamStarted,
-			RpcEventTypeEnum.streamFinished,
-			RpcEventTypeEnum.peerClosed,
-			RpcEventTypeEnum.ownerClosing,
-			RpcEventTypeEnum.topologyClosed,
-		]);
-	});
-
-	it("RPC-STREAM-010 RPC-RECOVERY-004 preserves one admitted outgoing stream through Recovery", async () => {
-		let committedSink: IRpcProtocolSubscriberSink | undefined;
-		let retainedItem:
-			| ReturnType<IRpcProtocolSubscriberSink["reserveItem"]>
-			| undefined;
-		let reservationCalls = 0;
-		let starts = 0;
-		const session: IRpcProtocolSession = {
-			reserveInvocation: () => undefined,
-			reserveStream() {
-				reservationCalls += 1;
-				return {
-					commit(sink) {
-						committedSink = sink;
-						return {
-							start() {
-								starts += 1;
-								retainedItem = sink.reserveItem({
-									value: "retained",
-									weight: 10,
-								} as never);
-								retainedItem.commit();
-							},
-							cancel() {},
-						};
-					},
-					release() {},
-				};
-			},
-			forceClose() {},
-		};
-		const { connector, sessionHost } = await connectProtocolSession(session);
-		const descriptor = createRemoteServiceDescriptor(IMixedExposureService, {
-			wireName: "example.recovery-continuity.v1",
-			members: { history: { kind: "stream-method" } },
-		});
-		const facade = connector.peer.resolve(descriptor);
-		const history = facade.history;
-		const history$ = facade.history("room");
-		const values: string[] = [];
-
-		history$.subscribe((value) => values.push(value));
-		const originalSink = committedSink;
-		sessionHost.transition({
-			type: RpcProtocolSessionTransitionTypeEnum.recovering,
-		});
-		sessionHost.transition({
-			type: RpcProtocolSessionTransitionTypeEnum.recovered,
-		});
-		retainedItem?.commit();
-
-		expect(facade.history).toBe(history);
-		expect(committedSink).toBe(originalSink);
-		expect({ reservationCalls, starts }).toEqual({
-			reservationCalls: 1,
-			starts: 1,
-		});
-		expect(values).toEqual(["retained"]);
-		expect(connector.peer.state).toEqual({ status: "connected" });
-		await connector.close();
-	});
-
-	it("RPC-STREAM-010 RPC-RECOVERY-008 RPC-SEC-011 RPC-RESOURCE-015 RPC-CONFORMANCE-004 publishes Recovery without Source resubscription", async () => {
-		const flow = createW1SemanticStreamHarness();
-		const { connector, sessionHost, events } = await connectProtocolSession(
-			flow.session,
-		);
-		flow.attachIncomingHost(sessionHost);
-		const descriptor = createRemoteServiceDescriptor(IMixedExposureService, {
-			wireName: "example.recovery-source.v1",
-			members: { history: { kind: "stream-method" } },
-		});
-		const source = new Subject<string>();
-		let methodCalls = 0;
-		let sourceSubscriptions = 0;
-		let sourceTeardowns = 0;
-		connector.peer.expose(descriptor, {
-			history() {
-				methodCalls += 1;
-				return new Observable<string>((subscriber) => {
-					sourceSubscriptions += 1;
-					const subscription = source.subscribe(subscriber);
-					return () => {
-						sourceTeardowns += 1;
-						subscription.unsubscribe();
-					};
-				});
-			},
-		} as never);
-		const values: string[] = [];
-		const history$ = connector.peer.resolve(descriptor).history("room");
-		history$.subscribe((value) => values.push(value));
-		await Promise.resolve();
-		await Promise.resolve();
-
-		sessionHost.transition({
-			type: RpcProtocolSessionTransitionTypeEnum.recovering,
-		});
-		sessionHost.transition({
-			type: RpcProtocolSessionTransitionTypeEnum.recovered,
-		});
-		expect(
-			events.filter((event) => event.type === RpcEventTypeEnum.streamStarted),
-		).toHaveLength(2);
-		expect(
-			events.filter((event) => event.type === RpcEventTypeEnum.streamFinished),
-		).toHaveLength(0);
-		source.next("after-recovery");
-		flow.flush();
-		source.complete();
-		flow.flush();
-
-		expect(values).toEqual(["after-recovery"]);
-		expect({ methodCalls, sourceSubscriptions, sourceTeardowns }).toEqual({
-			methodCalls: 1,
-			sourceSubscriptions: 1,
-			sourceTeardowns: 1,
-		});
-		expect(flow.released).toBe(true);
-		const finished = events.filter(
-			(event) => event.type === RpcEventTypeEnum.streamFinished,
-		);
-		expect(finished).toHaveLength(2);
-		expect(finished).toEqual(
-			expect.arrayContaining([
-				expect.objectContaining({
-					direction: RpcEventDirectionEnum.incoming,
-					outcome: RpcStreamStatusEnum.completed,
-					admittedItemCount: 1,
-				}),
-				expect.objectContaining({
-					direction: RpcEventDirectionEnum.outgoing,
-					outcome: RpcStreamStatusEnum.completed,
-					deliveredItemCount: 1,
-				}),
-			]),
-		);
-		await connector.close();
-	});
-
-	it("RPC-RECOVERY-009 fences a recovered state publication superseded by graceful cutoff", async () => {
-		const session: IRpcProtocolSession = {
-			reserveInvocation: () => undefined,
-			reserveStream: () => undefined,
-			forceClose() {},
-		};
-		const { connector, sessionHost } = await connectProtocolSession(session);
-		const earlierStates: string[] = [];
-		const laterStates: string[] = [];
-		let recoveryStarted = false;
-		let terminationTask: Promise<void> | undefined;
-		connector.peer.state$.subscribe((state) => {
-			earlierStates.push(state.status);
-			if (state.status === RpcStateStatusEnum.recovering) {
-				recoveryStarted = true;
-			} else if (
-				recoveryStarted &&
-				state.status === RpcStateStatusEnum.connected
-			) {
-				terminationTask = connector.shutdown();
-			}
-		});
-		connector.peer.state$.subscribe((state) => laterStates.push(state.status));
-		earlierStates.length = 0;
-		laterStates.length = 0;
-
-		sessionHost.transition({
-			type: RpcProtocolSessionTransitionTypeEnum.recovering,
-		});
-		sessionHost.transition({
-			type: RpcProtocolSessionTransitionTypeEnum.recovered,
-		});
-
-		expect(earlierStates).toEqual(["recovering", "connected", "draining"]);
-		expect(laterStates).toEqual(["recovering", "draining"]);
-		expect(connector.peer.state).toEqual({
-			status: RpcStateStatusEnum.draining,
-			reason: RpcCloseReasonEnum.gracefulShutdown,
-		});
-		await terminationTask;
-		let lateStateCount = 0;
-		let lateCompletionCount = 0;
-		connector.peer.state$.subscribe({
-			next: () => {
-				lateStateCount += 1;
-			},
-			complete: () => {
-				lateCompletionCount += 1;
-			},
-		});
-		expect({ lateCompletionCount, lateStateCount }).toEqual({
-			lateCompletionCount: 1,
-			lateStateCount: 0,
-		});
-	});
-
-	it("RPC-RECOVERY-009 RPC-EVENT-014 RPC-LIFE-003 suppresses a recovered event revoked by reentrant close", async () => {
-		const session: IRpcProtocolSession = {
-			reserveInvocation: () => undefined,
-			reserveStream: () => undefined,
-			forceClose() {},
-		};
-		const { connector, sessionHost } = await connectProtocolSession(session);
-		const laterEvents: string[] = [];
-		let terminationTask: Promise<void> | undefined;
-		connector.event$.subscribe((event) => {
-			if (event.type === RpcEventTypeEnum.peerRecovered) {
-				terminationTask = connector.close();
-			}
-		});
-		connector.event$.subscribe((event) => laterEvents.push(event.type));
-
-		sessionHost.transition({
-			type: RpcProtocolSessionTransitionTypeEnum.recovering,
-		});
-		laterEvents.length = 0;
-		sessionHost.transition({
-			type: RpcProtocolSessionTransitionTypeEnum.recovered,
-		});
-
-		expect(laterEvents).not.toContain(RpcEventTypeEnum.peerRecovered);
-		expect(laterEvents.slice(0, 2)).toEqual([
-			RpcEventTypeEnum.peerClosed,
-			RpcEventTypeEnum.ownerClosing,
-		]);
-		await terminationTask;
-	});
-
-	it("RPC-EVENT-014 RPC-LIFE-003 suppresses an owner-draining event revoked by reentrant close through the same task", async () => {
-		const session: IRpcProtocolSession = {
-			reserveInvocation: () => undefined,
-			reserveStream: () => undefined,
-			forceClose() {},
-		};
-		const { connector } = await connectProtocolSession(session);
-		const laterEvents: string[] = [];
-		let closeTask: Promise<void> | undefined;
-		connector.event$.subscribe((event) => {
-			if (event.type === RpcEventTypeEnum.ownerDraining) {
-				closeTask = connector.close();
-			}
-		});
-		connector.event$.subscribe((event) => laterEvents.push(event.type));
-
-		const shutdownTask = connector.shutdown();
-
-		expect(closeTask).toBe(shutdownTask);
-		expect(laterEvents).not.toContain(RpcEventTypeEnum.ownerDraining);
-		expect(laterEvents.slice(0, 2)).toEqual([
-			RpcEventTypeEnum.peerClosed,
-			RpcEventTypeEnum.ownerClosing,
-		]);
-		await shutdownTask;
-	});
-
-	it("RPC-STREAM-010 RPC-RECOVERY-007 hands an identity-free Pending stream off once after Recovery", async () => {
-		let incomingHost: IRpcProtocolSessionHost | undefined;
-		let recovering = false;
-		let admissionHandoffs = 0;
-		const pendingAdmissions = new Set<() => void>();
-		const session: IRpcProtocolSession = {
-			reserveInvocation: () => undefined,
-			reserveStream(request) {
-				return {
-					commit(subscriberSink) {
-						let admitted = false;
-						let canceled = false;
-						const admit = (): void => {
-							if (admitted || canceled) {
-								return;
-							}
-							admitted = true;
-							pendingAdmissions.delete(admit);
-							admissionHandoffs += 1;
-							const reservation = incomingHost?.reserveIncomingStream(request);
-							if (reservation?.kind !== "source") {
-								subscriberSink
-									.reserveTerminal({
-										type: "failed",
-										code: RpcExceptionCodeEnum.unavailable,
-									})
-									.commit();
-								return;
-							}
-							let incomingStream: IRpcProtocolIncomingStream | undefined;
-							const sourceSink: IRpcProtocolSourceSink = {
-								reserveEmission: () => undefined,
-								finish: (outcome) => {
-									if (outcome.type === "completed") {
-										subscriberSink.reserveTerminal(outcome).commit();
-										incomingStream?.finish(outcome, () => {});
-										return;
-									}
-									const failure: Extract<
-										RpcIncomingStreamTerminal,
-										{ readonly type: "failed" }
-									> = {
-										type: "failed",
-										code: RpcExceptionCodeEnum.handlerFailed,
-									};
-									subscriberSink.reserveTerminal(failure).commit();
-									incomingStream?.finish(failure, () => {});
-								},
-							};
-							incomingStream = reservation.reservation.commit(sourceSink);
-						};
-						return {
-							start() {
-								if (recovering) {
-									pendingAdmissions.add(admit);
-								} else {
-									admit();
-								}
-							},
-							cancel() {
-								if (!admitted) {
-									canceled = true;
-									pendingAdmissions.delete(admit);
-								}
-							},
-						};
-					},
-					release() {},
-				};
-			},
-			forceClose() {},
-		};
-		const { connector, sessionHost } = await connectProtocolSession(session);
-		incomingHost = sessionHost;
-		const descriptor = createRemoteServiceDescriptor(IMixedExposureService, {
-			wireName: "example.pending-recovery.v1",
-			members: { history: { kind: "stream-method" } },
-		});
-		let methodCalls = 0;
-		connector.peer.expose(descriptor, {
-			history: () => {
-				methodCalls += 1;
-				return of("done");
-			},
-		} as never);
-		recovering = true;
-		sessionHost.transition({
-			type: RpcProtocolSessionTransitionTypeEnum.recovering,
-		});
-		const history$ = connector.peer.resolve(descriptor).history("room");
-		const retracted = history$.subscribe();
-		history$.subscribe();
-		expect(pendingAdmissions.size).toBe(2);
-		retracted.unsubscribe();
-
-		recovering = false;
-		sessionHost.transition({
-			type: RpcProtocolSessionTransitionTypeEnum.recovered,
-		});
-		for (const admit of [...pendingAdmissions]) {
-			admit();
-			admit();
-		}
-		await Promise.resolve();
-		await Promise.resolve();
-
-		expect({ admissionHandoffs, methodCalls }).toEqual({
-			admissionHandoffs: 1,
-			methodCalls: 1,
-		});
-		expect(pendingAdmissions.size).toBe(0);
-		await connector.close();
-	});
-
-	it("RPC-STREAM-002 RPC-STREAM-003 RPC-STREAM-008 sends one cancel only for explicit unsubscription", async () => {
-		let starts = 0;
-		let cancels = 0;
-		const session: IRpcProtocolSession = {
-			reserveInvocation: () => undefined,
-			reserveStream() {
-				return {
-					commit() {
-						return {
-							start() {
-								starts += 1;
-							},
-							cancel() {
-								cancels += 1;
-							},
-						};
-					},
-					release() {},
-				};
-			},
-			forceClose() {},
-		};
-		const { connector } = await connectProtocolSession(session);
-		const descriptor = createRemoteServiceDescriptor(IMixedExposureService, {
-			wireName: "example.cancel-stream.v1",
-			members: { history: { kind: "stream-method" } },
-		});
-		const subscription = connector.peer
-			.resolve(descriptor)
-			.history("room")
-			.subscribe();
-
-		expect(starts).toBe(1);
-		expect(cancels).toBe(0);
-		subscription.unsubscribe();
-		subscription.unsubscribe();
-		expect(cancels).toBe(1);
-		await connector.close();
-	});
-
-	it("RPC-DESC-008 RPC-SPI-013 subscribes a stream property without arguments", async () => {
-		const requests: unknown[] = [];
-		const session: IRpcProtocolSession = {
-			reserveInvocation: () => undefined,
-			reserveStream(request) {
-				requests.push(request);
-				return {
-					commit(sink) {
-						return {
-							start() {
-								sink.reserveTerminal({ type: "completed" }).commit();
-							},
-							cancel() {},
-						};
-					},
-					release() {},
-				};
-			},
-			forceClose() {},
-		};
-		const { connector } = await connectProtocolSession(session);
-		const descriptor = createRemoteServiceDescriptor(IMixedExposureService, {
-			wireName: "example.property-stream.v1",
-			members: { events$: { kind: "stream-property" } },
-		});
-		let completed = 0;
-
-		connector.peer.resolve(descriptor).events$.subscribe({
-			complete: () => {
-				completed += 1;
-			},
-		});
-
-		expect(requests).toEqual([
-			{
-				service: "example.property-stream.v1",
-				member: "events$",
-				kind: "stream-property",
-			},
-		]);
-		expect(completed).toBe(1);
-		await connector.close();
-	});
-
-	it("RPC-FLOW-001 RPC-FLOW-002 RPC-FLOW-004 RPC-FLOW-006 RPC-WIRE-019 RPC-EVENT-016 overflows a real RxJS burst at W=1", async () => {
-		const flow = createW1SemanticStreamHarness();
-		const { connector, sessionHost, events } = await connectProtocolSession(
-			flow.session,
-		);
-		flow.attachIncomingHost(sessionHost);
-		const descriptor = createRemoteServiceDescriptor(IMixedExposureService, {
-			wireName: "example.w1-burst.v1",
-			members: { history: { kind: "stream-method" } },
-		});
-		let poisonReads = 0;
-		const overflowValue = Object.defineProperty({}, "poison", {
-			enumerable: true,
-			get() {
-				poisonReads += 1;
-				return "must not be inspected";
-			},
-		});
-		let sourceTeardowns = 0;
-		connector.peer.expose(descriptor, {
-			history: () =>
-				new Observable<string>((subscriber) => {
-					subscriber.next("admitted");
-					subscriber.next(overflowValue as never);
-					return () => {
-						sourceTeardowns += 1;
-					};
-				}),
-		} as never);
-		const values: string[] = [];
-		const errors: unknown[] = [];
-
-		connector.peer
-			.resolve(descriptor)
-			.history("room")
-			.subscribe({
-				next: (value) => values.push(value),
-				error: (error) => errors.push(error),
-			});
-		await Promise.resolve();
-		await Promise.resolve();
-		flow.flush();
-
-		expect(values).toEqual(["admitted"]);
-		expect(errors).toHaveLength(1);
-		expect(errors[0]).toBeInstanceOf(RpcException);
-		expect(errors[0]).toMatchObject({
-			code: RpcExceptionCodeEnum.overflow,
-			cause: undefined,
-		});
-		expect(flow.terminal).toEqual({
-			type: "failed",
-			code: RpcExceptionCodeEnum.overflow,
-		});
-		expect(flow.admittedItemCount).toBe(1);
-		expect(flow.creditThrough).toBe(1);
-		expect(poisonReads).toBe(0);
-		expect(sourceTeardowns).toBe(1);
-		expect(flow.released).toBe(true);
-		const finished = events.filter(
-			(event) => event.type === RpcEventTypeEnum.streamFinished,
-		);
-		expect(finished).toEqual(
-			expect.arrayContaining([
-				expect.objectContaining({
-					direction: RpcEventDirectionEnum.incoming,
-					outcome: RpcStreamStatusEnum.failed,
-					code: RpcExceptionCodeEnum.overflow,
-					admittedItemCount: 1,
-				}),
-				expect.objectContaining({
-					direction: RpcEventDirectionEnum.outgoing,
-					outcome: RpcStreamStatusEnum.failed,
-					code: RpcExceptionCodeEnum.overflow,
-					deliveredItemCount: 1,
-				}),
-			]),
-		);
-		await connector.close();
-	});
-
-	it("RPC-FLOW-004 RPC-EVENT-016 selects overflow before inspecting an emission without ordinary capacity", async () => {
-		const flow = createW1SemanticStreamHarness();
-		flow.setOrdinaryCapacityAvailable(false);
-		const { connector, sessionHost } = await connectProtocolSession(
-			flow.session,
-		);
-		flow.attachIncomingHost(sessionHost);
-		const descriptor = createRemoteServiceDescriptor(IMixedExposureService, {
-			wireName: "example.w1-capacity.v1",
-			members: { history: { kind: "stream-method" } },
-		});
-		let poisonReads = 0;
-		const unavailableValue = Object.defineProperty({}, "poison", {
-			enumerable: true,
-			get() {
-				poisonReads += 1;
-				return "must not be inspected";
-			},
-		});
-		connector.peer.expose(descriptor, {
-			history: () => of(unavailableValue),
-		} as never);
-		const errors: unknown[] = [];
-
-		connector.peer
-			.resolve(descriptor)
-			.history("room")
-			.subscribe({
-				error: (error) => errors.push(error),
-			});
-		await Promise.resolve();
-		await Promise.resolve();
-		flow.flush();
-
-		expect(errors[0]).toMatchObject({
-			code: RpcExceptionCodeEnum.overflow,
-			cause: undefined,
-		});
-		expect(flow.admittedItemCount).toBe(0);
-		expect(poisonReads).toBe(0);
-		await connector.close();
-	});
-
-	it("RPC-FLOW-005 classifies an invalid admitted emission as handler-failed", async () => {
-		const flow = createW1SemanticStreamHarness();
-		const { connector, sessionHost } = await connectProtocolSession(
-			flow.session,
-		);
-		flow.attachIncomingHost(sessionHost);
-		const descriptor = createRemoteServiceDescriptor(IMixedExposureService, {
-			wireName: "example.w1-invalid.v1",
-			members: { history: { kind: "stream-method" } },
-		});
-		connector.peer.expose(descriptor, {
-			history: () => of(Symbol("invalid item")),
-		} as never);
-		const errors: unknown[] = [];
-
-		connector.peer
-			.resolve(descriptor)
-			.history("room")
-			.subscribe({
-				error: (error) => errors.push(error),
-			});
-		await Promise.resolve();
-		await Promise.resolve();
-		flow.flush();
-
-		expect(errors[0]).toMatchObject({
-			code: RpcExceptionCodeEnum.handlerFailed,
-			cause: undefined,
-		});
-		expect(flow.terminal).toEqual({
-			type: "failed",
-			code: RpcExceptionCodeEnum.handlerFailed,
-		});
-		expect(flow.admittedItemCount).toBe(0);
-		await connector.close();
-	});
-
-	it("RPC-FLOW-003 RPC-WIRE-019 re-arms one cumulative credit after each serial next return", async () => {
-		const flow = createW1SemanticStreamHarness();
-		const { connector, sessionHost } = await connectProtocolSession(
-			flow.session,
-		);
-		flow.attachIncomingHost(sessionHost);
-		const descriptor = createRemoteServiceDescriptor(IMixedExposureService, {
-			wireName: "example.w1-rearm.v1",
-			members: { history: { kind: "stream-method" } },
-		});
-		const source = new Subject<string>();
-		connector.peer.expose(descriptor, { history: () => source } as never);
-		const values: string[] = [];
-		connector.peer
-			.resolve(descriptor)
-			.history("room")
-			.subscribe((value) => values.push(value));
-		await Promise.resolve();
-		await Promise.resolve();
-
-		source.next("first");
-		flow.flush();
-		expect(flow.creditThrough).toBe(2);
-		source.next("second");
-		flow.flush();
-
-		expect(values).toEqual(["first", "second"]);
-		expect(flow.admittedItemCount).toBe(2);
-		expect(flow.creditThrough).toBe(3);
-		await connector.close();
-	});
-
-	it("RPC-FLOW-003 RPC-FLOW-004 keeps reentrant delivery serial and exhausts credit inside next", async () => {
-		const flow = createW1SemanticStreamHarness();
-		const { connector, sessionHost } = await connectProtocolSession(
-			flow.session,
-		);
-		flow.attachIncomingHost(sessionHost);
-		const descriptor = createRemoteServiceDescriptor(IMixedExposureService, {
-			wireName: "example.w1-reentrant.v1",
-			members: { history: { kind: "stream-method" } },
-		});
-		const source = new Subject<string>();
-		connector.peer.expose(descriptor, { history: () => source } as never);
-		const trace: string[] = [];
-		let callbackDepth = 0;
-		let maximumCallbackDepth = 0;
-		connector.peer
-			.resolve(descriptor)
-			.history("room")
-			.subscribe({
-				next(value) {
-					callbackDepth += 1;
-					maximumCallbackDepth = Math.max(maximumCallbackDepth, callbackDepth);
-					trace.push(`next:${value}:begin`);
-					source.next("overflow");
-					trace.push(`next:${value}:end`);
-					callbackDepth -= 1;
-				},
-				error(error) {
-					callbackDepth += 1;
-					maximumCallbackDepth = Math.max(maximumCallbackDepth, callbackDepth);
-					trace.push(`error:${String((error as RpcException).code)}`);
-					callbackDepth -= 1;
-				},
-			});
-		await Promise.resolve();
-		await Promise.resolve();
-
-		source.next("first");
-		flow.flush();
-
-		expect(trace).toEqual([
-			"next:first:begin",
-			"next:first:end",
-			"error:overflow",
-		]);
-		expect(maximumCallbackDepth).toBe(1);
-		expect(flow.admittedItemCount).toBe(1);
-		expect(flow.creditThrough).toBe(1);
-		await connector.close();
-	});
-
-	it("RPC-FLOW-003 RPC-WIRE-019 faults an overlapping custom Protocol item projection before Observer reentry", async () => {
-		let forceCloses = 0;
-		let firstEffect: "closed" | "rearm" | undefined;
-		let sink: IRpcProtocolSubscriberSink | undefined;
-		const session: IRpcProtocolSession = {
-			reserveInvocation: () => undefined,
-			reserveStream() {
-				return {
-					commit(nextSink) {
-						sink = nextSink;
-						return {
-							start() {
-								firstEffect = nextSink
-									.reserveItem({ value: "first", weight: 5 } as never)
-									.commit();
-							},
-							cancel() {},
-						};
-					},
-					release() {},
-				};
-			},
-			forceClose() {
-				forceCloses += 1;
-			},
-		};
-		const { connector } = await connectProtocolSession(session);
-		const descriptor = createRemoteServiceDescriptor(IMixedExposureService, {
-			wireName: "example.overlapping-item.v1",
-			members: { history: { kind: "stream-method" } },
-		});
-		const values: string[] = [];
-		let callbackDepth = 0;
-		let maximumCallbackDepth = 0;
-
-		connector.peer
-			.resolve(descriptor)
-			.history("room")
-			.subscribe((value) => {
-				callbackDepth += 1;
-				maximumCallbackDepth = Math.max(maximumCallbackDepth, callbackDepth);
-				values.push(value);
-				if (value === "first") {
-					sink
-						?.reserveItem({ value: "over-credit", weight: 11 } as never)
-						.commit();
-				}
-				callbackDepth -= 1;
-			});
-
-		expect(values).toEqual(["first"]);
-		expect(maximumCallbackDepth).toBe(1);
-		expect(firstEffect).toBe("closed");
-		expect(forceCloses).toBe(1);
-		await connector.close();
-	});
-
-	it("RPC-FLOW-003 does not re-arm credit after unsubscribe inside next", async () => {
-		const flow = createW1SemanticStreamHarness();
-		const { connector, sessionHost } = await connectProtocolSession(
-			flow.session,
-		);
-		flow.attachIncomingHost(sessionHost);
-		const descriptor = createRemoteServiceDescriptor(IMixedExposureService, {
-			wireName: "example.w1-unsubscribe.v1",
-			members: { history: { kind: "stream-method" } },
-		});
-		const source = new Subject<string>();
-		connector.peer.expose(descriptor, { history: () => source } as never);
-		const values: string[] = [];
-		const observer = new Subscriber<string>({
-			next(value) {
-				values.push(value);
-				observer.unsubscribe();
-			},
-			error() {},
-			complete() {},
-		});
-		connector.peer.resolve(descriptor).history("room").subscribe(observer);
-		await Promise.resolve();
-		await Promise.resolve();
-
-		source.next("first");
-		flow.flush();
-
-		expect(values).toEqual(["first"]);
-		expect(flow.creditThrough).toBe(1);
-		expect(flow.terminal).toEqual({ type: "canceled" });
-		await connector.close();
-	});
-
-	it("RPC-STREAM-006 RPC-STREAM-009 serializes a reentrant terminal after next", async () => {
-		const trace: string[] = [];
-		let callbackDepth = 0;
-		let maximumCallbackDepth = 0;
-		let subscriberSink: IRpcProtocolSubscriberSink | undefined;
-		const session: IRpcProtocolSession = {
-			reserveInvocation: () => undefined,
-			reserveStream() {
-				return {
-					commit(sink) {
-						subscriberSink = sink;
-						return {
-							start() {
-								const item = sink.reserveItem({
-									value: "first",
-									weight: 5,
-								} as never);
-								trace.push(`item:${item.commit()}`);
-								trace.push(
-									`late:${sink
-										.reserveItem({ value: "late", weight: 4 } as never)
-										.commit()}`,
-								);
-							},
-							cancel() {},
-						};
-					},
-					release() {},
-				};
-			},
-			forceClose() {},
-		};
-		const { connector } = await connectProtocolSession(session);
-		const descriptor = createRemoteServiceDescriptor(IMixedExposureService, {
-			wireName: "example.reentrant-stream.v1",
-			members: { history: { kind: "stream-method" } },
-		});
-
-		connector.peer
-			.resolve(descriptor)
-			.history("room")
-			.subscribe({
-				next(value) {
-					callbackDepth += 1;
-					maximumCallbackDepth = Math.max(maximumCallbackDepth, callbackDepth);
-					trace.push(`next:${value}:begin`);
-					subscriberSink?.reserveTerminal({ type: "completed" }).commit();
-					trace.push(`next:${value}:end`);
-					callbackDepth -= 1;
-				},
-				complete() {
-					callbackDepth += 1;
-					maximumCallbackDepth = Math.max(maximumCallbackDepth, callbackDepth);
-					trace.push("complete");
-					callbackDepth -= 1;
-				},
-			});
-
-		expect(maximumCallbackDepth).toBe(1);
-		expect(trace).toEqual([
-			"next:first:begin",
-			"next:first:end",
-			"complete",
-			"item:closed",
-			"late:closed",
-		]);
-		await connector.close();
-	});
-
-	it("RPC-STREAM-007 RPC-FLOW-003 keeps a committed item and re-arms when its Observer throws", async () => {
-		const reported: unknown[] = [];
-		const previousUnhandledError = config.onUnhandledError;
-		config.onUnhandledError = (error) => reported.push(error);
-		let forceCloses = 0;
-		let itemEffect = "";
-		let completed = 0;
-		const observerFailure = new Error("local observer failure");
-		const session: IRpcProtocolSession = {
-			reserveInvocation: () => undefined,
-			reserveStream() {
-				return {
-					commit(sink) {
-						return {
-							start() {
-								itemEffect = sink
-									.reserveItem({ value: "item", weight: 4 } as never)
-									.commit();
-								sink.reserveTerminal({ type: "completed" }).commit();
-							},
-							cancel() {},
-						};
-					},
-					release() {},
-				};
-			},
-			forceClose() {
-				forceCloses += 1;
-			},
-		};
-		try {
-			const { connector } = await connectProtocolSession(session);
-			const descriptor = createRemoteServiceDescriptor(IMixedExposureService, {
-				wireName: "example.observer-throw.v1",
-				members: { history: { kind: "stream-method" } },
-			});
-
-			connector.peer
-				.resolve(descriptor)
-				.history("room")
-				.subscribe({
-					next() {
-						throw observerFailure;
-					},
-					complete() {
-						completed += 1;
-					},
-				});
-			await vi.waitFor(() => expect(reported).toContain(observerFailure));
-
-			expect(itemEffect).toBe("rearm");
-			expect(completed).toBe(1);
-			expect(forceCloses).toBe(0);
-			expect(reported).toEqual([observerFailure]);
-			await connector.close();
-		} finally {
-			config.onUnhandledError = previousUnhandledError;
-		}
-	});
-
-	it("RPC-STREAM-008 fences late effects after unsubscribe inside next", async () => {
-		const values: string[] = [];
-		let cancels = 0;
-		let itemEffect = "";
-		let sink: IRpcProtocolSubscriberSink | undefined;
-		const session: IRpcProtocolSession = {
-			reserveInvocation: () => undefined,
-			reserveStream() {
-				return {
-					commit(nextSink) {
-						sink = nextSink;
-						return {
-							start() {
-								itemEffect = nextSink
-									.reserveItem({ value: "first", weight: 5 } as never)
-									.commit();
-							},
-							cancel() {
-								cancels += 1;
-							},
-						};
-					},
-					release() {},
-				};
-			},
-			forceClose() {},
-		};
-		const { connector } = await connectProtocolSession(session);
-		const descriptor = createRemoteServiceDescriptor(IMixedExposureService, {
-			wireName: "example.unsubscribe-next.v1",
-			members: { history: { kind: "stream-method" } },
-		});
-		const observer = new Subscriber<string>({
-			next(value) {
-				values.push(value);
-				observer.unsubscribe();
-			},
-			error() {},
-			complete() {},
-		});
-
-		connector.peer.resolve(descriptor).history("room").subscribe(observer);
-		sink?.reserveItem({ value: "late", weight: 4 } as never).commit();
-		sink?.reserveTerminal({ type: "completed" }).commit();
-
-		expect(values).toEqual(["first"]);
-		expect(itemEffect).toBe("closed");
-		expect(cancels).toBe(1);
-		await connector.close();
-	});
-
-	it("RPC-STREAM-005 RPC-STREAM-012 RPC-STREAM-013 RPC-STREAM-014 runs one synchronous Source lifecycle", async () => {
-		const trace: string[] = [];
-		let sourceSubscriptions = 0;
-		let sourceTeardowns = 0;
-		const session: IRpcProtocolSession = {
-			reserveInvocation: () => undefined,
-			reserveStream: () => undefined,
-			forceClose() {},
-		};
-		const { connector, host, sessionHost, events } =
-			await connectProtocolSession(session);
-		const descriptor = createRemoteServiceDescriptor(IMixedExposureService, {
-			wireName: "example.source-lifecycle.v1",
-			members: { history: { kind: "stream-method" } },
-		});
-		connector.peer.expose(descriptor, {
-			history(room: string) {
-				trace.push(`acquire:${room}`);
-				return new Observable<string>((subscriber) => {
-					sourceSubscriptions += 1;
-					trace.push("source:subscribe");
-					subscriber.next("first");
-					subscriber.complete();
-					return () => {
-						sourceTeardowns += 1;
-						trace.push("source:teardown");
-					};
-				});
-			},
-		} as never);
-		const reservation = sessionHost.reserveIncomingStream({
-			service: "example.source-lifecycle.v1",
-			member: "history",
-			kind: "stream-method",
-			args: host.normalizeApplicationArguments(["room"]),
-		});
-		connector.event$.subscribe((event) => {
-			if (event.type === RpcEventTypeEnum.streamStarted) {
-				trace.push("event:stream-started");
-			}
-		});
-		expect(reservation?.kind).toBe("source");
-		let incoming: IRpcProtocolIncomingStream | undefined;
-		const sourceSink: IRpcProtocolSourceSink = {
-			reserveEmission() {
-				trace.push("protocol:reserve-emission");
-				return {
-					commit(snapshot) {
-						trace.push(`protocol:item:${snapshot.value}`);
-					},
-					fail() {
-						trace.push("protocol:item-failed");
-					},
-				};
-			},
-			finish(outcome) {
-				trace.push(`protocol:terminal:${outcome.type}`);
-				incoming?.finish(outcome, () => trace.push("protocol:on-released"));
-			},
-		};
-		if (reservation?.kind === "source") {
-			incoming = reservation.reservation.commit(sourceSink);
-		}
-
-		await Promise.resolve();
-		await Promise.resolve();
-
-		expect(sourceSubscriptions).toBe(1);
-		expect(sourceTeardowns).toBe(1);
-		expect(trace).toEqual([
-			"event:stream-started",
-			"acquire:room",
-			"source:subscribe",
-			"protocol:reserve-emission",
-			"protocol:item:first",
-			"protocol:terminal:completed",
-			"source:teardown",
-			"protocol:on-released",
-		]);
-		const streamEvents = events.filter(
-			(event) =>
-				event.type === RpcEventTypeEnum.streamStarted ||
-				event.type === RpcEventTypeEnum.streamFinished,
-		);
-		expect(streamEvents).toHaveLength(2);
-		expect(streamEvents[0]).toMatchObject({
-			type: RpcEventTypeEnum.streamStarted,
-			direction: RpcEventDirectionEnum.incoming,
-			service: "example.source-lifecycle.v1",
-			member: "history",
-		});
-		expect(streamEvents[1]).toMatchObject({
-			type: RpcEventTypeEnum.streamFinished,
-			observationId: Reflect.get(streamEvents[0] as object, "observationId"),
-			direction: RpcEventDirectionEnum.incoming,
-			service: "example.source-lifecycle.v1",
-			member: "history",
-			outcome: RpcStreamStatusEnum.completed,
-			admittedItemCount: 1,
-			durationMs: expect.any(Number),
-		});
-		await connector.close();
-	});
-
-	it("RPC-STREAM-012 tears down the returned Source Subscription handle once", async () => {
-		let returnedTeardowns = 0;
-		let releases = 0;
-		const session: IRpcProtocolSession = {
-			reserveInvocation: () => undefined,
-			reserveStream: () => undefined,
-			forceClose() {},
-		};
-		const { connector, host, sessionHost } =
-			await connectProtocolSession(session);
-		const descriptor = createRemoteServiceDescriptor(IMixedExposureService, {
-			wireName: "example.returned-source-subscription.v1",
-			members: { history: { kind: "stream-method" } },
-		});
-		connector.peer.expose(descriptor, {
-			history() {
-				return {
-					lift() {},
-					subscribe(subscriber: Subscriber<unknown>) {
-						subscriber.complete();
-						return {
-							closed: false,
-							unsubscribe() {
-								returnedTeardowns += 1;
-							},
-						};
-					},
-				};
-			},
-		} as never);
-		const reservation = sessionHost.reserveIncomingStream({
-			service: "example.returned-source-subscription.v1",
-			member: "history",
-			kind: "stream-method",
-			args: host.normalizeApplicationArguments(["room"]),
-		});
-		let incoming: IRpcProtocolIncomingStream | undefined;
-		if (reservation?.kind === "source") {
-			incoming = reservation.reservation.commit({
-				reserveEmission: () => undefined,
-				finish(outcome) {
-					incoming?.finish(outcome, () => {
-						releases += 1;
-					});
-				},
-			});
-		}
-		await Promise.resolve();
-		await Promise.resolve();
-		incoming?.finish({ type: "canceled" }, () => {
-			releases += 100;
-		});
-
-		expect(returnedTeardowns).toBe(1);
-		expect(releases).toBe(1);
-		await connector.close();
-	});
-
-	it("RPC-RESOURCE-012 RPC-STREAM-004 RPC-VALID-010 reserves capacity before route classification", async () => {
-		const session: IRpcProtocolSession = {
-			reserveInvocation: () => undefined,
-			reserveStream: () => undefined,
-			forceClose() {},
-		};
-		const { connector, sessionHost } = await connectProtocolSession(session, {
-			maxApplicationWorkPerSession: 2,
-			maxActiveStreamsPerSession: 2,
-		});
-		const heldReservations: Array<{ release(): void }> = [];
-		const missingRoute = {
-			service: "example.capacity-before-route.v1",
-			member: "missing$",
-			kind: "stream-property" as const,
-		};
-		for (let index = 0; index < 2; index += 1) {
-			const held = sessionHost.reserveIncomingStream(missingRoute);
-			expect(held?.kind).toBe("unknown");
-			if (held !== undefined) {
-				heldReservations.push(held.reservation);
-			}
-		}
-
-		expect(sessionHost.reserveIncomingStream(missingRoute)).toBeUndefined();
-		for (const heldReservation of heldReservations) {
-			heldReservation.release();
-		}
-		const reopened = sessionHost.reserveIncomingStream(missingRoute);
-		expect(reopened?.kind).toBe("unknown");
-		reopened?.reservation.release();
-		await connector.close();
-	});
-
-	it("RPC-RESOURCE-007 RPC-RESOURCE-009 shares Application Work between outgoing unary and stream roots", async () => {
-		let subscriberSink: IRpcProtocolSubscriberSink | undefined;
-		let invocationReservations = 0;
-		let streamReservations = 0;
-		const session: IRpcProtocolSession = {
-			reserveInvocation() {
-				invocationReservations += 1;
-				return {
-					commit: (sink) => ({
-						start: () =>
-							sink.finish({ type: RpcCallTerminalTypeEnum.returnedVoid }),
-						cancel() {},
-					}),
-					release() {},
-				};
-			},
-			reserveStream() {
-				streamReservations += 1;
-				return {
-					commit(sink) {
-						subscriberSink = sink;
-						return { start() {}, cancel() {} };
-					},
-					release() {},
-				};
-			},
-			forceClose() {},
-		};
-		const { connector } = await connectProtocolSession(session, {
-			maxApplicationWorkPerSession: 1,
-			maxActiveStreamsPerSession: 1,
-		});
-		const descriptor = createRemoteServiceDescriptor(IMixedExposureService, {
-			wireName: "example.shared-application-work.v1",
-			members: {
-				add: { kind: "unary" },
-				history: { kind: "stream-method" },
-			},
-		});
-		const remote = connector.peer.resolve(descriptor);
-		const first = remote.history("room").subscribe();
-		const rejectedStreamErrors: unknown[] = [];
-		remote.history("other").subscribe({
-			error: (error) => rejectedStreamErrors.push(error),
-		});
-
-		await expect(remote.add(1, 2)).rejects.toMatchObject({
-			code: RpcExceptionCodeEnum.unavailable,
-		});
-		expect(rejectedStreamErrors).toMatchObject([
-			{ code: RpcExceptionCodeEnum.unavailable },
-		]);
-		expect(streamReservations).toBe(1);
-		expect(invocationReservations).toBe(0);
-
-		subscriberSink?.reserveTerminal({ type: "completed" }).commit();
-		await expect(remote.add(1, 2)).resolves.toBeUndefined();
-		expect(invocationReservations).toBe(1);
-		first.unsubscribe();
-		await connector.close();
-	});
-
-	it("RPC-RESOURCE-007 RPC-RESOURCE-009 applies Active Streams as a subset without blocking unary work", async () => {
-		const streamSinks: IRpcProtocolSubscriberSink[] = [];
-		const session: IRpcProtocolSession = {
-			reserveInvocation: () => ({
-				commit: (sink) => ({
-					start: () =>
-						sink.finish({ type: RpcCallTerminalTypeEnum.returnedVoid }),
-					cancel() {},
-				}),
-				release() {},
-			}),
-			reserveStream: () => ({
-				commit: (sink) => {
-					streamSinks.push(sink);
-					return { start() {}, cancel() {} };
-				},
-				release() {},
-			}),
-			forceClose() {},
-		};
-		const { connector } = await connectProtocolSession(session, {
-			maxApplicationWorkPerSession: 2,
-			maxActiveStreamsPerSession: 1,
-		});
-		const descriptor = createRemoteServiceDescriptor(IMixedExposureService, {
-			wireName: "example.active-stream-subset.v1",
-			members: {
-				add: { kind: "unary" },
-				history: { kind: "stream-method" },
-			},
-		});
-		const remote = connector.peer.resolve(descriptor);
-		const first = remote.history("room").subscribe();
-		const rejectedStreamErrors: unknown[] = [];
-		remote.history("other").subscribe({
-			error: (error) => rejectedStreamErrors.push(error),
-		});
-
-		await expect(remote.add(1, 2)).resolves.toBeUndefined();
-		expect(rejectedStreamErrors).toMatchObject([
-			{ code: RpcExceptionCodeEnum.unavailable },
-		]);
-
-		streamSinks[0]?.reserveTerminal({ type: "completed" }).commit();
-		first.unsubscribe();
-		await connector.close();
-	});
-
-	it("RPC-RESOURCE-007 RPC-RESOURCE-012 shares incoming Application Work while keeping Active Streams a subset", async () => {
-		const session: IRpcProtocolSession = {
-			reserveInvocation: () => undefined,
-			reserveStream: () => undefined,
-			forceClose() {},
-		};
-		const { connector, host, sessionHost } = await connectProtocolSession(
-			session,
-			{
-				maxApplicationWorkPerSession: 2,
-				maxActiveStreamsPerSession: 1,
-			},
-		);
-		const args = host.normalizeApplicationArguments([]);
-		const stream = sessionHost.reserveIncomingStream({
-			service: "missing.service",
-			member: "missing$",
-			kind: "stream-property",
-		});
-		const call = sessionHost.reserveIncomingCall({
-			service: "missing.service",
-			member: "missing",
-			args,
-		});
-
-		expect(stream?.kind).toBe("unknown");
-		expect(call?.kind).toBe("unknown");
-		expect(
-			sessionHost.reserveIncomingStream({
-				service: "missing.service",
-				member: "other$",
-				kind: "stream-property",
-			}),
-		).toBeUndefined();
-		stream?.reservation.release();
-		call?.reservation.release();
-		await connector.close();
-	});
-
-	it("RPC-STREAM-003 RPC-STREAM-014 keeps Source ownership through onReleased", async () => {
-		const session: IRpcProtocolSession = {
-			reserveInvocation: () => undefined,
-			reserveStream: () => undefined,
-			forceClose() {},
-		};
-		const { connector, host, sessionHost } = await connectProtocolSession(
-			session,
-			{
-				maxApplicationWorkPerSession: 256,
-				maxActiveStreamsPerSession: 256,
-			},
-		);
-		const descriptor = createRemoteServiceDescriptor(IMixedExposureService, {
-			wireName: "example.source-release-receipt.v1",
-			members: { history: { kind: "stream-method" } },
-		});
-		connector.peer.expose(descriptor, {
-			history: () => new Observable(() => undefined),
-		} as never);
-		const source = sessionHost.reserveIncomingStream({
-			service: "example.source-release-receipt.v1",
-			member: "history",
-			kind: "stream-method",
-			args: host.normalizeApplicationArguments(["room"]),
-		});
-		let incoming: IRpcProtocolIncomingStream | undefined;
-		if (source?.kind === "source") {
-			incoming = source.reservation.commit({
-				reserveEmission: () => undefined,
-				finish() {},
-			});
-		}
-		await Promise.resolve();
-		await Promise.resolve();
-		const heldReservations: Array<{ release(): void }> = [];
-		const missingRoute = {
-			service: "example.source-release-capacity.v1",
-			member: "missing$",
-			kind: "stream-property" as const,
-		};
-		for (let index = 0; index < 255; index += 1) {
-			const held = sessionHost.reserveIncomingStream(missingRoute);
-			expect(held?.kind).toBe("unknown");
-			if (held !== undefined) {
-				heldReservations.push(held.reservation);
-			}
-		}
-		let capacityHeldThroughReceipt = false;
-		incoming?.finish({ type: "canceled" }, () => {
-			capacityHeldThroughReceipt =
-				sessionHost.reserveIncomingStream(missingRoute) === undefined;
-		});
-
-		expect(capacityHeldThroughReceipt).toBe(true);
-		const reopened = sessionHost.reserveIncomingStream(missingRoute);
-		expect(reopened?.kind).toBe("unknown");
-		reopened?.reservation.release();
-		for (const heldReservation of heldReservations) {
-			heldReservation.release();
-		}
-		await connector.close();
-	});
-
-	it("RPC-DESC-008 keeps the captured stream-property route after cleanup and re-exposure", async () => {
-		const session: IRpcProtocolSession = {
-			reserveInvocation: () => undefined,
-			reserveStream: () => undefined,
-			forceClose() {},
-		};
-		const { connector, sessionHost } = await connectProtocolSession(session);
-		const descriptor = createRemoteServiceDescriptor(IMixedExposureService, {
-			wireName: "example.captured-property.v1",
-			members: { lazy$: { kind: "stream-property" } },
-		});
-		let oldGetterCalls = 0;
-		let newGetterCalls = 0;
-		const oldImplementation = Object.create(null);
-		Object.defineProperty(oldImplementation, "lazy$", {
-			get() {
-				oldGetterCalls += 1;
-				return of("old");
-			},
-		});
-		const newImplementation = Object.create(null);
-		Object.defineProperty(newImplementation, "lazy$", {
-			get() {
-				newGetterCalls += 1;
-				return of("new");
-			},
-		});
-		const cleanup = connector.peer.expose(descriptor, oldImplementation);
-		const reservation = sessionHost.reserveIncomingStream({
-			service: "example.captured-property.v1",
-			member: "lazy$",
-			kind: "stream-property",
-		});
-		expect(oldGetterCalls).toBe(0);
-		cleanup();
-		connector.peer.expose(descriptor, newImplementation);
-		const items: unknown[] = [];
-		let incoming: IRpcProtocolIncomingStream | undefined;
-		if (reservation?.kind === "source") {
-			incoming = reservation.reservation.commit({
-				reserveEmission: () => ({
-					commit: (snapshot) => items.push(snapshot.value),
-					fail() {},
-				}),
-				finish(outcome) {
-					incoming?.finish(outcome, () => undefined);
-				},
-			});
-		}
-
-		await Promise.resolve();
-		await Promise.resolve();
-
-		expect(oldGetterCalls).toBe(1);
-		expect(newGetterCalls).toBe(0);
-		expect(items).toEqual(["old"]);
-		await connector.close();
-	});
-
-	it("RPC-STREAM-005 removes a queued Source Start Job after a terminal winner", async () => {
-		let acquisitions = 0;
-		let subscriptions = 0;
-		let releases = 0;
-		const session: IRpcProtocolSession = {
-			reserveInvocation: () => undefined,
-			reserveStream: () => undefined,
-			forceClose() {},
-		};
-		const { connector, host, sessionHost } =
-			await connectProtocolSession(session);
-		const descriptor = createRemoteServiceDescriptor(IMixedExposureService, {
-			wireName: "example.queued-source.v1",
-			members: { history: { kind: "stream-method" } },
-		});
-		connector.peer.expose(descriptor, {
-			history() {
-				acquisitions += 1;
-				return new Observable(() => {
-					subscriptions += 1;
-				});
-			},
-		} as never);
-		const reservation = sessionHost.reserveIncomingStream({
-			service: "example.queued-source.v1",
-			member: "history",
-			kind: "stream-method",
-			args: host.normalizeApplicationArguments(["room"]),
-		});
-		let incoming: IRpcProtocolIncomingStream | undefined;
-		if (reservation?.kind === "source") {
-			incoming = reservation.reservation.commit({
-				reserveEmission: () => undefined,
-				finish() {},
-			});
-		}
-		incoming?.finish({ type: "canceled" }, () => {
-			releases += 1;
-		});
-		incoming?.finish({ type: "canceled" }, () => {
-			releases += 100;
-		});
-
-		await Promise.resolve();
-		await Promise.resolve();
-
-		expect(acquisitions).toBe(0);
-		expect(subscriptions).toBe(0);
-		expect(releases).toBe(1);
-		await connector.close();
-	});
-
-	it("RPC-STREAM-009 RPC-STREAM-012 RPC-STREAM-013 fences and tears down an active Source once", async () => {
-		const applicationSource = new Subject<string>();
-		let sourceTeardowns = 0;
-		let releases = 0;
-		const session: IRpcProtocolSession = {
-			reserveInvocation: () => undefined,
-			reserveStream: () => undefined,
-			forceClose() {},
-		};
-		const { connector, host, sessionHost } =
-			await connectProtocolSession(session);
-		const descriptor = createRemoteServiceDescriptor(IMixedExposureService, {
-			wireName: "example.active-source.v1",
-			members: { history: { kind: "stream-method" } },
-		});
-		connector.peer.expose(descriptor, {
-			history() {
-				return new Observable<string>((subscriber) => {
-					const subscription = applicationSource.subscribe(subscriber);
-					return () => {
-						sourceTeardowns += 1;
-						subscription.unsubscribe();
-					};
-				});
-			},
-		} as never);
-		const reservation = sessionHost.reserveIncomingStream({
-			service: "example.active-source.v1",
-			member: "history",
-			kind: "stream-method",
-			args: host.normalizeApplicationArguments(["room"]),
-		});
-		const items: unknown[] = [];
-		let incoming: IRpcProtocolIncomingStream | undefined;
-		if (reservation?.kind === "source") {
-			incoming = reservation.reservation.commit({
-				reserveEmission: () => ({
-					commit: (snapshot) => items.push(snapshot.value),
-					fail() {},
-				}),
-				finish() {},
-			});
-		}
-		await Promise.resolve();
-		await Promise.resolve();
-		applicationSource.next("first");
-		incoming?.finish({ type: "canceled" }, () => {
-			releases += 1;
-		});
-		incoming?.finish({ type: "session-terminated" }, () => {
-			releases += 100;
-		});
-		applicationSource.next("late");
-
-		expect(items).toEqual(["first"]);
-		expect(sourceTeardowns).toBe(1);
-		expect(releases).toBe(1);
-		await connector.close();
-	});
-
-	it.each([
-		[
-			"acquisition throw",
-			() => {
-				throw new Error("raw acquisition failure");
-			},
-		],
-		["invalid Observable", () => ({})],
-		[
-			"subscribe throw",
-			() => ({
-				lift() {},
-				subscribe() {
-					throw new Error("raw subscribe failure");
-				},
-			}),
-		],
-		[
-			"invalid returned subscription",
-			() => ({
-				lift() {},
-				subscribe() {
-					return {};
-				},
-			}),
-		],
-		[
-			"source error",
-			() =>
-				new Observable((subscriber) => {
-					subscriber.error(new Error("raw source failure"));
-				}),
-		],
-		[
-			"item normalization failure",
-			() =>
-				new Observable((subscriber) => {
-					subscriber.next(Symbol("raw invalid item"));
-				}),
-		],
-	] as const)("RPC-STREAM-007 RPC-VALID-010 maps %s to handler-failed", async (_label, createSource) => {
-		const session: IRpcProtocolSession = {
-			reserveInvocation: () => undefined,
-			reserveStream: () => undefined,
-			forceClose() {},
-		};
-		const { connector, host, sessionHost, events } =
-			await connectProtocolSession(session);
-		const descriptor = createRemoteServiceDescriptor(IMixedExposureService, {
-			wireName: "example.failed-source.v1",
-			members: { history: { kind: "stream-method" } },
-		});
-		connector.peer.expose(descriptor, {
-			history: createSource,
-		} as never);
-		const reservation = sessionHost.reserveIncomingStream({
-			service: "example.failed-source.v1",
-			member: "history",
-			kind: "stream-method",
-			args: host.normalizeApplicationArguments(["room"]),
-		});
-		const terminals: unknown[] = [];
-		let incoming: IRpcProtocolIncomingStream | undefined;
-		const finishAsHandlerFailed = (): void => {
-			const terminal = {
-				type: "failed",
-				code: RpcExceptionCodeEnum.handlerFailed,
-			} as const;
-			terminals.push(terminal);
-			incoming?.finish(terminal, () => undefined);
-		};
-		if (reservation?.kind === "source") {
-			incoming = reservation.reservation.commit({
-				reserveEmission: () => ({
-					commit() {},
-					fail: finishAsHandlerFailed,
-				}),
-				finish(outcome) {
-					terminals.push(outcome);
-					incoming?.finish(outcome, () => undefined);
-				},
-			});
-		}
-
-		await Promise.resolve();
-		await Promise.resolve();
-
-		expect(terminals).toEqual([
-			{
-				type: "failed",
-				code: RpcExceptionCodeEnum.handlerFailed,
-			},
-		]);
-		expect(JSON.stringify(terminals)).not.toContain("raw");
-		expect(
-			events.filter((event) => event.type === RpcEventTypeEnum.streamFinished),
-		).toEqual([
-			expect.objectContaining({
-				direction: RpcEventDirectionEnum.incoming,
-				outcome: RpcStreamStatusEnum.failed,
-				code: RpcExceptionCodeEnum.handlerFailed,
-				admittedItemCount: 0,
-			}),
-		]);
-		await connector.close();
-	});
-
-	it("RPC-STREAM-012 RPC-STREAM-013 keeps completion authoritative when teardown throws", async () => {
-		const trace: string[] = [];
-		let teardownAttempts = 0;
-		const session: IRpcProtocolSession = {
-			reserveInvocation: () => undefined,
-			reserveStream: () => undefined,
-			forceClose() {},
-		};
-		const { connector, host, sessionHost, events } =
-			await connectProtocolSession(session);
-		const descriptor = createRemoteServiceDescriptor(IMixedExposureService, {
-			wireName: "example.throwing-teardown.v1",
-			members: { history: { kind: "stream-method" } },
-		});
-		connector.peer.expose(descriptor, {
-			history() {
-				return new Observable((subscriber) => {
-					subscriber.complete();
-					return () => {
-						teardownAttempts += 1;
-						trace.push("source:teardown-throw");
-						throw new Error("raw teardown failure");
-					};
-				});
-			},
-		} as never);
-		const reservation = sessionHost.reserveIncomingStream({
-			service: "example.throwing-teardown.v1",
-			member: "history",
-			kind: "stream-method",
-			args: host.normalizeApplicationArguments(["room"]),
-		});
-		connector.event$.subscribe((event) => {
-			if (event.type === RpcEventTypeEnum.streamFinished) {
-				trace.push("event:stream-finished");
-			}
-		});
-		let incoming: IRpcProtocolIncomingStream | undefined;
-		if (reservation?.kind === "source") {
-			incoming = reservation.reservation.commit({
-				reserveEmission: () => undefined,
-				finish(outcome) {
-					trace.push(`protocol:terminal:${outcome.type}`);
-					incoming?.finish(outcome, () => trace.push("protocol:on-released"));
-				},
-			});
-		}
-
-		await Promise.resolve();
-		await Promise.resolve();
-
-		expect(teardownAttempts).toBe(1);
-		expect(trace).toEqual([
-			"protocol:terminal:completed",
-			"source:teardown-throw",
-			"protocol:on-released",
-			"event:stream-finished",
-		]);
-		const finished = events.filter(
-			(event) => event.type === RpcEventTypeEnum.streamFinished,
-		);
-		expect(finished).toHaveLength(1);
-		expect(finished[0]).toMatchObject({
-			direction: RpcEventDirectionEnum.incoming,
-			outcome: RpcStreamStatusEnum.completed,
-			admittedItemCount: 0,
-			sourceTeardownFailed: true,
-		});
-		await connector.close();
-	});
-
-	it("RPC-EVENT-018 does not classify a post-terminal subscribe throw as teardown failure", async () => {
-		const session: IRpcProtocolSession = {
-			reserveInvocation: () => undefined,
-			reserveStream: () => undefined,
-			forceClose() {},
-		};
-		const { connector, host, sessionHost, events } =
-			await connectProtocolSession(session);
-		const descriptor = createRemoteServiceDescriptor(IMixedExposureService, {
-			wireName: "example.post-terminal-subscribe-throw.v1",
-			members: { history: { kind: "stream-method" } },
-		});
-		connector.peer.expose(descriptor, {
-			history() {
-				return {
-					lift() {},
-					subscribe(subscriber: Subscriber<unknown>) {
-						subscriber.complete();
-						throw new Error("post-terminal subscribe failure");
-					},
-				};
-			},
-		} as never);
-		const reservation = sessionHost.reserveIncomingStream({
-			service: "example.post-terminal-subscribe-throw.v1",
-			member: "history",
-			kind: "stream-method",
-			args: host.normalizeApplicationArguments(["room"]),
-		});
-		let incoming: IRpcProtocolIncomingStream | undefined;
-		if (reservation?.kind === "source") {
-			incoming = reservation.reservation.commit({
-				reserveEmission: () => undefined,
-				finish(outcome) {
-					incoming?.finish(outcome, () => undefined);
-				},
-			});
-		}
-
-		await Promise.resolve();
-		await Promise.resolve();
-
-		const finished = events.find(
-			(event) => event.type === RpcEventTypeEnum.streamFinished,
-		);
-		expect(finished).toMatchObject({
-			outcome: RpcStreamStatusEnum.completed,
-			admittedItemCount: 0,
-		});
-		expect(finished).not.toHaveProperty("sourceTeardownFailed");
-		await connector.close();
-	});
-
-	it("RPC-SPI-015 keeps a Protocol emission commit throw out of source failure classification", async () => {
-		let forceCloses = 0;
-		let emissionFailures = 0;
-		const session: IRpcProtocolSession = {
-			reserveInvocation: () => undefined,
-			reserveStream: () => undefined,
-			forceClose() {
-				forceCloses += 1;
-			},
-		};
-		const { connector, host, sessionHost } =
-			await connectProtocolSession(session);
-		const descriptor = createRemoteServiceDescriptor(IMixedExposureService, {
-			wireName: "example.protocol-emission-failure.v1",
-			members: { history: { kind: "stream-method" } },
-		});
-		connector.peer.expose(descriptor, {
-			history: () => of("item"),
-		} as never);
-		const reservation = sessionHost.reserveIncomingStream({
-			service: "example.protocol-emission-failure.v1",
-			member: "history",
-			kind: "stream-method",
-			args: host.normalizeApplicationArguments(["room"]),
-		});
-		if (reservation?.kind === "source") {
-			reservation.reservation.commit({
-				reserveEmission: () => ({
-					commit() {
-						throw new TypeError("Protocol commit failed.");
-					},
-					fail() {
-						emissionFailures += 1;
-					},
-				}),
-				finish() {},
-			});
-		}
-
-		await Promise.resolve();
-		await Promise.resolve();
-
-		expect(emissionFailures).toBe(0);
-		expect(forceCloses).toBe(1);
-	});
-
-	it("RPC-VALID-010 classifies missing stream routes without application work", async () => {
-		let acquisitions = 0;
-		let releases = 0;
-		const session: IRpcProtocolSession = {
-			reserveInvocation: () => undefined,
-			reserveStream: () => undefined,
-			forceClose() {},
-		};
-		const { connector, sessionHost, events } =
-			await connectProtocolSession(session);
-		const descriptor = createRemoteServiceDescriptor(IMixedExposureService, {
-			wireName: "example.route-classification.v1",
-			members: { history: { kind: "stream-method" } },
-		});
-		connector.peer.expose(descriptor, {
-			history() {
-				acquisitions += 1;
-				return of("unexpected");
-			},
-		} as never);
-		const cases = [
-			{
-				request: {
-					service: "example.missing-service.v1",
-					member: "history",
-					kind: "stream-property" as const,
-				},
-				code: RpcExceptionCodeEnum.unknownService,
-			},
-			{
-				request: {
-					service: "example.route-classification.v1",
-					member: "missing$",
-					kind: "stream-property" as const,
-				},
-				code: RpcExceptionCodeEnum.unknownMember,
-			},
-			{
-				request: {
-					service: "example.route-classification.v1",
-					member: "history",
-					kind: "stream-property" as const,
-				},
-				code: RpcExceptionCodeEnum.unknownMember,
-			},
-		] as const;
-
-		for (const routeCase of cases) {
-			const reservation = sessionHost.reserveIncomingStream(routeCase.request);
-			expect(reservation).toMatchObject({
-				kind: "unknown",
-				code: routeCase.code,
-			});
-			if (reservation?.kind === "unknown") {
-				const incoming = reservation.reservation.commit();
-				incoming.finish({ type: "failed", code: routeCase.code }, () => {
-					releases += 1;
-				});
-			}
-		}
-
-		expect(acquisitions).toBe(0);
-		expect(releases).toBe(3);
-		const streamEvents = events.filter(
-			(event) =>
-				event.type === RpcEventTypeEnum.streamStarted ||
-				event.type === RpcEventTypeEnum.streamFinished,
-		);
-		expect(streamEvents).toHaveLength(6);
-		expect(streamEvents[0]).not.toHaveProperty("service");
-		expect(streamEvents[0]).not.toHaveProperty("member");
-		expect(streamEvents[1]).toMatchObject({
-			outcome: RpcStreamStatusEnum.failed,
-			code: RpcExceptionCodeEnum.unknownService,
-			admittedItemCount: 0,
-		});
-		expect(streamEvents[2]).toMatchObject({
-			service: "example.route-classification.v1",
-		});
-		expect(streamEvents[2]).not.toHaveProperty("member");
-		expect(streamEvents[3]).toMatchObject({
-			service: "example.route-classification.v1",
-			outcome: RpcStreamStatusEnum.failed,
-			code: RpcExceptionCodeEnum.unknownMember,
-			admittedItemCount: 0,
-		});
-		expect(JSON.stringify(streamEvents)).not.toContain("missing$");
-		await connector.close();
-	});
-
-	it("RPC-VALID-010 projects a safe unknown-member stream error", async () => {
-		const session: IRpcProtocolSession = {
-			reserveInvocation: () => undefined,
-			reserveStream() {
-				return {
-					commit(sink) {
-						return {
-							start() {
-								sink
-									.reserveTerminal({
-										type: "failed",
-										code: RpcExceptionCodeEnum.unknownMember,
-									})
-									.commit();
-							},
-							cancel() {},
-						};
-					},
-					release() {},
-				};
-			},
-			forceClose() {},
-		};
-		const { connector } = await connectProtocolSession(session);
-		const descriptor = createRemoteServiceDescriptor(IMixedExposureService, {
-			wireName: "example.safe-route-error.v1",
-			members: { history: { kind: "stream-method" } },
-		});
-		let receivedError: unknown;
-
-		connector.peer
-			.resolve(descriptor)
-			.history("room")
-			.subscribe({
-				error: (error) => {
-					receivedError = error;
-				},
-			});
-
-		expect(receivedError).toBeInstanceOf(RpcException);
-		expect(receivedError).toMatchObject({
-			code: RpcExceptionCodeEnum.unknownMember,
-		});
-		expect(receivedError).toHaveProperty("cause", undefined);
-		await connector.close();
-	});
-
-	it("RPC-STREAM-007 RPC-STREAM-009 defers release across synchronous Source reentrancy", async () => {
-		const trace: string[] = [];
-		let sourceTeardowns = 0;
-		const session: IRpcProtocolSession = {
-			reserveInvocation: () => undefined,
-			reserveStream: () => undefined,
-			forceClose() {},
-		};
-		const { connector, host, sessionHost } =
-			await connectProtocolSession(session);
-		const descriptor = createRemoteServiceDescriptor(IMixedExposureService, {
-			wireName: "example.source-reentrancy.v1",
-			members: { history: { kind: "stream-method" } },
-		});
-		connector.peer.expose(descriptor, {
-			history() {
-				return new Observable((subscriber) => {
-					trace.push("source:subscribe");
-					subscriber.next("first");
-					trace.push("source:after-first");
-					subscriber.next("late");
-					subscriber.complete();
-					subscriber.error(new Error("late raw error"));
-					return () => {
-						sourceTeardowns += 1;
-						trace.push("source:teardown");
-					};
-				});
-			},
-		} as never);
-		const reservation = sessionHost.reserveIncomingStream({
-			service: "example.source-reentrancy.v1",
-			member: "history",
-			kind: "stream-method",
-			args: host.normalizeApplicationArguments(["room"]),
-		});
-		let incoming: IRpcProtocolIncomingStream | undefined;
-		if (reservation?.kind === "source") {
-			incoming = reservation.reservation.commit({
-				reserveEmission: () => {
-					trace.push("protocol:reserve-emission");
-					return {
-						commit(snapshot) {
-							trace.push(`protocol:item:${snapshot.value}`);
-							incoming?.finish({ type: "canceled" }, () =>
-								trace.push("protocol:on-released"),
-							);
-						},
-						fail() {},
-					};
-				},
-				finish(outcome) {
-					trace.push(`protocol:late-terminal:${outcome.type}`);
-				},
-			});
-		}
-
-		await Promise.resolve();
-		await Promise.resolve();
-
-		expect(sourceTeardowns).toBe(1);
-		expect(trace).toEqual([
-			"source:subscribe",
-			"protocol:reserve-emission",
-			"protocol:item:first",
-			"source:after-first",
-			"source:teardown",
-			"protocol:on-released",
-		]);
-		await connector.close();
-	});
-
-	it("RPC-STREAM-015 releases Source arguments and route references after subscribe settles", async () => {
-		class TrackedSource extends Observable<string> {
-			constructor() {
-				super((subscriber) => subscriber.complete());
-			}
-		}
-		class TrackedImplementation {
-			history(): Observable<string> {
-				return new TrackedSource();
-			}
-		}
-		const implementationBaseline = queryObjects(TrackedImplementation, {
-			format: "count",
-		});
-		const sourceBaseline = queryObjects(TrackedSource, { format: "count" });
-
-		await (async () => {
-			const session: IRpcProtocolSession = {
-				reserveInvocation: () => undefined,
-				reserveStream: () => undefined,
-				forceClose() {},
-			};
-			const { connector, host, sessionHost } =
-				await connectProtocolSession(session);
-			const descriptor = createRemoteServiceDescriptor(IMixedExposureService, {
-				wireName: "example.reference-retirement.v1",
-				members: { history: { kind: "stream-method" } },
-			});
-			const cleanup = connector.peer.expose(
-				descriptor,
-				new TrackedImplementation() as never,
-			);
-			const reservation = sessionHost.reserveIncomingStream({
-				service: "example.reference-retirement.v1",
-				member: "history",
-				kind: "stream-method",
-				args: host.normalizeApplicationArguments([
-					{ room: "detached argument" },
-				]),
-			});
-			let incoming: IRpcProtocolIncomingStream | undefined;
-			if (reservation?.kind === "source") {
-				incoming = reservation.reservation.commit({
-					reserveEmission: () => undefined,
-					finish(outcome) {
-						incoming?.finish(outcome, () => undefined);
-					},
-				});
-			}
-			await Promise.resolve();
-			await Promise.resolve();
-			cleanup();
-			await connector.close();
-		})();
-		await new Promise<void>((resolveTask) => setImmediate(resolveTask));
-
-		expect(queryObjects(TrackedImplementation, { format: "count" })).toBe(
-			implementationBaseline,
-		);
-		expect(queryObjects(TrackedSource, { format: "count" })).toBe(
-			sourceBaseline,
-		);
-	});
-
-	it("RPC-API-007 omits every Remote Service Group facade", () => {
-		const { protocol } = createProtocolHarness();
-		const acceptor = createRpcAcceptor({ protocol });
-
-		expect("resolveAll" in acceptor).toBe(false);
-		expect(
-			Object.getOwnPropertyNames(Object.getPrototypeOf(acceptor)),
-		).not.toContain("resolveAll");
-	});
-
-	it("RPC-DESC-005 RPC-DESC-009 applies the same duplicate and cleanup rules to Acceptor owner exposure", () => {
+	it("RPC-DESC-004 RPC-DESC-005 applies the same duplicate and cleanup rules to Acceptor owner exposure", () => {
 		const { protocol } = createProtocolHarness();
 		const acceptor = createRpcAcceptor({ protocol });
 		const descriptor = createRemoteServiceDescriptor(ICalculatorService, {
 			wireName: "example.calculator.v1",
-			members: { add: { kind: "unary" } },
+			methods: { add: true },
 		});
 		const implementation = {
 			add: (left: number, right: number) => left + right,
@@ -4524,7 +1514,7 @@ describe("exposure registries and remote facades", () => {
 		const connector = createRpcConnector({ protocol });
 		const descriptor = createRemoteServiceDescriptor(ICalculatorService, {
 			wireName: "example.calculator.v1",
-			members: { cancel: { kind: "unary", cancelable: true } },
+			methods: { cancel: { cancelable: true } },
 		});
 		const remote = connector.peer.resolve(descriptor);
 		const escapedCancel = remote.cancel as unknown as (
@@ -4559,87 +1549,6 @@ describe("exposure registries and remote facades", () => {
 			{ code: "unavailable" },
 		);
 		expect(businessGetterCalls).toBe(0);
-	});
-});
-
-describe("streaming Protocol conformance", () => {
-	it("RPC-CONFORMANCE-004 publishes and passes the outgoing stream lifecycle case", async () => {
-		await expectStreamingConformanceCase("protocol.stream.outgoing-lifecycle");
-	});
-
-	it("RPC-STREAM-004 RPC-FLOW-005 RPC-VALID-008 RPC-RESOURCE-012 RPC-CONFORMANCE-004 publishes and passes incoming stream resource-before-route", async () => {
-		await expectStreamingConformanceCase(
-			"protocol.stream.incoming-resource-before-route",
-		);
-	});
-
-	it("RPC-VALID-008 RPC-VALID-010 RPC-CONFORMANCE-004 publishes and passes incoming stream semantic unknown-member", async () => {
-		await expectStreamingConformanceCase(
-			"protocol.stream.incoming-semantic-unknown-member",
-		);
-	});
-
-	it("RPC-CONFORMANCE-004 publishes and passes projection disposition rearm", async () => {
-		await expectStreamingConformanceCase("protocol.stream.projection-rearm");
-	});
-
-	it("RPC-CONFORMANCE-004 publishes and passes Source reserve-before-raw", async () => {
-		await expectStreamingConformanceCase(
-			"protocol.stream.source-reserve-before-raw",
-		);
-	});
-
-	it("RPC-CONFORMANCE-004 publishes and passes Source W=1 overflow", async () => {
-		await expectStreamingConformanceCase("protocol.stream.source-w1-overflow");
-	});
-
-	it("RPC-CONFORMANCE-004 publishes and passes item-before-terminal ordering", async () => {
-		await expectStreamingConformanceCase(
-			"protocol.stream.item-before-terminal",
-		);
-	});
-
-	it("RPC-CONFORMANCE-004 publishes and passes terminal teardown release", async () => {
-		await expectStreamingConformanceCase(
-			"protocol.stream.terminal-teardown-release",
-		);
-	});
-
-	it("RPC-CONFORMANCE-004 publishes and passes over-credit Session fault classification", async () => {
-		await expectStreamingConformanceCase(
-			"protocol.stream.over-credit-session-fault",
-		);
-	});
-
-	it("RPC-SPI-017 RPC-CONFORMANCE-004 publishes and passes retained Source Recovery without resubscription", async () => {
-		await expectStreamingConformanceCase(
-			"protocol.stream.recovery-no-resubscribe",
-		);
-	});
-
-	it("RPC-CONFORMANCE-004 RPC-CONFORMANCE-005 publishes and passes bounded stream fairness progress", async () => {
-		await expectStreamingConformanceCase("protocol.stream.fairness-progress");
-	});
-
-	it("RPC-SHUTDOWN-013 RPC-SPI-017 RPC-CONFORMANCE-004 publishes and passes stream graceful-to-force shutdown", async () => {
-		await expectStreamingConformanceCase(
-			"protocol.stream.shutdown-graceful-force",
-		);
-	});
-
-	it("RPC-CONFORMANCE-005 publishes and passes one-direction terminal receipt isolation", async () => {
-		await expectStreamingConformanceCase(
-			"protocol.receipt.terminal-direction-only",
-		);
-	});
-
-	it("RPC-CONFORMANCE-004 RPC-CONFORMANCE-005 RPC-TRANSPORT-013 publishes and passes aggregate bounded stream load", async () => {
-		await expectStreamingConformanceCase(
-			"protocol.stream.aggregate-bounded-load",
-		);
-		await expectStreamingConformanceCase(
-			"protocol.stream.adapter-rejection-is-binding-failure",
-		);
 	});
 });
 
@@ -4733,7 +1642,6 @@ describe("Adapter startup and Protocol handoff", () => {
 	it("RPC-START-005 ignores a reentrant abort after binding success", async () => {
 		const session: IRpcProtocolSession = {
 			reserveInvocation: () => undefined,
-			reserveStream: () => undefined,
 			forceClose() {},
 		};
 		const protocol: IRpcProtocol = {
@@ -4825,7 +1733,6 @@ describe("Adapter startup and Protocol handoff", () => {
 	it("RPC-START-005 lets reentrant Owner termination win before startup settles", async () => {
 		const session: IRpcProtocolSession = {
 			reserveInvocation: () => undefined,
-			reserveStream: () => undefined,
 			forceClose() {},
 		};
 		const protocol: IRpcProtocol = {
@@ -4895,7 +1802,6 @@ describe("Adapter startup and Protocol handoff", () => {
 		let connectorHost: IRpcProtocolConnectorHost | undefined;
 		const session: IRpcProtocolSession = {
 			reserveInvocation: () => undefined,
-			reserveStream: () => undefined,
 			forceClose() {},
 		};
 		const connection: IRpcConnection = {
@@ -5036,7 +1942,6 @@ describe("Adapter startup and Protocol handoff", () => {
 		let releaseAcceptance: (() => void) | undefined;
 		const session: IRpcProtocolSession = {
 			reserveInvocation: () => undefined,
-			reserveStream: () => undefined,
 			forceClose() {},
 		};
 		const connection: IRpcConnection = {
@@ -5233,86 +2138,13 @@ describe("Adapter startup and Protocol handoff", () => {
 	});
 });
 
-describe("built-in final streaming profile", () => {
-	it("RPC-WIRE-016 RPC-WIRE-017 RPC-WIRE-018 RPC-WIRE-019 streams method and property members over husky-di-rpc/1", async () => {
-		const descriptor = createRemoteServiceDescriptor(IMixedExposureService, {
-			wireName: "example.final-stream.v1",
-			members: {
-				add: { kind: "unary" },
-				cancel: { kind: "unary", cancelable: true },
-				history: { kind: "stream-method" },
-				events$: { kind: "stream-property" },
-				lazy$: { kind: "stream-property" },
-			},
-		});
-		const network = createRpcTestNetwork();
-		const acceptor = createRpcAcceptor();
-		const connector = createRpcConnector();
-		acceptor.expose(descriptor, {
-			add: (left, right) => left + right,
-			cancel: async (value) => value,
-			history: (room) => of(`history:${room}`),
-			events$: of("property:event"),
-			lazy$: of("property:lazy"),
-		});
-		const collect = (source: Observable<string>): Promise<readonly string[]> =>
-			new Promise((resolveValues, reject) => {
-				const values: string[] = [];
-				source.subscribe({
-					next: (value) => values.push(value),
-					error: reject,
-					complete: () => resolveValues(values),
-				});
-			});
-
-		await acceptor.listen(network.acceptorAdapter);
-		await connector.connect({ adapter: network.createConnectorAdapter() });
-		const remote = connector.peer.resolve(descriptor);
-		await expect(collect(remote.history("room"))).resolves.toEqual([
-			"history:room",
-		]);
-		await expect(collect(remote.events$)).resolves.toEqual(["property:event"]);
-
-		const semanticKinds = network.records.flatMap((record) => {
-			const message = record.value.message as
-				| Readonly<Record<string, unknown>>
-				| undefined;
-			return typeof message?.kind === "string" ? [message.kind] : [];
-		});
-		expect(semanticKinds).toEqual(
-			expect.arrayContaining([
-				"stream-method",
-				"stream-property",
-				"stream-item",
-				"stream-complete",
-			]),
-		);
-		expect(
-			network.records.some((record) => {
-				const message = record.value.message as
-					| Readonly<Record<string, unknown>>
-					| undefined;
-				return message?.kind === "stream-method" && message.creditThrough === 1;
-			}),
-		).toBe(true);
-
-		await Promise.all([connector.close(), acceptor.close()]);
-	});
-});
-
 describe("custom Protocol outgoing invocations", () => {
 	it("RPC-PKG-007 RPC-PKG-008 RPC-PKG-009 exposes stable string enums for public RPC vocabularies", async () => {
 		const protocolEntry = await import("../src/protocol");
 
-		expect(RpcEventDirectionEnum).toEqual({
+		expect(RpcCallDirectionEnum).toEqual({
 			incoming: "incoming",
 			outgoing: "outgoing",
-		});
-		expect(RpcStreamStatusEnum).toEqual({
-			completed: "completed",
-			canceled: "canceled",
-			failed: "failed",
-			terminated: "terminated",
 		});
 		expect(RpcExceptionCodeEnum).toEqual({
 			canceled: "canceled",
@@ -5320,8 +2152,7 @@ describe("custom Protocol outgoing invocations", () => {
 			outcomeUnknown: "outcome-unknown",
 			handlerFailed: "handler-failed",
 			unknownService: "unknown-service",
-			unknownMember: "unknown-member",
-			overflow: "overflow",
+			unknownMethod: "unknown-method",
 			protocol: "protocol",
 		});
 		expect(RpcCloseReasonEnum.cleanupFailed).toBe("cleanup-failed");
@@ -5404,14 +2235,13 @@ describe("custom Protocol outgoing invocations", () => {
 					release() {},
 				};
 			},
-			reserveStream: () => undefined,
 			forceClose() {},
 		};
 		const { connector, events, sessionHost } =
 			await connectProtocolSession(session);
 		const descriptor = createRemoteServiceDescriptor(ICalculatorService, {
 			wireName: "example.calculator.v1",
-			members: { add: { kind: "unary" } },
+			methods: { add: true },
 		});
 		const remote = connector.peer.resolve(descriptor);
 		const admitted = remote.add(1, 2);
@@ -5479,14 +2309,12 @@ describe("custom Protocol outgoing invocations", () => {
 		acceptor.event$.subscribe((event) => events.push(event));
 		const first = protocolHost?.admitSession({
 			reserveInvocation: () => undefined,
-			reserveStream: () => undefined,
 			forceClose() {
 				operations.push("first-force");
 			},
 		});
 		const second = protocolHost?.admitSession({
 			reserveInvocation: () => undefined,
-			reserveStream: () => undefined,
 			forceClose() {
 				operations.push("second-force");
 			},
@@ -5544,7 +2372,7 @@ describe("custom Protocol outgoing invocations", () => {
 		let request:
 			| {
 					readonly service: string;
-					readonly member: string;
+					readonly method: string;
 					readonly args: { readonly value: readonly unknown[] };
 			  }
 			| undefined;
@@ -5566,18 +2394,17 @@ describe("custom Protocol outgoing invocations", () => {
 					},
 				};
 			},
-			reserveStream: () => undefined,
 			forceClose() {},
 		};
 		const { connector, host, events } = await connectProtocolSession(session);
 		const descriptor = createRemoteServiceDescriptor(ICalculatorService, {
 			wireName: "example.calculator.v1",
-			members: { add: { kind: "unary" } },
+			methods: { add: true },
 		});
 		const result = connector.peer.resolve(descriptor).add(1, 2);
 
 		expect(request?.service).toBe("example.calculator.v1");
-		expect(request?.member).toBe("add");
+		expect(request?.method).toBe("add");
 		expect(request?.args.value).toEqual([1, 2]);
 		expect(startCalls).toBe(1);
 		expect(releaseCalls).toBe(0);
@@ -5590,7 +2417,7 @@ describe("custom Protocol outgoing invocations", () => {
 				type: "call-started",
 				direction: "outgoing",
 				service: "example.calculator.v1",
-				member: "add",
+				method: "add",
 			},
 		]);
 
@@ -5610,7 +2437,7 @@ describe("custom Protocol outgoing invocations", () => {
 				type: "call-finished",
 				direction: "outgoing",
 				service: "example.calculator.v1",
-				member: "add",
+				method: "add",
 				outcome: "fulfilled",
 			},
 		]);
@@ -5644,13 +2471,12 @@ describe("custom Protocol outgoing invocations", () => {
 					release() {},
 				};
 			},
-			reserveStream: () => undefined,
 			forceClose() {},
 		};
 		const { connector, events } = await connectProtocolSession(session);
 		const descriptor = createRemoteServiceDescriptor(ICalculatorService, {
 			wireName: "example.calculator.v1",
-			members: { cancel: { kind: "unary", cancelable: true } },
+			methods: { cancel: { cancelable: true } },
 		});
 		const controller = new AbortController();
 		Object.defineProperties(controller.signal, {
@@ -5685,13 +2511,12 @@ describe("custom Protocol outgoing invocations", () => {
 	it("RPC-SPI-004 maps reservation capacity failure to unavailable without call events", async () => {
 		const session: IRpcProtocolSession = {
 			reserveInvocation: () => undefined,
-			reserveStream: () => undefined,
 			forceClose() {},
 		};
 		const { connector, events } = await connectProtocolSession(session);
 		const descriptor = createRemoteServiceDescriptor(ICalculatorService, {
 			wireName: "example.calculator.v1",
-			members: { add: { kind: "unary" } },
+			methods: { add: true },
 		});
 
 		await expect(
@@ -5706,16 +2531,14 @@ describe("custom Protocol outgoing invocations", () => {
 	});
 });
 
-describe("explicit peer composition", () => {
-	it("RPC-API-008 RPC-STREAM-011 exposes stable peers with independent child work", async () => {
+describe("stable remote service groups", () => {
+	it("RPC-GROUP-001 RPC-GROUP-002 RPC-GROUP-003 reserves and commits every child before ordered start", async () => {
 		const harness = createProtocolHarness();
 		const acceptor = createRpcAcceptor({ protocol: harness.protocol });
 		const host = harness.acceptorHosts[0];
 		if (host === undefined) {
 			throw new Error("Expected an Acceptor Protocol host.");
 		}
-		const membershipSnapshots: Array<readonly unknown[]> = [];
-		acceptor.peers$.subscribe((peers) => membershipSnapshots.push(peers));
 		const operations: string[] = [];
 		const createSession = (
 			name: string,
@@ -5755,7 +2578,6 @@ describe("explicit peer composition", () => {
 					},
 				};
 			},
-			reserveStream: () => undefined,
 			forceClose() {},
 		});
 		expect(
@@ -5774,56 +2596,77 @@ describe("explicit peer composition", () => {
 				}),
 			),
 		).toBeDefined();
-		const descriptor = createRemoteServiceDescriptor(IMixedExposureService, {
-			wireName: "example.explicit-composition.v1",
-			members: {
-				add: { kind: "unary" },
-				history: { kind: "stream-method" },
-				events$: { kind: "stream-property" },
-			},
+		const descriptor = createRemoteServiceDescriptor(ICalculatorService, {
+			wireName: "example.calculator.v1",
+			methods: { add: true },
 		});
-		const peers = acceptor.peers;
-		const lateMembershipSnapshots: Array<readonly unknown[]> = [];
-		acceptor.peers$.subscribe((snapshot) =>
-			lateMembershipSnapshots.push(snapshot),
-		);
-		const facades = peers.map((peer) => peer.resolve(descriptor));
-		const streams = facades.map((facade) => facade.history("room"));
-		const results = await Promise.allSettled(
-			facades.map((facade) => facade.add(1, 2)),
-		);
 
-		expect(Object.isFrozen(peers)).toBe(true);
-		expect(membershipSnapshots).toHaveLength(3);
-		expect(membershipSnapshots.every(Object.isFrozen)).toBe(true);
-		expect(membershipSnapshots.at(-1)).toBe(peers);
-		expect(lateMembershipSnapshots).toEqual([peers]);
-		expect(acceptor.peers[0]).toBe(peers[0]);
-		expect(acceptor.peers[1]).toBe(peers[1]);
-		expect(streams[0]).not.toBe(streams[1]);
+		const results = await acceptor.resolveAll(descriptor).add(1, 2);
 		expect(operations).toEqual([
 			"reserve-first",
-			"commit-first",
-			"start-first",
 			"reserve-second",
+			"commit-first",
 			"commit-second",
+			"start-first",
 			"start-second",
 		]);
+		expect(Object.isFrozen(results)).toBe(true);
 		expect(results).toHaveLength(2);
 		expect(results[0]).toMatchObject({
+			peer: acceptor.peers[0],
 			status: "fulfilled",
 			value: 3,
 		});
 		expect(results[1]).toMatchObject({
+			peer: acceptor.peers[1],
 			status: "rejected",
-			reason: expect.objectContaining({ code: "handler-failed" }),
+			reason: { code: "handler-failed" },
 		});
 		if (results[1]?.status !== "rejected") {
-			throw new Error(
-				"Expected the second independently composed child to reject.",
-			);
+			throw new Error("Expected the second group child to reject.");
 		}
 		expect(results[1].reason).toBeInstanceOf(RpcException);
+	});
+
+	it("RPC-GROUP-002 rolls back every reservation when one child lacks capacity", async () => {
+		const harness = createProtocolHarness();
+		const acceptor = createRpcAcceptor({ protocol: harness.protocol });
+		const host = harness.acceptorHosts[0];
+		if (host === undefined) {
+			throw new Error("Expected an Acceptor Protocol host.");
+		}
+		let releaseCalls = 0;
+		let commitCalls = 0;
+		host.admitSession({
+			reserveInvocation() {
+				return {
+					commit() {
+						commitCalls += 1;
+						return { start() {}, cancel() {} };
+					},
+					release() {
+						releaseCalls += 1;
+					},
+				};
+			},
+			forceClose() {},
+		});
+		host.admitSession({
+			reserveInvocation: () => undefined,
+			forceClose() {},
+		});
+		const descriptor = createRemoteServiceDescriptor(ICalculatorService, {
+			wireName: "example.calculator.v1",
+			methods: { add: true },
+		});
+
+		await expect(
+			acceptor.resolveAll(descriptor).add(1, 2),
+		).rejects.toMatchObject({
+			code: "unavailable",
+		});
+		expect(releaseCalls).toBe(1);
+		expect(commitCalls).toBe(0);
 	});
 });
 
@@ -5832,7 +2675,6 @@ describe("custom Protocol incoming calls", () => {
 		let forceCalls = 0;
 		const session: IRpcProtocolSession = {
 			reserveInvocation: () => undefined,
-			reserveStream: () => undefined,
 			forceClose() {
 				forceCalls += 1;
 			},
@@ -5868,7 +2710,6 @@ describe("custom Protocol incoming calls", () => {
 					release() {},
 				};
 			},
-			reserveStream: () => undefined,
 			forceClose() {
 				forceCalls += 1;
 				sink?.finish({
@@ -5880,7 +2721,7 @@ describe("custom Protocol incoming calls", () => {
 		const { connector } = await connectProtocolSession(session);
 		const descriptor = createRemoteServiceDescriptor(ICalculatorService, {
 			wireName: "example.calculator.v1",
-			members: { add: { kind: "unary" } },
+			methods: { add: true },
 		});
 		const result = connector.peer.resolve(descriptor).add(20, 21);
 
@@ -5912,7 +2753,6 @@ describe("custom Protocol incoming calls", () => {
 					release() {},
 				};
 			},
-			reserveStream: () => undefined,
 			forceClose() {
 				forceCalls += 1;
 				sink?.finish({
@@ -5924,7 +2764,7 @@ describe("custom Protocol incoming calls", () => {
 		const { connector } = await connectProtocolSession(session);
 		const descriptor = createRemoteServiceDescriptor(ICalculatorService, {
 			wireName: "example.calculator.v1",
-			members: { add: { kind: "unary" } },
+			methods: { add: true },
 		});
 		const result = connector.peer.resolve(descriptor).add(20, 21);
 		const terminal = Object.assign(Object.create(null), {
@@ -5948,7 +2788,6 @@ describe("custom Protocol incoming calls", () => {
 		let forceCalls = 0;
 		const session: IRpcProtocolSession = {
 			reserveInvocation: () => undefined,
-			reserveStream: () => undefined,
 			forceClose() {
 				forceCalls += 1;
 			},
@@ -5957,7 +2796,7 @@ describe("custom Protocol incoming calls", () => {
 			await connectProtocolSession(session);
 		const reserved = sessionHost.reserveIncomingCall({
 			service: "unknown.service",
-			member: "unknownMember",
+			method: "unknownMethod",
 			args: host.normalizeApplicationArguments([]),
 		});
 		if (reserved?.kind !== "unknown") {
@@ -5967,7 +2806,7 @@ describe("custom Protocol incoming calls", () => {
 
 		call.finish({
 			type: RpcCallTerminalTypeEnum.failed,
-			code: RpcExceptionCodeEnum.unknownMember,
+			code: RpcExceptionCodeEnum.unknownMethod,
 		});
 
 		expect(forceCalls).toBe(1);
@@ -5983,7 +2822,6 @@ describe("custom Protocol incoming calls", () => {
 		let forceCalls = 0;
 		const session: IRpcProtocolSession = {
 			reserveInvocation: () => undefined,
-			reserveStream: () => undefined,
 			forceClose() {
 				forceCalls += 1;
 			},
@@ -5992,14 +2830,14 @@ describe("custom Protocol incoming calls", () => {
 			await connectProtocolSession(session);
 		const descriptor = createRemoteServiceDescriptor(IDeferredService, {
 			wireName: "example.deferred.v1",
-			members: { run: { kind: "unary" } },
+			methods: { run: true },
 		});
 		connector.peer.expose(descriptor, {
 			run: () => new Promise<number>(() => {}),
 		});
 		const reserved = sessionHost.reserveIncomingCall({
 			service: "example.deferred.v1",
-			member: "run",
+			method: "run",
 			args: host.normalizeApplicationArguments([1]),
 		});
 		if (reserved?.kind !== "handler") {
@@ -6025,7 +2863,6 @@ describe("custom Protocol incoming calls", () => {
 		let forceCalls = 0;
 		const session: IRpcProtocolSession = {
 			reserveInvocation: () => undefined,
-			reserveStream: () => undefined,
 			forceClose() {
 				forceCalls += 1;
 			},
@@ -6035,7 +2872,7 @@ describe("custom Protocol incoming calls", () => {
 
 		const reservation = sessionHost.reserveIncomingCall({
 			service: "attacker.service",
-			member: "attackerMember",
+			method: "attackerMethod",
 			args: { value: [], weight: 2 } as never,
 		});
 
@@ -6059,7 +2896,6 @@ describe("custom Protocol incoming calls", () => {
 		let forceCalls = 0;
 		const session: IRpcProtocolSession = {
 			reserveInvocation: () => undefined,
-			reserveStream: () => undefined,
 			forceClose() {
 				forceCalls += 1;
 			},
@@ -6068,7 +2904,7 @@ describe("custom Protocol incoming calls", () => {
 			await connectProtocolSession(session);
 		const request = Object.assign(Object.create(null), {
 			service: "attacker.service",
-			member: "attackerMember",
+			method: "attackerMethod",
 			args: host.normalizeApplicationArguments([]),
 		}) as Record<string, unknown>;
 		request.__proto__ = 0;
@@ -6094,14 +2930,13 @@ describe("custom Protocol incoming calls", () => {
 	it("RPC-SPI-006 RPC-SPI-007 RPC-EVENT-001 RPC-EVENT-002 RPC-EVENT-003 captures a known route, defers dispatch, and publishes a paired observation", async () => {
 		const session: IRpcProtocolSession = {
 			reserveInvocation: () => undefined,
-			reserveStream: () => undefined,
 			forceClose() {},
 		};
 		const { connector, host, sessionHost, events } =
 			await connectProtocolSession(session);
 		const descriptor = createRemoteServiceDescriptor(ICalculatorService, {
 			wireName: "example.calculator.v1",
-			members: { add: { kind: "unary" } },
+			methods: { add: true },
 		});
 		let handlerCalls = 0;
 		const implementation = {
@@ -6115,7 +2950,7 @@ describe("custom Protocol incoming calls", () => {
 
 		const reserved = sessionHost.reserveIncomingCall({
 			service: "example.calculator.v1",
-			member: "add",
+			method: "add",
 			args: host.normalizeApplicationArguments([2, 3]),
 		});
 		expect(reserved?.kind).toBe("handler");
@@ -6148,36 +2983,35 @@ describe("custom Protocol incoming calls", () => {
 				type: "call-started",
 				direction: "incoming",
 				service: "example.calculator.v1",
-				member: "add",
+				method: "add",
 			},
 			{
 				type: "call-finished",
 				direction: "incoming",
 				service: "example.calculator.v1",
-				member: "add",
+				method: "add",
 				outcome: "fulfilled",
 			},
 		]);
 	});
 
-	it("RPC-CALL-014 RPC-SPI-021 RPC-EVENT-022 emits safe correlated unknown-service and unknown-member pairs", async () => {
+	it("RPC-SPI-006 RPC-SPI-007 RPC-EVENT-001 RPC-EVENT-002 RPC-EVENT-003 emits safe correlated unknown-service and unknown-method pairs", async () => {
 		const session: IRpcProtocolSession = {
 			reserveInvocation: () => undefined,
-			reserveStream: () => undefined,
 			forceClose() {},
 		};
 		const { connector, host, sessionHost, events } =
 			await connectProtocolSession(session);
 		const descriptor = createRemoteServiceDescriptor(ICalculatorService, {
 			wireName: "example.calculator.v1",
-			members: { add: { kind: "unary" } },
+			methods: { add: true },
 		});
 		connector.peer.expose(descriptor, { add: (left, right) => left + right });
 		const args = host.normalizeApplicationArguments([]);
 
 		const unknownService = sessionHost.reserveIncomingCall({
 			service: "attacker.supplied.service",
-			member: "attackerMember",
+			method: "attackerMethod",
 			args,
 		});
 		expect(unknownService).toMatchObject({
@@ -6192,21 +3026,21 @@ describe("custom Protocol incoming calls", () => {
 			code: RpcExceptionCodeEnum.unknownService,
 		});
 
-		const unknownMember = sessionHost.reserveIncomingCall({
+		const unknownMethod = sessionHost.reserveIncomingCall({
 			service: "example.calculator.v1",
-			member: "attackerMember",
+			method: "attackerMethod",
 			args,
 		});
-		expect(unknownMember).toMatchObject({
+		expect(unknownMethod).toMatchObject({
 			kind: "unknown",
-			code: "unknown-member",
+			code: "unknown-method",
 		});
-		if (unknownMember?.kind !== "unknown") {
-			throw new Error("Expected unknown-member reservation.");
+		if (unknownMethod?.kind !== "unknown") {
+			throw new Error("Expected unknown-method reservation.");
 		}
-		unknownMember.reservation.commit().finish({
+		unknownMethod.reservation.commit().finish({
 			type: RpcCallTerminalTypeEnum.failed,
-			code: RpcExceptionCodeEnum.unknownMember,
+			code: RpcExceptionCodeEnum.unknownMethod,
 		});
 
 		const observations = events.filter(
@@ -6216,14 +3050,14 @@ describe("custom Protocol incoming calls", () => {
 		expect(observations).toHaveLength(4);
 		expect(observations[0]).toMatchObject({ direction: "incoming" });
 		expect(observations[0]).not.toHaveProperty("service");
-		expect(observations[0]).not.toHaveProperty("member");
+		expect(observations[0]).not.toHaveProperty("method");
 		expect(observations[1]).toMatchObject({ code: "unknown-service" });
 		expect(observations[2]).toMatchObject({
 			direction: "incoming",
 			service: "example.calculator.v1",
 		});
-		expect(observations[2]).not.toHaveProperty("member");
-		expect(observations[3]).toMatchObject({ code: "unknown-member" });
+		expect(observations[2]).not.toHaveProperty("method");
+		expect(observations[3]).toMatchObject({ code: "unknown-method" });
 		expect(connector.peer.state).toEqual({ status: "connected" });
 		await connector.close();
 	});
@@ -6231,7 +3065,6 @@ describe("custom Protocol incoming calls", () => {
 	it("RPC-CALL-008 holds the Session and Owner permits until real handler settlement", async () => {
 		const session: IRpcProtocolSession = {
 			reserveInvocation: () => undefined,
-			reserveStream: () => undefined,
 			forceClose() {},
 		};
 		const { connector, host, sessionHost } = await connectProtocolSession(
@@ -6240,7 +3073,7 @@ describe("custom Protocol incoming calls", () => {
 		);
 		const descriptor = createRemoteServiceDescriptor(IDeferredService, {
 			wireName: "example.deferred.v1",
-			members: { run: { kind: "unary" } },
+			methods: { run: true },
 		});
 		const handlerResolvers: ((value: number) => void)[] = [];
 		let handlerCalls = 0;
@@ -6256,7 +3089,7 @@ describe("custom Protocol incoming calls", () => {
 		const reserve = (value: number) => {
 			const reservation = sessionHost.reserveIncomingCall({
 				service: "example.deferred.v1",
-				member: "run",
+				method: "run",
 				args: host.normalizeApplicationArguments([value]),
 			});
 			if (reservation?.kind !== "handler") {
@@ -6295,7 +3128,6 @@ describe("custom Protocol incoming calls", () => {
 	it("RPC-RESOURCE-001 rejects incoming work before route lookup when the args subcap is reserved", async () => {
 		const session: IRpcProtocolSession = {
 			reserveInvocation: () => undefined,
-			reserveStream: () => undefined,
 			forceClose() {},
 		};
 		const { host, sessionHost, events } = await connectProtocolSession(
@@ -6312,7 +3144,7 @@ describe("custom Protocol incoming calls", () => {
 
 		const request = {
 			service: "unknown.service",
-			member: "unknownMember",
+			method: "unknownMethod",
 			args,
 		};
 		const first = sessionHost.reserveIncomingCall(request);
@@ -6334,14 +3166,13 @@ describe("custom Protocol incoming calls", () => {
 	it("RPC-CLOSE-001 consumes a terminal handler result without normalizing it", async () => {
 		const session: IRpcProtocolSession = {
 			reserveInvocation: () => undefined,
-			reserveStream: () => undefined,
 			forceClose() {},
 		};
 		const { connector, host, sessionHost } =
 			await connectProtocolSession(session);
 		const descriptor = createRemoteServiceDescriptor(IDeferredService, {
 			wireName: "example.deferred.v1",
-			members: { run: { kind: "unary" } },
+			methods: { run: true },
 		});
 		let resolveHandler!: (value: number) => void;
 		let inspectionCalls = 0;
@@ -6354,7 +3185,7 @@ describe("custom Protocol incoming calls", () => {
 		});
 		const reserved = sessionHost.reserveIncomingCall({
 			service: "example.deferred.v1",
-			member: "run",
+			method: "run",
 			args: host.normalizeApplicationArguments([1]),
 		});
 		if (reserved?.kind !== "handler") {
@@ -6458,7 +3289,6 @@ describe("Protocol Session state projection", () => {
 	it("RPC-STATE-001 RPC-SPI-010 projects Connector recovery and terminal ordering on stable streams", async () => {
 		const session: IRpcProtocolSession = {
 			reserveInvocation: () => undefined,
-			reserveStream: () => undefined,
 			forceClose() {},
 		};
 		const { connector, sessionHost, events } =
@@ -6592,7 +3422,6 @@ describe("Connector Reconnection", () => {
 	it("RPC-RECONNECT-001 owns one initial connection and publishes its orchestration state", async () => {
 		const session: IRpcProtocolSession = {
 			reserveInvocation: () => undefined,
-			reserveStream: () => undefined,
 			forceClose() {},
 		};
 		const protocol: IRpcProtocol = {
@@ -6792,7 +3621,6 @@ describe("Connector Reconnection", () => {
 	it("RPC-RECONNECT-002 immediately reconnects a recovering Peer with a fresh Adapter", async () => {
 		const session: IRpcProtocolSession = {
 			reserveInvocation: () => undefined,
-			reserveStream: () => undefined,
 			forceClose() {},
 		};
 		let sessionHost: IRpcProtocolSessionHost | undefined;
@@ -6938,7 +3766,6 @@ describe("Connector Reconnection", () => {
 		try {
 			const session: IRpcProtocolSession = {
 				reserveInvocation: () => undefined,
-				reserveStream: () => undefined,
 				forceClose() {},
 			};
 			let sessionHost: IRpcProtocolSessionHost | undefined;
@@ -7539,147 +4366,6 @@ describe("Topology Owner termination", () => {
 		});
 	});
 
-	it("RPC-SHUTDOWN-002 RPC-SHUTDOWN-013 RPC-SHUTDOWN-014 drains an admitted connected stream through Source release", async () => {
-		const flow = createW1SemanticStreamHarness();
-		const { connector, sessionHost } = await connectProtocolSession(
-			flow.session,
-		);
-		flow.attachIncomingHost(sessionHost);
-		const descriptor = createRemoteServiceDescriptor(IMixedExposureService, {
-			wireName: "example.shutdown-stream-drain.v1",
-			members: { history: { kind: "stream-method" } },
-		});
-		const source = new Subject<string>();
-		let sourceTeardowns = 0;
-		let observerCompletions = 0;
-		connector.peer.expose(descriptor, {
-			history: () =>
-				new Observable((subscriber) => {
-					const subscription = source.subscribe(subscriber);
-					return () => {
-						sourceTeardowns += 1;
-						subscription.unsubscribe();
-					};
-				}),
-		} as never);
-		connector.peer
-			.resolve(descriptor)
-			.history("room")
-			.subscribe({
-				complete: () => {
-					observerCompletions += 1;
-				},
-			});
-		await Promise.resolve();
-		await Promise.resolve();
-
-		let settled = false;
-		const task = connector.shutdown();
-		void task.then(() => {
-			settled = true;
-		});
-		await Promise.resolve();
-		await Promise.resolve();
-
-		expect(connector.state).toEqual({ status: "draining" });
-		expect(connector.peer.state).toMatchObject({ status: "draining" });
-		expect(settled).toBe(false);
-		expect(sourceTeardowns).toBe(0);
-		expect(observerCompletions).toBe(0);
-
-		source.complete();
-		flow.flush();
-		await task;
-
-		expect(sourceTeardowns).toBe(1);
-		expect(observerCompletions).toBe(1);
-		expect(flow.released).toBe(true);
-		expect(connector.state).toEqual({
-			status: "closed",
-			outcome: "normal",
-			reason: "graceful-shutdown",
-		});
-	});
-
-	it("RPC-LIFE-001 RPC-LIFE-003 RPC-SHUTDOWN-002 forces a recovering stream at G through the cached task", async () => {
-		const flow = createW1SemanticStreamHarness();
-		const { connector, sessionHost, events } = await connectProtocolSession(
-			flow.session,
-		);
-		flow.attachIncomingHost(sessionHost);
-		const descriptor = createRemoteServiceDescriptor(IMixedExposureService, {
-			wireName: "example.shutdown-recovering-stream.v1",
-			members: { history: { kind: "stream-method" } },
-		});
-		const source = new Subject<string>();
-		let sourceTeardowns = 0;
-		const observerErrors: unknown[] = [];
-		connector.peer.expose(descriptor, {
-			history: () =>
-				new Observable((subscriber) => {
-					const subscription = source.subscribe(subscriber);
-					return () => {
-						sourceTeardowns += 1;
-						subscription.unsubscribe();
-					};
-				}),
-		} as never);
-		connector.peer
-			.resolve(descriptor)
-			.history("room")
-			.subscribe({ error: (error) => observerErrors.push(error) });
-		await Promise.resolve();
-		await Promise.resolve();
-		sessionHost.transition({
-			type: RpcProtocolSessionTransitionTypeEnum.recovering,
-		});
-
-		const task = connector.shutdown();
-
-		expect(connector.shutdown()).toBe(task);
-		expect(flow.forceCloseCount).toBe(1);
-		expect(sourceTeardowns).toBe(1);
-		expect(flow.released).toBe(true);
-		expect(observerErrors).toMatchObject([
-			{ code: RpcExceptionCodeEnum.outcomeUnknown },
-		]);
-		expect(connector.peer.state).toEqual({
-			status: "closed",
-			outcome: "normal",
-			reason: "forced-close",
-		});
-		expect(
-			events.filter((event) => event.type === RpcEventTypeEnum.streamFinished),
-		).toEqual(
-			expect.arrayContaining([
-				expect.objectContaining({
-					direction: RpcEventDirectionEnum.incoming,
-					outcome: RpcStreamStatusEnum.terminated,
-				}),
-				expect.objectContaining({
-					direction: RpcEventDirectionEnum.outgoing,
-					outcome: RpcStreamStatusEnum.failed,
-					code: RpcExceptionCodeEnum.outcomeUnknown,
-				}),
-			]),
-		);
-
-		sessionHost.transition({
-			type: RpcProtocolSessionTransitionTypeEnum.recovered,
-		});
-		await task;
-
-		expect(connector.shutdown()).toBe(task);
-		expect(connector.close()).toBe(task);
-		expect(flow.forceCloseCount).toBe(1);
-		expect(sourceTeardowns).toBe(1);
-		expect(connector.state).toEqual({
-			status: "closed",
-			outcome: "normal",
-			reason: "graceful-shutdown",
-		});
-	});
-
 	it("RPC-LIFE-001 RPC-LIFE-002 upgrades an in-progress graceful shutdown through the same Promise", async () => {
 		let resolveShutdown: (() => void) | undefined;
 		let closeCalls = 0;
@@ -7944,12 +4630,10 @@ describe("Acceptor Topology Owner termination", () => {
 		const acceptor = createRpcAcceptor({ protocol });
 		const connectedSession: IRpcProtocolSession = {
 			reserveInvocation: () => undefined,
-			reserveStream: () => undefined,
 			forceClose() {},
 		};
 		const recoveringSession: IRpcProtocolSession = {
 			reserveInvocation: () => undefined,
-			reserveStream: () => undefined,
 			forceClose() {
 				recoveringForceCalls += 1;
 			},
@@ -8055,7 +4739,6 @@ describe("Acceptor Topology Owner termination", () => {
 		const acceptor = createRpcAcceptor({ protocol });
 		const session: IRpcProtocolSession = {
 			reserveInvocation: () => undefined,
-			reserveStream: () => undefined,
 			forceClose() {},
 		};
 		if (acceptorHost?.admitSession(session) === undefined) {
@@ -8437,44 +5120,5 @@ describe("Acceptor Topology Owner termination", () => {
 			"task-rejected",
 		]);
 		expect(acceptor.shutdown()).toBe(task);
-	});
-});
-
-describe("normative evidence registry", () => {
-	const packageRoot = resolve(fileURLToPath(new URL("../", import.meta.url)));
-	const auditScript = resolve(packageRoot, "scripts/evidence-registry.mjs");
-
-	it("RPC-EVIDENCE-004 RPC-EVIDENCE-013 verifies every close-delimited active and retired identity", () => {
-		const result = spawnSync(
-			process.execPath,
-			[
-				auditScript,
-				"ledger",
-				"--legacy-preserve",
-				"153",
-				"--legacy-retire",
-				"48",
-				"--active",
-				"343",
-			],
-			{ cwd: packageRoot, encoding: "utf8" },
-		);
-
-		expect(result.stderr).toBe("");
-		expect(result.status).toBe(0);
-	});
-
-	it("RPC-EVIDENCE-011 enforces zero unfinished nodes and reports the exact external release boundary", () => {
-		const result = spawnSync(
-			process.execPath,
-			[auditScript, "graph", "--inverse", "--zero-incomplete"],
-			{ cwd: packageRoot, encoding: "utf8" },
-		);
-
-		expect(result.stderr).toBe("");
-		expect(result.status).toBe(0);
-		expect(result.stdout).toContain(
-			"graph audit passed: active=343 retired=48 canonical=686 evidence=347",
-		);
 	});
 });

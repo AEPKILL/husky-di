@@ -10,18 +10,14 @@ import type {
 	IRpcProtocolRuntimePolicy,
 } from "@/interfaces/protocol/rpc-protocol.interface";
 import type { IRpcRetainedBytesLedger } from "@/interfaces/protocol/rpc-retained-bytes-ledger.interface";
-import type { IRpcApplicationWorkLedger } from "@/interfaces/rpc-application-work-ledger.interface";
-import type { IRpcEventPublisher } from "@/interfaces/rpc-event-publisher.interface";
 import type { IRpcHandlerScheduler } from "@/interfaces/rpc-handler-scheduler.interface";
 import type { IRpcOwnerCustody } from "@/interfaces/rpc-owner-custody.interface";
 import type { RpcPeerFactory } from "@/types/rpc-peer.type";
 
 type CreateRpcOwnerImplOptions = Readonly<{
-	readonly applicationWorkLedger: IRpcApplicationWorkLedger;
 	readonly policy: IRpcProtocolRuntimePolicy;
 	readonly retainedBytesLedger: IRpcRetainedBytesLedger;
 	readonly custody: IRpcOwnerCustody;
-	readonly eventPublisher: IRpcEventPublisher;
 	readonly handlerScheduler: IRpcHandlerScheduler;
 	readonly createPeer: RpcPeerFactory;
 }>;

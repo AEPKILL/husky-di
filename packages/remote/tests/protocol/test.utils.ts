@@ -92,10 +92,7 @@ export function createRpcDirectSessionHarness(
 	const policy: IRpcProtocolRuntimePolicy = {
 		maxSessions: 1,
 		maxHandshakes: 1,
-		maxApplicationWorkPerSession: 256,
-		maxApplicationWorkTotal: 256,
-		maxActiveStreamsPerSession: 16,
-		maxActiveStreamsTotal: 16,
+		maxPendingInvocationsPerSession: 256,
 		maxRetainedBytesPerSession: 32 * 1024 * 1024,
 		maxRetainedBytesTotal: 32 * 1024 * 1024,
 		maxHandlersPerSession: 16,
@@ -160,7 +157,6 @@ export function createRpcDirectSessionHarness(
 	});
 	const sessionHost: IRpcProtocolSessionHost = {
 		reserveIncomingCall: () => undefined,
-		reserveIncomingStream: () => undefined,
 		transition: (transition) => transitions.push(transition),
 		fault: (reason) => faults.push(reason),
 	};

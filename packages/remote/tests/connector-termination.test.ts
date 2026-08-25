@@ -114,7 +114,6 @@ describe("Connector termination cleanup", () => {
 		const closeCalls = [0, 0];
 		const sessions: IRpcProtocolSession[] = forceCalls.map((_, index) => ({
 			reserveInvocation: () => undefined,
-			reserveStream: () => undefined,
 			forceClose() {
 				forceCalls[index] += 1;
 			},
@@ -197,7 +196,6 @@ describe("Connector termination cleanup", () => {
 		const fault = new Error("fresh Session proof invariant failed");
 		const session: IRpcProtocolSession = {
 			reserveInvocation: () => undefined,
-			reserveStream: () => undefined,
 			forceClose() {
 				forceCalls += 1;
 				sessionHost?.transition({
@@ -267,7 +265,6 @@ describe("Connector termination cleanup", () => {
 		const fault = new Error("Session resource fault");
 		const session: IRpcProtocolSession = {
 			reserveInvocation: () => undefined,
-			reserveStream: () => undefined,
 			forceClose() {
 				forceCalls += 1;
 				if (terminalKind === "Session fault") {
@@ -456,7 +453,6 @@ describe("Connector termination cleanup", () => {
 			reserveInvocation() {
 				return undefined;
 			},
-			reserveStream: () => undefined,
 			forceClose() {},
 		};
 		const protocol: IRpcProtocol = {
@@ -544,7 +540,6 @@ describe("Connector termination cleanup", () => {
 		let bindCalls = 0;
 		const session: IRpcProtocolSession = {
 			reserveInvocation: () => undefined,
-			reserveStream: () => undefined,
 			forceClose() {},
 		};
 		const protocol: IRpcProtocol = {
@@ -719,7 +714,6 @@ describe("Connector termination cleanup", () => {
 			const connectionSource = new Subject<IRpcConnection>();
 			const session: IRpcProtocolSession = {
 				reserveInvocation: () => undefined,
-				reserveStream: () => undefined,
 				forceClose() {},
 			};
 			const connector = createRpcConnector({
@@ -786,7 +780,6 @@ describe("Connector termination cleanup", () => {
 		let sessionHost: IRpcProtocolSessionHost | undefined;
 		const session: IRpcProtocolSession = {
 			reserveInvocation: () => undefined,
-			reserveStream: () => undefined,
 			forceClose() {},
 		};
 		const connector = createRpcConnector({
@@ -853,7 +846,6 @@ describe("Connector termination cleanup", () => {
 		let sessionHost: IRpcProtocolSessionHost | undefined;
 		const session: IRpcProtocolSession = {
 			reserveInvocation: () => undefined,
-			reserveStream: () => undefined,
 			forceClose() {},
 		};
 		const connector = createRpcConnector({
@@ -923,7 +915,6 @@ describe("Connector termination cleanup", () => {
 		let runtimeCloseCalls = 0;
 		const session: IRpcProtocolSession = {
 			reserveInvocation: () => undefined,
-			reserveStream: () => undefined,
 			forceClose() {
 				forceCalls += 1;
 			},

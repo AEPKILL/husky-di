@@ -1,8 +1,19 @@
 {
 	"$schema": "https://unpkg.com/@changesets/config@3.1.1/schema.json",
-	"changelog": "@changesets/cli/changelog",
+	"changelog": [
+		"@changesets/changelog-github",
+		{
+			"repo": "aepkill/husky-di"
+		}
+	],
 	"commit": false,
-	"fixed": [["@husky-di/core", "@husky-di/module", "@husky-di/decorator"]],
+	"fixed": [
+		[
+			"@husky-di/core",
+			"@husky-di/module",
+			"@husky-di/decorator"
+		]
+	],
 	"linked": [],
 	"access": "public",
 	"baseBranch": "master",

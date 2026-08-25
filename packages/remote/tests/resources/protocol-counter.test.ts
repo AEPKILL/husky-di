@@ -88,7 +88,7 @@ describe("Default RPC Protocol counter drain", () => {
 		session._nextOutgoingCallOrdinal = Number.MAX_SAFE_INTEGER;
 		const reservation = session.reserveInvocation({
 			service: "example.counter.v1",
-			member: "run",
+			method: "run",
 			args: normalizeRpcApplicationArguments([]),
 		});
 		if (reservation === undefined) {
@@ -113,7 +113,7 @@ describe("Default RPC Protocol counter drain", () => {
 		const network = createRpcTestNetwork();
 		const descriptor = createRemoteServiceDescriptor(ICounterService, {
 			wireName: "example.counter.v1",
-			members: { run: { kind: "unary" } },
+			methods: { run: true },
 		});
 		const acceptor = createRpcAcceptor({ protocol });
 		const connector = createRpcConnector({ protocol });
@@ -149,7 +149,7 @@ describe("Default RPC Protocol counter drain", () => {
 		const network = createRpcTestNetwork();
 		const descriptor = createRemoteServiceDescriptor(ICounterService, {
 			wireName: "example.counter.v1",
-			members: { run: { kind: "unary" } },
+			methods: { run: true },
 		});
 		const acceptor = createRpcAcceptor({ protocol });
 		const connector = createRpcConnector({ protocol });

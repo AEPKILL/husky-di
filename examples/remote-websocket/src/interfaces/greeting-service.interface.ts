@@ -5,16 +5,9 @@
  */
 
 import { createServiceIdentifier } from "@husky-di/core";
-import type { Observable } from "rxjs";
 
 export interface IGreetingService {
-	readonly clock$: Observable<string>;
 	greet(name: string, delayMs: number): Promise<string>;
-	greetCancelable(
-		name: string,
-		delayMs: number,
-		signal: AbortSignal,
-	): Promise<string>;
 }
 
 export const IGreetingService =

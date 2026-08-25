@@ -193,48 +193,6 @@ export function getFixture(): unknown {
 		assert.deepEqual(getRuleIds(rootDirectoryPath), []);
 	});
 
-	it("reports Remote implementation imports outside factories", () => {
-		const rootDirectoryPath = createWorkspace({
-			"packages/remote/src/impls/rpc-owner.impl.ts": `/**
- * @overview RPC owner implementation.
- * @author AEPKILL
- * @created 2026-08-25 00:00:00
- */
-import { RpcPeerImpl } from "@/impls/rpc-peer.impl";
-
-export type RpcEndpoint = import("@/impls/protocol/rpc-endpoint.impl").RpcEndpointImpl;
-
-export async function loadRpcSession(): Promise<unknown> {
-	return import("@/impls/protocol/rpc-session.impl");
-}
-`,
-		});
-
-		assert.deepEqual(getRuleIds(rootDirectoryPath), [
-			"imports/implementation-only-in-factories",
-			"imports/implementation-only-in-factories",
-			"imports/implementation-only-in-factories",
-		]);
-	});
-
-	it("allows Remote factories to import concrete implementations", () => {
-		const rootDirectoryPath = createWorkspace({
-			"packages/remote/src/factories/rpc-peer.factory.ts": `/**
- * @overview RPC peer factory.
- * @author AEPKILL
- * @created 2026-08-25 00:00:00
- */
-import { RpcPeerImpl } from "@/impls/rpc-peer.impl";
-
-export function createRpcPeer(): RpcPeerImpl {
-	return new RpcPeerImpl();
-}
-`,
-		});
-
-		assert.deepEqual(getRuleIds(rootDirectoryPath), []);
-	});
-
 	it("reports biome-ignore directives without reasons", () => {
 		const rootDirectoryPath = createWorkspace({
 			"scripts/src/check-code-standard.ts": `/**

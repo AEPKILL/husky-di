@@ -8,11 +8,13 @@ import type { Cleanup } from "@husky-di/core";
 import { Observable, Subject, type Subscription } from "rxjs";
 import { RpcProtocolSessionTransitionTypeEnum } from "@/enums/protocol/rpc-protocol-session-transition-type.enum";
 import { RpcAcceptorListenerStopReasonEnum } from "@/enums/rpc-acceptor-listener-stop-reason.enum";
+import { RpcCallStatusEnum } from "@/enums/rpc-call-status.enum";
 import { RpcCloseOutcomeEnum } from "@/enums/rpc-close-outcome.enum";
 import { RpcCloseReasonEnum } from "@/enums/rpc-close-reason.enum";
 import { RpcEventTypeEnum } from "@/enums/rpc-event-type.enum";
 import { RpcExceptionCodeEnum } from "@/enums/rpc-exception-code.enum";
 import { RpcStateStatusEnum } from "@/enums/rpc-state-status.enum";
+import { getRemoteServiceDescriptorData } from "@/factories/remote-service-descriptor.factory";
 import { createRpcException } from "@/factories/rpc-exception.factory";
 import type {
 	IRpcProtocolAcceptorRuntime,
@@ -27,20 +29,24 @@ import type {
 import type { IRpcRetainedBytesLedger } from "@/interfaces/protocol/rpc-retained-bytes-ledger.interface";
 import type { IRemoteServiceDescriptor } from "@/interfaces/remote-service-descriptor.interface";
 import type { IRpcAcceptorAdapter } from "@/interfaces/rpc-adapter.interface";
-import type { IRpcApplicationWorkLedger } from "@/interfaces/rpc-application-work-ledger.interface";
 import type {
 	IRpcAcceptor,
 	IRpcPeer,
+	RemoteServiceGroup,
 	RpcEvent,
+	RpcPeerResult,
 } from "@/interfaces/rpc-caller.interface";
 import type { IRpcConnection } from "@/interfaces/rpc-connection.interface";
-import type { IRpcEventPublisher } from "@/interfaces/rpc-event-publisher.interface";
 import type { IRpcHandlerScheduler } from "@/interfaces/rpc-handler-scheduler.interface";
 import type { IRpcOwnerCustody } from "@/interfaces/rpc-owner-custody.interface";
-import type { IRpcPeerRuntime } from "@/interfaces/rpc-peer.interface";
+import type {
+	IRpcPeerCommittedInvocation,
+	IRpcPeerInvocationReservation,
+	IRpcPeerRuntime,
+} from "@/interfaces/rpc-peer.interface";
 import type {
 	RemoteServiceImplementation,
-	RpcMemberDefinitions,
+	RpcMethodDefinitions,
 } from "@/types/remote-service-descriptor.type";
 import type {
 	RpcAcceptorListenerState,
@@ -53,7 +59,13 @@ import type {
 	RpcOwnedConnection,
 } from "@/types/rpc-owner-custody.type";
 import type { RpcPeerFactory } from "@/types/rpc-peer.type";
+import { normalizeRpcApplicationArguments } from "@/utils/rpc-application-value.util";
+import {
+	installRpcAbortListener,
+	prepareRpcInvocationArguments,
+} from "@/utils/rpc-cancellation.util";
 import { installRpcExposure } from "@/utils/rpc-exposure.util";
+import { createRpcFacade } from "@/utils/rpc-facade.util";
 import {
 	rpcCallableSchema,
 	rpcNonNullObjectSchema,
@@ -69,8 +81,6 @@ function isProtocolSession(value: unknown): value is IRpcProtocolSession {
 	const session = value as object;
 	return (
 		rpcCallableSchema.safeParse(Reflect.get(session, "reserveInvocation"))
-			.success &&
-		rpcCallableSchema.safeParse(Reflect.get(session, "reserveStream"))
 			.success &&
 		rpcCallableSchema.safeParse(Reflect.get(session, "forceClose")).success
 	);
@@ -98,12 +108,11 @@ type RpcAcceptorClosedState = Extract<
 export class RpcAcceptorImpl implements IRpcAcceptor {
 	readonly #runtime: IRpcProtocolAcceptorRuntime;
 	readonly #policy: IRpcProtocolRuntimePolicy;
-	readonly #applicationWorkLedger: IRpcApplicationWorkLedger;
 	readonly #retainedBytesLedger: IRpcRetainedBytesLedger;
 	readonly #ownerExposureRegistry: RpcExposureRegistry = new Map();
 	readonly #stateSubject = new Subject<RpcAcceptorState>();
 	readonly #peersSubject = new Subject<readonly IRpcPeer[]>();
-	readonly #eventPublisher: IRpcEventPublisher;
+	readonly #eventSubject = new Subject<RpcEvent>();
 	readonly #sessions = new Map<IRpcProtocolSession, IRpcPeerRuntime>();
 	readonly #faultingSessions = new Set<IRpcProtocolSession>();
 	readonly #handlerScheduler: IRpcHandlerScheduler;
@@ -126,10 +135,8 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 
 	constructor(options: CreateRpcAcceptorImplOptions) {
 		const {
-			applicationWorkLedger,
 			createPeer,
 			custody,
-			eventPublisher,
 			handlerScheduler,
 			policy,
 			retainedBytesLedger,
@@ -137,9 +144,7 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 		} = options;
 		this.#runtime = runtime;
 		this.#policy = policy;
-		this.#applicationWorkLedger = applicationWorkLedger;
 		this.#custody = custody;
-		this.#eventPublisher = eventPublisher;
 		this.#retainedBytesLedger = retainedBytesLedger;
 		this.#handlerScheduler = handlerScheduler;
 		this.#createPeer = createPeer;
@@ -167,7 +172,7 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 			}
 			return subscription;
 		});
-		this.event$ = this.#eventPublisher.event$;
+		this.event$ = this.#eventSubject.asObservable();
 	}
 
 	get state(): RpcAcceptorState {
@@ -185,7 +190,7 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 		return this.#retainedBytesLedger.reserve(bytes);
 	}
 
-	expose<T, Definitions extends RpcMemberDefinitions<T>>(
+	expose<T, Definitions extends RpcMethodDefinitions<T>>(
 		descriptor: IRemoteServiceDescriptor<T, Definitions>,
 		implementation: NoInfer<RemoteServiceImplementation<T, Definitions>>,
 	): Cleanup {
@@ -479,6 +484,123 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 		}
 	}
 
+	resolveAll<T, Definitions extends RpcMethodDefinitions<T>>(
+		descriptor: IRemoteServiceDescriptor<T, Definitions>,
+	): RemoteServiceGroup<T, Definitions> {
+		const service = getRemoteServiceDescriptorData(descriptor).wireName;
+		return createRpcFacade(descriptor, (method, cancelable, actualArguments) =>
+			this.#invokeGroup(service, method, cancelable, actualArguments),
+		) as RemoteServiceGroup<T, Definitions>;
+	}
+
+	#invokeGroup(
+		service: string,
+		method: string,
+		cancelable: boolean,
+		actualArguments: readonly unknown[],
+	): Promise<readonly RpcPeerResult<unknown>[]> {
+		const prepared = prepareRpcInvocationArguments(cancelable, actualArguments);
+		if (this.state.status !== RpcStateStatusEnum.active) {
+			return Promise.reject(
+				createRpcException(RpcExceptionCodeEnum.unavailable),
+			);
+		}
+		const args = normalizeRpcApplicationArguments(
+			prepared.applicationArguments,
+		);
+		const peers = this.#peers.filter(
+			(peer) =>
+				peer.state.status === RpcStateStatusEnum.connected ||
+				peer.state.status === RpcStateStatusEnum.recovering,
+		);
+		if (peers.length === 0) {
+			return Promise.resolve(Object.freeze([]));
+		}
+
+		const reservations: IRpcPeerInvocationReservation[] = [];
+		try {
+			for (const peer of peers) {
+				const reservation = peer.reserveOutgoingProtocolInvocation(
+					service,
+					method,
+					args,
+				);
+				if (reservation === undefined) {
+					for (const retained of reservations) {
+						retained.release();
+					}
+					return Promise.reject(
+						createRpcException(RpcExceptionCodeEnum.unavailable),
+					);
+				}
+				reservations.push(reservation);
+			}
+		} catch (error) {
+			for (const retained of reservations) {
+				try {
+					retained.release();
+				} catch {
+					// The first Protocol fault remains authoritative.
+				}
+			}
+			return Promise.reject(error);
+		}
+
+		const invocations: IRpcPeerCommittedInvocation[] = [];
+		try {
+			for (const reservation of reservations) {
+				invocations.push(reservation.commit());
+			}
+		} catch (error) {
+			for (
+				let index = invocations.length;
+				index < reservations.length;
+				index += 1
+			) {
+				try {
+					reservations[index]?.release();
+				} catch {
+					// The commit fault remains authoritative.
+				}
+			}
+			return Promise.reject(error);
+		}
+
+		let removeAbortListener: (() => void) | undefined;
+		if (prepared.signal !== undefined) {
+			removeAbortListener = installRpcAbortListener(prepared.signal, () => {
+				for (const invocation of invocations) {
+					invocation.cancel();
+				}
+			});
+		}
+		for (const invocation of invocations) {
+			invocation.start();
+		}
+		return Promise.allSettled(
+			invocations.map((invocation) => invocation.result),
+		).then((results) => {
+			removeAbortListener?.();
+			return Object.freeze(
+				results.map((result, index) =>
+					Object.freeze<RpcPeerResult<unknown>>(
+						result.status === "fulfilled"
+							? {
+									peer: peers[index] as IRpcPeerRuntime,
+									status: RpcCallStatusEnum.fulfilled,
+									value: result.value,
+								}
+							: {
+									peer: peers[index] as IRpcPeerRuntime,
+									status: RpcCallStatusEnum.rejected,
+									reason: result.reason,
+								},
+					),
+				),
+			);
+		});
+	}
+
 	shutdown(): Promise<void> {
 		if (this.#terminationTask !== undefined) {
 			return this.#terminationTask;
@@ -577,12 +699,9 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 		for (const peer of changedPeers) {
 			peer.flushState();
 		}
-		this.#eventPublisher.publish(
-			{ type: RpcEventTypeEnum.ownerDraining },
-			() => this.state.status === RpcStateStatusEnum.draining,
-		);
+		this.#eventSubject.next({ type: RpcEventTypeEnum.ownerDraining });
 		for (const event of peerEvents) {
-			this.#eventPublisher.publish(event);
+			this.#eventSubject.next(event);
 		}
 		for (const peer of terminalPeers) {
 			peer.completeState();
@@ -590,10 +709,7 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 
 		let grace: Promise<unknown>;
 		try {
-			grace = Promise.all([
-				this.#runtime.shutdown(),
-				this.#applicationWorkLedger.waitForIdle(),
-			]);
+			grace = Promise.resolve(this.#runtime.shutdown());
 		} catch {
 			this.#beginClosing(RpcCloseReasonEnum.forcedClose, true);
 			return;
@@ -644,12 +760,12 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 			peer.flushState();
 		}
 		for (const event of peerClosures.events) {
-			this.#eventPublisher.publish(event);
+			this.#eventSubject.next(event);
 		}
 		for (const peer of peerClosures.peers) {
 			peer.completeState();
 		}
-		this.#eventPublisher.publish({ type: RpcEventTypeEnum.ownerClosing });
+		this.#eventSubject.next({ type: RpcEventTypeEnum.ownerClosing });
 		this.#startCleanup(
 			Object.freeze({
 				status: RpcStateStatusEnum.closed,
@@ -772,19 +888,19 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 		this.#stateSubject.complete();
 		this.#peersSubject.complete();
 		if (finalState.outcome === RpcCloseOutcomeEnum.normal) {
-			this.#eventPublisher.publish({
+			this.#eventSubject.next({
 				type: RpcEventTypeEnum.topologyClosed,
 				outcome: RpcCloseOutcomeEnum.normal,
 				reason: finalState.reason,
 			});
 		} else {
-			this.#eventPublisher.publish({
+			this.#eventSubject.next({
 				type: RpcEventTypeEnum.topologyClosed,
 				outcome: RpcCloseOutcomeEnum.failed,
 				reason: finalState.reason,
 			});
 		}
-		this.#eventPublisher.complete();
+		this.#eventSubject.complete();
 		this.#resolveTermination?.();
 	}
 
@@ -805,12 +921,12 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 		this.#clearCleanupReferences();
 		this.#stateSubject.complete();
 		this.#peersSubject.complete();
-		this.#eventPublisher.publish({
+		this.#eventSubject.next({
 			type: RpcEventTypeEnum.topologyClosed,
 			outcome: RpcCloseOutcomeEnum.failed,
 			reason: RpcCloseReasonEnum.cleanupFailed,
 		});
-		this.#eventPublisher.complete();
+		this.#eventSubject.complete();
 		this.#rejectTermination?.(error);
 	}
 
@@ -838,20 +954,13 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 			initialState: { status: RpcStateStatusEnum.connected },
 			ownerExposureRegistry: this.#ownerExposureRegistry,
 			isOwnerActive: () => this.state.status === RpcStateStatusEnum.active,
-			emitEvent: (event) => this.#eventPublisher.publish(event),
+			emitEvent: (event) => this.#eventSubject.next(event),
 			onProtocolFault: (error) =>
 				this.#faultSession(session, RpcCloseReasonEnum.protocolFault, error),
 			handlerScheduler: this.#handlerScheduler,
-			maximumActiveStreamsPerSession: this.#policy.maxActiveStreamsPerSession,
-			maximumApplicationWorkPerSession:
-				this.#policy.maxApplicationWorkPerSession,
 			maximumIncomingBytes: Math.floor(
 				this.#policy.maxRetainedBytesPerSession / 4,
 			),
-			reserveLocalApplicationWork: (stream) =>
-				this.#applicationWorkLedger.reserveLocal(stream),
-			reserveRemoteApplicationWork: (stream) =>
-				this.#applicationWorkLedger.reserveRemote(stream),
 			reserveRetainedBytes: (bytes) =>
 				reserveRpcSessionRetainedBytes(
 					session,
@@ -862,18 +971,10 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 		peer.attachProtocolSession(session);
 		this.#sessions.set(session, peer);
 		this.#commitPeers(Object.freeze([...this.#peers, peer]));
-		this.#eventPublisher.publish(
-			{ type: RpcEventTypeEnum.peerOpened, peer },
-			() =>
-				this.state.status === RpcStateStatusEnum.active &&
-				this.#sessions.get(session) === peer &&
-				peer.state.status === RpcStateStatusEnum.connected,
-		);
+		this.#eventSubject.next({ type: RpcEventTypeEnum.peerOpened, peer });
 		return Object.freeze<IRpcProtocolSessionHost>({
 			reserveIncomingCall: (request) =>
 				peer.reserveIncomingProtocolCall(request),
-			reserveIncomingStream: (request) =>
-				peer.reserveIncomingProtocolStream(request),
 			transition: (transition) => this.#transitionSession(session, transition),
 			fault: (reason, error) => this.#faultSession(session, reason, error),
 		});
@@ -937,24 +1038,12 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 		}
 		if (transition.type === RpcProtocolSessionTransitionTypeEnum.recovering) {
 			peer.commitState({ status: RpcStateStatusEnum.recovering });
-			this.#eventPublisher.publish(
-				{ type: RpcEventTypeEnum.peerRecovering, peer },
-				() =>
-					this.state.status === RpcStateStatusEnum.active &&
-					this.#sessions.get(session) === peer &&
-					peer.state.status === RpcStateStatusEnum.recovering,
-			);
+			this.#eventSubject.next({ type: RpcEventTypeEnum.peerRecovering, peer });
 			return;
 		}
 		if (transition.type === RpcProtocolSessionTransitionTypeEnum.recovered) {
 			peer.commitState({ status: RpcStateStatusEnum.connected });
-			this.#eventPublisher.publish(
-				{ type: RpcEventTypeEnum.peerRecovered, peer },
-				() =>
-					this.state.status === RpcStateStatusEnum.active &&
-					this.#sessions.get(session) === peer &&
-					peer.state.status === RpcStateStatusEnum.connected,
-			);
+			this.#eventSubject.next({ type: RpcEventTypeEnum.peerRecovered, peer });
 			return;
 		}
 		if (transition.type === RpcProtocolSessionTransitionTypeEnum.draining) {
@@ -962,16 +1051,11 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 				status: RpcStateStatusEnum.draining,
 				reason: RpcCloseReasonEnum.counterExhaustion,
 			});
-			this.#eventPublisher.publish(
-				{
-					type: RpcEventTypeEnum.peerDraining,
-					peer,
-					reason: RpcCloseReasonEnum.counterExhaustion,
-				},
-				() =>
-					this.#sessions.get(session) === peer &&
-					peer.state.status === RpcStateStatusEnum.draining,
-			);
+			this.#eventSubject.next({
+				type: RpcEventTypeEnum.peerDraining,
+				peer,
+				reason: RpcCloseReasonEnum.counterExhaustion,
+			});
 			return;
 		}
 		this.#closePeerFromSession(session, transition.reason, transition.cause);
@@ -1044,7 +1128,7 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 		);
 		peer.flushState();
 		this.#flushPeers();
-		this.#eventPublisher.publish(closeEvent);
+		this.#eventSubject.next(closeEvent);
 		peer.completeState();
 	}
 
@@ -1095,7 +1179,7 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 			peer.flushState();
 		}
 		for (const peer of terminalPeers) {
-			this.#eventPublisher.publish({
+			this.#eventSubject.next({
 				type: RpcEventTypeEnum.peerClosed,
 				peer,
 				outcome: RpcCloseOutcomeEnum.failed,
@@ -1103,7 +1187,7 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 			});
 			peer.completeState();
 		}
-		this.#eventPublisher.publish({ type: RpcEventTypeEnum.ownerClosing });
+		this.#eventSubject.next({ type: RpcEventTypeEnum.ownerClosing });
 		this.#startCleanup(
 			Object.freeze({
 				status: RpcStateStatusEnum.closed,

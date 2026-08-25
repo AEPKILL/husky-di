@@ -46,11 +46,6 @@
       "pattern": "^[1-9][0-9]{0,15}$",
       "x-maximumDecimal": "9007199254740991"
     },
-    "streamOrdinal": {
-      "type": "string",
-      "pattern": "^[1-9][0-9]{0,15}$",
-      "x-maximumDecimal": "9007199254740991"
-    },
     "applicationString": {
       "type": "string",
       "x-maxUtf8Bytes": 524288,
@@ -203,12 +198,12 @@
     },
     "call": {
       "type": "object",
-      "required": ["kind", "callId", "service", "member", "args"],
+      "required": ["kind", "callId", "service", "method", "args"],
       "properties": {
         "kind": { "const": "call" },
         "callId": { "$ref": "#/$defs/callOrdinal" },
         "service": { "$ref": "#/$defs/identifier" },
-        "member": {
+        "method": {
           "allOf": [
             { "$ref": "#/$defs/identifier" },
             { "not": { "const": "then" } }
@@ -223,7 +218,6 @@
           "x-maxCompactJsonWeight": 1000000
         }
       },
-      "not": { "required": ["method"] },
       "additionalProperties": true
     },
     "cancel": {
@@ -255,10 +249,11 @@
             "unavailable",
             "handler-failed",
             "unknown-service",
-            "unknown-member"
+            "unknown-method"
           ]
         },
-        "message": { "$ref": "#/$defs/applicationString" }
+        "message": { "$ref": "#/$defs/applicationString" },
+        "details": { "$ref": "#/$defs/applicationValue" }
       },
       "additionalProperties": false
     },
@@ -272,135 +267,12 @@
       },
       "additionalProperties": true
     },
-    "streamMethodStart": {
-      "type": "object",
-      "required": ["kind", "streamId", "service", "member", "args", "creditThrough"],
-      "properties": {
-        "kind": { "const": "stream-method" },
-        "streamId": { "$ref": "#/$defs/streamOrdinal" },
-        "service": { "$ref": "#/$defs/identifier" },
-        "member": {
-          "allOf": [
-            { "$ref": "#/$defs/identifier" },
-            { "not": { "const": "then" } }
-          ]
-        },
-        "args": {
-          "type": "array",
-          "maxItems": 8192,
-          "items": { "$ref": "#/$defs/applicationValue" },
-          "x-maxDepth": 64,
-          "x-maxNodes": 65536,
-          "x-maxCompactJsonWeight": 1000000
-        },
-        "creditThrough": { "const": 1 }
-      },
-      "not": { "required": ["method"] },
-      "additionalProperties": true
-    },
-    "streamPropertyStart": {
-      "type": "object",
-      "required": ["kind", "streamId", "service", "member", "creditThrough"],
-      "properties": {
-        "kind": { "const": "stream-property" },
-        "streamId": { "$ref": "#/$defs/streamOrdinal" },
-        "service": { "$ref": "#/$defs/identifier" },
-        "member": {
-          "allOf": [
-            { "$ref": "#/$defs/identifier" },
-            { "not": { "const": "then" } }
-          ]
-        },
-        "creditThrough": { "const": 1 }
-      },
-      "allOf": [
-        { "not": { "required": ["method"] } },
-        { "not": { "required": ["args"] } }
-      ],
-      "additionalProperties": true
-    },
-    "streamItem": {
-      "type": "object",
-      "required": ["kind", "streamId", "itemOrdinal", "value"],
-      "properties": {
-        "kind": { "const": "stream-item" },
-        "streamId": { "$ref": "#/$defs/streamOrdinal" },
-        "itemOrdinal": { "$ref": "#/$defs/sequence" },
-        "value": { "$ref": "#/$defs/applicationValue" }
-      },
-      "additionalProperties": true
-    },
-    "streamCredit": {
-      "type": "object",
-      "required": ["kind", "streamId", "creditThrough"],
-      "properties": {
-        "kind": { "const": "stream-credit" },
-        "streamId": { "$ref": "#/$defs/streamOrdinal" },
-        "creditThrough": { "$ref": "#/$defs/sequence" }
-      },
-      "additionalProperties": true
-    },
-    "streamCancel": {
-      "type": "object",
-      "required": ["kind", "streamId"],
-      "properties": {
-        "kind": { "const": "stream-cancel" },
-        "streamId": { "$ref": "#/$defs/streamOrdinal" }
-      },
-      "additionalProperties": true
-    },
-    "streamComplete": {
-      "type": "object",
-      "required": ["kind", "streamId", "itemThrough"],
-      "properties": {
-        "kind": { "const": "stream-complete" },
-        "streamId": { "$ref": "#/$defs/streamOrdinal" },
-        "itemThrough": { "$ref": "#/$defs/ackCursor" }
-      },
-      "additionalProperties": true
-    },
-    "streamWireError": {
-      "type": "object",
-      "required": ["code", "message"],
-      "properties": {
-        "code": {
-          "enum": [
-            "canceled",
-            "unavailable",
-            "handler-failed",
-            "unknown-service",
-            "unknown-member",
-            "overflow"
-          ]
-        },
-        "message": { "$ref": "#/$defs/applicationString" }
-      },
-      "additionalProperties": false
-    },
-    "streamError": {
-      "type": "object",
-      "required": ["kind", "streamId", "itemThrough", "error"],
-      "properties": {
-        "kind": { "const": "stream-error" },
-        "streamId": { "$ref": "#/$defs/streamOrdinal" },
-        "itemThrough": { "$ref": "#/$defs/ackCursor" },
-        "error": { "$ref": "#/$defs/streamWireError" }
-      },
-      "additionalProperties": true
-    },
     "semanticMessage": {
       "oneOf": [
         { "$ref": "#/$defs/call" },
         { "$ref": "#/$defs/cancel" },
         { "$ref": "#/$defs/result" },
-        { "$ref": "#/$defs/error" },
-        { "$ref": "#/$defs/streamMethodStart" },
-        { "$ref": "#/$defs/streamPropertyStart" },
-        { "$ref": "#/$defs/streamItem" },
-        { "$ref": "#/$defs/streamCredit" },
-        { "$ref": "#/$defs/streamCancel" },
-        { "$ref": "#/$defs/streamComplete" },
-        { "$ref": "#/$defs/streamError" }
+        { "$ref": "#/$defs/error" }
       ]
     },
     "messageEnvelope": {
@@ -453,15 +325,10 @@
         { "not": { "required": ["sessionSecret"] } },
         { "not": { "required": ["proof"] } },
         { "not": { "required": ["callId"] } },
-        { "not": { "required": ["streamId"] } },
         { "not": { "required": ["service"] } },
         { "not": { "required": ["method"] } },
-        { "not": { "required": ["member"] } },
         { "not": { "required": ["args"] } },
         { "not": { "required": ["value"] } },
-        { "not": { "required": ["itemOrdinal"] } },
-        { "not": { "required": ["creditThrough"] } },
-        { "not": { "required": ["itemThrough"] } },
         { "not": { "required": ["error"] } },
         { "not": { "required": ["code"] } },
         { "not": { "required": ["message"] } },

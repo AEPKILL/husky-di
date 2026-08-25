@@ -7,23 +7,24 @@
 import type { Cleanup } from "@husky-di/core";
 import type { Observable } from "rxjs";
 
+import type { RpcCallDirectionEnum } from "@/enums/rpc-call-direction.enum";
 import type { RpcCallStatusEnum } from "@/enums/rpc-call-status.enum";
 import type { RpcCloseOutcomeEnum } from "@/enums/rpc-close-outcome.enum";
 import type { RpcCloseReasonEnum } from "@/enums/rpc-close-reason.enum";
-import type { RpcEventDirectionEnum } from "@/enums/rpc-event-direction.enum";
 import type { RpcEventTypeEnum } from "@/enums/rpc-event-type.enum";
 import type { RpcExceptionCodeEnum } from "@/enums/rpc-exception-code.enum";
-import type { RpcStreamStatusEnum } from "@/enums/rpc-stream-status.enum";
-import type {
-	RpcCallFailure,
-	RpcStreamFailure,
-} from "@/interfaces/protocol/rpc-protocol.interface";
+import type { RpcException } from "@/exceptions/rpc.exception";
+import type { RpcCallFailure } from "@/interfaces/protocol/rpc-protocol.interface";
 import type { IRemoteServiceDescriptor } from "@/interfaces/remote-service-descriptor.interface";
 import type { IRpcAcceptorAdapter } from "@/interfaces/rpc-adapter.interface";
 import type {
+	AnyMethod,
+	IsCancelableMethod,
+	RemoteMethodKey,
 	RemoteService,
 	RemoteServiceImplementation,
-	RpcMemberDefinitions,
+	RpcMethodDefinitions,
+	SelectedMethodKey,
 } from "@/types/remote-service-descriptor.type";
 import type {
 	RpcAcceptorState,
@@ -32,16 +33,50 @@ import type {
 	RpcPeerState,
 } from "@/types/rpc-caller.type";
 
+export type RpcPeerResult<T> =
+	| {
+			readonly peer: IRpcPeer;
+			readonly status: RpcCallStatusEnum.fulfilled;
+			readonly value: T;
+	  }
+	| {
+			readonly peer: IRpcPeer;
+			readonly status: RpcCallStatusEnum.rejected;
+			readonly reason: RpcException;
+	  };
+
+type RemoteGroupMethod<F, Definition> = F extends (
+	...args: infer Arguments
+) => infer Result
+	? IsCancelableMethod<Definition> extends true
+		? Arguments extends [...infer Parameters, AbortSignal]
+			? (
+					...args: [...Parameters, signal: AbortSignal | undefined]
+				) => Promise<readonly RpcPeerResult<Awaited<Result>>[]>
+			: never
+		: (...args: Arguments) => Promise<readonly RpcPeerResult<Awaited<Result>>[]>
+	: never;
+
+export type RemoteServiceGroup<
+	T,
+	Definitions extends RpcMethodDefinitions<T>,
+> = {
+	readonly [K in Extract<
+		SelectedMethodKey<Definitions>,
+		RemoteMethodKey<T>
+	>]: RemoteGroupMethod<Extract<T[K], AnyMethod>, Definitions[K]>;
+} & { readonly then?: never };
+
 export interface IRpcPeer {
 	readonly state: RpcPeerState;
 	readonly state$: Observable<RpcPeerState>;
 
-	expose<T, Definitions extends RpcMemberDefinitions<T>>(
+	expose<T, Definitions extends RpcMethodDefinitions<T>>(
 		descriptor: IRemoteServiceDescriptor<T, Definitions>,
 		implementation: NoInfer<RemoteServiceImplementation<T, Definitions>>,
 	): Cleanup;
 
-	resolve<T, Definitions extends RpcMemberDefinitions<T>>(
+	resolve<T, Definitions extends RpcMethodDefinitions<T>>(
 		descriptor: IRemoteServiceDescriptor<T, Definitions>,
 	): RemoteService<T, Definitions>;
 }
@@ -52,27 +87,27 @@ type RpcCallObservationBase = {
 };
 
 type RpcOutgoingCallContext = {
-	readonly direction: RpcEventDirectionEnum.outgoing;
+	readonly direction: RpcCallDirectionEnum.outgoing;
 	readonly service: string;
-	readonly member: string;
+	readonly method: string;
 };
 
 type RpcKnownIncomingCallContext = {
-	readonly direction: RpcEventDirectionEnum.incoming;
+	readonly direction: RpcCallDirectionEnum.incoming;
 	readonly service: string;
-	readonly member: string;
+	readonly method: string;
 };
 
 type RpcUnknownServiceCallContext = {
-	readonly direction: RpcEventDirectionEnum.incoming;
+	readonly direction: RpcCallDirectionEnum.incoming;
 	readonly service?: never;
-	readonly member?: never;
+	readonly method?: never;
 };
 
-type RpcUnknownMemberCallContext = {
-	readonly direction: RpcEventDirectionEnum.incoming;
+type RpcUnknownMethodCallContext = {
+	readonly direction: RpcCallDirectionEnum.incoming;
 	readonly service: string;
-	readonly member?: never;
+	readonly method?: never;
 };
 
 type RpcCallStartedEvent = RpcCallObservationBase &
@@ -80,7 +115,7 @@ type RpcCallStartedEvent = RpcCallObservationBase &
 		| RpcOutgoingCallContext
 		| RpcKnownIncomingCallContext
 		| RpcUnknownServiceCallContext
-		| RpcUnknownMemberCallContext
+		| RpcUnknownMethodCallContext
 	) & { readonly type: RpcEventTypeEnum.callStarted };
 
 type RpcCallFinishedBase = RpcCallObservationBase & {
@@ -113,92 +148,9 @@ type RpcCallFinishedEvent = RpcCallFinishedBase &
 				readonly outcome: RpcCallStatusEnum.rejected;
 				readonly code: RpcExceptionCodeEnum.unknownService;
 		  })
-		| (RpcUnknownMemberCallContext & {
+		| (RpcUnknownMethodCallContext & {
 				readonly outcome: RpcCallStatusEnum.rejected;
-				readonly code: RpcExceptionCodeEnum.unknownMember;
-		  })
-	);
-
-type RpcStreamObservationBase = {
-	readonly observationId: string;
-	readonly peer: IRpcPeer;
-};
-
-type RpcOutgoingStreamContext = {
-	readonly direction: RpcEventDirectionEnum.outgoing;
-	readonly service: string;
-	readonly member: string;
-};
-
-type RpcKnownIncomingStreamContext = {
-	readonly direction: RpcEventDirectionEnum.incoming;
-	readonly service: string;
-	readonly member: string;
-};
-
-type RpcUnknownServiceStreamContext = {
-	readonly direction: RpcEventDirectionEnum.incoming;
-	readonly service?: never;
-	readonly member?: never;
-};
-
-type RpcUnknownMemberStreamContext = {
-	readonly direction: RpcEventDirectionEnum.incoming;
-	readonly service: string;
-	readonly member?: never;
-};
-
-type RpcStreamStartedEvent = RpcStreamObservationBase &
-	(
-		| RpcOutgoingStreamContext
-		| RpcKnownIncomingStreamContext
-		| RpcUnknownServiceStreamContext
-		| RpcUnknownMemberStreamContext
-	) & { readonly type: RpcEventTypeEnum.streamStarted };
-
-type RpcStreamFinishedBase = RpcStreamObservationBase & {
-	readonly type: RpcEventTypeEnum.streamFinished;
-	readonly durationMs: number;
-};
-
-type RpcStreamFinishedEvent = RpcStreamFinishedBase &
-	(
-		| (RpcOutgoingStreamContext & {
-				readonly outcome:
-					| RpcStreamStatusEnum.completed
-					| RpcStreamStatusEnum.canceled;
-				readonly deliveredItemCount: number;
-		  })
-		| (RpcOutgoingStreamContext & {
-				readonly outcome: RpcStreamStatusEnum.failed;
-				readonly code: RpcStreamFailure;
-				readonly deliveredItemCount: number;
-		  })
-		| (RpcKnownIncomingStreamContext & {
-				readonly outcome:
-					| RpcStreamStatusEnum.completed
-					| RpcStreamStatusEnum.canceled
-					| RpcStreamStatusEnum.terminated;
-				readonly admittedItemCount: number;
-				readonly sourceTeardownFailed?: true;
-		  })
-		| (RpcKnownIncomingStreamContext & {
-				readonly outcome: RpcStreamStatusEnum.failed;
-				readonly code:
-					| RpcExceptionCodeEnum.handlerFailed
-					| RpcExceptionCodeEnum.overflow;
-				readonly admittedItemCount: number;
-				readonly sourceTeardownFailed?: true;
-		  })
-		| (RpcUnknownServiceStreamContext & {
-				readonly outcome: RpcStreamStatusEnum.failed;
-				readonly code: RpcExceptionCodeEnum.unknownService;
-				readonly admittedItemCount: 0;
-		  })
-		| (RpcUnknownMemberStreamContext & {
-				readonly outcome: RpcStreamStatusEnum.failed;
-				readonly code: RpcExceptionCodeEnum.unknownMember;
-				readonly admittedItemCount: 0;
+				readonly code: RpcExceptionCodeEnum.unknownMethod;
 		  })
 	);
 
@@ -273,9 +225,7 @@ export type RpcEvent =
 	| RpcTopologyLifecycleEvent
 	| RpcPeerLifecycleEvent
 	| RpcCallStartedEvent
-	| RpcCallFinishedEvent
-	| RpcStreamStartedEvent
-	| RpcStreamFinishedEvent;
+	| RpcCallFinishedEvent;
 
 export interface IRpcConnector {
 	readonly state: RpcConnectorState;
@@ -294,12 +244,16 @@ export interface IRpcAcceptor {
 	readonly peers$: Observable<readonly IRpcPeer[]>;
 	readonly event$: Observable<RpcEvent>;
 
-	expose<T, Definitions extends RpcMemberDefinitions<T>>(
+	expose<T, Definitions extends RpcMethodDefinitions<T>>(
 		descriptor: IRemoteServiceDescriptor<T, Definitions>,
 		implementation: NoInfer<RemoteServiceImplementation<T, Definitions>>,
 	): Cleanup;
 
 	listen(adapter: IRpcAcceptorAdapter): Promise<void>;
+
+	resolveAll<T, Definitions extends RpcMethodDefinitions<T>>(
+		descriptor: IRemoteServiceDescriptor<T, Definitions>,
+	): RemoteServiceGroup<T, Definitions>;
 
 	shutdown(): Promise<void>;
 	close(): Promise<void>;

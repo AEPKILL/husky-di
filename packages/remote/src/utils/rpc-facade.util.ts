@@ -4,55 +4,32 @@
  * @created 2026-08-19 00:00:00
  */
 
-import { Observable, type Subscriber, type TeardownLogic } from "rxjs";
-
 import { getRemoteServiceDescriptorData } from "@/factories/remote-service-descriptor.factory";
 import type { IRemoteServiceDescriptor } from "@/interfaces/remote-service-descriptor.interface";
 import type {
 	RemoteService,
-	RpcMemberDefinitions,
+	RpcMethodDefinitions,
 } from "@/types/remote-service-descriptor.type";
 
 export type RpcFacadeInvocation = (
-	member: string,
+	method: string,
 	cancelable: boolean,
 	actualArguments: readonly unknown[],
 ) => Promise<unknown>;
 
-type RpcFacadeStreamSubscription = (
-	member: string,
-	kind: "stream-method" | "stream-property",
-	actualArguments: readonly unknown[],
-	subscriber: Subscriber<unknown>,
-) => TeardownLogic;
-
 /** Creates one facade without retaining current Session or membership state. */
-export function createRpcFacade<T, Definitions extends RpcMemberDefinitions<T>>(
+export function createRpcFacade<T, Definitions extends RpcMethodDefinitions<T>>(
 	descriptor: IRemoteServiceDescriptor<T, Definitions>,
 	invoke: RpcFacadeInvocation,
-	subscribe: RpcFacadeStreamSubscription,
 ): RemoteService<T, Definitions> {
 	const data = getRemoteServiceDescriptorData(descriptor);
 	const facade = Object.create(null) as Record<string, unknown>;
 
-	for (const [member, interaction] of Object.entries(data.members)) {
-		if (interaction.kind === "stream-property") {
-			facade[member] = new Observable((subscriber) =>
-				subscribe(member, "stream-property", [], subscriber),
-			);
-			continue;
-		}
-		if (interaction.kind === "stream-method") {
-			facade[member] = (...actualArguments: unknown[]) =>
-				new Observable((subscriber) =>
-					subscribe(member, "stream-method", actualArguments, subscriber),
-				);
-			continue;
-		}
-		const cancelable = interaction.cancelable;
-		facade[member] = (...actualArguments: unknown[]) => {
+	for (const method of Object.keys(data.methods)) {
+		const cancelable = data.methods[method] !== true;
+		facade[method] = (...actualArguments: unknown[]) => {
 			try {
-				return invoke(member, cancelable, actualArguments);
+				return invoke(method, cancelable, actualArguments);
 			} catch (error) {
 				return Promise.reject(error);
 			}

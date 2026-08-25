@@ -23,28 +23,9 @@ import {
 	createMemoryAcceptorFixture,
 	createMemoryConnectorFixture,
 	createMemoryProtocolFixture,
-	type MemoryProtocolMutant,
 } from "./test.utils";
 
 describe("RPC conformance runner", () => {
-	const streamCaseIds = [
-		"protocol.stream.outgoing-lifecycle",
-		"protocol.stream.incoming-resource-before-route",
-		"protocol.stream.incoming-semantic-unknown-member",
-		"protocol.stream.projection-rearm",
-		"protocol.stream.source-reserve-before-raw",
-		"protocol.stream.source-w1-overflow",
-		"protocol.stream.item-before-terminal",
-		"protocol.stream.over-credit-session-fault",
-		"protocol.stream.terminal-teardown-release",
-		"protocol.stream.recovery-no-resubscribe",
-		"protocol.stream.fairness-progress",
-		"protocol.stream.shutdown-graceful-force",
-		"protocol.stream.aggregate-bounded-load",
-		"protocol.receipt.terminal-direction-only",
-		"protocol.stream.adapter-rejection-is-binding-failure",
-	] as const;
-
 	it("RPC-CONFORMANCE-001 continues, reports once, and aggregates the same failures in stable order", async () => {
 		const constructionError = new Error("construction failed");
 		const protocol = Object.freeze({
@@ -73,7 +54,7 @@ describe("RPC conformance runner", () => {
 			(result) => result.status === "failed",
 		);
 		expect(failures.length).toBeGreaterThanOrEqual(2);
-		expect(reports).toHaveLength(15 + streamCaseIds.length);
+		expect(reports).toHaveLength(15);
 		expect(failedReports).toHaveLength(failures.length);
 		expect(failedReports.map((result) => result.caseId)).toEqual(
 			failures.map((failure) => Reflect.get(failure, "caseId")),
@@ -119,25 +100,22 @@ describe("RPC conformance runner", () => {
 		expect(reports.every((result) => result.status === "failed")).toBe(true);
 	});
 
-	it("RPC-CONFORMANCE-004 Protocol runner accepts an independent streaming candidate", async () => {
+	it("RPC-CONFORMANCE-002 Protocol runner accepts an independent minimal candidate", async () => {
 		const reports: RpcConformanceCaseResult[] = [];
 
 		await runRpcProtocolConformance(createMemoryProtocolFixture(), {
 			report: (result) => reports.push(result),
 		});
 
-		expect(reports).toHaveLength(15 + streamCaseIds.length);
+		expect(reports).toHaveLength(15);
 		expect(reports.every((result) => result.status === "passed")).toBe(true);
-		expect(
-			reports.slice(-streamCaseIds.length).map(({ caseId }) => caseId),
-		).toEqual(streamCaseIds);
 	});
 
-	it("RPC-CONFORMANCE-004 keeps byte-replay semantics outside the custom Protocol seam", async () => {
+	it("RPC-CONFORMANCE-002 Protocol runner accepts the built-in husky-di-rpc/1 candidate", async () => {
 		const reports: RpcConformanceCaseResult[] = [];
 		const encoder = new TextEncoder();
 
-		const error = await runRpcProtocolConformance(
+		await runRpcProtocolConformance(
 			{
 				protocol: createRpcProtocol(),
 				counterExhaustionProtocol: createRpcCounterExhaustionProtocolForTest(),
@@ -145,60 +123,10 @@ describe("RPC conformance runner", () => {
 					encoder.encode(JSON.stringify({ kind: "bogus" })),
 			},
 			{ report: (result) => reports.push(result) },
-		).catch((reason: unknown) => reason);
-
-		expect(error).toBeInstanceOf(AggregateError);
-		expect(
-			reports.slice(0, 15).every((result) => result.status === "passed"),
-		).toBe(true);
-		expect(reports.slice(15).map(({ caseId }) => caseId)).toEqual(
-			streamCaseIds,
 		);
-		expect(
-			reports
-				.slice(15)
-				.filter(
-					({ caseId }) =>
-						caseId !== "protocol.stream.over-credit-session-fault",
-				)
-				.every((result) => result.status === "passed"),
-		).toBe(true);
-		expect(
-			reports.find(
-				({ caseId }) => caseId === "protocol.stream.over-credit-session-fault",
-			)?.status,
-		).toBe("failed");
-	});
 
-	it("RPC-CONFORMANCE-004 RPC-CONFORMANCE-005 kills all five fixed broken-Protocol mutants", async () => {
-		const mutants = [
-			["accept-over-credit", "protocol.stream.over-credit-session-fault"],
-			["terminal-before-item", "protocol.stream.item-before-terminal"],
-			["reacquire-on-recovery", "protocol.stream.recovery-no-resubscribe"],
-			[
-				"terminal-ack-over-retirement",
-				"protocol.receipt.terminal-direction-only",
-			],
-			[
-				"adapter-rejection-overflow",
-				"protocol.stream.adapter-rejection-is-binding-failure",
-			],
-		] as const satisfies ReadonlyArray<readonly [MemoryProtocolMutant, string]>;
-
-		for (const [mutant, expectedCaseId] of mutants) {
-			const reports: RpcConformanceCaseResult[] = [];
-			const error = await runRpcProtocolConformance(
-				createMemoryProtocolFixture(mutant),
-				{ report: (result) => reports.push(result) },
-			).catch((reason: unknown) => reason);
-			expect(error, mutant).toBeInstanceOf(AggregateError);
-			expect(
-				reports
-					.filter((result) => result.status === "failed")
-					.map(({ caseId }) => caseId),
-				mutant,
-			).toEqual([expectedCaseId]);
-		}
+		expect(reports).toHaveLength(15);
+		expect(reports.every((result) => result.status === "passed")).toBe(true);
 	});
 
 	it.each([
@@ -214,7 +142,7 @@ describe("RPC conformance runner", () => {
 			createMemoryAcceptorFixture(),
 			14,
 		],
-	] as const)("RPC-CONFORMANCE-005 RPC-TRANSPORT-013 %s Adapter runner accepts a conforming in-memory candidate", async (_role, run, fixture, expectedCaseCount) => {
+	] as const)("RPC-CONFORMANCE-003 %s Adapter runner accepts a conforming in-memory candidate", async (_role, run, fixture, expectedCaseCount) => {
 		const reports: RpcConformanceCaseResult[] = [];
 		await run(fixture as never, {
 			report: (result) => reports.push(result),
@@ -224,7 +152,7 @@ describe("RPC conformance runner", () => {
 		expect(reports.every((result) => result.status === "passed")).toBe(true);
 	});
 
-	it("RPC-TRANSPORT-001 RPC-TRANSPORT-002 RPC-TRANSPORT-003 RPC-TRANSPORT-004 RPC-TRANSPORT-005 RPC-TRANSPORT-006 RPC-TRANSPORT-007 RPC-TRANSPORT-010 RPC-TRANSPORT-013 RPC-CONFORMANCE-005 publishes canonical Adapter case IDs", async () => {
+	it("RPC-TRANSPORT-001 RPC-TRANSPORT-002 RPC-TRANSPORT-003 RPC-TRANSPORT-004 RPC-TRANSPORT-005 RPC-TRANSPORT-006 RPC-TRANSPORT-007 RPC-TRANSPORT-010 RPC-CONFORMANCE-003 publishes canonical Adapter case IDs", async () => {
 		const reports: RpcConformanceCaseResult[] = [];
 		await runRpcConnectorAdapterConformance(createMemoryConnectorFixture(), {
 			report: (result) => reports.push(result),

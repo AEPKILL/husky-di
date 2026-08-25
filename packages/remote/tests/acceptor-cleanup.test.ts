@@ -52,7 +52,6 @@ describe("Acceptor termination cleanup", () => {
 		const acceptor = createRpcAcceptor({ protocol });
 		sessionHost = protocolHost?.admitSession({
 			reserveInvocation: () => undefined,
-			reserveStream: () => undefined,
 			forceClose() {
 				sessionHost?.transition({
 					type: RpcProtocolSessionTransitionTypeEnum.closed,
@@ -102,14 +101,12 @@ describe("Acceptor termination cleanup", () => {
 			reserveInvocation() {
 				throw fault;
 			},
-			reserveStream: () => undefined,
 			forceClose() {
 				firstForceCalls += 1;
 			},
 		});
 		protocolHost?.admitSession({
 			reserveInvocation: () => undefined,
-			reserveStream: () => undefined,
 			forceClose() {},
 		});
 		const [faultingPeer, healthyPeer] = acceptor.peers;
@@ -118,7 +115,7 @@ describe("Acceptor termination cleanup", () => {
 		}
 		const descriptor = createRemoteServiceDescriptor(IFaultingService, {
 			wireName: "test.faulting.v1",
-			members: { run: { kind: "unary" } },
+			methods: { run: true },
 		});
 
 		await expect(faultingPeer.resolve(descriptor).run()).rejects.toMatchObject({
@@ -163,14 +160,12 @@ describe("Acceptor termination cleanup", () => {
 		const acceptor = createRpcAcceptor({ protocol });
 		const firstHost = protocolHost?.admitSession({
 			reserveInvocation: () => undefined,
-			reserveStream: () => undefined,
 			forceClose() {
 				forced[0] += 1;
 			},
 		});
 		const secondHost = protocolHost?.admitSession({
 			reserveInvocation: () => undefined,
-			reserveStream: () => undefined,
 			forceClose() {
 				forced[1] += 1;
 			},
@@ -529,7 +524,6 @@ describe("Acceptor termination cleanup", () => {
 		};
 		const session: IRpcProtocolSession = {
 			reserveInvocation: () => undefined,
-			reserveStream: () => undefined,
 			forceClose() {},
 		};
 		const protocol: IRpcProtocol = {

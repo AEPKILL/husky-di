@@ -32,13 +32,6 @@ import type {
 	RpcResumeReject,
 	RpcResumeRequest,
 	RpcSemanticMessage,
-	RpcStreamCancelMessage,
-	RpcStreamCompleteMessage,
-	RpcStreamCreditMessage,
-	RpcStreamErrorMessage,
-	RpcStreamItemMessage,
-	RpcStreamMethodStartMessage,
-	RpcStreamPropertyStartMessage,
 } from "@/types/protocol/rpc-wire-record.type";
 import {
 	normalizeRpcApplicationArguments,
@@ -56,8 +49,6 @@ import {
 	rpcPositiveSafeIntegerSchema,
 	rpcProfileOfferSchema,
 	rpcResumeRejectCodeSchema,
-	rpcStreamOrdinalSchema,
-	rpcStreamWireErrorCodeSchema,
 	rpcStringSchema,
 	rpcWireErrorCodeSchema,
 	rpcWireIdentifierSchema,
@@ -133,15 +124,10 @@ const closeForbiddenMembers = new Set([
 	"sessionSecret",
 	"proof",
 	"callId",
-	"streamId",
 	"service",
 	"method",
-	"member",
 	"args",
 	"value",
-	"itemOrdinal",
-	"creditThrough",
-	"itemThrough",
 	"error",
 	"code",
 	"message",
@@ -424,38 +410,6 @@ function readCallId(record: RpcJsonRecord): string {
 	return value;
 }
 
-function readStreamId(record: RpcJsonRecord): string {
-	const value = readString(record, "streamId");
-	if (!rpcStreamOrdinalSchema.safeParse(value).success) {
-		throw new Error("RPC streamId must be a canonical Stream Ordinal.");
-	}
-	const ordinal = Number(value);
-	if (!rpcPositiveSafeIntegerSchema.safeParse(ordinal).success) {
-		throw new Error("RPC streamId exceeds the safe-integer domain.");
-	}
-	return value;
-}
-
-function readFailurePayload(record: RpcJsonRecord, stream: boolean): void {
-	if (!isJsonRecord(record.error)) {
-		throw new Error("RPC error payload must be an object.");
-	}
-	if (
-		!rpcErrorPayloadMemberNamesSchema.safeParse(Reflect.ownKeys(record.error))
-			.success
-	) {
-		throw new Error("RPC error payload contains an unknown member.");
-	}
-	const code = readString(record.error, "code");
-	const codeIsValid = stream
-		? rpcStreamWireErrorCodeSchema.safeParse(code).success
-		: rpcWireErrorCodeSchema.safeParse(code).success;
-	if (!codeIsValid) {
-		throw new Error("RPC error code is outside the profile union.");
-	}
-	readString(record.error, "message");
-}
-
 function validateSemanticMessage(
 	value: RpcJsonValue | undefined,
 ): RpcSemanticMessage {
@@ -463,13 +417,13 @@ function validateSemanticMessage(
 		throw new Error("RPC semantic message must be an object.");
 	}
 	const kind = readString(value, "kind");
+	readCallId(value);
 	switch (kind) {
 		case RpcWireRecordKindEnum.call: {
-			readCallId(value);
 			readIdentifier(value, "service");
-			const member = readIdentifier(value, "member");
-			if (member === "then") {
-				throw new Error("RPC wire member then is reserved.");
+			const method = readIdentifier(value, "method");
+			if (method === "then") {
+				throw new Error("RPC wire method then is reserved.");
 			}
 			if (!rpcJsonArraySchema.safeParse(value.args).success) {
 				throw new Error("RPC call args must be an array.");
@@ -478,63 +432,33 @@ function validateSemanticMessage(
 			return value as RpcCallMessage;
 		}
 		case RpcWireRecordKindEnum.cancel:
-			readCallId(value);
 			return value as RpcCancelMessage;
 		case RpcWireRecordKindEnum.result:
-			readCallId(value);
 			if (Object.hasOwn(value, "value")) {
 				normalizeRpcApplicationValue(value.value);
 			}
 			return value as RpcResultMessage;
 		case RpcWireRecordKindEnum.error: {
-			readCallId(value);
-			readFailurePayload(value, false);
+			if (!isJsonRecord(value.error)) {
+				throw new Error("RPC error payload must be an object.");
+			}
+			if (
+				!rpcErrorPayloadMemberNamesSchema.safeParse(
+					Reflect.ownKeys(value.error),
+				).success
+			) {
+				throw new Error("RPC error payload contains an unknown member.");
+			}
+			const code = readString(value.error, "code");
+			if (!rpcWireErrorCodeSchema.safeParse(code).success) {
+				throw new Error("RPC error code is outside the profile union.");
+			}
+			readString(value.error, "message");
+			if (Object.hasOwn(value.error, "details")) {
+				normalizeRpcApplicationValue(value.error.details);
+			}
 			return value as RpcErrorMessage;
 		}
-		case RpcWireRecordKindEnum.streamMethod:
-		case RpcWireRecordKindEnum.streamProperty: {
-			readStreamId(value);
-			readIdentifier(value, "service");
-			const member = readIdentifier(value, "member");
-			if (member === "then") {
-				throw new Error("RPC wire member then is reserved.");
-			}
-			if (value.creditThrough !== 1) {
-				throw new Error("RPC stream start creditThrough must be one.");
-			}
-			if (kind === RpcWireRecordKindEnum.streamProperty) {
-				if (Object.hasOwn(value, "args")) {
-					throw new Error("RPC stream property must not carry args.");
-				}
-				return value as RpcStreamPropertyStartMessage;
-			}
-			if (!rpcJsonArraySchema.safeParse(value.args).success) {
-				throw new Error("RPC stream method args must be an array.");
-			}
-			normalizeRpcApplicationArguments(value.args);
-			return value as RpcStreamMethodStartMessage;
-		}
-		case RpcWireRecordKindEnum.streamItem:
-			readStreamId(value);
-			readSequence(value, "itemOrdinal");
-			normalizeRpcApplicationValue(value.value);
-			return value as RpcStreamItemMessage;
-		case RpcWireRecordKindEnum.streamCredit:
-			readStreamId(value);
-			readSequence(value, "creditThrough");
-			return value as RpcStreamCreditMessage;
-		case RpcWireRecordKindEnum.streamCancel:
-			readStreamId(value);
-			return value as RpcStreamCancelMessage;
-		case RpcWireRecordKindEnum.streamComplete:
-			readStreamId(value);
-			readAckCursor(value, "itemThrough");
-			return value as RpcStreamCompleteMessage;
-		case RpcWireRecordKindEnum.streamError:
-			readStreamId(value);
-			readAckCursor(value, "itemThrough");
-			readFailurePayload(value, true);
-			return value as RpcStreamErrorMessage;
 		default:
 			throw new Error("RPC semantic message kind is unknown.");
 	}

@@ -9,8 +9,6 @@ import type {
 	IRpcProtocolIncomingCallRequest,
 	IRpcProtocolSession,
 	RpcProtocolIncomingCallReservation,
-	RpcProtocolIncomingStreamReservation,
-	RpcProtocolStreamRequest,
 } from "@/interfaces/protocol/rpc-protocol.interface";
 import type { IRpcPeer } from "@/interfaces/rpc-caller.interface";
 import type { RpcPeerState } from "@/types/rpc-caller.type";
@@ -34,15 +32,12 @@ export interface IRpcPeerRuntime extends IRpcPeer {
 	completeState(): void;
 	reserveOutgoingProtocolInvocation(
 		service: string,
-		member: string,
+		method: string,
 		args: IRpcApplicationArgumentsSnapshot,
 	): IRpcPeerInvocationReservation | undefined;
 	reserveIncomingProtocolCall(
 		request: IRpcProtocolIncomingCallRequest,
 	): RpcProtocolIncomingCallReservation | undefined;
-	reserveIncomingProtocolStream(
-		request: RpcProtocolStreamRequest,
-	): RpcProtocolIncomingStreamReservation | undefined;
 	attachProtocolSession(session: IRpcProtocolSession): boolean;
 	readonly localExposureRegistry: RpcExposureRegistry;
 }

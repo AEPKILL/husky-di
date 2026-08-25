@@ -9,6 +9,7 @@ import { describe, expect, it, vi } from "vitest";
 import { RpcCallTerminalTypeEnum } from "../../src/enums/protocol/rpc-call-terminal-type.enum";
 import { RpcIncomingCallKindEnum } from "../../src/enums/protocol/rpc-incoming-call-kind.enum";
 import { RpcWireRecordKindEnum } from "../../src/enums/protocol/rpc-wire-record-kind.enum";
+import { RpcCallDirectionEnum } from "../../src/enums/rpc-call-direction.enum";
 import { RpcEventTypeEnum } from "../../src/enums/rpc-event-type.enum";
 import { createRpcProtocol } from "../../src/factories/rpc-protocol.factory";
 import { RpcCodecImpl } from "../../src/impls/protocol/rpc-codec.impl";
@@ -17,17 +18,12 @@ import {
 	createRemoteServiceDescriptor,
 	createRpcAcceptor,
 	createRpcConnector,
-	RpcEventDirectionEnum,
 } from "../../src/index";
 import type {
 	IRpcProtocol,
 	IRpcProtocolHost,
-	IRpcProtocolSourceSink,
 } from "../../src/interfaces/protocol/rpc-protocol.interface";
-import {
-	normalizeRpcApplicationArguments,
-	normalizeRpcApplicationValue,
-} from "../../src/utils/rpc-application-value.util";
+import { normalizeRpcApplicationArguments } from "../../src/utils/rpc-application-value.util";
 import {
 	createRpcDirectSessionHarness,
 	createRpcTestNetwork,
@@ -50,218 +46,15 @@ const ILargeLedgerService = createServiceIdentifier<ILargeLedgerService>(
 );
 
 describe("Default RPC Protocol retained ledger", () => {
-	it("RPC-COUNTER-001 keeps the final Item Ordinal safe through terminal validation", async () => {
-		const harness = createRpcDirectSessionHarness();
-		const reservation = harness.session.reserveStream({
-			kind: "stream-property",
-			service: "example.item-counter.v1",
-			member: "items$",
-		});
-		if (reservation === undefined) {
-			throw new Error("Expected outgoing Stream capacity.");
-		}
-		const stream = reservation.commit({
-			reserveItem: () => ({ commit: () => "closed" }),
-			reserveTerminal: () => ({ commit() {} }),
-		});
-		stream.start();
-		await vi.waitFor(() => expect(harness.sent).toHaveLength(1));
-		const entry = harness.session._outgoingStreams.get("1");
-		if (entry === undefined) {
-			throw new Error("Expected the admitted outgoing Stream.");
-		}
-		entry.nextItemOrdinal = Number.MAX_SAFE_INTEGER;
-		entry.creditThrough = Number.MAX_SAFE_INTEGER;
-
-		harness.session._receiveStreamItem({
-			kind: RpcWireRecordKindEnum.streamItem,
-			streamId: "1",
-			itemOrdinal: Number.MAX_SAFE_INTEGER,
-			value: "last",
-		})?.();
-
-		expect(entry.nextItemOrdinal).toBe(Number.MAX_SAFE_INTEGER);
-		expect(entry.itemOrdinalExhausted).toBe(true);
-		expect(Number.isSafeInteger(entry.nextItemOrdinal)).toBe(true);
-		expect(() =>
-			harness.session._receiveStreamTerminal({
-				kind: RpcWireRecordKindEnum.streamComplete,
-				streamId: "1",
-				itemThrough: Number.MAX_SAFE_INTEGER,
-			})?.(),
-		).not.toThrow();
-		harness.session.forceClose();
-	});
-
-	it("RPC-VALID-009 RPC-WIRE-024 rejects a valid post-G stream start without routing", async () => {
-		const harness = createRpcDirectSessionHarness();
-		let routeLookups = 0;
-		harness.session._sessionHost = {
-			reserveIncomingCall: () => undefined,
-			reserveIncomingStream: () => {
-				routeLookups += 1;
-				return undefined;
-			},
-			transition() {},
-			fault() {},
-		};
-		harness.session._draining = true;
-
-		harness.session._receiveStreamStart({
-			kind: RpcWireRecordKindEnum.streamMethod,
-			streamId: "1",
-			service: "example.post-g.v1",
-			member: "items",
-			args: [],
-			creditThrough: 1,
-		})?.();
-		await vi.waitFor(() => expect(harness.sent).toHaveLength(1));
-
-		expect(routeLookups).toBe(0);
-		expect(harness.sent[0]?.message).toMatchObject({
-			kind: "stream-error",
-			streamId: "1",
-			itemThrough: 0,
-			error: { code: "unavailable" },
-		});
-		expect(harness.session._highestIncomingStreamOrdinal).toBe(1);
-		expect(harness.faults).toEqual([]);
-		harness.session.forceClose();
-	});
-
-	it("RPC-WIRE-019 RPC-WIRE-022 faults retained credit rollback and absorbs equal or higher credit", async () => {
-		const harness = createRpcDirectSessionHarness();
-		let sourceSink: IRpcProtocolSourceSink | undefined;
-		harness.session._sessionHost = {
-			reserveIncomingCall: () => undefined,
-			reserveIncomingStream: () => ({
-				kind: "source",
-				reservation: {
-					commit: (sink) => {
-						sourceSink = sink;
-						return { finish() {} };
-					},
-					release() {},
-				},
-			}),
-			transition() {},
-			fault() {},
-		};
-
-		harness.session._receiveStreamStart({
-			kind: RpcWireRecordKindEnum.streamProperty,
-			streamId: "1",
-			service: "example.retained-credit.v1",
-			member: "items$",
-			creditThrough: 1,
-		})?.();
-		const emission = sourceSink?.reserveEmission();
-		if (emission === undefined) {
-			throw new Error("Expected the initial Source emission reservation.");
-		}
-		emission.commit(normalizeRpcApplicationValue("one"));
-		harness.session._receiveStreamCredit({
-			kind: RpcWireRecordKindEnum.streamCredit,
-			streamId: "1",
-			creditThrough: 2,
-		});
-		sourceSink?.finish({ type: "completed" });
-
-		expect(() =>
-			harness.session._receiveStreamCredit({
-				kind: RpcWireRecordKindEnum.streamCredit,
-				streamId: "1",
-				creditThrough: 1,
-			}),
-		).toThrow(/regressed/);
-		expect(
-			harness.session._receiveStreamCredit({
-				kind: RpcWireRecordKindEnum.streamCredit,
-				streamId: "1",
-				creditThrough: 2,
-			}),
-		).toBeUndefined();
-		expect(
-			harness.session._receiveStreamCredit({
-				kind: RpcWireRecordKindEnum.streamCredit,
-				streamId: "1",
-				creditThrough: 3,
-			}),
-		).toBeUndefined();
-		harness.session.forceClose();
-	});
-
-	it("RPC-WIRE-019 RPC-WIRE-021 suppresses a credit-backed item after local stream cancel", async () => {
-		const harness = createRpcDirectSessionHarness();
-		let itemReservations = 0;
-		let terminalReservations = 0;
-		const reservation = harness.session.reserveStream({
-			kind: "stream-method",
-			service: "example.cancel-race.v1",
-			member: "items",
-			args: normalizeRpcApplicationArguments([]),
-		});
-		if (reservation === undefined) {
-			throw new Error("Expected outgoing Stream capacity.");
-		}
-		const stream = reservation.commit({
-			reserveItem: () => {
-				itemReservations += 1;
-				return { commit: () => "rearm" };
-			},
-			reserveTerminal: () => {
-				terminalReservations += 1;
-				return { commit() {} };
-			},
-		});
-
-		stream.start();
-		await vi.waitFor(() => expect(harness.sent).toHaveLength(1));
-		stream.cancel();
-		await vi.waitFor(() => expect(harness.sent).toHaveLength(2));
-		harness.receive(
-			codec.encode({
-				kind: "message",
-				seq: 1,
-				message: {
-					kind: "stream-item",
-					streamId: "1",
-					itemOrdinal: 1,
-					value: "late",
-				},
-			}),
-		);
-		harness.receive(
-			codec.encode({
-				kind: "message",
-				seq: 2,
-				message: {
-					kind: "stream-error",
-					streamId: "1",
-					itemThrough: 1,
-					error: {
-						code: "canceled",
-						message: "Remote operation was canceled.",
-					},
-				},
-			}),
-		);
-
-		expect(harness.faults).toEqual([]);
-		expect(itemReservations).toBe(0);
-		expect(terminalReservations).toBe(1);
-		harness.session.forceClose();
-	});
-
 	it("RPC-CALL-005 RPC-RESOURCE-003 guards replay-rejected payload through reentrant terminal cleanup", async () => {
 		const harness = createRpcDirectSessionHarness({
-			maxApplicationWorkPerSession: 1,
+			maxPendingInvocationsPerSession: 1,
 		});
 		const { session } = harness;
 		for (let ordinal = 1; ordinal <= 4; ordinal += 1) {
 			const reservation = session.reserveInvocation({
 				service: "example.replay-guard.v1",
-				member: "run",
+				method: "run",
 				args: normalizeRpcApplicationArguments([ordinal]),
 			});
 			if (reservation === undefined) {
@@ -291,7 +84,7 @@ describe("Default RPC Protocol retained ledger", () => {
 		}
 		const reservation = session.reserveInvocation({
 			service: "example.replay-guard.v1",
-			member: "run",
+			method: "run",
 			args,
 		});
 		if (reservation === undefined) {
@@ -334,7 +127,7 @@ describe("Default RPC Protocol retained ledger", () => {
 		const network = createRpcTestNetwork();
 		const descriptor = createRemoteServiceDescriptor(ILedgerService, {
 			wireName: "example.reentrant-incoming-ledger.v1",
-			members: { run: { kind: "unary" } },
+			methods: { run: true },
 		});
 		const handler = vi.fn((value: number) => value);
 		const acceptor = createRpcAcceptor({
@@ -354,7 +147,7 @@ describe("Default RPC Protocol retained ledger", () => {
 		const eventSubscription = acceptor.event$.subscribe((event) => {
 			if (
 				event.type === RpcEventTypeEnum.callStarted &&
-				event.direction === RpcEventDirectionEnum.incoming
+				event.direction === RpcCallDirectionEnum.incoming
 			) {
 				closeTask ??= acceptor.close();
 			}
@@ -389,7 +182,7 @@ describe("Default RPC Protocol retained ledger", () => {
 		const harness = createRpcDirectSessionHarness();
 		const reservation = harness.session.reserveInvocation({
 			service: "example.outgoing-ledger.v1",
-			member: "run",
+			method: "run",
 			args: normalizeRpcApplicationArguments(["x".repeat(512 * 1024)]),
 		});
 		if (reservation === undefined) {
@@ -430,7 +223,6 @@ describe("Default RPC Protocol retained ledger", () => {
 					release() {},
 				},
 			}),
-			reserveIncomingStream: () => undefined,
 			transition() {},
 			fault() {},
 		};
@@ -439,9 +231,9 @@ describe("Default RPC Protocol retained ledger", () => {
 			kind: RpcWireRecordKindEnum.call,
 			callId: "1",
 			service: "example.finished-call.v1",
-			member: "run",
+			method: "run",
 			args: [1],
-		})?.();
+		});
 		await vi.waitFor(() => expect(harness.sent).toHaveLength(1));
 
 		const entry = harness.session._incomingCalls.get("1");
@@ -491,7 +283,7 @@ describe("Default RPC Protocol retained ledger", () => {
 		const network = createRpcTestNetwork();
 		const descriptor = createRemoteServiceDescriptor(ILedgerService, {
 			wireName: "example.ledger.v1",
-			members: { run: { kind: "unary" } },
+			methods: { run: true },
 		});
 		const acceptor = createRpcAcceptor({ runtimePolicy: { ackDelayMs: 1 } });
 		const connector = createRpcConnector({ runtimePolicy: { ackDelayMs: 1 } });
@@ -528,7 +320,7 @@ describe("Default RPC Protocol retained ledger", () => {
 						kind: "call",
 						callId: "1",
 						service: "example.ledger.v1",
-						member: "run",
+						method: "run",
 						args: [2],
 					},
 				}),
@@ -551,7 +343,7 @@ describe("Default RPC Protocol retained ledger", () => {
 				kind: RpcWireRecordKindEnum.call,
 				callId: "1",
 				service: "example.invalid-capacity.v1",
-				member: "run",
+				method: "run",
 				args: ["x".repeat(524_289)],
 			}),
 		).toThrow(TypeError);
@@ -564,11 +356,11 @@ describe("Default RPC Protocol retained ledger", () => {
 		const network = createRpcTestNetwork();
 		const descriptor = createRemoteServiceDescriptor(ILedgerService, {
 			wireName: "example.ledger.v1",
-			members: { run: { kind: "unary" } },
+			methods: { run: true },
 		});
 		const unknownDescriptor = createRemoteServiceDescriptor(ILedgerService, {
 			wireName: "example.unknown-ledger.v1",
-			members: { run: { kind: "unary" } },
+			methods: { run: true },
 		});
 		const acceptor = createRpcAcceptor({ runtimePolicy: { ackDelayMs: 1 } });
 		const connector = createRpcConnector({ runtimePolicy: { ackDelayMs: 1 } });
@@ -615,11 +407,11 @@ describe("Default RPC Protocol retained ledger", () => {
 		const network = createRpcTestNetwork();
 		const descriptor = createRemoteServiceDescriptor(ILedgerService, {
 			wireName: "example.ledger.v1",
-			members: { run: { kind: "unary" } },
+			methods: { run: true },
 		});
 		const policy = {
 			ackDelayMs: 1,
-			maxApplicationWorkPerSession: 1,
+			maxPendingInvocationsPerSession: 1,
 		};
 		const acceptor = createRpcAcceptor({ runtimePolicy: policy });
 		const connector = createRpcConnector({ runtimePolicy: policy });
@@ -657,7 +449,7 @@ describe("Default RPC Protocol retained ledger", () => {
 		const network = createRpcTestNetwork();
 		const descriptor = createRemoteServiceDescriptor(ILargeLedgerService, {
 			wireName: "example.large-ledger.v1",
-			members: { run: { kind: "unary" } },
+			methods: { run: true },
 		});
 		const policy = {
 			ackDelayMs: 1,

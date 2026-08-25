@@ -131,10 +131,8 @@ describe("installed @husky-di/remote-websocket package", () => {
 			readonly engines: { readonly node: string };
 			readonly exports: Readonly<Record<string, unknown>>;
 			readonly sideEffects: boolean;
-			readonly version: string;
 		};
 		expect(manifest).toMatchObject({
-			version: "1.0.0",
 			sideEffects: false,
 			engines: { node: ">=23.6" },
 		});
@@ -172,12 +170,7 @@ describe("installed @husky-di/remote-websocket package", () => {
 			changesets.some((contents) =>
 				contents.includes('"@husky-di/remote-websocket": major'),
 			),
-		).toBe(false);
-		const changelog = readFileSync(
-			resolve(installedRoot, "CHANGELOG.md"),
-			"utf8",
-		);
-		expect(changelog.match(/^## 1\.0\.0$/gmu)).toHaveLength(1);
+		).toBe(true);
 	});
 
 	it("RPC-TRANSPORT-012 WS-SEC-001 documents the packaged secure-deployment boundary", () => {

@@ -5,41 +5,31 @@
  */
 
 import type { Cleanup } from "@husky-di/core";
-import { Observable, type Subscriber, type TeardownLogic } from "rxjs";
+import { Observable, Subject } from "rxjs";
 import { RpcCallTerminalTypeEnum } from "@/enums/protocol/rpc-call-terminal-type.enum";
 import { RpcIncomingCallKindEnum } from "@/enums/protocol/rpc-incoming-call-kind.enum";
+import { RpcCallDirectionEnum } from "@/enums/rpc-call-direction.enum";
 import { RpcCallStatusEnum } from "@/enums/rpc-call-status.enum";
-import { RpcEventDirectionEnum } from "@/enums/rpc-event-direction.enum";
 import { RpcEventTypeEnum } from "@/enums/rpc-event-type.enum";
 import { RpcExceptionCodeEnum } from "@/enums/rpc-exception-code.enum";
 import { RpcStateStatusEnum } from "@/enums/rpc-state-status.enum";
-import { RpcStreamStatusEnum } from "@/enums/rpc-stream-status.enum";
 import { getRemoteServiceDescriptorData } from "@/factories/remote-service-descriptor.factory";
 import { createRpcException } from "@/factories/rpc-exception.factory";
-import { createRpcSourceSubscription } from "@/factories/rpc-source-subscription.factory";
 import type {
 	IRpcApplicationArgumentsSnapshot,
 	IRpcApplicationSnapshot,
 	IRpcProtocolIncomingCall,
 	IRpcProtocolIncomingCallRequest,
 	IRpcProtocolIncomingHandlerCall,
-	IRpcProtocolIncomingStream,
 	IRpcProtocolSession,
-	IRpcProtocolSourceSink,
-	IRpcProtocolStream,
-	IRpcProtocolSubscriberSink,
 	IRpcRetainedBytesReservation,
 	RpcCallOutcome,
 	RpcHandlerOutcome,
 	RpcIncomingTerminal,
 	RpcProtocolIncomingCallReservation,
-	RpcProtocolIncomingStreamReservation,
-	RpcProtocolStreamRequest,
-	RpcStreamOutcome,
 	RpcUnknownCallFailure,
 } from "@/interfaces/protocol/rpc-protocol.interface";
 import type { IRemoteServiceDescriptor } from "@/interfaces/remote-service-descriptor.interface";
-import type { IRpcApplicationWorkReservation } from "@/interfaces/rpc-application-work-ledger.interface";
 import type { RpcEvent } from "@/interfaces/rpc-caller.interface";
 import type { IRpcHandlerScheduler } from "@/interfaces/rpc-handler-scheduler.interface";
 import type {
@@ -50,17 +40,15 @@ import type {
 import type {
 	RemoteService,
 	RemoteServiceImplementation,
-	RpcMemberDefinitions,
+	RpcMethodDefinitions,
 } from "@/types/remote-service-descriptor.type";
 import type { RpcPeerState } from "@/types/rpc-caller.type";
 import type {
 	RpcExposureRegistry,
 	RpcHandlerRoute,
-	RpcStreamRoute,
 } from "@/types/rpc-exposure.type";
 import type { CreateRpcPeerOptions } from "@/types/rpc-peer.type";
 import {
-	isRpcApplicationArgumentsSnapshot,
 	normalizeRpcApplicationArguments,
 	normalizeRpcApplicationValue,
 } from "@/utils/rpc-application-value.util";
@@ -86,19 +74,11 @@ function createObservationId(): string {
 	return `rpc-observation-${nextObservationOrdinal}`;
 }
 
-function observationDuration(
-	startedAt: number,
-	finishedAt = Date.now(),
-): number {
-	const duration = finishedAt - startedAt;
-	if (!Number.isFinite(duration)) {
-		return 0;
-	}
-	return Math.min(Number.MAX_SAFE_INTEGER, Math.max(0, Math.floor(duration)));
-}
-
-function incrementObservationCount(count: number): number {
-	return Math.min(Number.MAX_SAFE_INTEGER, count + 1);
+function observationDuration(startedAt: number): number {
+	return Math.min(
+		Number.MAX_SAFE_INTEGER,
+		Math.max(0, Math.floor(Date.now() - startedAt)),
+	);
 }
 
 function invokeRpcHandler(
@@ -199,72 +179,24 @@ function isIncomingCallRequest(
 	);
 }
 
-function isIncomingStreamRequest(
-	value: unknown,
-): value is RpcProtocolStreamRequest {
-	const fields = readProtocolFields(value);
-	if (fields === undefined) {
-		return false;
-	}
-	const { fieldNames, fields: values } = fields;
-	const baseIsValid =
-		typeof values.service === "string" &&
-		values.service.length > 0 &&
-		typeof values.member === "string" &&
-		values.member.length > 0 &&
-		values.member !== "then";
-	if (!baseIsValid) {
-		return false;
-	}
-	if (values.kind === "stream-property") {
-		return (
-			fieldNames.length === 3 &&
-			fieldNames.every((name) => ["service", "member", "kind"].includes(name))
-		);
-	}
-	return (
-		values.kind === "stream-method" &&
-		fieldNames.length === 4 &&
-		fieldNames.every((name) =>
-			["service", "member", "kind", "args"].includes(name),
-		) &&
-		isRpcApplicationArgumentsSnapshot(values.args)
-	);
-}
-
 /** Retains one stable Peer identity and its replay-latest state snapshot. */
 export class RpcPeerImpl implements IRpcPeerRuntime {
-	readonly #stateSubscribers = new Set<Subscriber<RpcPeerState>>();
+	readonly #stateSubject = new Subject<RpcPeerState>();
 	readonly #localExposureRegistry: RpcExposureRegistry = new Map();
 	readonly #ownerExposureRegistry: RpcExposureRegistry;
 	readonly #isOwnerActive: () => boolean;
 	readonly #emitEvent: (event: RpcEvent) => void;
 	readonly #onProtocolFault: (error: Error) => void;
 	readonly #handlerScheduler: IRpcHandlerScheduler;
-	readonly #maximumActiveStreamsPerSession: number;
-	readonly #maximumApplicationWorkPerSession: number;
 	readonly #maximumIncomingBytes: number;
-	readonly #reserveLocalApplicationWork: (
-		stream: boolean,
-	) => IRpcApplicationWorkReservation | undefined;
-	readonly #reserveRemoteApplicationWork: (
-		stream: boolean,
-	) => IRpcApplicationWorkReservation | undefined;
 	readonly #reserveRetainedBytes: (
 		bytes: number,
 	) => IRpcRetainedBytesReservation | undefined;
 	#state: RpcPeerState;
 	#stateDirty = false;
-	#stateCompleted = false;
-	#stateGeneration = 0;
 	#session: IRpcProtocolSession | undefined;
+	#incomingReservationCount = 0;
 	#incomingReservationBytes = 0;
-	#localApplicationWork = 0;
-	#localActiveStreams = 0;
-	#remoteApplicationWork = 0;
-	#remoteActiveStreams = 0;
-	readonly #applicationWorkReservations =
-		new Set<IRpcApplicationWorkReservation>();
 	readonly state$: Observable<RpcPeerState>;
 
 	constructor(options: CreateRpcPeerOptions) {
@@ -273,13 +205,9 @@ export class RpcPeerImpl implements IRpcPeerRuntime {
 			handlerScheduler,
 			initialState,
 			isOwnerActive,
-			maximumActiveStreamsPerSession,
-			maximumApplicationWorkPerSession,
 			maximumIncomingBytes,
 			onProtocolFault,
 			ownerExposureRegistry,
-			reserveLocalApplicationWork,
-			reserveRemoteApplicationWork,
 			reserveRetainedBytes,
 		} = options;
 		this.#state = Object.freeze(initialState);
@@ -288,22 +216,14 @@ export class RpcPeerImpl implements IRpcPeerRuntime {
 		this.#emitEvent = emitEvent;
 		this.#onProtocolFault = onProtocolFault;
 		this.#handlerScheduler = handlerScheduler;
-		this.#maximumActiveStreamsPerSession = maximumActiveStreamsPerSession;
-		this.#maximumApplicationWorkPerSession = maximumApplicationWorkPerSession;
 		this.#maximumIncomingBytes = maximumIncomingBytes;
-		this.#reserveLocalApplicationWork = reserveLocalApplicationWork;
-		this.#reserveRemoteApplicationWork = reserveRemoteApplicationWork;
 		this.#reserveRetainedBytes = reserveRetainedBytes;
 		this.state$ = new Observable((subscriber) => {
-			if (this.#stateCompleted) {
-				subscriber.complete();
-				return;
-			}
-			this.#stateSubscribers.add(subscriber);
+			const subscription = this.#stateSubject.subscribe(subscriber);
 			if (!subscriber.closed) {
 				subscriber.next(this.#state);
 			}
-			return () => this.#stateSubscribers.delete(subscriber);
+			return subscription;
 		});
 	}
 
@@ -324,7 +244,6 @@ export class RpcPeerImpl implements IRpcPeerRuntime {
 		}
 		this.#state = Object.freeze(state);
 		this.#stateDirty = true;
-		this.#stateGeneration += 1;
 	}
 
 	/** Package-private notification flush for a previously staged state. */
@@ -333,99 +252,18 @@ export class RpcPeerImpl implements IRpcPeerRuntime {
 			return;
 		}
 		this.#stateDirty = false;
-		const generation = this.#stateGeneration;
-		const state = this.#state;
-		for (const subscriber of [...this.#stateSubscribers]) {
-			if (generation !== this.#stateGeneration) {
-				return;
-			}
-			subscriber.next(state);
-		}
+		this.#stateSubject.next(this.#state);
 	}
 
 	/** Package-private terminal cleanup after the final snapshot is committed. */
 	completeState(): void {
-		if (this.#stateCompleted) {
-			return;
-		}
 		this.flushState();
-		this.#stateCompleted = true;
 		this.#localExposureRegistry.clear();
 		this.#session = undefined;
-		for (const reservation of [...this.#applicationWorkReservations]) {
-			reservation.release();
-		}
-		this.#stateGeneration += 1;
-		for (const subscriber of [...this.#stateSubscribers]) {
-			subscriber.complete();
-		}
-		this.#stateSubscribers.clear();
+		this.#stateSubject.complete();
 	}
 
-	#reserveApplicationWork(
-		direction: "local" | "remote",
-		stream: boolean,
-	): IRpcApplicationWorkReservation | undefined {
-		const work =
-			direction === "local"
-				? this.#localApplicationWork
-				: this.#remoteApplicationWork;
-		const activeStreams =
-			direction === "local"
-				? this.#localActiveStreams
-				: this.#remoteActiveStreams;
-		// Work and its stream subset must be acquired as one Session reservation.
-		const sessionCapacityUnavailable =
-			work >= this.#maximumApplicationWorkPerSession ||
-			(stream && activeStreams >= this.#maximumActiveStreamsPerSession);
-		if (sessionCapacityUnavailable) {
-			return undefined;
-		}
-		const ownerReservation =
-			direction === "local"
-				? this.#reserveLocalApplicationWork(stream)
-				: this.#reserveRemoteApplicationWork(stream);
-		if (ownerReservation === undefined) {
-			return undefined;
-		}
-		if (direction === "local") {
-			this.#localApplicationWork += 1;
-			if (stream) {
-				this.#localActiveStreams += 1;
-			}
-		} else {
-			this.#remoteApplicationWork += 1;
-			if (stream) {
-				this.#remoteActiveStreams += 1;
-			}
-		}
-		let released = false;
-		const reservation = Object.freeze<IRpcApplicationWorkReservation>({
-			release: () => {
-				if (released) {
-					return;
-				}
-				released = true;
-				this.#applicationWorkReservations.delete(reservation);
-				ownerReservation.release();
-				if (direction === "local") {
-					this.#localApplicationWork -= 1;
-					if (stream) {
-						this.#localActiveStreams -= 1;
-					}
-				} else {
-					this.#remoteApplicationWork -= 1;
-					if (stream) {
-						this.#remoteActiveStreams -= 1;
-					}
-				}
-			},
-		});
-		this.#applicationWorkReservations.add(reservation);
-		return reservation;
-	}
-
-	expose<T, Definitions extends RpcMemberDefinitions<T>>(
+	expose<T, Definitions extends RpcMethodDefinitions<T>>(
 		descriptor: IRemoteServiceDescriptor<T, Definitions>,
 		implementation: NoInfer<RemoteServiceImplementation<T, Definitions>>,
 	): Cleanup {
@@ -445,321 +283,18 @@ export class RpcPeerImpl implements IRpcPeerRuntime {
 		);
 	}
 
-	resolve<T, Definitions extends RpcMemberDefinitions<T>>(
+	resolve<T, Definitions extends RpcMethodDefinitions<T>>(
 		descriptor: IRemoteServiceDescriptor<T, Definitions>,
 	): RemoteService<T, Definitions> {
 		const service = getRemoteServiceDescriptorData(descriptor).wireName;
-		return createRpcFacade(
-			descriptor,
-			(member, cancelable, actualArguments) =>
-				this.#invoke(service, member, cancelable, actualArguments),
-			(member, kind, actualArguments, subscriber) =>
-				this.#subscribe(service, member, kind, actualArguments, subscriber),
+		return createRpcFacade(descriptor, (method, cancelable, actualArguments) =>
+			this.#invoke(service, method, cancelable, actualArguments),
 		);
-	}
-
-	#subscribe(
-		service: string,
-		member: string,
-		kind: "stream-method" | "stream-property",
-		actualArguments: readonly unknown[],
-		subscriber: Subscriber<unknown>,
-	): TeardownLogic {
-		const session = this.#session;
-		// Subscription preflight rejects state before inspecting application arguments.
-		const cannotSubscribe =
-			!this.#isOwnerActive() ||
-			(this.state.status !== RpcStateStatusEnum.connected &&
-				this.state.status !== RpcStateStatusEnum.recovering) ||
-			session === undefined;
-		if (cannotSubscribe) {
-			subscriber.error(createRpcException(RpcExceptionCodeEnum.unavailable));
-			return;
-		}
-
-		let request: RpcProtocolStreamRequest;
-		try {
-			request =
-				kind === "stream-method"
-					? {
-							service,
-							member,
-							kind,
-							args: normalizeRpcApplicationArguments(actualArguments),
-						}
-					: { service, member, kind };
-		} catch (error) {
-			subscriber.error(error);
-			return;
-		}
-		if (subscriber.closed) {
-			return;
-		}
-		const applicationWorkReservation = this.#reserveApplicationWork(
-			"local",
-			true,
-		);
-		if (applicationWorkReservation === undefined) {
-			subscriber.error(createRpcException(RpcExceptionCodeEnum.unavailable));
-			return;
-		}
-		let streamRootReleased = false;
-		const releaseStreamRoot = (): void => {
-			if (streamRootReleased) {
-				return;
-			}
-			streamRootReleased = true;
-			applicationWorkReservation.release();
-		};
-
-		let reservation: ReturnType<IRpcProtocolSession["reserveStream"]>;
-		try {
-			reservation = session.reserveStream(request);
-		} catch (error) {
-			releaseStreamRoot();
-			subscriber.error(this.#protocolFailure(error));
-			return;
-		}
-		if (reservation === undefined) {
-			releaseStreamRoot();
-			subscriber.error(createRpcException(RpcExceptionCodeEnum.unavailable));
-			return;
-		}
-		if (!rpcInvocationReservationSchema.safeParse(reservation).success) {
-			releaseStreamRoot();
-			subscriber.error(
-				this.#protocolFailure(new Error("Invalid stream reservation.")),
-			);
-			return;
-		}
-		if (subscriber.closed) {
-			try {
-				reservation.release();
-			} catch (error) {
-				this.#protocolFailure(error);
-			}
-			releaseStreamRoot();
-			return;
-		}
-
-		const observationId = createObservationId();
-		const startedAt = Date.now();
-		let observationStarted = false;
-		let observationFinished = false;
-		let deliveredItemCount = 0;
-		let terminalCommitted = false;
-		let dispatching = false;
-		let itemProjectionReserved = false;
-		let projectionClosed = false;
-		const deferredEffects: Array<() => void> = [];
-		const runOrDefer = (effect: () => void): void => {
-			if (dispatching || !observationStarted) {
-				deferredEffects.push(effect);
-				return;
-			}
-			effect();
-		};
-		const flushDeferredEffects = (): void => {
-			if (dispatching || !observationStarted) {
-				return;
-			}
-			while (deferredEffects.length > 0) {
-				deferredEffects.shift()?.();
-			}
-		};
-		const createFinishedEvent = (
-			outcome: RpcStreamOutcome,
-		): RpcEvent | undefined => {
-			if (observationFinished) {
-				return undefined;
-			}
-			observationFinished = true;
-			const base = {
-				type: RpcEventTypeEnum.streamFinished as const,
-				observationId,
-				peer: this,
-				direction: RpcEventDirectionEnum.outgoing as const,
-				service,
-				member,
-				deliveredItemCount,
-				durationMs: observationDuration(startedAt),
-			};
-			if (outcome.type === "completed") {
-				return { ...base, outcome: RpcStreamStatusEnum.completed };
-			}
-			if (outcome.type === "canceled") {
-				return { ...base, outcome: RpcStreamStatusEnum.canceled };
-			}
-			return {
-				...base,
-				outcome: RpcStreamStatusEnum.failed,
-				code: outcome.code,
-			};
-		};
-		const closedItemProjection = Object.freeze({
-			commit: () => "closed" as const,
-		});
-		const closedTerminalProjection = Object.freeze({
-			commit: () => undefined,
-		});
-		const commitTerminal = (outcome: RpcStreamOutcome): void => {
-			if (terminalCommitted || projectionClosed) {
-				return;
-			}
-			terminalCommitted = true;
-			const finishedEvent = createFinishedEvent(outcome);
-			const effect = (): void => {
-				try {
-					if (finishedEvent !== undefined) {
-						this.#emitEvent(finishedEvent);
-					}
-					if (subscriber.closed) {
-						return;
-					}
-					if (outcome.type === "completed") {
-						subscriber.complete();
-						return;
-					}
-					const code =
-						outcome.type === "canceled"
-							? RpcExceptionCodeEnum.canceled
-							: outcome.code;
-					subscriber.error(createRpcException(code));
-				} finally {
-					releaseStreamRoot();
-				}
-			};
-			runOrDefer(effect);
-		};
-		const sink: IRpcProtocolSubscriberSink = Object.freeze({
-			reserveItem: (snapshot: IRpcApplicationSnapshot) => {
-				if (terminalCommitted || projectionClosed || subscriber.closed) {
-					return closedItemProjection;
-				}
-				// One W=1 item projection must settle before another begins.
-				const itemProjectionOverlaps = dispatching || itemProjectionReserved;
-				if (itemProjectionOverlaps) {
-					projectionClosed = true;
-					this.#protocolFailure(
-						new Error("Protocol overlapped stream item projections."),
-					);
-					return closedItemProjection;
-				}
-				itemProjectionReserved = true;
-				let committed = false;
-				return Object.freeze({
-					commit: () => {
-						if (committed) {
-							return "closed" as const;
-						}
-						committed = true;
-						itemProjectionReserved = false;
-						// A terminal, Session fault, or unsubscribe suppresses the reserved effect.
-						const itemProjectionIsClosed =
-							terminalCommitted || projectionClosed || subscriber.closed;
-						if (itemProjectionIsClosed) {
-							return "closed" as const;
-						}
-						deliveredItemCount = incrementObservationCount(deliveredItemCount);
-						dispatching = true;
-						try {
-							subscriber.next(snapshot.value);
-						} finally {
-							dispatching = false;
-							flushDeferredEffects();
-						}
-						return terminalCommitted || projectionClosed || subscriber.closed
-							? ("closed" as const)
-							: ("rearm" as const);
-					},
-				});
-			},
-			reserveTerminal: (outcome: RpcStreamOutcome) => {
-				if (projectionClosed) {
-					return closedTerminalProjection;
-				}
-				let committed = false;
-				return Object.freeze({
-					commit: () => {
-						if (committed) {
-							return;
-						}
-						committed = true;
-						commitTerminal(outcome);
-					},
-				});
-			},
-		});
-
-		let stream: IRpcProtocolStream;
-		try {
-			stream = reservation.commit(sink);
-		} catch (error) {
-			releaseStreamRoot();
-			subscriber.error(this.#protocolFailure(error));
-			return;
-		}
-		if (!rpcCommittedInvocationSchema.safeParse(stream).success) {
-			releaseStreamRoot();
-			subscriber.error(this.#protocolFailure(new Error("Invalid stream.")));
-			return;
-		}
-
-		observationStarted = true;
-		this.#emitEvent({
-			type: RpcEventTypeEnum.streamStarted,
-			observationId,
-			peer: this,
-			direction: RpcEventDirectionEnum.outgoing,
-			service,
-			member,
-		});
-		flushDeferredEffects();
-
-		let canceled = false;
-		const cancel = (): void => {
-			if (terminalCommitted || canceled) {
-				return;
-			}
-			canceled = true;
-			const finishedEvent = createFinishedEvent({ type: "canceled" });
-			if (finishedEvent !== undefined) {
-				runOrDefer(() => this.#emitEvent(finishedEvent));
-			}
-			try {
-				stream.cancel();
-			} catch (error) {
-				this.#protocolFailure(error);
-			}
-		};
-		if (subscriber.closed) {
-			cancel();
-			return;
-		}
-		if (terminalCommitted) {
-			return;
-		}
-		try {
-			stream.start();
-		} catch (error) {
-			terminalCommitted = true;
-			const finishedEvent = createFinishedEvent({
-				type: "failed",
-				code: RpcExceptionCodeEnum.outcomeUnknown,
-			});
-			if (finishedEvent !== undefined) {
-				this.#emitEvent(finishedEvent);
-			}
-			releaseStreamRoot();
-			subscriber.error(this.#protocolFailure(error));
-			return;
-		}
-		return cancel;
 	}
 
 	#invoke(
 		service: string,
-		member: string,
+		method: string,
 		cancelable: boolean,
 		actualArguments: readonly unknown[],
 	): Promise<unknown> {
@@ -780,7 +315,7 @@ export class RpcPeerImpl implements IRpcPeerRuntime {
 		);
 		const reservation = this.reserveOutgoingProtocolInvocation(
 			service,
-			member,
+			method,
 			args,
 		);
 		if (reservation === undefined) {
@@ -801,10 +336,10 @@ export class RpcPeerImpl implements IRpcPeerRuntime {
 		return invocation.result.finally(removeAbortListener);
 	}
 
-	/** Package-private unary invocation reservation seam. */
+	/** Package-private all-or-none group reservation seam. */
 	reserveOutgoingProtocolInvocation(
 		service: string,
-		member: string,
+		method: string,
 		args: IRpcApplicationArgumentsSnapshot,
 	): IRpcPeerInvocationReservation | undefined {
 		const session = this.#session;
@@ -817,27 +352,17 @@ export class RpcPeerImpl implements IRpcPeerRuntime {
 		if (cannotReserveInvocation) {
 			return undefined;
 		}
-		const applicationWorkReservation = this.#reserveApplicationWork(
-			"local",
-			false,
-		);
-		if (applicationWorkReservation === undefined) {
-			return undefined;
-		}
 
 		let reservation: ReturnType<IRpcProtocolSession["reserveInvocation"]>;
 		try {
-			reservation = session.reserveInvocation({ service, member, args });
+			reservation = session.reserveInvocation({ service, method, args });
 		} catch (error) {
-			applicationWorkReservation.release();
 			throw this.#protocolFailure(error);
 		}
 		if (reservation === undefined) {
-			applicationWorkReservation.release();
 			return undefined;
 		}
 		if (!rpcInvocationReservationSchema.safeParse(reservation).success) {
-			applicationWorkReservation.release();
 			throw this.#protocolFailure(new Error("Invalid invocation reservation."));
 		}
 
@@ -852,9 +377,8 @@ export class RpcPeerImpl implements IRpcPeerRuntime {
 				state = "committed";
 				return this.#commitOutgoingProtocolInvocation(
 					reservation,
-					applicationWorkReservation,
 					service,
-					member,
+					method,
 				);
 			},
 			release: () => {
@@ -868,8 +392,6 @@ export class RpcPeerImpl implements IRpcPeerRuntime {
 					reservation.release();
 				} catch (error) {
 					throw this.#protocolFailure(error);
-				} finally {
-					applicationWorkReservation.release();
 				}
 			},
 		});
@@ -879,9 +401,8 @@ export class RpcPeerImpl implements IRpcPeerRuntime {
 		reservation: NonNullable<
 			ReturnType<IRpcProtocolSession["reserveInvocation"]>
 		>,
-		applicationWorkReservation: IRpcApplicationWorkReservation,
 		service: string,
-		member: string,
+		method: string,
 	): IRpcPeerCommittedInvocation {
 		const result = Promise.withResolvers<unknown>();
 		const observationId = createObservationId();
@@ -914,7 +435,6 @@ export class RpcPeerImpl implements IRpcPeerRuntime {
 				return;
 			}
 			settled = true;
-			applicationWorkReservation.release();
 			const durationMs = observationDuration(startedAt);
 			// Successful Protocol outcomes are normalized to one caller-visible result path.
 			const callReturned =
@@ -925,9 +445,9 @@ export class RpcPeerImpl implements IRpcPeerRuntime {
 					type: RpcEventTypeEnum.callFinished,
 					observationId,
 					peer: this,
-					direction: RpcEventDirectionEnum.outgoing,
+					direction: RpcCallDirectionEnum.outgoing,
 					service,
-					member,
+					method,
 					outcome: RpcCallStatusEnum.fulfilled,
 					durationMs,
 				});
@@ -943,9 +463,9 @@ export class RpcPeerImpl implements IRpcPeerRuntime {
 				type: RpcEventTypeEnum.callFinished,
 				observationId,
 				peer: this,
-				direction: RpcEventDirectionEnum.outgoing,
+				direction: RpcCallDirectionEnum.outgoing,
 				service,
-				member,
+				method,
 				outcome: RpcCallStatusEnum.rejected,
 				code: outcome.code,
 				durationMs,
@@ -957,11 +477,9 @@ export class RpcPeerImpl implements IRpcPeerRuntime {
 		try {
 			protocolInvocation = reservation.commit({ finish });
 		} catch (error) {
-			applicationWorkReservation.release();
 			throw this.#protocolFailure(error);
 		}
 		if (!rpcCommittedInvocationSchema.safeParse(protocolInvocation).success) {
-			applicationWorkReservation.release();
 			throw this.#protocolFailure(new Error("Invalid committed invocation."));
 		}
 
@@ -969,9 +487,9 @@ export class RpcPeerImpl implements IRpcPeerRuntime {
 			type: RpcEventTypeEnum.callStarted,
 			observationId,
 			peer: this,
-			direction: RpcEventDirectionEnum.outgoing,
+			direction: RpcCallDirectionEnum.outgoing,
 			service,
-			member,
+			method,
 		});
 		published = true;
 		if (queuedOutcome !== undefined) {
@@ -1023,28 +541,16 @@ export class RpcPeerImpl implements IRpcPeerRuntime {
 		// Incoming admission must fit the Peer count and retained-byte budgets.
 		const cannotReserveIncomingCall =
 			this.state.status !== RpcStateStatusEnum.connected ||
+			this.#incomingReservationCount >= 256 ||
 			charge > this.#maximumIncomingBytes - this.#incomingReservationBytes;
 		if (cannotReserveIncomingCall) {
 			return undefined;
 		}
-		const applicationWorkReservation = this.#reserveApplicationWork(
-			"remote",
-			false,
-		);
-		if (applicationWorkReservation === undefined) {
-			return undefined;
-		}
-		let retainedBytesReservation: IRpcRetainedBytesReservation | undefined;
-		try {
-			retainedBytesReservation = this.#reserveRetainedBytes(charge);
-		} catch (error) {
-			applicationWorkReservation.release();
-			throw error;
-		}
+		const retainedBytesReservation = this.#reserveRetainedBytes(charge);
 		if (retainedBytesReservation === undefined) {
-			applicationWorkReservation.release();
 			return undefined;
 		}
+		this.#incomingReservationCount += 1;
 		this.#incomingReservationBytes += charge;
 		const exposure =
 			this.#localExposureRegistry.get(request.service) ??
@@ -1054,16 +560,14 @@ export class RpcPeerImpl implements IRpcPeerRuntime {
 				RpcExceptionCodeEnum.unknownService,
 				charge,
 				retainedBytesReservation,
-				applicationWorkReservation,
 			);
 		}
-		const route = exposure.members.get(request.member);
-		if (route === undefined || route.kind !== "unary") {
+		const route = exposure.methods.get(request.method);
+		if (route === undefined) {
 			return this.#reserveUnknownIncoming(
-				RpcExceptionCodeEnum.unknownMember,
+				RpcExceptionCodeEnum.unknownMethod,
 				charge,
 				retainedBytesReservation,
-				applicationWorkReservation,
 				exposure.wireName,
 			);
 		}
@@ -1073,327 +577,18 @@ export class RpcPeerImpl implements IRpcPeerRuntime {
 			route,
 			charge,
 			retainedBytesReservation,
-			applicationWorkReservation,
 		);
-	}
-
-	/** Package-private Framework reservation port for one validated remote stream. */
-	reserveIncomingProtocolStream(
-		request: RpcProtocolStreamRequest,
-	): RpcProtocolIncomingStreamReservation | undefined {
-		if (!isIncomingStreamRequest(request)) {
-			this.#onProtocolFault(
-				new Error("Protocol supplied an invalid incoming stream request."),
-			);
-			return undefined;
-		}
-		const charge =
-			(request.kind === "stream-method" ? request.args.weight : 0) + 256;
-		// Incoming capacity is reserved before any service or member route lookup.
-		const cannotReserveIncomingStream =
-			this.state.status !== RpcStateStatusEnum.connected ||
-			charge > this.#maximumIncomingBytes - this.#incomingReservationBytes;
-		if (cannotReserveIncomingStream) {
-			return undefined;
-		}
-		const applicationWorkReservation = this.#reserveApplicationWork(
-			"remote",
-			true,
-		);
-		if (applicationWorkReservation === undefined) {
-			return undefined;
-		}
-		let retainedBytesReservation: IRpcRetainedBytesReservation | undefined;
-		try {
-			retainedBytesReservation = this.#reserveRetainedBytes(charge);
-		} catch (error) {
-			applicationWorkReservation.release();
-			throw error;
-		}
-		if (retainedBytesReservation === undefined) {
-			applicationWorkReservation.release();
-			return undefined;
-		}
-		this.#incomingReservationBytes += charge;
-		const exposure =
-			this.#localExposureRegistry.get(request.service) ??
-			this.#ownerExposureRegistry.get(request.service);
-		if (exposure === undefined) {
-			return this.#reserveUnknownIncomingStream(
-				RpcExceptionCodeEnum.unknownService,
-				charge,
-				retainedBytesReservation,
-				applicationWorkReservation,
-			);
-		}
-		const route = exposure.members.get(request.member);
-		if (route === undefined || route.kind !== request.kind) {
-			return this.#reserveUnknownIncomingStream(
-				RpcExceptionCodeEnum.unknownMember,
-				charge,
-				retainedBytesReservation,
-				applicationWorkReservation,
-				exposure.wireName,
-			);
-		}
-		return this.#reserveSourceIncomingStream(
-			request,
-			route,
-			charge,
-			retainedBytesReservation,
-			applicationWorkReservation,
-		);
-	}
-
-	#reserveUnknownIncomingStream(
-		code:
-			| RpcExceptionCodeEnum.unknownService
-			| RpcExceptionCodeEnum.unknownMember,
-		charge: number,
-		retainedBytesReservation: IRpcRetainedBytesReservation,
-		applicationWorkReservation: IRpcApplicationWorkReservation,
-		service?: string,
-	): RpcProtocolIncomingStreamReservation {
-		let state: "pending" | "committed" | "released" = "pending";
-		let finished = false;
-		let observationId = "";
-		let startedAt = 0;
-		const stream = Object.freeze<IRpcProtocolIncomingStream>({
-			finish: (outcome, onReleased) => {
-				if (finished || state !== "committed") {
-					return;
-				}
-				const outcomeMatchesRoute =
-					outcome.type === "failed" && outcome.code === code;
-				if (!outcomeMatchesRoute) {
-					this.#onProtocolFault(
-						new Error("Protocol supplied the wrong unknown-stream terminal."),
-					);
-					return;
-				}
-				finished = true;
-				const durationMs = observationDuration(startedAt);
-				this.#releaseIncomingCapacity(
-					charge,
-					retainedBytesReservation,
-					applicationWorkReservation,
-				);
-				let releaseError: unknown;
-				try {
-					onReleased();
-				} catch (error) {
-					releaseError = error;
-				}
-				const base = {
-					type: RpcEventTypeEnum.streamFinished as const,
-					observationId,
-					peer: this,
-					direction: RpcEventDirectionEnum.incoming as const,
-					outcome: RpcStreamStatusEnum.failed as const,
-					admittedItemCount: 0 as const,
-					durationMs,
-				};
-				this.#emitEvent(
-					code === RpcExceptionCodeEnum.unknownService
-						? { ...base, code: RpcExceptionCodeEnum.unknownService }
-						: {
-								...base,
-								service: service as string,
-								code: RpcExceptionCodeEnum.unknownMember,
-							},
-				);
-				if (releaseError !== undefined) {
-					this.#onProtocolFault(
-						releaseError instanceof Error
-							? releaseError
-							: new Error("Protocol stream release callback failed."),
-					);
-				}
-			},
-		});
-		return {
-			kind: "unknown",
-			code,
-			reservation: Object.freeze({
-				commit: () => {
-					if (state !== "pending") {
-						this.#onProtocolFault(
-							new Error("Incoming stream reservation had multiple winners."),
-						);
-						return stream;
-					}
-					state = "committed";
-					observationId = createObservationId();
-					startedAt = Date.now();
-					const base = {
-						type: RpcEventTypeEnum.streamStarted as const,
-						observationId,
-						peer: this,
-						direction: RpcEventDirectionEnum.incoming as const,
-					};
-					this.#emitEvent(
-						code === RpcExceptionCodeEnum.unknownService
-							? base
-							: { ...base, service: service as string },
-					);
-					return stream;
-				},
-				release: () => {
-					if (state !== "pending") {
-						this.#onProtocolFault(
-							new Error("Incoming stream reservation had multiple winners."),
-						);
-						return;
-					}
-					state = "released";
-					this.#releaseIncomingCapacity(
-						charge,
-						retainedBytesReservation,
-						applicationWorkReservation,
-					);
-				},
-			}),
-		};
-	}
-
-	#reserveSourceIncomingStream(
-		request: RpcProtocolStreamRequest,
-		route: RpcStreamRoute,
-		charge: number,
-		retainedBytesReservation: IRpcRetainedBytesReservation,
-		applicationWorkReservation: IRpcApplicationWorkReservation,
-	): RpcProtocolIncomingStreamReservation {
-		let state: "pending" | "committed" | "released" = "pending";
-		const service = request.service;
-		const member = request.member;
-		let capturedRoute: RpcStreamRoute | undefined = route;
-		let argumentsSnapshot =
-			request.kind === "stream-method" ? request.args : undefined;
-		return {
-			kind: "source",
-			reservation: Object.freeze({
-				commit: (source: IRpcProtocolSourceSink) => {
-					if (state !== "pending" || capturedRoute === undefined) {
-						throw this.#protocolFailure(
-							new Error("Incoming stream reservation had multiple winners."),
-						);
-					}
-					state = "committed";
-					const observationId = createObservationId();
-					const startedAt = Date.now();
-					const adapter = createRpcSourceSubscription(
-						capturedRoute,
-						argumentsSnapshot,
-						source,
-						(error) => this.#protocolFailure(error),
-						() =>
-							this.#releaseIncomingCapacity(
-								charge,
-								retainedBytesReservation,
-								applicationWorkReservation,
-							),
-						(outcome, finishedAt, admittedItemCount, sourceTeardownFailed) => {
-							const base = {
-								type: RpcEventTypeEnum.streamFinished as const,
-								observationId,
-								peer: this,
-								direction: RpcEventDirectionEnum.incoming as const,
-								service,
-								member,
-								admittedItemCount,
-								durationMs: observationDuration(startedAt, finishedAt),
-								...(sourceTeardownFailed
-									? { sourceTeardownFailed: true as const }
-									: {}),
-							};
-							if (outcome.type === "completed") {
-								this.#emitEvent({
-									...base,
-									outcome: RpcStreamStatusEnum.completed,
-								});
-								return;
-							}
-							if (outcome.type === "canceled") {
-								this.#emitEvent({
-									...base,
-									outcome: RpcStreamStatusEnum.canceled,
-								});
-								return;
-							}
-							if (outcome.type === "session-terminated") {
-								this.#emitEvent({
-									...base,
-									outcome: RpcStreamStatusEnum.terminated,
-								});
-								return;
-							}
-							// A known Source exposes only application failure and overflow codes.
-							const sourceFailureIsPublic =
-								outcome.code === RpcExceptionCodeEnum.handlerFailed ||
-								outcome.code === RpcExceptionCodeEnum.overflow;
-							if (!sourceFailureIsPublic) {
-								this.#emitEvent({
-									...base,
-									outcome: RpcStreamStatusEnum.terminated,
-								});
-								this.#protocolFailure(
-									new Error(
-										"Protocol supplied an invalid known-stream terminal.",
-									),
-								);
-								return;
-							}
-							this.#emitEvent({
-								...base,
-								outcome: RpcStreamStatusEnum.failed,
-								code: outcome.code,
-							});
-						},
-					);
-					this.#emitEvent({
-						type: RpcEventTypeEnum.streamStarted,
-						observationId,
-						peer: this,
-						direction: RpcEventDirectionEnum.incoming,
-						service,
-						member,
-					});
-					capturedRoute = undefined;
-					argumentsSnapshot = undefined;
-					const removeQueuedJob = this.#handlerScheduler.enqueue(
-						this,
-						(releasePermit) => adapter.start(releasePermit),
-					);
-					adapter.setQueuedJobRemoval(removeQueuedJob);
-					return adapter;
-				},
-				release: () => {
-					if (state !== "pending") {
-						this.#onProtocolFault(
-							new Error("Incoming stream reservation had multiple winners."),
-						);
-						return;
-					}
-					state = "released";
-					capturedRoute = undefined;
-					argumentsSnapshot = undefined;
-					this.#releaseIncomingCapacity(
-						charge,
-						retainedBytesReservation,
-						applicationWorkReservation,
-					);
-				},
-			}),
-		};
 	}
 
 	#releaseIncomingCapacity(
 		charge: number,
 		retainedBytesReservation: IRpcRetainedBytesReservation,
-		applicationWorkReservation: IRpcApplicationWorkReservation,
 	): void {
 		retainedBytesReservation.release();
-		applicationWorkReservation.release();
+		this.#incomingReservationCount = Math.max(
+			0,
+			this.#incomingReservationCount - 1,
+		);
 		this.#incomingReservationBytes = Math.max(
 			0,
 			this.#incomingReservationBytes - charge,
@@ -1404,7 +599,6 @@ export class RpcPeerImpl implements IRpcPeerRuntime {
 		code: RpcUnknownCallFailure,
 		charge: number,
 		retainedBytesReservation: IRpcRetainedBytesReservation,
-		applicationWorkReservation: IRpcApplicationWorkReservation,
 		service?: string,
 	): RpcProtocolIncomingCallReservation {
 		let state: "pending" | "committed" | "released" = "pending";
@@ -1424,18 +618,14 @@ export class RpcPeerImpl implements IRpcPeerRuntime {
 					return;
 				}
 				settled = true;
-				this.#releaseIncomingCapacity(
-					charge,
-					retainedBytesReservation,
-					applicationWorkReservation,
-				);
+				this.#releaseIncomingCapacity(charge, retainedBytesReservation);
 				const durationMs = observationDuration(startedAt);
 				if (code === RpcExceptionCodeEnum.unknownService) {
 					this.#emitEvent({
 						type: RpcEventTypeEnum.callFinished,
 						observationId,
 						peer: this,
-						direction: RpcEventDirectionEnum.incoming as const,
+						direction: RpcCallDirectionEnum.incoming as const,
 						outcome: RpcCallStatusEnum.rejected,
 						code: RpcExceptionCodeEnum.unknownService,
 						durationMs,
@@ -1445,10 +635,10 @@ export class RpcPeerImpl implements IRpcPeerRuntime {
 						type: RpcEventTypeEnum.callFinished,
 						observationId,
 						peer: this,
-						direction: RpcEventDirectionEnum.incoming,
+						direction: RpcCallDirectionEnum.incoming,
 						service: service as string,
 						outcome: RpcCallStatusEnum.rejected,
-						code: RpcExceptionCodeEnum.unknownMember,
+						code: RpcExceptionCodeEnum.unknownMethod,
 						durationMs,
 					});
 				}
@@ -1473,7 +663,7 @@ export class RpcPeerImpl implements IRpcPeerRuntime {
 						type: RpcEventTypeEnum.callStarted as const,
 						observationId,
 						peer: this,
-						direction: RpcEventDirectionEnum.incoming as const,
+						direction: RpcCallDirectionEnum.incoming as const,
 					};
 					this.#emitEvent(
 						code === RpcExceptionCodeEnum.unknownService
@@ -1490,23 +680,18 @@ export class RpcPeerImpl implements IRpcPeerRuntime {
 						return;
 					}
 					state = "released";
-					this.#releaseIncomingCapacity(
-						charge,
-						retainedBytesReservation,
-						applicationWorkReservation,
-					);
+					this.#releaseIncomingCapacity(charge, retainedBytesReservation);
 				},
 			}),
 		};
 	}
 
 	#reserveHandlerIncoming(
-		{ args, member }: IRpcProtocolIncomingCallRequest,
+		{ args, method }: IRpcProtocolIncomingCallRequest,
 		service: string,
 		route: RpcHandlerRoute,
 		charge: number,
 		retainedBytesReservation: IRpcRetainedBytesReservation,
-		applicationWorkReservation: IRpcApplicationWorkReservation,
 	): RpcProtocolIncomingCallReservation {
 		let state: "pending" | "committed" | "released" = "pending";
 		let settled = false;
@@ -1535,11 +720,7 @@ export class RpcPeerImpl implements IRpcPeerRuntime {
 				argumentsSnapshot = undefined;
 				removeQueuedJob?.();
 				removeQueuedJob = undefined;
-				this.#releaseIncomingCapacity(
-					charge,
-					retainedBytesReservation,
-					applicationWorkReservation,
-				);
+				this.#releaseIncomingCapacity(charge, retainedBytesReservation);
 				// Session termination and acknowledged cancellation both settle as cancellation.
 				const callWasCanceled =
 					outcome.type === RpcCallTerminalTypeEnum.sessionTerminated ||
@@ -1557,9 +738,9 @@ export class RpcPeerImpl implements IRpcPeerRuntime {
 					type: RpcEventTypeEnum.callFinished as const,
 					observationId,
 					peer: this,
-					direction: RpcEventDirectionEnum.incoming as const,
+					direction: RpcCallDirectionEnum.incoming as const,
 					service,
-					member,
+					method,
 					durationMs: observationDuration(startedAt),
 				};
 				// Successful handler outcomes commit returned payload or void.
@@ -1683,9 +864,9 @@ export class RpcPeerImpl implements IRpcPeerRuntime {
 						type: RpcEventTypeEnum.callStarted,
 						observationId,
 						peer: this,
-						direction: RpcEventDirectionEnum.incoming,
+						direction: RpcCallDirectionEnum.incoming,
 						service,
-						member,
+						method,
 					});
 					removeQueuedJob = this.#handlerScheduler.enqueue(this, runHandler);
 					return call;
@@ -1699,11 +880,7 @@ export class RpcPeerImpl implements IRpcPeerRuntime {
 					}
 					state = "released";
 					argumentsSnapshot = undefined;
-					this.#releaseIncomingCapacity(
-						charge,
-						retainedBytesReservation,
-						applicationWorkReservation,
-					);
+					this.#releaseIncomingCapacity(charge, retainedBytesReservation);
 				},
 			}),
 		};

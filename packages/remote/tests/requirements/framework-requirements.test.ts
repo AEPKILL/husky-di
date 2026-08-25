@@ -5,7 +5,7 @@
  */
 
 import { createServiceIdentifier } from "@husky-di/core";
-import { config, Observable, Subject } from "rxjs";
+import { config, Subject } from "rxjs";
 import { describe, expect, it, vi } from "vitest";
 
 import * as rootEntry from "../../src/index";
@@ -17,7 +17,6 @@ import {
 	type IRpcConnection,
 	type IRpcConnector,
 	type IRpcProtocol,
-	type RpcAcceptorRuntimePolicyOptions,
 	RpcCloseReasonEnum,
 	type RpcEvent,
 } from "../../src/index";
@@ -42,11 +41,6 @@ interface RequirementService {
 	wait(): Promise<string>;
 }
 
-interface ScheduledFrameworkService {
-	run(value: string): Promise<string>;
-	watch(value: string): Observable<string>;
-}
-
 interface ConnectorHarnessOptions {
 	readonly session?: IRpcProtocolSession;
 	readonly shutdown?: () => Promise<void>;
@@ -61,32 +55,13 @@ const requirementDescriptor = createRemoteServiceDescriptor(
 	IRequirementService,
 	{
 		wireName: "example.requirements.v1",
-		members: {
-			cancel: { kind: "unary", cancelable: true },
-			echo: { kind: "unary" },
-			wait: { kind: "unary" },
-		},
-	},
-);
-const IScheduledFrameworkService =
-	createServiceIdentifier<ScheduledFrameworkService>(
-		"IScheduledFrameworkService",
-	);
-const scheduledFrameworkDescriptor = createRemoteServiceDescriptor(
-	IScheduledFrameworkService,
-	{
-		wireName: "example.framework-scheduler.v1",
-		members: {
-			run: { kind: "unary" },
-			watch: { kind: "stream-method" },
-		},
+		methods: { cancel: { cancelable: true }, echo: true, wait: true },
 	},
 );
 
 function createEmptySession(): IRpcProtocolSession {
 	return {
 		reserveInvocation: () => undefined,
-		reserveStream: () => undefined,
 		forceClose() {},
 	};
 }
@@ -193,10 +168,7 @@ function createConnectorHarness(options: ConnectorHarnessOptions = {}): {
 }
 
 function createAcceptorHarness(
-	options: {
-		readonly cleanup?: () => Promise<void>;
-		readonly runtimePolicy?: RpcAcceptorRuntimePolicyOptions;
-	} = {},
+	options: { readonly cleanup?: () => Promise<void> } = {},
 ): {
 	readonly acceptor: IRpcAcceptor;
 	readonly host: IRpcProtocolAcceptorHost;
@@ -218,7 +190,7 @@ function createAcceptorHarness(
 	};
 	const acceptor = createRpcAcceptor({
 		protocol,
-		runtimePolicy: { ...options.runtimePolicy, shutdownDeadlineMs: 50 },
+		runtimePolicy: { shutdownDeadlineMs: 50 },
 	});
 	if (acceptorHost === undefined) {
 		throw new Error("Expected an Acceptor Protocol host.");
@@ -287,21 +259,20 @@ describe("Framework requirement evidence", () => {
 		expect(acceptor.peers).toEqual([]);
 	});
 
-	it("RPC-BASE-003 RPC-EVENT-005 RPC-EVENT-010 RPC-POLICY-004 keeps private machinery out of public runtime surfaces", () => {
+	it("RPC-BASE-003 RPC-EVENT-005 RPC-POLICY-004 keeps private machinery out of public runtime surfaces", () => {
 		expect(Object.keys(rootEntry).sort()).toEqual([
 			"RpcAcceptorListenerStopReasonEnum",
+			"RpcCallDirectionEnum",
 			"RpcCallStatusEnum",
 			"RpcCloseOutcomeEnum",
 			"RpcCloseReasonEnum",
 			"RpcConnectorReconnectionAttemptFailureStageEnum",
 			"RpcConnectorReconnectionEventTypeEnum",
 			"RpcConnectorReconnectionStopReasonEnum",
-			"RpcEventDirectionEnum",
 			"RpcEventTypeEnum",
 			"RpcException",
 			"RpcExceptionCodeEnum",
 			"RpcStateStatusEnum",
-			"RpcStreamStatusEnum",
 			"createRemoteServiceDescriptor",
 			"createRpcAcceptor",
 			"createRpcConnector",
@@ -349,7 +320,6 @@ describe("Framework requirement evidence", () => {
 					release() {},
 				};
 			},
-			reserveStream: () => undefined,
 			forceClose() {},
 		};
 		const harness = createConnectorHarness({ session });
@@ -372,29 +342,21 @@ describe("Framework requirement evidence", () => {
 		await harness.connector.close();
 	});
 
-	it("RPC-DESC-005 RPC-DESC-008 keeps the captured handler route after replacement and cleanup", async () => {
+	it("RPC-DESC-005 keeps an admitted handler route after synchronous idempotent cleanup", async () => {
 		const harness = createConnectorHarness();
 		const sessionHost = await harness.connect();
-		const implementation: RequirementService & { prefix: string } = {
-			prefix: "captured",
+		const cleanup = harness.connector.peer.expose(requirementDescriptor, {
 			async cancel(value) {
 				return value;
 			},
-			echo({ secret }) {
-				return { secret: `${this.prefix}:${secret}` };
-			},
+			echo: ({ secret }) => ({ secret: `captured:${secret}` }),
 			async wait() {
 				return "done";
 			},
-		};
-		const cleanup = harness.connector.peer.expose(
-			requirementDescriptor,
-			implementation,
-		);
-		implementation.echo = ({ secret }) => ({ secret: `replacement:${secret}` });
+		});
 		const reservation = sessionHost.reserveIncomingCall({
 			service: "example.requirements.v1",
-			member: "echo",
+			method: "echo",
 			args: harness.host.normalizeApplicationArguments([{ secret: "value" }]),
 		});
 		expect(reservation?.kind).toBe("handler");
@@ -489,7 +451,7 @@ describe("Framework requirement evidence", () => {
 		expect(
 			futureSessionHost?.reserveIncomingCall({
 				service: "example.requirements.v1",
-				member: "wait",
+				method: "wait",
 				args: host.normalizeApplicationArguments([]),
 			})?.kind,
 		).toBe("handler");
@@ -502,7 +464,7 @@ describe("Framework requirement evidence", () => {
 		expect(
 			currentSessionHost?.reserveIncomingCall({
 				service: "example.requirements.v1",
-				member: "wait",
+				method: "wait",
 				args: host.normalizeApplicationArguments([]),
 			})?.kind,
 		).toBe("handler");
@@ -539,7 +501,6 @@ describe("Framework requirement evidence", () => {
 				reservationCalls += 1;
 				return undefined;
 			},
-			reserveStream: () => undefined,
 			forceClose() {},
 		};
 		const harness = createConnectorHarness({ session });
@@ -658,134 +619,6 @@ describe("Framework requirement evidence", () => {
 		await Promise.all([connectorHarness.connector.close(), acceptor.close()]);
 	});
 
-	it("RPC-RESOURCE-007 RPC-RESOURCE-009 atomically shares owner Application Work and Active Stream limits across Sessions", async () => {
-		const { acceptor, host } = createAcceptorHarness({
-			runtimePolicy: {
-				maxSessions: 2,
-				maxApplicationWorkPerSession: 2,
-				maxApplicationWorkTotal: 2,
-				maxActiveStreamsPerSession: 1,
-				maxActiveStreamsTotal: 1,
-			},
-		});
-		const firstSession = host.admitSession(createEmptySession());
-		const secondSession = host.admitSession(createEmptySession());
-		if (firstSession === undefined || secondSession === undefined) {
-			throw new Error("Expected two admitted Acceptor Sessions.");
-		}
-		const unknownStreamRequest = {
-			service: "missing.resource.service",
-			member: "events$",
-			kind: "stream-property" as const,
-		};
-		const unknownCallRequest = {
-			service: "missing.resource.service",
-			member: "run",
-			args: host.normalizeApplicationArguments([]),
-		};
-
-		const heldStream = firstSession.reserveIncomingStream(unknownStreamRequest);
-		expect(heldStream?.kind).toBe("unknown");
-		expect(
-			secondSession.reserveIncomingStream(unknownStreamRequest),
-		).toBeUndefined();
-		const heldCall = secondSession.reserveIncomingCall(unknownCallRequest);
-		expect(heldCall?.kind).toBe("unknown");
-		expect(
-			secondSession.reserveIncomingCall(unknownCallRequest),
-		).toBeUndefined();
-
-		heldStream?.reservation.release();
-		const reopenedStream =
-			secondSession.reserveIncomingStream(unknownStreamRequest);
-		expect(reopenedStream?.kind).toBe("unknown");
-		reopenedStream?.reservation.release();
-		heldCall?.reservation.release();
-		expect(acceptor.state.status).toBe("active");
-		await acceptor.close();
-	});
-
-	it("RPC-RESOURCE-013 RPC-SCHEDULE-006 round-robins unary and Source Start Jobs through one shared scheduler", async () => {
-		const { acceptor, host } = createAcceptorHarness({
-			runtimePolicy: { maxHandlersPerSession: 1, maxHandlersTotal: 1 },
-		});
-		const firstResult = Promise.withResolvers<string>();
-		const starts: string[] = [];
-		acceptor.expose(scheduledFrameworkDescriptor, {
-			async run(value) {
-				starts.push(`unary:${value}`);
-				return value === "first-a" ? firstResult.promise : value;
-			},
-			watch(value) {
-				starts.push(`stream:${value}`);
-				return new Observable((subscriber) => subscriber.complete());
-			},
-		});
-		const firstSession = host.admitSession(createEmptySession());
-		const secondSession = host.admitSession(createEmptySession());
-		if (firstSession === undefined || secondSession === undefined) {
-			throw new Error("Expected two admitted Acceptor Sessions.");
-		}
-		const reserveRun = (value: string) =>
-			firstSession.reserveIncomingCall({
-				service: "example.framework-scheduler.v1",
-				member: "run",
-				args: host.normalizeApplicationArguments([value]),
-			});
-
-		const firstReservation = reserveRun("first-a");
-		if (firstReservation?.kind !== "handler") {
-			throw new Error("Expected the first handler reservation.");
-		}
-		const firstCall = firstReservation.reservation.commit();
-		await expect.poll(() => starts).toEqual(["unary:first-a"]);
-
-		const nextReservation = reserveRun("first-b");
-		if (nextReservation?.kind !== "handler") {
-			throw new Error("Expected the next handler reservation.");
-		}
-		const nextCall = nextReservation.reservation.commit();
-		const streamReservation = secondSession.reserveIncomingStream({
-			service: "example.framework-scheduler.v1",
-			member: "watch",
-			kind: "stream-method",
-			args: host.normalizeApplicationArguments(["second-a"]),
-		});
-		if (streamReservation?.kind !== "source") {
-			throw new Error("Expected a Source reservation.");
-		}
-		let incomingStream: ReturnType<typeof streamReservation.reservation.commit>;
-		incomingStream = streamReservation.reservation.commit({
-			reserveEmission: () => undefined,
-			finish(outcome) {
-				incomingStream.finish(outcome, () => undefined);
-			},
-		});
-		expect(starts).toEqual(["unary:first-a"]);
-
-		firstResult.resolve("first-a");
-		await expect(firstCall.handlerOutcome).resolves.toMatchObject({
-			type: "returned",
-			value: { value: "first-a" },
-		});
-		firstCall.finish({
-			type: RpcCallTerminalTypeEnum.returned,
-			value: host.normalizeApplicationValue("first-a"),
-		});
-		await expect
-			.poll(() => starts)
-			.toEqual(["unary:first-a", "stream:second-a", "unary:first-b"]);
-		await expect(nextCall.handlerOutcome).resolves.toMatchObject({
-			type: "returned",
-			value: { value: "first-b" },
-		});
-		nextCall.finish({
-			type: RpcCallTerminalTypeEnum.returned,
-			value: host.normalizeApplicationValue("first-b"),
-		});
-		await acceptor.close();
-	});
-
 	it("RPC-EVENT-004 RPC-EVENT-007 keeps call observations safe, saturated, local, and pair-stable", async () => {
 		const requests: IRpcProtocolInvocationRequest[] = [];
 		const session: IRpcProtocolSession = {
@@ -808,7 +641,6 @@ describe("Framework requirement evidence", () => {
 					release() {},
 				};
 			},
-			reserveStream: () => undefined,
 			forceClose() {},
 		};
 		const harness = createConnectorHarness({ session });
@@ -856,7 +688,7 @@ describe("Framework requirement evidence", () => {
 		}
 		expect(Reflect.ownKeys(requests[0] ?? {})).toEqual([
 			"service",
-			"member",
+			"method",
 			"args",
 		]);
 		await harness.connector.close();

@@ -30,22 +30,15 @@ import type {
 	IRpcProtocolHost,
 	IRpcProtocolIncomingCall,
 	IRpcProtocolIncomingHandlerCall,
-	IRpcProtocolIncomingStream,
 	IRpcProtocolRuntimePolicy,
 	IRpcProtocolSession,
 	IRpcProtocolSessionHost,
-	IRpcProtocolSourceSink,
-	IRpcProtocolStream,
-	IRpcProtocolSubscriberSink,
 	RpcApplicationValue,
 	RpcCallOutcome,
 	RpcHandlerOutcome,
-	RpcIncomingStreamTerminal,
 	RpcIncomingTerminal,
 	RpcProtocolFaultReason,
 	RpcProtocolSessionTransition,
-	RpcProtocolStreamRequest,
-	RpcStreamOutcome,
 	RpcUnknownCallFailure,
 } from "@/interfaces/protocol/rpc-protocol.interface";
 import type { IRpcConnection } from "@/interfaces/rpc-connection.interface";
@@ -58,12 +51,9 @@ import {
 const CONFORMANCE_POLICY: IRpcProtocolRuntimePolicy = Object.freeze({
 	maxSessions: 4,
 	maxHandshakes: 2,
-	maxApplicationWorkPerSession: 8,
-	maxApplicationWorkTotal: 16,
-	maxActiveStreamsPerSession: 4,
-	maxActiveStreamsTotal: 8,
-	maxRetainedBytesPerSession: 8_388_608,
-	maxRetainedBytesTotal: 10_485_760,
+	maxPendingInvocationsPerSession: 4,
+	maxRetainedBytesPerSession: 4_194_304,
+	maxRetainedBytesTotal: 5_767_168,
 	maxHandlersPerSession: 2,
 	maxHandlersTotal: 4,
 	ackDelayMs: 1,
@@ -220,7 +210,7 @@ export function runRpcProtocolConformance(
 						);
 						const reservation = pair.connectorSession.reserveInvocation({
 							service: "service",
-							member: "member",
+							method: "method",
 							args,
 						});
 						assertRpcConformance(
@@ -290,7 +280,7 @@ export function runRpcProtocolConformance(
 						);
 						const reservation = pair.connectorSession.reserveInvocation({
 							service: "service",
-							member: "member",
+							method: "method",
 							args,
 						});
 						if (reservation !== undefined) {
@@ -353,7 +343,6 @@ export function runRpcProtocolConformance(
 					await within(first, "Protocol cleanup");
 				},
 			},
-			...createStreamConformanceCases(fixture.protocol),
 		],
 		options,
 	);
@@ -450,23 +439,12 @@ type IncomingDisposition =
 			readonly outcome: RpcHandlerOutcome;
 	  };
 
-type IncomingStreamDisposition =
-	| { readonly kind: "resource" }
-	| { readonly kind: "source" }
-	| {
-			readonly kind: "unknown";
-			readonly code:
-				| RpcExceptionCodeEnum.unknownService
-				| RpcExceptionCodeEnum.unknownMember;
-	  };
-
 interface ProtocolHostProbe<
 	THost extends IRpcProtocolConnectorHost | IRpcProtocolAcceptorHost,
 > {
 	readonly host: THost;
 	session: IRpcProtocolSession | undefined;
 	disposition: IncomingDisposition;
-	streamDisposition: IncomingStreamDisposition;
 	attachCount: number;
 	reservationCount: number;
 	commitCount: number;
@@ -475,18 +453,11 @@ interface ProtocolHostProbe<
 	lastRequest:
 		| {
 				readonly service: string;
-				readonly member: string;
+				readonly method: string;
 				readonly args: IRpcApplicationArgumentsSnapshot;
 		  }
 		| undefined;
 	readonly incomingFinishes: RpcIncomingTerminal[];
-	readonly incomingStreamFinishes: RpcIncomingStreamTerminal[];
-	readonly incomingStreamRequests: RpcProtocolStreamRequest[];
-	readonly sourceSinks: IRpcProtocolSourceSink[];
-	streamCommitCount: number;
-	streamReleaseCount: number;
-	deferSourceRelease: boolean;
-	releaseSource(): void;
 	readonly transitions: RpcProtocolSessionTransition[];
 	readonly ownerFaults: Array<{
 		readonly reason: RpcProtocolFaultReason;
@@ -505,16 +476,10 @@ interface TrackedProtocolTransport {
 	acceptorSubscriptions: number;
 	connectorSends: number;
 	acceptorSends: number;
-	maxConnectorUnsettledSends: number;
-	maxAcceptorUnsettledSends: number;
-	readonly connectorMessages: Uint8Array[];
-	readonly acceptorMessages: Uint8Array[];
 	closeCount: number;
 	handoffViolation: boolean;
 	connectorHandoff: boolean;
 	acceptorHandoff: boolean;
-	fail(error: Error): void;
-	replayLastAcceptorMessage(): void;
 }
 
 interface ProtocolPair {
@@ -523,8 +488,7 @@ interface ProtocolPair {
 	readonly connectorProbe: ProtocolHostProbe<IRpcProtocolConnectorHost>;
 	readonly acceptorProbe: ProtocolHostProbe<IRpcProtocolAcceptorHost>;
 	readonly connectorSession: IRpcProtocolSession;
-	readonly acceptorSession: IRpcProtocolSession;
-	transport: TrackedProtocolTransport;
+	readonly transport: TrackedProtocolTransport;
 }
 
 function createIncomingDispositionCases(
@@ -557,7 +521,7 @@ function createIncomingDispositionCases(
 		...(
 			[
 				RpcExceptionCodeEnum.unknownService,
-				RpcExceptionCodeEnum.unknownMember,
+				RpcExceptionCodeEnum.unknownMethod,
 			] as const
 		).map(
 			(code): IRpcConformanceCase => ({
@@ -645,643 +609,12 @@ function createIncomingDispositionCases(
 	];
 }
 
-function createStreamConformanceCases(
-	protocol: IRpcProtocol,
-): IRpcConformanceCase[] {
-	return [
-		{
-			caseId: "protocol.stream.outgoing-lifecycle",
-			async run() {
-				const pair = await openProtocolPair(protocol);
-				try {
-					const observation = createSubscriberObservation();
-					const stream = reserveStream(pair, observation.sink);
-					assertRpcConformance(
-						pair.acceptorProbe.incomingStreamRequests.length === 0,
-						"Stream commit performed remote work before start().",
-					);
-					stream.start();
-					await waitFor(
-						() => pair.acceptorProbe.sourceSinks.length === 1,
-						"Incoming Source admission",
-					);
-					stream.cancel();
-					await waitFor(
-						() =>
-							observation.terminals.some(
-								(outcome) => outcome.type === "canceled",
-							),
-						"Canceled stream terminal",
-					);
-				} finally {
-					await closeProtocolPair(pair);
-				}
-			},
-		},
-		{
-			caseId: "protocol.stream.incoming-resource-before-route",
-			async run() {
-				const pair = await openProtocolPair(protocol);
-				try {
-					pair.acceptorProbe.streamDisposition = { kind: "resource" };
-					const observation = createSubscriberObservation();
-					reserveStream(pair, observation.sink).start();
-					await waitFor(
-						() => observation.terminals.length === 1,
-						"Resource stream terminal",
-					);
-					assertRpcConformance(
-						observation.terminals[0]?.type === "failed" &&
-							observation.terminals[0].code ===
-								RpcExceptionCodeEnum.unavailable &&
-							pair.acceptorProbe.streamCommitCount === 0,
-						"Incoming resource rejection acquired a Source.",
-					);
-				} finally {
-					await closeProtocolPair(pair);
-				}
-			},
-		},
-		{
-			caseId: "protocol.stream.incoming-semantic-unknown-member",
-			async run() {
-				const pair = await openProtocolPair(protocol);
-				try {
-					pair.acceptorProbe.streamDisposition = {
-						kind: "unknown",
-						code: RpcExceptionCodeEnum.unknownMember,
-					};
-					const observation = createSubscriberObservation();
-					reserveStream(pair, observation.sink).start();
-					await waitFor(
-						() => observation.terminals.length === 1,
-						"Unknown-member stream terminal",
-					);
-					assertRpcConformance(
-						observation.terminals[0]?.type === "failed" &&
-							observation.terminals[0].code ===
-								RpcExceptionCodeEnum.unknownMember &&
-							pair.acceptorProbe.sourceSinks.length === 0,
-						"Unknown stream route acquired a Source.",
-					);
-				} finally {
-					await closeProtocolPair(pair);
-				}
-			},
-		},
-		...createStreamDeliveryCases(protocol),
-		...createStreamConvergenceCases(protocol),
-	];
-}
-
-function createStreamDeliveryCases(
-	protocol: IRpcProtocol,
-): IRpcConformanceCase[] {
-	return [
-		{
-			caseId: "protocol.stream.projection-rearm",
-			run: () => runProjectionRearmCase(protocol),
-		},
-		{
-			caseId: "protocol.stream.source-reserve-before-raw",
-			async run() {
-				const pair = await openProtocolPair(protocol);
-				try {
-					const observation = createSubscriberObservation();
-					reserveStream(pair, observation.sink).start();
-					const source = await waitForSource(pair);
-					const emission = source.reserveEmission();
-					assertRpcConformance(
-						emission !== undefined,
-						"Source emission position was unavailable at initial W=1 credit.",
-					);
-					const snapshot = pair.acceptorProbe.host.normalizeApplicationValue(
-						"reserved-before-normalization",
-					);
-					emission.commit(snapshot);
-					await waitFor(
-						() => observation.items.length === 1,
-						"Reserved Source item",
-					);
-				} finally {
-					await closeProtocolPair(pair);
-				}
-			},
-		},
-		{
-			caseId: "protocol.stream.source-w1-overflow",
-			run: () => runW1OverflowCase(protocol, false),
-		},
-		{
-			caseId: "protocol.stream.item-before-terminal",
-			run: () => runW1OverflowCase(protocol, true),
-		},
-		{
-			caseId: "protocol.stream.over-credit-session-fault",
-			async run() {
-				const pair = await openProtocolPair(protocol);
-				try {
-					const observation = createSubscriberObservation("closed");
-					reserveStream(pair, observation.sink).start();
-					const source = await waitForSource(pair);
-					const emission = source.reserveEmission();
-					assertRpcConformance(
-						emission !== undefined,
-						"Initial emission missing.",
-					);
-					emission.commit(
-						pair.acceptorProbe.host.normalizeApplicationValue("one"),
-					);
-					await waitFor(
-						() => observation.items.length === 1,
-						"First stream item",
-					);
-					pair.transport.replayLastAcceptorMessage();
-					await waitFor(
-						() => pair.connectorProbe.sessionFaults.length === 1,
-						"Over-credit Session fault",
-					);
-					assertRpcConformance(
-						pair.connectorProbe.sessionFaults[0]?.reason ===
-							RpcCloseReasonEnum.protocolFault,
-						"Over-credit input did not fault the current Session.",
-					);
-				} finally {
-					await closeProtocolPair(pair);
-				}
-			},
-		},
-	];
-}
-
-function createStreamConvergenceCases(
-	protocol: IRpcProtocol,
-): IRpcConformanceCase[] {
-	return [
-		{
-			caseId: "protocol.stream.terminal-teardown-release",
-			run: () => runReleaseReceiptCase(protocol),
-		},
-		{
-			caseId: "protocol.stream.recovery-no-resubscribe",
-			async run() {
-				const pair = await openProtocolPair(protocol);
-				try {
-					const observation = createSubscriberObservation();
-					reserveStream(pair, observation.sink).start();
-					const source = await waitForSource(pair);
-					const first = source.reserveEmission();
-					assertRpcConformance(
-						first !== undefined,
-						"Pre-Recovery emission was unavailable.",
-					);
-					first.commit(
-						pair.acceptorProbe.host.normalizeApplicationValue("retained-first"),
-					);
-					await waitFor(
-						() => observation.items.length === 1,
-						"Pre-Recovery stream item",
-					);
-					let retainedEmission: ReturnType<
-						IRpcProtocolSourceSink["reserveEmission"]
-					>;
-					await waitFor(() => {
-						retainedEmission ??= source.reserveEmission();
-						return retainedEmission !== undefined;
-					}, "Retained Source emission position");
-					pair.transport.fail(new Error("Conformance binding loss."));
-					await waitFor(
-						() => pair.connectorProbe.transitions.some(isRecovering),
-						"Recovering transition",
-					);
-					await replaceProtocolPairConnection(pair);
-					assertRpcConformance(
-						pair.acceptorProbe.streamCommitCount === 1 &&
-							pair.acceptorProbe.sourceSinks.length === 1 &&
-							observation.items.length === 1,
-						"Recovery reacquired or resubscribed the Source.",
-					);
-					retainedEmission?.commit(
-						pair.acceptorProbe.host.normalizeApplicationValue(
-							"retained-second",
-						),
-					);
-					await waitFor(
-						() => observation.items.length === 2,
-						"Post-Recovery retained Source item",
-					);
-				} finally {
-					await closeProtocolPair(pair);
-				}
-			},
-		},
-		{
-			caseId: "protocol.stream.fairness-progress",
-			async run() {
-				const pair = await openProtocolPair(protocol);
-				try {
-					const observations = Array.from({ length: 4 }, () =>
-						createSubscriberObservation(),
-					);
-					for (const [index, observation] of observations.entries()) {
-						reserveStream(pair, observation.sink, `stream-${index}`).start();
-					}
-					await waitFor(
-						() => pair.acceptorProbe.sourceSinks.length === 4,
-						"Four ready stream Sources",
-					);
-					for (let round = 0; round < 8; round += 1) {
-						for (const [
-							index,
-							source,
-						] of pair.acceptorProbe.sourceSinks.entries()) {
-							const emission = source.reserveEmission();
-							assertRpcConformance(
-								emission !== undefined,
-								"Continuously ready stream starved.",
-							);
-							emission.commit(
-								pair.acceptorProbe.host.normalizeApplicationValue(
-									`item-${round}-${index}`,
-								),
-							);
-						}
-						await invokeWithValues(pair, [round]);
-						await waitFor(
-							() =>
-								observations.every(({ items }) => items.length === round + 1),
-							`Fair stream progress round ${round + 1}`,
-						);
-						await Promise.resolve();
-						await Promise.resolve();
-					}
-					assertRpcConformance(
-						observations.every(({ items }) => items.length === 8),
-						"A ready stream missed a sustained fairness round.",
-					);
-				} finally {
-					await closeProtocolPair(pair);
-				}
-			},
-		},
-		{
-			caseId: "protocol.stream.shutdown-graceful-force",
-			async run() {
-				const pair = await openProtocolPair(protocol);
-				const observation = createSubscriberObservation();
-				reserveStream(pair, observation.sink).start();
-				await waitForSource(pair);
-				const shutdown = pair.connectorRuntime.shutdown();
-				await Promise.resolve();
-				assertRpcConformance(
-					observation.terminals.length === 0,
-					"Graceful shutdown fabricated a stream terminal.",
-				);
-				pair.connectorRuntime.close();
-				await waitFor(
-					() => observation.terminals.length === 1,
-					"Forced stream terminal",
-				);
-				pair.acceptorRuntime.close();
-				await Promise.all([
-					shutdown,
-					pair.connectorRuntime.cleanup(),
-					pair.acceptorRuntime.cleanup(),
-				]);
-			},
-		},
-		{
-			caseId: "protocol.stream.aggregate-bounded-load",
-			run: () => runAggregateLoadCase(protocol, false),
-		},
-		{
-			caseId: "protocol.receipt.terminal-direction-only",
-			run: () => runTerminalDirectionCase(protocol),
-		},
-		{
-			caseId: "protocol.stream.adapter-rejection-is-binding-failure",
-			run: () => runAggregateLoadCase(protocol, true),
-		},
-	];
-}
-
-interface SubscriberObservation {
-	readonly sink: IRpcProtocolSubscriberSink;
-	readonly items: IRpcApplicationSnapshot[];
-	readonly terminals: RpcStreamOutcome[];
-}
-
-function createSubscriberObservation(
-	itemEffect: "rearm" | "closed" = "rearm",
-): SubscriberObservation {
-	const items: IRpcApplicationSnapshot[] = [];
-	const terminals: RpcStreamOutcome[] = [];
-	return {
-		items,
-		terminals,
-		sink: {
-			reserveItem(snapshot) {
-				return {
-					commit() {
-						items.push(snapshot);
-						return itemEffect;
-					},
-				};
-			},
-			reserveTerminal(outcome) {
-				return {
-					commit() {
-						terminals.push(outcome);
-					},
-				};
-			},
-		},
-	};
-}
-
-function reserveStream(
-	pair: ProtocolPair,
-	sink: IRpcProtocolSubscriberSink,
-	member = "events",
-): IRpcProtocolStream {
-	return reserveStreamFor(
-		pair.connectorSession,
-		pair.connectorProbe.host,
-		sink,
-		member,
-	);
-}
-
-function reserveStreamFor(
-	session: IRpcProtocolSession,
-	host: IRpcProtocolHost,
-	sink: IRpcProtocolSubscriberSink,
-	member: string,
-): IRpcProtocolStream {
-	const args = host.normalizeApplicationArguments([]);
-	const reservation = session.reserveStream({
-		service: "service",
-		member,
-		kind: "stream-method",
-		args,
-	});
-	assertRpcConformance(reservation !== undefined, "Stream was not reserved.");
-	return reservation.commit(sink);
-}
-
-async function waitForSource(
-	pair: ProtocolPair,
-): Promise<IRpcProtocolSourceSink> {
-	await waitFor(
-		() => pair.acceptorProbe.sourceSinks.length > 0,
-		"Incoming Source sink",
-	);
-	const source = pair.acceptorProbe.sourceSinks.at(-1);
-	assertRpcConformance(
-		source !== undefined,
-		"Incoming Source sink was missing.",
-	);
-	return source;
-}
-
-async function runProjectionRearmCase(protocol: IRpcProtocol): Promise<void> {
-	const pair = await openProtocolPair(protocol);
-	try {
-		const observation = createSubscriberObservation();
-		reserveStream(pair, observation.sink).start();
-		const source = await waitForSource(pair);
-		const first = source.reserveEmission();
-		assertRpcConformance(
-			first !== undefined,
-			"Initial emission was unavailable.",
-		);
-		first.commit(pair.acceptorProbe.host.normalizeApplicationValue("first"));
-		await waitFor(() => observation.items.length === 1, "First stream item");
-		let rearmedEmission: ReturnType<IRpcProtocolSourceSink["reserveEmission"]>;
-		await waitFor(() => {
-			rearmedEmission ??= source.reserveEmission();
-			return rearmedEmission !== undefined;
-		}, "Re-armed Source emission");
-		rearmedEmission?.commit(
-			pair.acceptorProbe.host.normalizeApplicationValue("second"),
-		);
-		await waitFor(() => observation.items.length === 2, "Second stream item");
-	} finally {
-		await closeProtocolPair(pair);
-	}
-}
-
-async function runW1OverflowCase(
-	protocol: IRpcProtocol,
-	assertOrdering: boolean,
-): Promise<void> {
-	const pair = await openProtocolPair(protocol);
-	try {
-		const trace: string[] = [];
-		const observation = createSubscriberObservation();
-		const sink: IRpcProtocolSubscriberSink = {
-			reserveItem(snapshot) {
-				trace.push("item-reserved");
-				const projection = observation.sink.reserveItem(snapshot);
-				return {
-					commit() {
-						trace.push("item-effect");
-						return projection.commit();
-					},
-				};
-			},
-			reserveTerminal(outcome) {
-				trace.push("terminal-reserved");
-				const projection = observation.sink.reserveTerminal(outcome);
-				return {
-					commit() {
-						trace.push("terminal-effect");
-						projection.commit();
-					},
-				};
-			},
-		};
-		reserveStream(pair, sink).start();
-		const source = await waitForSource(pair);
-		const first = source.reserveEmission();
-		assertRpcConformance(
-			first !== undefined,
-			"Initial emission was unavailable.",
-		);
-		first.commit(pair.acceptorProbe.host.normalizeApplicationValue("first"));
-		const second = source.reserveEmission();
-		assertRpcConformance(
-			second === undefined,
-			"W=1 admitted a second emission before re-arm.",
-		);
-		await waitFor(
-			() => observation.terminals.length === 1,
-			"Overflow stream terminal",
-		);
-		assertRpcConformance(
-			observation.terminals[0]?.type === "failed" &&
-				observation.terminals[0].code === RpcExceptionCodeEnum.overflow,
-			"W=1 overflow selected the wrong terminal.",
-		);
-		if (assertOrdering) {
-			assertRpcConformance(
-				trace.join(",") ===
-					"item-reserved,item-effect,terminal-reserved,terminal-effect",
-				"Stream terminal overtook an earlier item effect.",
-			);
-		}
-	} finally {
-		await closeProtocolPair(pair);
-	}
-}
-
-async function runReleaseReceiptCase(protocol: IRpcProtocol): Promise<void> {
-	const pair = await openProtocolPair(protocol);
-	try {
-		pair.acceptorProbe.deferSourceRelease = true;
-		const observation = createSubscriberObservation();
-		reserveStream(pair, observation.sink).start();
-		const source = await waitForSource(pair);
-		source.finish({ type: "completed" });
-		await waitFor(
-			() => pair.acceptorProbe.incomingStreamFinishes.length === 1,
-			"Incoming Source finish",
-		);
-		assertRpcConformance(
-			pair.acceptorProbe.streamReleaseCount === 0,
-			"Protocol retired Source ownership before teardown settlement.",
-		);
-		const shutdown = pair.acceptorRuntime.shutdown();
-		const shutdownSettled = await Promise.race([
-			shutdown.then(() => true),
-			new Promise<false>((resolve) => setTimeout(() => resolve(false), 0)),
-		]);
-		assertRpcConformance(
-			!shutdownSettled,
-			"Graceful drain ignored unreleased Source ownership.",
-		);
-		pair.acceptorProbe.releaseSource();
-		await waitFor(
-			() => pair.acceptorProbe.streamReleaseCount === 1,
-			"Source release receipt",
-		);
-		await within(shutdown, "Source release drain");
-	} finally {
-		await closeProtocolPair(pair);
-	}
-}
-
-async function runTerminalDirectionCase(protocol: IRpcProtocol): Promise<void> {
-	const pair = await openProtocolPair(protocol);
-	try {
-		const forwardObservation = createSubscriberObservation();
-		const reverseObservation = createSubscriberObservation();
-		reserveStream(pair, forwardObservation.sink, "forward").start();
-		const reverseStream = reserveStreamFor(
-			pair.acceptorSession,
-			pair.acceptorProbe.host,
-			reverseObservation.sink,
-			"reverse",
-		);
-		reverseStream.start();
-		await waitFor(
-			() =>
-				pair.acceptorProbe.sourceSinks.length === 1 &&
-				pair.connectorProbe.sourceSinks.length === 1,
-			"Bidirectional stream roots",
-		);
-		const sendsBeforeTerminal = pair.transport.connectorSends;
-		pair.acceptorProbe.sourceSinks[0]?.finish({ type: "completed" });
-		await waitFor(
-			() => forwardObservation.terminals.length === 1,
-			"Forward stream terminal",
-		);
-		await waitFor(
-			() => pair.transport.connectorSends > sendsBeforeTerminal,
-			"Forward terminal ACK",
-		);
-		const shutdown = pair.acceptorRuntime.shutdown();
-		const shutdownSettled = await Promise.race([
-			shutdown.then(() => true),
-			new Promise<false>((resolve) => setTimeout(() => resolve(false), 0)),
-		]);
-		assertRpcConformance(
-			!shutdownSettled,
-			"One-direction terminal ACK retired reverse stream evidence.",
-		);
-		reverseStream.cancel();
-		await waitFor(
-			() => reverseObservation.terminals.length === 1,
-			"Reverse stream terminal",
-		);
-		await within(shutdown, "Bidirectional terminal drain");
-	} finally {
-		await closeProtocolPair(pair);
-	}
-}
-
-async function runAggregateLoadCase(
-	protocol: IRpcProtocol,
-	assertFailureOwner: boolean,
-): Promise<void> {
-	const pair = await openProtocolPair(protocol, 8);
-	try {
-		const boundedTransport = pair.transport;
-		const observations = [
-			createSubscriberObservation(),
-			createSubscriberObservation(),
-		];
-		for (const [index, observation] of observations.entries()) {
-			reserveStream(pair, observation.sink, `stream-${index}`).start();
-		}
-		await waitFor(
-			() => pair.acceptorProbe.sourceSinks.length === 2,
-			"Aggregate stream starts",
-		);
-		pair.acceptorProbe.sourceSinks[0]?.finish({ type: "completed" });
-		for (let index = 0; index < 3; index += 1) {
-			await invokeWithValues(pair, [index]);
-		}
-		void invokeWithValues(pair, [3]).catch(() => undefined);
-		await waitFor(
-			() => pair.connectorProbe.transitions.some(isRecovering),
-			"Adapter rejection Recovery",
-		);
-		await replaceProtocolPairConnection(pair);
-		await invokeWithValues(pair, ["post-recovery"]);
-		assertRpcConformance(
-			boundedTransport.maxConnectorUnsettledSends <= 1 &&
-				boundedTransport.maxAcceptorUnsettledSends <= 1 &&
-				pair.transport.maxConnectorUnsettledSends <= 1 &&
-				pair.transport.maxAcceptorUnsettledSends <= 1,
-			"Protocol allowed more than one unsettled complete-message send per direction.",
-		);
-		if (assertFailureOwner) {
-			assertRpcConformance(
-				observations.every((observation) =>
-					observation.terminals.every(
-						(outcome) =>
-							outcome.type !== "failed" ||
-							outcome.code !== RpcExceptionCodeEnum.overflow,
-					),
-				),
-				"Adapter send rejection was projected as Stream Overflow.",
-			);
-		}
-	} finally {
-		await closeProtocolPair(pair);
-	}
-}
-
-async function openProtocolPair(
-	protocol: IRpcProtocol,
-	rejectConnectorSendAt?: number,
-): Promise<ProtocolPair> {
+async function openProtocolPair(protocol: IRpcProtocol): Promise<ProtocolPair> {
 	const connectorProbe = createSessionHostProbe("connector");
 	const acceptorProbe = createSessionHostProbe("acceptor");
 	const connectorRuntime = protocol.createConnector(connectorProbe.host);
 	const acceptorRuntime = protocol.createAcceptor(acceptorProbe.host);
-	const transport = createTrackedTransport(rejectConnectorSendAt);
+	const transport = createTrackedTransport();
 	const controller = new AbortController();
 
 	transport.acceptorHandoff = true;
@@ -1317,30 +650,8 @@ async function openProtocolPair(
 		connectorProbe,
 		acceptorProbe,
 		connectorSession: connectorProbe.session,
-		acceptorSession: acceptorProbe.session,
 		transport,
 	};
-}
-
-async function replaceProtocolPairConnection(
-	pair: ProtocolPair,
-): Promise<void> {
-	const transport = createTrackedTransport();
-	const controller = new AbortController();
-	transport.acceptorHandoff = true;
-	const acceptance = pair.acceptorRuntime.accept(
-		transport.acceptorConnection,
-		controller.signal,
-	);
-	transport.acceptorHandoff = false;
-	transport.connectorHandoff = true;
-	const binding = pair.connectorRuntime.bind(
-		transport.connectorConnection,
-		controller.signal,
-	);
-	transport.connectorHandoff = false;
-	await within(Promise.all([acceptance, binding]), "Protocol Recovery handoff");
-	pair.transport = transport;
 }
 
 async function closeProtocolPair(pair: ProtocolPair): Promise<void> {
@@ -1374,37 +685,22 @@ function createSessionHostProbe(
 	}> = [];
 	const transitions: RpcProtocolSessionTransition[] = [];
 	const incomingFinishes: RpcIncomingTerminal[] = [];
-	const incomingStreamFinishes: RpcIncomingStreamTerminal[] = [];
-	const incomingStreamRequests: RpcProtocolStreamRequest[] = [];
-	const sourceSinks: IRpcProtocolSourceSink[] = [];
-	let pendingSourceRelease: (() => void) | undefined;
 	const probe = {
 		session: undefined,
 		disposition: {
 			kind: RpcIncomingCallKindEnum.handler,
 			outcome: { type: RpcCallTerminalTypeEnum.returnedVoid },
 		},
-		streamDisposition: { kind: "source" },
 		attachCount: 0,
 		reservationCount: 0,
 		commitCount: 0,
 		releaseCount: 0,
 		handlerOutcomeReadCount: 0,
-		streamCommitCount: 0,
-		streamReleaseCount: 0,
-		deferSourceRelease: false,
 		lastRequest: undefined,
 		incomingFinishes,
-		incomingStreamFinishes,
-		incomingStreamRequests,
-		sourceSinks,
 		transitions,
 		ownerFaults,
 		sessionFaults,
-		releaseSource() {
-			pendingSourceRelease?.();
-			pendingSourceRelease = undefined;
-		},
 	} as Omit<
 		ProtocolHostProbe<IRpcProtocolConnectorHost | IRpcProtocolAcceptorHost>,
 		"host"
@@ -1464,61 +760,6 @@ function createSessionHostProbe(
 				},
 			};
 		},
-		reserveIncomingStream(request) {
-			incomingStreamRequests.push(request);
-			const disposition = probe.streamDisposition;
-			if (disposition.kind === "resource") {
-				return undefined;
-			}
-			let state: "reserved" | "committed" | "released" = "reserved";
-			const createControl = (): IRpcProtocolIncomingStream => ({
-				finish(outcome, onReleased) {
-					incomingStreamFinishes.push(outcome);
-					const release = (): void => {
-						probe.streamReleaseCount += 1;
-						onReleased();
-					};
-					if (probe.deferSourceRelease) {
-						pendingSourceRelease = release;
-					} else {
-						release();
-					}
-				},
-			});
-			const release = (): void => {
-				if (state !== "reserved") {
-					return;
-				}
-				state = "released";
-				probe.streamReleaseCount += 1;
-			};
-			if (disposition.kind === "unknown") {
-				return {
-					kind: "unknown",
-					code: disposition.code,
-					reservation: {
-						commit() {
-							state = "committed";
-							probe.streamCommitCount += 1;
-							return createControl();
-						},
-						release,
-					},
-				};
-			}
-			return {
-				kind: "source",
-				reservation: {
-					commit(source) {
-						state = "committed";
-						probe.streamCommitCount += 1;
-						sourceSinks.push(source);
-						return createControl();
-					},
-					release,
-				},
-			};
-		},
 		transition: (transition) => transitions.push(transition),
 		fault(reason, error) {
 			sessionFaults.push({ reason, error });
@@ -1545,42 +786,20 @@ function createSessionHostProbe(
 	return Object.assign(probe, { host });
 }
 
-function createTrackedTransport(
-	rejectConnectorSendAt?: number,
-): TrackedProtocolTransport {
+function createTrackedTransport(): TrackedProtocolTransport {
 	const connectorIngress = new Subject<Uint8Array>();
 	const acceptorIngress = new Subject<Uint8Array>();
 	let closed = false;
-	let connectorUnsettledSends = 0;
-	let acceptorUnsettledSends = 0;
 	const transport = {
 		connectorSubscriptions: 0,
 		acceptorSubscriptions: 0,
 		connectorSends: 0,
 		acceptorSends: 0,
-		maxConnectorUnsettledSends: 0,
-		maxAcceptorUnsettledSends: 0,
-		connectorMessages: [],
-		acceptorMessages: [],
 		closeCount: 0,
 		handoffViolation: false,
 		connectorHandoff: false,
 		acceptorHandoff: false,
-		fail(error: Error) {
-			if (closed) {
-				return;
-			}
-			closed = true;
-			connectorIngress.error(error);
-			acceptorIngress.error(error);
-		},
-		replayLastAcceptorMessage() {
-			const message = transport.acceptorMessages.at(-1);
-			if (message !== undefined && !closed) {
-				connectorIngress.next(message.slice());
-			}
-		},
-	} as unknown as TrackedProtocolTransport;
+	} as TrackedProtocolTransport;
 	const createConnection = (
 		direction: "connector" | "acceptor",
 		ingress: Subject<Uint8Array>,
@@ -1595,58 +814,22 @@ function createTrackedTransport(
 			return ingress.subscribe(subscriber);
 		}),
 		async send(message) {
+			// A Protocol cannot send after handing off its side of the Connection.
+			const sentAfterHandoff =
+				(direction === "connector" && transport.connectorHandoff) ||
+				(direction === "acceptor" && transport.acceptorHandoff);
+			if (sentAfterHandoff) {
+				transport.handoffViolation = true;
+			}
+			if (closed) {
+				throw new Error("Conformance Connection is closed.");
+			}
 			if (direction === "connector") {
-				connectorUnsettledSends += 1;
-				transport.maxConnectorUnsettledSends = Math.max(
-					transport.maxConnectorUnsettledSends,
-					connectorUnsettledSends,
-				);
+				transport.connectorSends += 1;
 			} else {
-				acceptorUnsettledSends += 1;
-				transport.maxAcceptorUnsettledSends = Math.max(
-					transport.maxAcceptorUnsettledSends,
-					acceptorUnsettledSends,
-				);
+				transport.acceptorSends += 1;
 			}
-			try {
-				// A Protocol cannot send after handing off its side of the Connection.
-				const sentAfterHandoff =
-					(direction === "connector" && transport.connectorHandoff) ||
-					(direction === "acceptor" && transport.acceptorHandoff);
-				if (sentAfterHandoff) {
-					transport.handoffViolation = true;
-				}
-				if (closed) {
-					throw new Error("Conformance Connection is closed.");
-				}
-				if (direction === "connector") {
-					transport.connectorSends += 1;
-					transport.connectorMessages.push(message.slice());
-					if (transport.connectorSends === rejectConnectorSendAt) {
-						const error = new Error(
-							"Conformance Connection rejected the bounded send.",
-						);
-						transport.fail(error);
-						throw error;
-					}
-				} else {
-					transport.acceptorSends += 1;
-					transport.acceptorMessages.push(message.slice());
-				}
-				await Promise.resolve();
-				if (closed) {
-					throw new Error(
-						"Conformance Connection closed before Local Admission.",
-					);
-				}
-				remoteIngress.next(message.slice());
-			} finally {
-				if (direction === "connector") {
-					connectorUnsettledSends -= 1;
-				} else {
-					acceptorUnsettledSends -= 1;
-				}
-			}
+			remoteIngress.next(message.slice());
 		},
 		async close() {
 			transport.closeCount += 1;
@@ -1686,7 +869,7 @@ async function invoke(
 ): Promise<RpcCallOutcome> {
 	const reservation = session.reserveInvocation({
 		service: "service",
-		member: "member",
+		method: "method",
 		args,
 	});
 	assertRpcConformance(
@@ -1734,8 +917,4 @@ function isCounterDrain(transition: RpcProtocolSessionTransition): boolean {
 		transition.type === RpcProtocolSessionTransitionTypeEnum.draining &&
 		transition.reason === RpcCloseReasonEnum.counterExhaustion
 	);
-}
-
-function isRecovering(transition: RpcProtocolSessionTransition): boolean {
-	return transition.type === RpcProtocolSessionTransitionTypeEnum.recovering;
 }

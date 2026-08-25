@@ -19,7 +19,7 @@ export function updatePendingCallDiagnostics(
 				observationId: event.observationId,
 				direction: event.direction,
 				service: event.service ?? "unknown-service",
-				member: event.member ?? "unknown-member",
+				method: event.method ?? "unknown-method",
 				startedAt: timestamp,
 			},
 			...current,

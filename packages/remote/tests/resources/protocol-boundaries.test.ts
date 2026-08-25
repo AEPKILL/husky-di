@@ -39,10 +39,7 @@ const mebibyte = 1024 * 1024;
 const defaultPolicy: IRpcProtocolRuntimePolicy = {
 	maxSessions: 1,
 	maxHandshakes: 1,
-	maxApplicationWorkPerSession: 256,
-	maxApplicationWorkTotal: 256,
-	maxActiveStreamsPerSession: 16,
-	maxActiveStreamsTotal: 16,
+	maxPendingInvocationsPerSession: 256,
 	maxRetainedBytesPerSession: 32 * mebibyte,
 	maxRetainedBytesTotal: 32 * mebibyte,
 	maxHandlersPerSession: 16,
@@ -114,10 +111,19 @@ function createApplicationMessages(
 			kind: RpcWireRecordKindEnum.call,
 			callId: "1",
 			service: "example.boundary.v1",
-			member: "run",
+			method: "run",
 			args,
 		},
 		{ kind: RpcWireRecordKindEnum.result, callId: "1", value },
+		{
+			kind: RpcWireRecordKindEnum.error,
+			callId: "1",
+			error: {
+				code: RpcExceptionCodeEnum.unavailable,
+				message: "Remote call failed.",
+				details: value,
+			},
+		},
 	];
 }
 
@@ -414,7 +420,7 @@ describe("Default RPC Protocol resource boundaries", () => {
 			const reserve = (stringBytes: number) =>
 				session.reserveInvocation({
 					service: "example.boundary.v1",
-					member: "run",
+					method: "run",
 					args: normalizeRpcApplicationArguments(["x".repeat(stringBytes)]),
 				});
 			const first = reserve(524_028);
@@ -432,11 +438,11 @@ describe("Default RPC Protocol resource boundaries", () => {
 			session.forceClose();
 		}
 
-		const session = createSession({ maxApplicationWorkPerSession: 2 });
+		const session = createSession({ maxPendingInvocationsPerSession: 2 });
 		const reserve = () =>
 			session.reserveInvocation({
 				service: "example.boundary.v1",
-				member: "run",
+				method: "run",
 				args: normalizeRpcApplicationArguments([]),
 			});
 		const limitMinusOne = reserve();
@@ -451,12 +457,12 @@ describe("Default RPC Protocol resource boundaries", () => {
 	});
 
 	it("RPC-CALL-005 RPC-RESOURCE-001 retracts canceled Pending storage without a send slot", () => {
-		const session = createSession({ maxApplicationWorkPerSession: 1 });
+		const session = createSession({ maxPendingInvocationsPerSession: 1 });
 		const finishes: unknown[] = [];
 		for (let index = 0; index < 3; index += 1) {
 			const reservation = session.reserveInvocation({
 				service: "example.pending-cancel.v1",
-				member: "run",
+				method: "run",
 				args: normalizeRpcApplicationArguments(["x".repeat(1024)]),
 			});
 			if (reservation === undefined) {
@@ -490,7 +496,7 @@ describe("Default RPC Protocol resource boundaries", () => {
 	});
 
 	it("RPC-CORPUS-004 executes ordinary replay and protected terminal/cancel entry triplets", () => {
-		const ordinary = createSession({ maxApplicationWorkPerSession: 1 });
+		const ordinary = createSession({ maxPendingInvocationsPerSession: 1 });
 		for (let ordinal = 1; ordinal <= 3; ordinal += 1) {
 			expect(
 				ordinary._queueSemantic({

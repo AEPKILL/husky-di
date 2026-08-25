@@ -1,68 +1,41 @@
 /**
- * @overview Creates opaque mixed-member Remote Service Descriptors.
+ * @overview Creates opaque Remote Service Descriptors.
  * @author AEPKILL
- * @created 2026-08-24 00:00:00
+ * @created 2026-08-19 00:00:00
  */
 
 import type { ServiceIdentifier } from "@husky-di/core";
 
 import type { IRemoteServiceDescriptor } from "@/interfaces/remote-service-descriptor.interface";
 import type {
-	NonEmptyMemberDefinitions,
-	RemoteServiceDescriptorData,
-	RpcMemberDefinitions,
-	RpcMemberInteraction,
-	ValidateMemberDefinitions,
+	NonEmptyMethodDefinitions,
+	RpcMethodDefinitions,
+	ValidateMethodDefinitions,
 } from "@/types/remote-service-descriptor.type";
-import { rpcWireIdentifierSchema } from "@/utils/rpc-schema.util";
+import {
+	rpcCancelableMethodDefinitionSchema,
+	rpcDescriptorPlainRecordSchema,
+	rpcStringSchema,
+	rpcWireIdentifierSchema,
+} from "@/utils/rpc-schema.util";
+
+export interface RemoteServiceDescriptorData {
+	readonly serviceIdentifier: ServiceIdentifier<unknown>;
+	readonly wireName: string;
+	readonly methods: Readonly<
+		Record<string, true | { readonly cancelable: true }>
+	>;
+}
 
 const remoteServiceDescriptorData = new WeakMap<
 	object,
 	RemoteServiceDescriptorData
 >();
 
+const cancelableMethodDefinition = Object.freeze({ cancelable: true });
+
 function isPlainRecord(value: unknown): value is Record<PropertyKey, unknown> {
-	if (typeof value !== "object" || value === null) {
-		return false;
-	}
-	try {
-		const prototype = Object.getPrototypeOf(value);
-		return prototype === Object.prototype || prototype === null;
-	} catch {
-		return false;
-	}
-}
-
-function ownKeys(value: object, label: string): readonly PropertyKey[] {
-	try {
-		return Reflect.ownKeys(value);
-	} catch {
-		throw new TypeError(`${label} could not be inspected.`);
-	}
-}
-
-function readEnumerableDataProperty(
-	record: object,
-	key: PropertyKey,
-	label: string,
-): unknown {
-	let property: PropertyDescriptor | undefined;
-	try {
-		property = Object.getOwnPropertyDescriptor(record, key);
-	} catch {
-		throw new TypeError(`${label} could not be inspected.`);
-	}
-	if (property === undefined) {
-		throw new TypeError(`${label} must be an own enumerable data property.`);
-	}
-	if (!property.enumerable) {
-		throw new TypeError(`${label} must be an own enumerable data property.`);
-	}
-	// Snapshotting must never execute an accessor.
-	if (!("value" in property)) {
-		throw new TypeError(`${label} must be an own enumerable data property.`);
-	}
-	return property.value;
+	return rpcDescriptorPlainRecordSchema.safeParse(value).success;
 }
 
 function validateWireIdentifier(
@@ -76,118 +49,101 @@ function validateWireIdentifier(
 	}
 }
 
-function snapshotMemberDefinition(value: unknown): RpcMemberInteraction {
+function isCancelableMethodDefinition(value: unknown): boolean {
 	if (!isPlainRecord(value)) {
-		throw new TypeError("member definition must be a plain record.");
+		return false;
 	}
 
-	const keys = ownKeys(value, "member definition");
-	const kind = readEnumerableDataProperty(value, "kind", "kind");
-	if (kind === "unary") {
-		if (keys.length === 1 && keys[0] === "kind") {
-			return Object.freeze({ kind, cancelable: false });
-		}
-		const cancelable = readEnumerableDataProperty(
-			value,
-			"cancelable",
-			"cancelable",
-		);
-		// The cancelable form has no extension fields or alternate boolean value.
-		const keysAreExact =
-			keys.length === 2 && keys.includes("kind") && keys.includes("cancelable");
-		if (!keysAreExact || cancelable !== true) {
-			throw new TypeError(
-				"cancelable unary definition must be exactly { kind: 'unary', cancelable: true }.",
-			);
-		}
-		return Object.freeze({ kind, cancelable: true });
+	const keys = Reflect.ownKeys(value);
+	if (keys.length !== 1 || keys[0] !== "cancelable") {
+		return false;
 	}
 
-	// A stream definition is exactly one recognized kind field.
-	const streamDefinitionIsInvalid =
-		(kind !== "stream-method" && kind !== "stream-property") ||
-		keys.length !== 1 ||
-		keys[0] !== "kind";
-	if (streamDefinitionIsInvalid) {
-		throw new TypeError("stream definition must contain only its valid kind.");
+	const descriptor = Object.getOwnPropertyDescriptor(value, "cancelable");
+	if (descriptor === undefined || !("value" in descriptor)) {
+		return false;
 	}
-	return Object.freeze({ kind });
+
+	const snapshot = { cancelable: descriptor.value };
+	return rpcCancelableMethodDefinitionSchema.safeParse(snapshot).success;
 }
 
-function snapshotMembers(
+function snapshotMethods(
 	value: unknown,
-): RemoteServiceDescriptorData["members"] {
+): RemoteServiceDescriptorData["methods"] {
 	if (!isPlainRecord(value)) {
-		throw new TypeError("members must be a plain record.");
+		throw new TypeError("methods must be a plain record.");
 	}
 
-	const keys = ownKeys(value, "members");
+	const keys = Reflect.ownKeys(value);
 	if (keys.length === 0) {
-		throw new TypeError("members must select at least one member.");
+		throw new TypeError("methods must select at least one method.");
 	}
 
-	const snapshot = Object.create(null) as Record<string, RpcMemberInteraction>;
+	const snapshot = Object.create(null) as Record<
+		string,
+		true | { readonly cancelable: true }
+	>;
 	for (const key of keys) {
-		validateWireIdentifier(key, "member name");
-		if (key === "then") {
-			throw new TypeError("then is reserved and cannot be exposed.");
+		const keyResult = rpcStringSchema.safeParse(key);
+		if (!keyResult.success) {
+			throw new TypeError("methods must contain only string-named methods.");
 		}
-		const definition = readEnumerableDataProperty(value, key, `member ${key}`);
-		const interaction = snapshotMemberDefinition(definition);
-		if (interaction.kind === "stream-property" && !key.endsWith("$")) {
-			throw new TypeError("stream property names must end with $.");
+		const methodName = keyResult.data;
+
+		validateWireIdentifier(methodName, "method name");
+		if (methodName === "then") {
+			throw new TypeError(
+				"then is reserved and cannot be exposed as an RPC method.",
+			);
 		}
-		snapshot[key] = interaction;
+
+		const descriptor = Object.getOwnPropertyDescriptor(value, methodName);
+		// A method definition must be an enumerable data property in an allowed shape.
+		const methodDefinitionIsInvalid =
+			descriptor === undefined ||
+			!descriptor.enumerable ||
+			!("value" in descriptor) ||
+			(descriptor.value !== true &&
+				!isCancelableMethodDefinition(descriptor.value));
+		if (methodDefinitionIsInvalid) {
+			throw new TypeError(
+				"Each method definition must be true or exactly { cancelable: true }.",
+			);
+		}
+
+		snapshot[methodName] =
+			descriptor.value === true ? true : cancelableMethodDefinition;
 	}
+
 	return Object.freeze(snapshot);
 }
 
-function snapshotOptions(options: unknown): {
-	readonly wireName: string;
-	readonly members: RemoteServiceDescriptorData["members"];
-} {
-	if (!isPlainRecord(options)) {
-		throw new TypeError("options must be a plain record.");
-	}
-	const keys = ownKeys(options, "options");
-	// The public options record has one closed, accessor-free shape.
-	const keysAreExact =
-		keys.length === 2 && keys.includes("wireName") && keys.includes("members");
-	if (!keysAreExact) {
-		throw new TypeError("options must contain exactly wireName and members.");
-	}
-	const wireName = readEnumerableDataProperty(options, "wireName", "wireName");
-	validateWireIdentifier(wireName, "wireName");
-	const members = snapshotMembers(
-		readEnumerableDataProperty(options, "members", "members"),
-	);
-	return { wireName, members };
-}
-
-/** Creates an opaque Descriptor and retains a detached mixed-member snapshot. */
+/** Creates an opaque Descriptor and retains a detached allowlist snapshot. */
 export function createRemoteServiceDescriptor<
 	T,
-	const Members extends RpcMemberDefinitions<T>,
+	const Definitions extends RpcMethodDefinitions<T>,
 >(
 	serviceIdentifier: ServiceIdentifier<T>,
 	options: {
 		readonly wireName: string;
-		readonly members: Members &
-			ValidateMemberDefinitions<T, Members> &
-			NonEmptyMemberDefinitions<Members>;
+		readonly methods: Definitions &
+			ValidateMethodDefinitions<T, Definitions> &
+			NonEmptyMethodDefinitions<Definitions>;
 	},
-): IRemoteServiceDescriptor<T, Members> {
-	const { wireName, members } = snapshotOptions(options);
+): IRemoteServiceDescriptor<T, Definitions> {
+	validateWireIdentifier(options.wireName, "wireName");
+	const methods = snapshotMethods(options.methods);
 	const descriptor = Object.freeze(
 		Object.create(null),
-	) as IRemoteServiceDescriptor<T, Members>;
+	) as IRemoteServiceDescriptor<T, Definitions>;
 
 	remoteServiceDescriptorData.set(
 		descriptor,
 		Object.freeze({
 			serviceIdentifier: serviceIdentifier as ServiceIdentifier<unknown>,
-			wireName,
-			members,
+			wireName: options.wireName,
+			methods,
 		}),
 	);
 

@@ -321,7 +321,7 @@ describe("Default RPC Protocol", () => {
 	it("RPC-SHUTDOWN-003 RPC-SHUTDOWN-005 drains queued post-G ingress through resource rejection before Close", async () => {
 		const descriptor = createRemoteServiceDescriptor(ICalculatorService, {
 			wireName: "example.shutdown-ingress.v1",
-			members: { add: { kind: "unary" } },
+			methods: { add: true },
 		});
 		const network = createRecoveryNetwork();
 		const acceptor = createRpcAcceptor();
@@ -357,7 +357,7 @@ describe("Default RPC Protocol", () => {
 				kind: "call",
 				callId: "1",
 				service: "example.shutdown-ingress.v1",
-				member: "add",
+				method: "add",
 				args: [20, 22],
 			},
 		});
@@ -401,7 +401,7 @@ describe("Default RPC Protocol", () => {
 			IDeferredCalculatorService,
 			{
 				wireName: "example.shutdown-predicate.v1",
-				members: { add: { kind: "unary" } },
+				methods: { add: true },
 			},
 		);
 		const network = createRecoveryNetwork();
@@ -506,7 +506,7 @@ describe("Default RPC Protocol", () => {
 			IDeferredCalculatorService,
 			{
 				wireName: "example.shutdown-binding-loss.v1",
-				members: { add: { kind: "unary" } },
+				methods: { add: true },
 			},
 		);
 		const network = createRecoveryNetwork();
@@ -691,7 +691,7 @@ describe("Default RPC Protocol", () => {
 			IDeferredCalculatorService,
 			{
 				wireName: "example.force-fence.v1",
-				members: { add: { kind: "unary" } },
+				methods: { add: true },
 			},
 		);
 		const network = createRecoveryNetwork();
@@ -769,7 +769,7 @@ describe("Default RPC Protocol", () => {
 		const protocol = createRpcCounterExhaustionProtocolForTest();
 		const descriptor = createRemoteServiceDescriptor(ICalculatorService, {
 			wireName: "example.calculator.v1",
-			members: { add: { kind: "unary" } },
+			methods: { add: true },
 		});
 		const adapters = createMemoryAdapters();
 		const acceptor = createRpcAcceptor({ protocol });
@@ -793,7 +793,7 @@ describe("Default RPC Protocol", () => {
 	it("RPC-PKG-003 RPC-WIRE-001 RPC-ACK-001 RPC-ACK-003 performs one authenticated fresh unary call with directional ledgers", async () => {
 		const descriptor = createRemoteServiceDescriptor(ICalculatorService, {
 			wireName: "example.calculator.v1",
-			members: { add: { kind: "unary" } },
+			methods: { add: true },
 		});
 		const adapters = createMemoryAdapters();
 		const acceptor = createRpcAcceptor({ runtimePolicy: { ackDelayMs: 1 } });
@@ -848,7 +848,7 @@ describe("Default RPC Protocol", () => {
 				kind: "call",
 				callId: "1",
 				service: "example.calculator.v1",
-				member: "add",
+				method: "add",
 				args: [19, 23],
 			},
 		});
@@ -901,7 +901,7 @@ describe("Default RPC Protocol", () => {
 	it("RPC-SESSION-001 RPC-SESSION-005 RPC-SESSION-006 RPC-RECOVERY-004 RPC-ACK-007 RPC-LEDGER-002 RPC-CORPUS-003 resumes the retained Session and replays an unreceived call identity", async () => {
 		const descriptor = createRemoteServiceDescriptor(ICalculatorService, {
 			wireName: "example.calculator.v1",
-			members: { add: { kind: "unary" } },
+			methods: { add: true },
 		});
 		const network = createRecoveryNetwork();
 		let handlerCalls = 0;
@@ -999,7 +999,7 @@ describe("Default RPC Protocol", () => {
 			IDeferredCalculatorService,
 			{
 				wireName: "example.deferred-calculator.v1",
-				members: { add: { kind: "unary" } },
+				methods: { add: true },
 			},
 		);
 		const network = createRecoveryNetwork();
@@ -1065,7 +1065,7 @@ describe("Default RPC Protocol", () => {
 	] as const)("RPC-SESSION-008 RPC-SEC-006 RPC-VALID-004 RPC-CORPUS-003 authenticates a %s resume cursor as continuity-failure", async (_position, receivedThrough) => {
 		const descriptor = createRemoteServiceDescriptor(ICalculatorService, {
 			wireName: "example.calculator.v1",
-			members: { add: { kind: "unary" } },
+			methods: { add: true },
 		});
 		const network = createRecoveryNetwork();
 		const policy = {
@@ -1163,7 +1163,7 @@ describe("Default RPC Protocol", () => {
 	it("RPC-SESSION-006 RPC-SESSION-007 RPC-RECOVERY-002 RPC-CORPUS-003 recovers a lost resume accept with a higher attempt", async () => {
 		const descriptor = createRemoteServiceDescriptor(ICalculatorService, {
 			wireName: "example.calculator.v1",
-			members: { add: { kind: "unary" } },
+			methods: { add: true },
 		});
 		const network = createRecoveryNetwork();
 		const policy = {
@@ -1395,7 +1395,7 @@ describe("Default RPC Protocol", () => {
 	it("RPC-SESSION-007 RPC-RECOVERY-005 RPC-SEC-007 RPC-CORPUS-003 fences an old binding while its initiator and send completion are late", async () => {
 		const descriptor = createRemoteServiceDescriptor(ICalculatorService, {
 			wireName: "example.calculator.v1",
-			members: { add: { kind: "unary" } },
+			methods: { add: true },
 		});
 		const network = createRecoveryNetwork();
 		let releaseLateSend!: () => void;
@@ -1601,7 +1601,7 @@ describe("Default RPC Protocol", () => {
 	it("RPC-SESSION-001 RPC-RECOVERY-003 RPC-RECOVERY-006 RPC-CORPUS-003 expires retained authority after key loss without sliding the deadline", async () => {
 		const descriptor = createRemoteServiceDescriptor(ICalculatorService, {
 			wireName: "example.calculator.v1",
-			members: { add: { kind: "unary" } },
+			methods: { add: true },
 		});
 		const originalNetwork = createRecoveryNetwork();
 		const restartedNetwork = createRecoveryNetwork();

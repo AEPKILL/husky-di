@@ -59,7 +59,7 @@ describe("Default RPC Protocol remaining requirements", () => {
 		const blocked = Promise.withResolvers<void>();
 		const descriptor = createRemoteServiceDescriptor(IRequirementsService, {
 			wireName: "example.requirements.v1",
-			members: { run: { kind: "unary" } },
+			methods: { run: true },
 		});
 		const policy = { maxRetainedBytesPerSession: 4 * 1024 * 1024 };
 		const acceptor = createRpcAcceptor({ runtimePolicy: policy });
@@ -125,7 +125,7 @@ describe("Default RPC Protocol remaining requirements", () => {
 		const network = createRpcTestNetwork();
 		const descriptor = createRemoteServiceDescriptor(IRequirementsService, {
 			wireName: "example.bidirectional-ledger.v1",
-			members: { run: { kind: "unary" } },
+			methods: { run: true },
 		});
 		const acceptor = createRpcAcceptor();
 		const connector = createRpcConnector();
@@ -162,7 +162,7 @@ describe("Default RPC Protocol remaining requirements", () => {
 		const network = createRpcTestNetwork();
 		const descriptor = createRemoteServiceDescriptor(IRequirementsService, {
 			wireName: "example.plaintext-deployment.v1",
-			members: { run: { kind: "unary" } },
+			methods: { run: true },
 		});
 		const acceptor = createRpcAcceptor();
 		const connector = createRpcConnector();
@@ -240,7 +240,7 @@ describe("Default RPC Protocol remaining requirements", () => {
 		const network = createRpcTestNetwork();
 		const descriptor = createRemoteServiceDescriptor(IRequirementsService, {
 			wireName: "example.retained-owner.v1",
-			members: { run: { kind: "unary" } },
+			methods: { run: true },
 		});
 		const acceptor = createRpcAcceptor({ runtimePolicy: { maxSessions: 1 } });
 		const retainedConnector = createRpcConnector();
@@ -273,7 +273,7 @@ describe("Default RPC Protocol remaining requirements", () => {
 		const { session } = createRpcDirectSessionHarness();
 		const request = {
 			service: "example.reentrant-reclamation.v1",
-			member: "run",
+			method: "run",
 			args: normalizeRpcApplicationArguments([]),
 		};
 		const outcomes: unknown[] = [];
@@ -314,7 +314,7 @@ describe("Default RPC Protocol remaining requirements", () => {
 		const network = createRpcTestNetwork();
 		const descriptor = createRemoteServiceDescriptor(IRequirementsService, {
 			wireName: "example.ingress-order.v1",
-			members: { run: { kind: "unary" } },
+			methods: { run: true },
 		});
 		const acceptor = createRpcAcceptor();
 		const connector = createRpcConnector();
@@ -349,7 +349,7 @@ describe("Default RPC Protocol remaining requirements", () => {
 							kind: "call",
 							callId: String(seq + 1),
 							service: "example.ingress-order.v1",
-							member: "run",
+							method: "run",
 							args: [value],
 						},
 					}),
@@ -368,7 +368,7 @@ describe("Default RPC Protocol remaining requirements", () => {
 			IScheduledRequirementsService,
 			{
 				wireName: "example.handler-fairness.v1",
-				members: { run: { kind: "unary" } },
+				methods: { run: true },
 			},
 		);
 		const acceptor = createRpcAcceptor({
@@ -434,24 +434,20 @@ describe("Default RPC Protocol remaining requirements", () => {
 			emitEvent: () => {},
 			onProtocolFault: () => {},
 			handlerScheduler: scheduler,
-			maximumActiveStreamsPerSession: 16,
-			maximumApplicationWorkPerSession: 256,
 			maximumIncomingBytes: 1024 * 1024,
-			reserveLocalApplicationWork: () => ({ release() {} }),
-			reserveRemoteApplicationWork: () => ({ release() {} }),
 			reserveRetainedBytes: () => ({ release() {} }),
 		});
 		const descriptor = createRemoteServiceDescriptor(
 			IScheduledRequirementsService,
 			{
 				wireName: "example.terminal-queued-handler.v1",
-				members: { run: { kind: "unary" } },
+				methods: { run: true },
 			},
 		);
 		peer.expose(descriptor, { run: async (value) => value });
 		const reservation = peer.reserveIncomingProtocolCall({
 			service: "example.terminal-queued-handler.v1",
-			member: "run",
+			method: "run",
 			args: normalizeRpcApplicationArguments(["payload"]),
 		});
 		if (reservation?.kind !== "handler") {

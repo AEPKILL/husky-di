@@ -43,7 +43,7 @@ export type RpcCallFailure = Exclude<
 
 export type RpcUnknownCallFailure = Extract<
 	RpcCallFailure,
-	RpcExceptionCodeEnum.unknownService | RpcExceptionCodeEnum.unknownMember
+	RpcExceptionCodeEnum.unknownService | RpcExceptionCodeEnum.unknownMethod
 >;
 
 export type RpcIncomingFailure = Extract<
@@ -91,10 +91,7 @@ export type RpcIncomingTerminal =
 export interface IRpcProtocolRuntimePolicy {
 	readonly maxSessions: number;
 	readonly maxHandshakes: number;
-	readonly maxApplicationWorkPerSession: number;
-	readonly maxApplicationWorkTotal: number;
-	readonly maxActiveStreamsPerSession: number;
-	readonly maxActiveStreamsTotal: number;
+	readonly maxPendingInvocationsPerSession: number;
 	readonly maxRetainedBytesPerSession: number;
 	readonly maxRetainedBytesTotal: number;
 	readonly maxHandlersPerSession: number;
@@ -133,7 +130,7 @@ export interface IRpcProtocolHost {
 
 export interface IRpcProtocolInvocationRequest {
 	readonly service: string;
-	readonly member: string;
+	readonly method: string;
 	readonly args: IRpcApplicationArgumentsSnapshot;
 }
 
@@ -151,127 +148,16 @@ export interface IRpcProtocolInvocation {
 	cancel(): void;
 }
 
-export type RpcProtocolStreamRequest =
-	| {
-			readonly service: string;
-			readonly member: string;
-			readonly kind: "stream-method";
-			readonly args: IRpcApplicationArgumentsSnapshot;
-	  }
-	| {
-			readonly service: string;
-			readonly member: string;
-			readonly kind: "stream-property";
-	  };
-
-export type RpcStreamFailure = Extract<
-	RpcCallFailure,
-	| RpcExceptionCodeEnum.unavailable
-	| RpcExceptionCodeEnum.outcomeUnknown
-	| RpcExceptionCodeEnum.handlerFailed
-	| RpcExceptionCodeEnum.unknownService
-	| RpcExceptionCodeEnum.unknownMember
-	| RpcExceptionCodeEnum.overflow
->;
-
-export type RpcStreamOutcome =
-	| { readonly type: "completed" }
-	| { readonly type: "canceled" }
-	| { readonly type: "failed"; readonly code: RpcStreamFailure };
-
-export type RpcStreamItemEffect = "rearm" | "closed";
-
-export interface IRpcProtocolProjection<TResult = void> {
-	commit(): TResult;
-}
-
-export interface IRpcProtocolSubscriberSink {
-	reserveItem(
-		value: IRpcApplicationSnapshot,
-	): IRpcProtocolProjection<RpcStreamItemEffect>;
-	reserveTerminal(outcome: RpcStreamOutcome): IRpcProtocolProjection;
-}
-
-export interface IRpcProtocolStreamReservation {
-	commit(sink: IRpcProtocolSubscriberSink): IRpcProtocolStream;
-	release(): void;
-}
-
-export interface IRpcProtocolStream {
-	start(): void;
-	cancel(): void;
-}
-
-export type RpcSourceTerminal =
-	| { readonly type: "completed" }
-	| {
-			readonly type: "failed";
-			readonly code: RpcExceptionCodeEnum.handlerFailed;
-	  };
-
-export interface IRpcProtocolSourceEmissionReservation {
-	commit(value: IRpcApplicationSnapshot): void;
-	fail(): void;
-}
-
-export interface IRpcProtocolSourceSink {
-	reserveEmission(): IRpcProtocolSourceEmissionReservation | undefined;
-	finish(outcome: RpcSourceTerminal): void;
-}
-
-export type RpcIncomingStreamTerminal =
-	| { readonly type: "completed" }
-	| { readonly type: "canceled" }
-	| {
-			readonly type: "failed";
-			readonly code:
-				| RpcExceptionCodeEnum.handlerFailed
-				| RpcExceptionCodeEnum.unknownService
-				| RpcExceptionCodeEnum.unknownMember
-				| RpcExceptionCodeEnum.overflow;
-	  }
-	| { readonly type: "session-terminated" };
-
-export interface IRpcProtocolIncomingStream {
-	finish(outcome: RpcIncomingStreamTerminal, onReleased: () => void): void;
-}
-
-export interface IRpcProtocolIncomingSourceReservation {
-	commit(source: IRpcProtocolSourceSink): IRpcProtocolIncomingStream;
-	release(): void;
-}
-
-export interface IRpcProtocolIncomingUnknownStreamReservation {
-	commit(): IRpcProtocolIncomingStream;
-	release(): void;
-}
-
-export type RpcProtocolIncomingStreamReservation =
-	| {
-			readonly kind: "source";
-			readonly reservation: IRpcProtocolIncomingSourceReservation;
-	  }
-	| {
-			readonly kind: "unknown";
-			readonly code:
-				| RpcExceptionCodeEnum.unknownService
-				| RpcExceptionCodeEnum.unknownMember;
-			readonly reservation: IRpcProtocolIncomingUnknownStreamReservation;
-	  };
-
 export interface IRpcProtocolSession {
 	reserveInvocation(
 		request: IRpcProtocolInvocationRequest,
 	): IRpcProtocolInvocationReservation | undefined;
-	reserveStream(
-		request: RpcProtocolStreamRequest,
-	): IRpcProtocolStreamReservation | undefined;
 	forceClose(): void;
 }
 
 export interface IRpcProtocolIncomingCallRequest {
 	readonly service: string;
-	readonly member: string;
+	readonly method: string;
 	readonly args: IRpcApplicationArgumentsSnapshot;
 }
 
@@ -332,9 +218,6 @@ export interface IRpcProtocolSessionHost {
 	reserveIncomingCall(
 		request: IRpcProtocolIncomingCallRequest,
 	): RpcProtocolIncomingCallReservation | undefined;
-	reserveIncomingStream(
-		request: RpcProtocolStreamRequest,
-	): RpcProtocolIncomingStreamReservation | undefined;
 	transition(transition: RpcProtocolSessionTransition): void;
 	fault(reason: RpcProtocolFaultReason, error: Error): void;
 }

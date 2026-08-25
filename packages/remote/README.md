@@ -1,28 +1,42 @@
 # @husky-di/remote
 
-`@husky-di/remote` adds typed, transport-independent unary RPC and remote
-Observable streams to Husky DI. Define one mixed service contract, expose it on
-one peer, and resolve a type-safe facade on the other. The package owns logical
-Sessions, Recovery, bounded work, stream flow control, and termination; a
-separate Transport Adapter owns each physical connection.
+`@husky-di/remote` adds typed, transport-independent unary RPC to Husky DI.
+Define a remote service once, expose an implementation on one peer, and resolve
+an asynchronous proxy on the other. The package owns logical RPC sessions,
+recovery, bounded work, and graceful shutdown; a separate Transport Adapter owns
+the physical connection.
 
 ## Is This The Right Package?
 
 Use this package when you need:
 
-- TypeScript-first unary calls and cold RxJS streams selected by an exact member allowlist
-- the same connection to carry work in both directions
-- a stable logical Peer that can survive replacement of its physical connection
-- one Connector talking to one Peer, or one Acceptor serving many independent Peers
-- bounded application work, active streams, retained data, Recovery, and shutdown
+- TypeScript-first request/response RPC with an explicit method allowlist
+- the same connection to carry calls in both directions
+- a stable logical peer that can survive replacement of its physical connection
+- one connector talking to one peer, or one acceptor serving many peers
+- bounded concurrency, retained data, recovery, and shutdown behavior
 - a replaceable wire Protocol or Transport Adapter
 
-Arguments, unary results, and stream items must fit the
+This package currently supports unary calls whose arguments and results fit the
 [RPC application value model](docs/SPECIFICATION.md#4-common-application-value-model).
-The package does not provide service discovery or a WebSocket implementation by
-itself. Use
-[`@husky-di/remote-websocket`](../remote-websocket/README.md) for browser and
-Node WebSocket Adapters.
+It does not provide streaming RPC, notifications, service discovery, or a
+WebSocket implementation by itself. Use
+[`@husky-di/remote-websocket`](../remote-websocket/README.md) for browser and Node
+WebSocket Adapters.
+
+## What You Get
+
+- opaque, type-safe Remote Service Descriptors
+- asynchronous proxies inferred from ordinary TypeScript service interfaces
+- Connector and Acceptor Topology Owners
+- bidirectional calls through every connected peer
+- Acceptor fan-out with one result per peer
+- cooperative cancellation with `AbortSignal`
+- explicit recovery over a replacement physical connection
+- replay-latest state and membership Observables
+- non-replaying lifecycle and call telemetry
+- graceful draining and forced close
+- conformance runners for custom Protocols and Transport Adapters
 
 ## Installation
 
@@ -33,14 +47,15 @@ WebSocket deployment:
 pnpm add @husky-di/core @husky-di/remote @husky-di/remote-websocket rxjs ws
 ```
 
-Browser-only applications do not need `ws`. Node Connector and Acceptor
-Adapters import from `@husky-di/remote-websocket/node` and require it.
+Browser-only applications do not need `ws`. Node Connector and Acceptor Adapters
+import from `@husky-di/remote-websocket/node` and require it.
+
 `@husky-di/remote` requires Node.js 23.6 or newer when used in Node.
 
 ## Quick Start
 
-The shared contract below mixes a unary method, a stream method, and a readonly
-stream property.
+The example below exposes a calculator from a Node Acceptor and calls it from a
+Connector. Put the shared contract in a module that both applications can import.
 
 ### 1. Define The Shared Service
 
@@ -48,33 +63,27 @@ stream property.
 // calculator.contract.ts
 import { createServiceIdentifier } from "@husky-di/core";
 import { createRemoteServiceDescriptor } from "@husky-di/remote";
-import type { Observable } from "rxjs";
 
 export interface Calculator {
   add(left: number, right: number): number;
-  count(limit: number): Observable<number>;
-  readonly totals$: Observable<number>;
 }
 
 const ICalculator = createServiceIdentifier<Calculator>("ICalculator");
 
 export const remoteCalculator = createRemoteServiceDescriptor(ICalculator, {
   wireName: "example.calculator.v1",
-  members: {
-    add: { kind: "unary" },
-    count: { kind: "stream-method" },
-    totals$: { kind: "stream-property" },
+  methods: {
+    add: true,
   },
 });
 ```
 
-`wireName` is the service identity sent over the connection. Both peers must
-use the same exact name and compatible `members`. The local
-`ServiceIdentifier` is used only for local exposure lookup.
+`wireName` is the service identity sent over the connection. Both peers must use
+the same exact name and compatible method definitions. The local
+`ServiceIdentifier` is not used for wire routing.
 
-A unary return such as `number` becomes `Promise<number>` on the remote
-facade. A stream method returns `Observable<Item>` directly, and a stream
-property remains an `Observable<Item>` data property.
+Only methods selected in `methods` can be exposed or called. A synchronous local
+return type such as `number` becomes `Promise<number>` on the remote proxy.
 
 ### 2. Expose It From A Node Acceptor
 
@@ -82,7 +91,6 @@ property remains an `Observable<Item>` data property.
 // server.ts
 import { createRpcAcceptor } from "@husky-di/remote";
 import { createNodeWebSocketAcceptorAdapter } from "@husky-di/remote-websocket/node";
-import { Observable } from "rxjs";
 
 import { remoteCalculator } from "./calculator.contract";
 
@@ -92,24 +100,6 @@ const stopExposing = acceptor.expose(remoteCalculator, {
   add(left, right) {
     return left + right;
   },
-  count(limit) {
-    return new Observable<number>((subscriber) => {
-      let value = 0;
-      const timer = setInterval(() => {
-        subscriber.next(value);
-        value += 1;
-        if (value === limit) {
-          clearInterval(timer);
-          subscriber.complete();
-        }
-      }, 100);
-      return () => clearInterval(timer);
-    });
-  },
-  totals$: new Observable<number>((subscriber) => {
-    subscriber.next(42);
-    subscriber.complete();
-  }),
 });
 
 await acceptor.listen(
@@ -123,11 +113,11 @@ stopExposing();
 await acceptor.shutdown();
 ```
 
-`acceptor.expose()` applies atomically to current and future peers. Its cleanup
-removes the exposure for future admission without interrupting already admitted
-unary calls or stream sources.
+`acceptor.expose()` applies atomically to current and future peers. Its returned
+cleanup removes the exposure for future calls without interrupting calls that
+have already been admitted.
 
-### 3. Resolve It From A Connector
+### 3. Resolve And Call It From A Connector
 
 ```typescript
 // client.ts
@@ -151,208 +141,232 @@ const calculator = connector.peer.resolve(remoteCalculator);
 
 try {
   await reconnection.connect();
-  console.log(await calculator.add(20, 22)); // 42
 
-  await new Promise<void>((resolve, reject) => {
-    calculator.count(3).subscribe({
-      next: (value) => console.log(value),
-      error: reject,
-      complete: resolve,
-    });
-  });
+  console.log(await calculator.add(20, 22)); // 42
 } finally {
   await reconnection.stop();
   await connector.shutdown();
 }
 ```
 
-The local `ws:` URL keeps the quick start small. Production deployments need
-an authenticated, encrypted Transport such as correctly validated `wss:`; see
+The Connector's `peer` and previously resolved proxies remain stable throughout
+connection recovery. You can expose services and resolve proxies before the first
+physical connection exists.
+
+The local `ws:` URL keeps the quick start small. Use an authenticated, encrypted
+Transport such as correctly validated `wss:` in production; see
 [Security](#security).
 
-## Descriptors And Cold Streams
+## Mental Model
 
-Each selected member definition is exactly one of:
+Five concepts make up the public caller API:
 
-- `{ kind: "unary" }`
-- `{ kind: "unary", cancelable: true }`
-- `{ kind: "stream-method" }`
-- `{ kind: "stream-property" }`
+| Concept | Responsibility |
+| --- | --- |
+| Remote Service Descriptor | Combines a local service type, an exact wire identity, and a non-empty method allowlist. |
+| Peer | Represents one stable logical RPC session. It exposes local implementations and resolves remote proxies. |
+| Topology Owner | Owns peers, lifecycle, resource policy, and physical connection attempts. A Connector owns one peer; an Acceptor owns a changing set. |
+| Transport Adapter | Creates or accepts physical connections. It is supplied separately and does not define RPC semantics. |
+| Connector Reconnection | An optional supervisor that owns initial and replacement Connector attempts under one finite retry policy. |
 
-A Descriptor may mix all four interactions. Stream properties are required,
-readonly, Observable-valued properties whose names end in `$`. Stream methods
-return an Observable directly and cannot accept `AbortSignal`, Observable, or
-another asynchronous capability as an argument.
+The built-in `husky-di-rpc/1` Protocol is used when `protocol` is omitted from
+`createRpcConnector()` or `createRpcAcceptor()`. Most applications should use the
+default. Protocol implementors can use the dedicated SPI described in the
+[Protocol guide](docs/PROTOCOL.md).
 
-Calling a stream method, reading a stream property, or retaining either remote
-Observable is state-neutral. Remote service streams are cold Observables: each
-subscription creates an independent owning root with its own argument snapshot,
-wire identity, credit, terminal, and source subscription. The Framework never
-shares or replays application items across subscriptions.
+Factories are cold: creating an owner or Reconnection supervisor does not start
+network I/O. Call `connector.connect({ adapter })`,
+`reconnection.connect()`, or `acceptor.listen(adapter)` when the application is
+ready to transfer ownership of network resources to it.
 
-Explicit unsubscription is the caller-facing stream cancellation authority. If
-it wins before outgoing admission, no remote execution is possible. After
-admission, unsubscription closes only that local observation and sends one
-cooperative cancellation intent; source teardown and protocol evidence converge
-separately.
+## Bidirectional Calls And Fan-Out
 
-The built-in profile uses fixed `W=1` item credit. Credit is admission for one
-item, not a general demand signal or an unbounded buffer. A source that emits
-again without durable credit terminates that stream with `overflow`. Prefer
-sources that pace emissions rather than synchronous bursts.
-
-## Unary Cancellation
-
-A cancelable unary implementation has exactly one required trailing
-`AbortSignal`; its remote facade accepts `AbortSignal | undefined`:
+Every peer can both expose and resolve services. For a reverse call, define a
+second shared Descriptor and expose it through the Connector's stable peer:
 
 ```typescript
+const stopClientEvents = connector.peer.expose(remoteClientEvents, {
+  changed(message) {
+    console.log(message);
+  },
+});
+```
+
+An Acceptor can resolve that service on one peer:
+
+```typescript
+const clientEvents = peer.resolve(remoteClientEvents);
+await clientEvents.changed("session-opened");
+```
+
+Or it can create a stable group facade and invoke the current eligible peer
+snapshot:
+
+```typescript
+const allClientEvents = acceptor.resolveAll(remoteClientEvents);
+const deliveries = await allClientEvents.changed("maintenance-scheduled");
+
+for (const delivery of deliveries) {
+  if (delivery.status === "rejected") {
+    console.warn(delivery.peer, delivery.reason.code);
+  }
+}
+```
+
+The group Promise waits for every child and always fulfills with one
+`fulfilled` or `rejected` result per selected peer. One peer's failure does not
+fail-fast the whole group. If no peer is eligible, the result is an empty array.
+
+## Cancellation
+
+Mark a method as cancelable only when its local implementation has exactly one
+required trailing `AbortSignal`:
+
+```typescript
+import { createServiceIdentifier } from "@husky-di/core";
+import { createRemoteServiceDescriptor } from "@husky-di/remote";
+
 interface Reports {
   generate(reportId: string, signal: AbortSignal): Promise<string>;
 }
 
+const IReports = createServiceIdentifier<Reports>("IReports");
+
 const remoteReports = createRemoteServiceDescriptor(IReports, {
   wireName: "example.reports.v1",
-  members: {
-    generate: { kind: "unary", cancelable: true },
+  methods: {
+    generate: { cancelable: true },
   },
 });
+```
+
+The remote proxy replaces the implementation's final parameter with
+`AbortSignal | undefined`:
+
+```typescript
+import { RpcException, RpcExceptionCodeEnum } from "@husky-di/remote";
 
 const controller = new AbortController();
-const task = reports.generate("weekly", controller.signal);
-controller.abort();
-await task;
+const pendingReport = reports.generate("weekly", controller.signal);
 
-// Pass undefined explicitly when no cancellation is requested.
+controller.abort();
+
+try {
+  await pendingReport;
+} catch (error) {
+  if (
+    !(error instanceof RpcException) ||
+    error.code !== RpcExceptionCodeEnum.canceled
+  ) {
+    throw error;
+  }
+}
+
+// Pass undefined explicitly when this call should not be cancelable.
 await reports.generate("monthly", undefined);
 ```
 
-Cancellation is cooperative after admission and does not promise rollback of
-remote side effects.
-
-## Bidirectional Work And Explicit Multi-Peer Composition
-
-Every Peer can expose and resolve services. The Acceptor's `peers` getter is a
-frozen snapshot. Compose one single-peer facade per snapshot member:
-
-```typescript
-const peers = acceptor.peers;
-const deliveries = await Promise.allSettled(
-  peers.map((peer) =>
-    peer
-      .resolve(remoteClientEvents)
-      .changed("maintenance-scheduled")
-      .then((value) => ({ peer, value })),
-  ),
-);
-```
-
-For remote Observable children, ordinary RxJS composition makes cancellation
-and concurrency visible:
-
-```typescript
-import { from, map, mergeMap } from "rxjs";
-
-const peers = acceptor.peers;
-const samples$ = from(peers).pipe(
-  mergeMap(
-	(peer) =>
-	        .resolve(remoteMetrics)
-        .samples()
-        .pipe(map((value) => ({ peer, value }))),
-    4,
-  ),
-);
-
-const subscription = samples$.subscribe({
-  next: ({ peer, value }) => console.log(peer, value),
-  error: (error) => console.error(error),
-});
-
-// RxJS unsubscribes every active child stream.
-subscription.unsubscribe();
-```
-
-Each child is independent. The application owns concurrency, peer/result
-association, error policy, fail-fast versus wait-all behavior, and cancellation.
-There is no shared atomic admission, ordering, or fairness guarantee across
-children.
+Cancellation is cooperative after a call has been admitted. A `canceled` result
+does not promise that remote side effects were rolled back.
 
 ## Recovery, State, And Events
 
-The built-in Protocol can preserve one final-profile logical Session across a
-replacement physical connection while its finite Recovery window remains open.
-Recovery retains the stable Peer, resolved facades and Observable objects,
-exposures, eligible unary calls, active stream identities, source subscriptions,
-credit, and terminal authority. It does not resubscribe application sources.
+The built-in Protocol preserves a logical session across an interrupted physical
+connection while its recovery window remains open. Opt into finite automatic
+replacement attempts by supplying a fresh Adapter Factory:
 
-Use `createRpcConnectorReconnection()` when the application wants finite
-automatic replacement attempts from a fresh Adapter factory. Stop that
-supervisor before starting a direct `connector.connect({ adapter, signal })`
-attempt.
+```typescript
+const reconnection = createRpcConnectorReconnection({
+  connector,
+  adapterFactory: () =>
+    createNodeWebSocketConnectorAdapter({
+      url: "wss://rpc.example.com",
+    }),
+  policy: {
+    retryDelaysMs: [1_000, 2_000, 5_000, 10_000],
+    attemptTimeoutMs: 30_000,
+  },
+});
 
-Current snapshots and observation streams are separate:
+await reconnection.connect();
+```
 
-- `peer.state` and `peer.state$` describe one logical Peer.
+Recovery keeps the Connector's peer, resolved proxies, exposures, and eligible
+pending calls. `reconnection.state/state$` describes retry orchestration;
+`reconnection.connector.peer.state/state$` remains the authoritative Session
+state. `reconnection.event$` reports payload-free background attempt failures,
+including whether another configured delay was scheduled. Call
+`await reconnection.stop()` before taking over with a direct
+`connector.connect({ adapter, signal })` attempt. Stopping Reconnection does not
+close the Connector.
+
+Use the synchronous state getters for current snapshots and Observables for
+changes:
+
+- `peer.state` and `peer.state$` describe one logical peer.
 - `connector.state` and `connector.state$` describe the Connector owner.
-- `acceptor.state`, `acceptor.state$`, `acceptor.peers`, and
-  `acceptor.peers$` describe the Acceptor topology.
-- `event$` reports lifecycle plus unary and stream telemetry.
+- `acceptor.state` and `acceptor.state$` describe the Acceptor and listener.
+- `acceptor.peers` and `acceptor.peers$` expose current membership.
+- `event$` reports peer lifecycle, topology lifecycle, and call telemetry.
 
-State and membership Observables replay the latest value. `event$` is hot and
-non-replaying. These public observation streams are non-owning registrations;
-subscribing to them never starts or owns network/application work.
+State and membership streams replay their latest value. `event$` is hot and
+non-replaying, so subscribe before the operation whose events matter. Subscribing
+to any public Observable only observes resources; it never starts or owns them.
 
 ## Errors
 
-Framework call and stream failures use `RpcException`. Invalid local inputs
-use `TypeError`. Branch on `RpcException.code`, not message text:
+Framework-level call failures reject with `RpcException`. Invalid local inputs
+reject with `TypeError`. Branch on the stable `RpcException.code`, not its
+message:
+
+```typescript
+import { RpcException, RpcExceptionCodeEnum } from "@husky-di/remote";
+
+try {
+  await calculator.add(20, 22);
+} catch (error) {
+  if (
+    error instanceof RpcException &&
+    error.code === RpcExceptionCodeEnum.unavailable
+  ) {
+    // This invocation definitely did not execute remotely.
+  } else {
+    throw error;
+  }
+}
+```
 
 | Code | Meaning |
 | --- | --- |
-| `unavailable` | Work definitely did not execute remotely. |
-| `outcome-unknown` | Admitted work lost authoritative outcome evidence and may have executed. |
-| `canceled` | Cancellation won; remote rollback is not implied. |
-| `handler-failed` | The remote handler, source acquisition, item normalization, or source failed safely. |
-| `unknown-service` | No exposure exists for the exact wire service. |
-| `unknown-member` | The service exists, but the exact member route does not. |
-| `overflow` | A source emitted without its single durable credit. |
-| `protocol` | Continuity, validation, resource, or Protocol safety failed. |
+| `unavailable` | The call definitely did not execute remotely. Retry only under your application's policy. |
+| `outcome-unknown` | The call may have executed, but its authoritative outcome was lost. Treat retries as possible duplicates. |
+| `canceled` | Cancellation won the public result. It does not imply remote rollback. |
+| `handler-failed` | The remote handler failed. Remote messages, stacks, and thrown values are not exposed. |
+| `unknown-service` / `unknown-method` | The remote peer does not expose the requested wire route. |
+| `protocol` | A Protocol invariant, continuity, or resource fault made the operation unsafe. |
 
-Remote exception messages, stacks, causes, service/member spellings, arguments,
-items, and thrown values are never copied into public remote diagnostics.
+Calls only accept RPC application values: `null`, booleans, strings, finite
+numbers, arrays, and string-keyed records recursively composed from those values.
+Unsupported values reject locally instead of being passed to the Transport.
+
+The root entry exports enums for public call directions/statuses, event types,
+state statuses, listener stop reasons, close outcomes/reasons, and exception
+codes. The `/protocol` entry likewise exports its call-terminal, incoming-kind,
+and Session-transition enums, so callers and Protocol implementors do not need
+to repeat wire-stable strings.
 
 ## Shutdown And Close
 
-`shutdown()` performs Graceful Cutoff: it stops new local admission, lets
-already admitted unary and stream work converge within the absolute deadline,
-attempts graceful Session close, and then cleans up. An infinite or silent source
-can keep the owner draining until that deadline.
+Use `shutdown()` for normal application termination. It stops admitting new work,
+allows admitted work to drain within the configured deadline, performs graceful
+session close, and then cleans up physical resources.
 
-`close()` performs Force Cutoff immediately. It chooses all Session-wide
-terminal winners, fences application and wire effects, closes physical
-connections, and then settles asynchronous cleanup. Both methods are idempotent
-and return the same cached termination task for that owner.
+Use `close()` when the application must force the semantic cutoff immediately.
+It skips the graceful drain phase and can leave admitted outgoing calls with an
+`outcome-unknown` result. Physical cleanup can still take up to its configured
+deadline.
 
-## Pre-1.0 Migration
-
-The final `husky-di-rpc/1` profile is a one-time replacement of every draft
-profile. Any pre-final draft Session must be drained or terminated before
-deployment. Both endpoints must upgrade together, then establish a fresh Session
-on a fresh physical Connection. Same-version and cross-package-build final
-conformers must still prove fresh establishment and authenticated resume; that
-evidence is no compatibility bridge for old bytes.
-
-The method-only `methods` option was replaced by mixed `members`. The
-`unknown-method` code became `unknown-member`, and
-`maxPendingInvocationsPerSession` became
-`maxApplicationWorkPerSession` without aliases.
-
-The Remote Service Group API (`resolveAll`, `RemoteServiceGroup`, and
-`RpcPeerResult`) was removed. No replacement semantics are provided. Explicit
-composition provides no common normalization, atomic reservation, cancellation,
-fail-fast, wait-all, ordering, or fairness policy. Applications must choose
-those semantics for each independently owned child, as shown above.
+Both methods are idempotent and return the owner's cached termination task.
 
 ## Public Entry Points
 
@@ -362,23 +376,38 @@ those semantics for each independently owned child, as shown above.
 | `@husky-di/remote/protocol` | SPI for third-party semantic Protocol implementations. |
 | `@husky-di/remote/transport` | Physical Connection and Adapter contracts. |
 | `@husky-di/remote/conformance` | Protocol and Adapter conformance runners. |
-| `@husky-di/remote/wire/husky-di-rpc-1/schema` | Final closed wire schema. |
+| `@husky-di/remote/wire/husky-di-rpc-1/schema` | Closed normative wire schema. |
 | `@husky-di/remote/wire/husky-di-rpc-1/vectors` | Raw wire vectors. |
-| `@husky-di/remote/wire/husky-di-rpc-1/transcripts` | Stateful protocol transcripts. |
+| `@husky-di/remote/wire/husky-di-rpc-1/transcripts` | Normative protocol transcripts. |
 | `@husky-di/remote/wire/husky-di-rpc-1/security-vectors` | Cryptographic known-answer vectors. |
+
+Keep implementation seams private unless you are building a Protocol or
+Transport Adapter. Applications normally need only the root entry point plus a
+Transport package.
 
 ## Security
 
-The built-in Protocol authenticates fresh and Recovery transcripts, but active
-Session authority comes from the protected physical binding. The Transport must
-provide confidentiality, ordered integrity, anti-replay, and intended-endpoint
-authentication.
+The built-in Protocol authenticates its fresh and recovery transcripts, but its
+active-session authority comes from the protected physical binding. The
+Transport must provide confidentiality, ordered integrity and anti-replay, and
+authentication of the intended endpoint.
 
-The Protocol does not authenticate the initiating application or authorize
-service members. Before Acceptor handoff, deployments must authenticate and
-admit the initiator at the Transport or gateway boundary and enforce finite
-per-principal connection, Session, request-rate, handler-duration, frame, and
-queue limits. Do not deploy over an untrusted plaintext channel.
+The built-in Protocol does not authenticate the initiating application or
+authorize services and methods. A Session proof establishes continuity with an
+existing Session; it is not a user or tenant identity. Before handing an
+untrusted inbound Connection to an Acceptor, deployments must authenticate and
+admit the initiator at the transport or gateway boundary and enforce
+per-principal connection, Session, request-rate, and handler-duration limits.
+
+Do not deploy over an untrusted plaintext channel. For WebSockets, `ws:` is
+plaintext. A `wss:` deployment is suitable only when the application correctly
+validates the intended TLS endpoint and trust policy. Ordinary
+server-authenticated TLS authenticates the responder to the initiator; it does
+not by itself authenticate the initiator to the responder.
+
+Call telemetry deliberately excludes raw arguments, results, remote errors,
+credentials, and wire data. Applications that record payloads at their own
+caller or handler boundaries remain responsible for redaction and data handling.
 
 ## Related Documentation
 
@@ -386,18 +415,20 @@ queue limits. Do not deploy over an untrusted plaintext channel.
 - [Transport Adapter guide](docs/TRANSPORT.md)
 - [Normative specification](docs/SPECIFICATION.md)
 - [Requirement-to-evidence index](docs/REQUIREMENTS.md)
-- [Architecture source](docs/ARCHITECTURE.drawio) and
-  [rendered diagram](docs/ARCHITECTURE.png)
 - [`@husky-di/remote-websocket`](../remote-websocket/README.md)
 - [Changelog](CHANGELOG.md)
 
 ## Local Development
 
+From the repository root:
+
 ```bash
+pnpm --filter @husky-di/remote build
 pnpm --filter @husky-di/remote typecheck
 pnpm --filter @husky-di/remote test
-pnpm --filter @husky-di/remote build
 ```
+
+The complete test command includes the Playwright browser suite.
 
 ## License
 

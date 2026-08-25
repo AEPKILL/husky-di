@@ -4,7 +4,6 @@
  * @created 2026-08-19 00:00:00
  */
 
-import { deserialize, serialize } from "node:v8";
 import { Subject } from "rxjs";
 
 import type {
@@ -20,22 +19,14 @@ import type {
 	IRpcProtocolAcceptorRuntime,
 	IRpcProtocolConnectorHost,
 	IRpcProtocolConnectorRuntime,
-	IRpcProtocolIncomingStream,
 	IRpcProtocolInvocationRequest,
 	IRpcProtocolInvocationReservation,
 	IRpcProtocolInvocationSink,
 	IRpcProtocolSession,
 	IRpcProtocolSessionHost,
-	IRpcProtocolSourceSink,
-	IRpcProtocolStreamReservation,
-	IRpcProtocolSubscriberSink,
 	RpcApplicationValue,
 	RpcCallFailure,
 	RpcHandlerOutcome,
-	RpcIncomingStreamTerminal,
-	RpcProtocolStreamRequest,
-	RpcStreamFailure,
-	RpcStreamOutcome,
 } from "../../src/interfaces/protocol/rpc-protocol.interface";
 import type {
 	IRpcAcceptorAdapter,
@@ -64,7 +55,7 @@ type MemoryProtocolRecord =
 			readonly kind: "call";
 			readonly id: number;
 			readonly service: string;
-			readonly member: string;
+			readonly method: string;
 			readonly args: readonly RpcApplicationValue[];
 	  }
 	| { readonly kind: "cancel"; readonly id: number }
@@ -75,81 +66,27 @@ type MemoryProtocolRecord =
 			readonly value?: RpcApplicationValue;
 			readonly code?: RpcCallFailure;
 	  }
-	| {
-			readonly kind: "stream-start";
-			readonly id: number;
-			readonly service: string;
-			readonly member: string;
-			readonly streamKind: "stream-method" | "stream-property";
-			readonly args?: readonly RpcApplicationValue[];
-	  }
-	| {
-			readonly kind: "stream-item";
-			readonly id: number;
-			readonly ordinal: number;
-			readonly value: RpcApplicationValue;
-	  }
-	| {
-			readonly kind: "stream-credit";
-			readonly id: number;
-			readonly through: number;
-	  }
-	| { readonly kind: "stream-cancel"; readonly id: number }
-	| {
-			readonly kind: "stream-terminal";
-			readonly id: number;
-			readonly itemThrough: number;
-			readonly outcome: "completed" | "canceled" | "failed";
-			readonly code?: RpcStreamFailure;
-	  }
-	| { readonly kind: "stream-terminal-ack"; readonly id: number }
 	| { readonly kind: "fault" }
 	| { readonly kind: "close" };
 
-interface MemoryOutgoingStream {
-	readonly sink: IRpcProtocolSubscriberSink;
-	receivedItems: number;
-	creditThrough: number;
-	closed: boolean;
-}
+const memoryProtocolEncoder = new TextEncoder();
+const memoryProtocolDecoder = new TextDecoder();
 
-interface MemoryIncomingStream {
-	readonly request: RpcProtocolStreamRequest;
-	readonly source: IRpcProtocolSourceSink;
-	readonly control: IRpcProtocolIncomingStream;
-	itemThrough: number;
-	creditThrough: number;
-	closed: boolean;
-	released: boolean;
-}
-
-export type MemoryProtocolMutant =
-	| "accept-over-credit"
-	| "terminal-before-item"
-	| "reacquire-on-recovery"
-	| "terminal-ack-over-retirement"
-	| "adapter-rejection-overflow";
-
-export function createMemoryProtocolFixture(
-	mutant?: MemoryProtocolMutant,
-): IRpcProtocolConformanceFixture {
+export function createMemoryProtocolFixture(): IRpcProtocolConformanceFixture {
 	return {
-		protocol: createMemoryProtocol(false, mutant),
-		counterExhaustionProtocol: createMemoryProtocol(true, mutant),
+		protocol: createMemoryProtocol(false),
+		counterExhaustionProtocol: createMemoryProtocol(true),
 		createActiveProtocolFaultMessage: () =>
 			encodeMemoryRecord({ kind: "fault" }),
 	};
 }
 
-function createMemoryProtocol(
-	counterExhaustion: boolean,
-	mutant?: MemoryProtocolMutant,
-): IRpcProtocol {
+function createMemoryProtocol(counterExhaustion: boolean): IRpcProtocol {
 	return Object.freeze({
 		createConnector: (host: IRpcProtocolConnectorHost) =>
-			new MemoryProtocolRuntime("connector", host, counterExhaustion, mutant),
+			new MemoryProtocolRuntime("connector", host, counterExhaustion),
 		createAcceptor: (host: IRpcProtocolAcceptorHost) =>
-			new MemoryProtocolRuntime("acceptor", host, counterExhaustion, mutant),
+			new MemoryProtocolRuntime("acceptor", host, counterExhaustion),
 	});
 }
 
@@ -159,12 +96,8 @@ class MemoryProtocolRuntime
 	readonly #role: "connector" | "acceptor";
 	readonly #host: IRpcProtocolConnectorHost | IRpcProtocolAcceptorHost;
 	readonly #counterExhaustion: boolean;
-	readonly #mutant: MemoryProtocolMutant | undefined;
 	readonly #binding = Promise.withResolvers<void>();
 	readonly #outgoing = new Map<number, IRpcProtocolInvocationSink>();
-	readonly #outgoingStreams = new Map<number, MemoryOutgoingStream>();
-	readonly #incomingStreams = new Map<number, MemoryIncomingStream>();
-	readonly #pendingTerminalAcks = new Set<number>();
 	readonly #incoming = new Map<
 		number,
 		{
@@ -178,23 +111,17 @@ class MemoryProtocolRuntime
 	#session: MemoryProtocolSession | undefined;
 	#sessionHost: IRpcProtocolSessionHost | undefined;
 	#nextCallId = 1;
-	#nextStreamId = 1;
 	#closing = false;
-	#draining = false;
 	#cleanupTask: Promise<void> | undefined;
-	#shutdown: PromiseWithResolvers<void> | undefined;
-	#sendTail = Promise.resolve();
 
 	public constructor(
 		role: "connector" | "acceptor",
 		host: IRpcProtocolConnectorHost | IRpcProtocolAcceptorHost,
 		counterExhaustion: boolean,
-		mutant?: MemoryProtocolMutant,
 	) {
 		this.#role = role;
 		this.#host = host;
 		this.#counterExhaustion = counterExhaustion;
-		this.#mutant = mutant;
 	}
 
 	public bind(connection: IRpcConnection, _signal: AbortSignal): Promise<void> {
@@ -202,13 +129,6 @@ class MemoryProtocolRuntime
 			return Promise.reject(new Error("Only the Connector runtime can bind."));
 		}
 		this.#subscribe(connection);
-		if (this.#session !== undefined) {
-			this.#reacquireSourcesForMutant();
-			this.#sessionHost?.transition({
-				type: RpcProtocolSessionTransitionTypeEnum.recovered,
-			});
-			return Promise.resolve();
-		}
 		void Promise.resolve().then(() => this.#send({ kind: "hello" }));
 		return this.#binding.promise;
 	}
@@ -221,21 +141,15 @@ class MemoryProtocolRuntime
 			return Promise.reject(new Error("Only the Acceptor runtime can accept."));
 		}
 		this.#subscribe(connection);
-		if (this.#session !== undefined) {
-			this.#reacquireSourcesForMutant();
-			this.#sessionHost?.transition({
-				type: RpcProtocolSessionTransitionTypeEnum.recovered,
-			});
-			return Promise.resolve();
-		}
 		return this.#binding.promise;
 	}
 
 	public async shutdown(): Promise<void> {
-		this.#draining = true;
-		this.#shutdown ??= Promise.withResolvers<void>();
-		this.#checkDrained();
-		return this.#shutdown.promise;
+		this.#closing = true;
+		if (this.#connection !== undefined) {
+			await this.#send({ kind: "close" });
+			await this.#connection.close();
+		}
 	}
 
 	public close(): void {
@@ -247,25 +161,7 @@ class MemoryProtocolRuntime
 			});
 		}
 		this.#outgoing.clear();
-		for (const stream of this.#outgoingStreams.values()) {
-			if (stream.closed) {
-				continue;
-			}
-			stream.closed = true;
-			stream.sink
-				.reserveTerminal({
-					type: "failed",
-					code: RpcExceptionCodeEnum.outcomeUnknown,
-				})
-				.commit();
-		}
-		this.#outgoingStreams.clear();
-		this.#pendingTerminalAcks.clear();
-		for (const stream of this.#incomingStreams.values()) {
-			this.#finishIncomingStream(stream, { type: "session-terminated" });
-		}
 		void this.#connection?.close();
-		this.#shutdown?.resolve(undefined);
 	}
 
 	public cleanup(): Promise<void> {
@@ -298,76 +194,20 @@ class MemoryProtocolRuntime
 				return {
 					start: () => {
 						this.#outgoing.set(id, sink);
-						this.#sendIgnoringFailure({
+						void this.#send({
 							kind: "call",
 							id,
 							service: request.service,
-							member: request.member,
+							method: request.method,
 							args: request.args.value,
 						});
 					},
-					cancel: () => this.#sendIgnoringFailure({ kind: "cancel", id }),
+					cancel: () => void this.#send({ kind: "cancel", id }),
 				};
 			},
 			release() {
 				if (settled) {
 					throw new Error("Invocation reservation already settled.");
-				}
-				settled = true;
-			},
-		};
-	}
-
-	public reserveStream(
-		request: RpcProtocolStreamRequest,
-	): IRpcProtocolStreamReservation | undefined {
-		if (this.#closing || this.#draining || this.#sessionHost === undefined) {
-			return undefined;
-		}
-		let settled = false;
-		return {
-			commit: (sink) => {
-				if (settled) {
-					throw new Error("Stream reservation already settled.");
-				}
-				settled = true;
-				const id = this.#nextStreamId;
-				this.#nextStreamId += 1;
-				let started = false;
-				return {
-					start: () => {
-						if (started) {
-							return;
-						}
-						started = true;
-						this.#outgoingStreams.set(id, {
-							sink,
-							receivedItems: 0,
-							creditThrough: 1,
-							closed: false,
-						});
-						this.#sendIgnoringFailure({
-							kind: "stream-start",
-							id,
-							service: request.service,
-							member: request.member,
-							streamKind: request.kind,
-							...(request.kind === "stream-method"
-								? { args: request.args.value }
-								: {}),
-						});
-					},
-					cancel: () => {
-						if (!started) {
-							return;
-						}
-						this.#sendIgnoringFailure({ kind: "stream-cancel", id });
-					},
-				};
-			},
-			release() {
-				if (settled) {
-					throw new Error("Stream reservation already settled.");
 				}
 				settled = true;
 			},
@@ -390,16 +230,6 @@ class MemoryProtocolRuntime
 					} else {
 						this.#sessionHost.fault(RpcCloseReasonEnum.protocolFault, cause);
 					}
-				});
-			},
-			error: (error: unknown) => {
-				if (this.#closing) {
-					return;
-				}
-				this.#connection = undefined;
-				this.#sessionHost?.transition({
-					type: RpcProtocolSessionTransitionTypeEnum.recovering,
-					...(error instanceof Error ? { cause: error } : {}),
 				});
 			},
 		});
@@ -437,24 +267,6 @@ class MemoryProtocolRuntime
 			}
 			case "result":
 				this.#receiveResult(record);
-				break;
-			case "stream-start":
-				await this.#receiveStreamStart(record);
-				break;
-			case "stream-item":
-				await this.#receiveStreamItem(record);
-				break;
-			case "stream-credit":
-				this.#receiveStreamCredit(record);
-				break;
-			case "stream-cancel":
-				this.#receiveStreamCancel(record.id);
-				break;
-			case "stream-terminal":
-				this.#receiveStreamTerminal(record);
-				break;
-			case "stream-terminal-ack":
-				this.#receiveStreamTerminalAck(record.id);
 				break;
 			case "fault":
 				this.#sessionHost?.fault(
@@ -495,7 +307,7 @@ class MemoryProtocolRuntime
 		const args = this.#host.normalizeApplicationArguments(record.args);
 		const reserved = this.#sessionHost?.reserveIncomingCall({
 			service: record.service,
-			member: record.member,
+			method: record.method,
 			args,
 		});
 		if (reserved === undefined) {
@@ -547,336 +359,11 @@ class MemoryProtocolRuntime
 		}
 	}
 
-	async #receiveStreamStart(
-		record: Extract<MemoryProtocolRecord, { readonly kind: "stream-start" }>,
-	): Promise<void> {
-		const request: RpcProtocolStreamRequest =
-			record.streamKind === "stream-method"
-				? {
-						service: record.service,
-						member: record.member,
-						kind: "stream-method",
-						args: this.#host.normalizeApplicationArguments(record.args ?? []),
-					}
-				: {
-						service: record.service,
-						member: record.member,
-						kind: "stream-property",
-					};
-		const reservation = this.#sessionHost?.reserveIncomingStream(request);
-		if (reservation === undefined) {
-			this.#pendingTerminalAcks.add(record.id);
-			await this.#sendStreamTerminal(record.id, 0, {
-				type: "failed",
-				code: RpcExceptionCodeEnum.unavailable,
-			});
-			return;
-		}
-		if (reservation.kind === "unknown") {
-			const control = reservation.reservation.commit();
-			const outcome = { type: "failed", code: reservation.code } as const;
-			await new Promise<void>((resolve) => control.finish(outcome, resolve));
-			this.#pendingTerminalAcks.add(record.id);
-			await this.#sendStreamTerminal(record.id, 0, outcome);
-			return;
-		}
-		let state: MemoryIncomingStream | undefined;
-		const source: IRpcProtocolSourceSink = {
-			reserveEmission: () => {
-				if (
-					state === undefined ||
-					state.closed ||
-					state.itemThrough >= state.creditThrough
-				) {
-					if (state !== undefined && !state.closed) {
-						this.#finishIncomingStream(state, {
-							type: "failed",
-							code: RpcExceptionCodeEnum.overflow,
-						});
-					}
-					return undefined;
-				}
-				let open = true;
-				return {
-					commit: (snapshot) => {
-						if (!open || state === undefined || state.closed) {
-							return;
-						}
-						open = false;
-						state.itemThrough += 1;
-						const itemRecord = {
-							kind: "stream-item",
-							id: record.id,
-							ordinal: state.itemThrough,
-							value: snapshot.value,
-						} as const;
-						if (this.#mutant === "terminal-before-item") {
-							void Promise.resolve().then(() =>
-								this.#sendIgnoringFailure(itemRecord),
-							);
-						} else {
-							this.#sendIgnoringFailure(itemRecord);
-						}
-					},
-					fail: () => {
-						if (!open || state === undefined || state.closed) {
-							return;
-						}
-						open = false;
-						this.#finishIncomingStream(state, {
-							type: "failed",
-							code: RpcExceptionCodeEnum.handlerFailed,
-						});
-					},
-				};
-			},
-			finish: (outcome) => {
-				if (state !== undefined) {
-					this.#finishIncomingStream(state, outcome);
-				}
-			},
-		};
-		const control = reservation.reservation.commit(source);
-		state = {
-			request,
-			source,
-			control,
-			itemThrough: 0,
-			creditThrough: 1,
-			closed: false,
-			released: false,
-		};
-		this.#incomingStreams.set(record.id, state);
-	}
-
-	async #receiveStreamItem(
-		record: Extract<MemoryProtocolRecord, { readonly kind: "stream-item" }>,
-	): Promise<void> {
-		const stream = this.#outgoingStreams.get(record.id);
-		const itemIsInvalid =
-			stream === undefined ||
-			stream.closed ||
-			record.ordinal !== stream.receivedItems + 1 ||
-			record.ordinal > stream.creditThrough;
-		if (itemIsInvalid) {
-			if (this.#mutant === "accept-over-credit") {
-				return;
-			}
-			this.#sessionHost?.fault(
-				RpcCloseReasonEnum.protocolFault,
-				new Error("Memory Protocol received an over-credit stream item."),
-			);
-			return;
-		}
-		const projection = stream.sink.reserveItem(
-			this.#host.normalizeApplicationValue(record.value),
-		);
-		stream.receivedItems = record.ordinal;
-		const effect = projection.commit();
-		if (effect === "rearm" && !stream.closed) {
-			stream.creditThrough += 1;
-			await this.#send({
-				kind: "stream-credit",
-				id: record.id,
-				through: stream.creditThrough,
-			});
-		}
-	}
-
-	#receiveStreamCredit(
-		record: Extract<MemoryProtocolRecord, { readonly kind: "stream-credit" }>,
-	): void {
-		const stream = this.#incomingStreams.get(record.id);
-		if (stream === undefined || stream.closed) {
-			return;
-		}
-		if (record.through !== stream.creditThrough + 1) {
-			this.#sessionHost?.fault(
-				RpcCloseReasonEnum.protocolFault,
-				new Error("Memory Protocol received an invalid stream credit."),
-			);
-			return;
-		}
-		stream.creditThrough = record.through;
-	}
-
-	#receiveStreamCancel(id: number): void {
-		const stream = this.#incomingStreams.get(id);
-		if (stream !== undefined) {
-			this.#finishIncomingStream(stream, { type: "canceled" });
-		}
-	}
-
-	#receiveStreamTerminal(
-		record: Extract<MemoryProtocolRecord, { readonly kind: "stream-terminal" }>,
-	): void {
-		const stream = this.#outgoingStreams.get(record.id);
-		const terminalOvertookItem =
-			stream !== undefined &&
-			!stream.closed &&
-			record.itemThrough === stream.receivedItems + 1;
-		if (
-			stream === undefined ||
-			stream.closed ||
-			(record.itemThrough !== stream.receivedItems &&
-				!(terminalOvertookItem && this.#mutant === "terminal-before-item"))
-		) {
-			this.#sessionHost?.fault(
-				RpcCloseReasonEnum.protocolFault,
-				new Error("Memory Protocol stream terminal overtook an item."),
-			);
-			return;
-		}
-		const outcome: RpcStreamOutcome =
-			record.outcome === "completed"
-				? { type: "completed" }
-				: record.outcome === "canceled"
-					? { type: "canceled" }
-					: {
-							type: "failed",
-							code: record.code ?? RpcExceptionCodeEnum.handlerFailed,
-						};
-		const projection = stream.sink.reserveTerminal(outcome);
-		stream.closed = true;
-		this.#outgoingStreams.delete(record.id);
-		projection.commit();
-		this.#sendIgnoringFailure({ kind: "stream-terminal-ack", id: record.id });
-		this.#checkDrained();
-	}
-
-	#receiveStreamTerminalAck(id: number): void {
-		if (!this.#pendingTerminalAcks.delete(id)) {
-			this.#sessionHost?.fault(
-				RpcCloseReasonEnum.protocolFault,
-				new Error("Memory Protocol received an unknown stream terminal ACK."),
-			);
-			return;
-		}
-		if (this.#mutant === "terminal-ack-over-retirement") {
-			this.#outgoingStreams.clear();
-		}
-		this.#checkDrained();
-	}
-
-	#finishIncomingStream(
-		stream: MemoryIncomingStream,
-		outcome: RpcIncomingStreamTerminal | { readonly type: "completed" },
-	): void {
-		if (stream.closed) {
-			return;
-		}
-		stream.closed = true;
-		const incomingOutcome: RpcIncomingStreamTerminal = outcome;
-		stream.control.finish(incomingOutcome, () => {
-			if (stream.released) {
-				return;
-			}
-			stream.released = true;
-			for (const [id, candidate] of this.#incomingStreams) {
-				if (candidate === stream) {
-					this.#incomingStreams.delete(id);
-					this.#pendingTerminalAcks.add(id);
-					void this.#sendStreamTerminal(
-						id,
-						stream.itemThrough,
-						incomingOutcome,
-					).catch(() => undefined);
-					break;
-				}
-			}
-			this.#checkDrained();
-		});
-	}
-
-	#sendStreamTerminal(
-		id: number,
-		itemThrough: number,
-		outcome: RpcIncomingStreamTerminal | RpcStreamOutcome,
-	): Promise<void> {
-		return this.#send({
-			kind: "stream-terminal",
-			id,
-			itemThrough,
-			outcome:
-				outcome.type === "completed"
-					? "completed"
-					: outcome.type === "canceled"
-						? "canceled"
-						: "failed",
-			...(outcome.type === "failed" ? { code: outcome.code } : {}),
-		});
-	}
-
-	#checkDrained(): void {
-		if (
-			!this.#draining ||
-			this.#closing ||
-			this.#outgoing.size > 0 ||
-			this.#incoming.size > 0 ||
-			this.#outgoingStreams.size > 0 ||
-			this.#incomingStreams.size > 0 ||
-			this.#pendingTerminalAcks.size > 0
-		) {
-			return;
-		}
-		this.#closing = true;
-		void this.#send({ kind: "close" })
-			.catch(() => undefined)
-			.finally(() => {
-				void this.#connection?.close().finally(() => {
-					this.#shutdown?.resolve(undefined);
-				});
-			});
-	}
-
 	#send(record: MemoryProtocolRecord): Promise<void> {
-		const task = this.#sendTail.then(() => {
-			if (this.#connection === undefined) {
-				throw new Error("Protocol is not bound.");
-			}
-			return this.#connection.send(encodeMemoryRecord(record));
-		});
-		this.#sendTail = task.catch(() => undefined);
-		return task.catch((error) => {
-			if (!this.#closing) {
-				if (this.#mutant === "adapter-rejection-overflow") {
-					for (const stream of this.#outgoingStreams.values()) {
-						if (!stream.closed) {
-							stream.closed = true;
-							stream.sink
-								.reserveTerminal({
-									type: "failed",
-									code: RpcExceptionCodeEnum.overflow,
-								})
-								.commit();
-						}
-					}
-				}
-				this.#sessionHost?.transition({
-					type: RpcProtocolSessionTransitionTypeEnum.recovering,
-					cause: error instanceof Error ? error : new Error(String(error)),
-				});
-			}
-			throw error;
-		});
-	}
-
-	#sendIgnoringFailure(record: MemoryProtocolRecord): void {
-		void this.#send(record).catch(() => undefined);
-	}
-
-	#reacquireSourcesForMutant(): void {
-		if (this.#mutant !== "reacquire-on-recovery") {
-			return;
+		if (this.#connection === undefined) {
+			return Promise.reject(new Error("Protocol is not bound."));
 		}
-		for (const stream of this.#incomingStreams.values()) {
-			const reservation = this.#sessionHost?.reserveIncomingStream(
-				stream.request,
-			);
-			if (reservation?.kind === "source") {
-				reservation.reservation.commit(stream.source);
-			}
-		}
+		return this.#connection.send(encodeMemoryRecord(record));
 	}
 }
 
@@ -891,12 +378,6 @@ class MemoryProtocolSession implements IRpcProtocolSession {
 		request: IRpcProtocolInvocationRequest,
 	): IRpcProtocolInvocationReservation | undefined {
 		return this.#runtime.reserveInvocation(request);
-	}
-
-	public reserveStream(
-		request: RpcProtocolStreamRequest,
-	): IRpcProtocolStreamReservation | undefined {
-		return this.#runtime.reserveStream(request);
 	}
 
 	public forceClose(): void {
@@ -931,11 +412,13 @@ function handlerOutcomeRecord(
 }
 
 function encodeMemoryRecord(record: MemoryProtocolRecord): Uint8Array {
-	return new Uint8Array(serialize(record));
+	return memoryProtocolEncoder.encode(JSON.stringify(record));
 }
 
 function decodeMemoryRecord(message: Uint8Array): MemoryProtocolRecord {
-	return deserialize(message) as MemoryProtocolRecord;
+	return JSON.parse(
+		memoryProtocolDecoder.decode(message),
+	) as MemoryProtocolRecord;
 }
 
 export function createMemoryConnectorFixture(): IRpcConnectorAdapterConformanceFixture {

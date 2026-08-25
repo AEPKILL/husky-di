@@ -5,17 +5,16 @@
  */
 
 export { RpcAcceptorListenerStopReasonEnum } from "@/enums/rpc-acceptor-listener-stop-reason.enum";
+export { RpcCallDirectionEnum } from "@/enums/rpc-call-direction.enum";
 export { RpcCallStatusEnum } from "@/enums/rpc-call-status.enum";
 export { RpcCloseOutcomeEnum } from "@/enums/rpc-close-outcome.enum";
 export { RpcCloseReasonEnum } from "@/enums/rpc-close-reason.enum";
 export { RpcConnectorReconnectionAttemptFailureStageEnum } from "@/enums/rpc-connector-reconnection-attempt-failure-stage.enum";
 export { RpcConnectorReconnectionEventTypeEnum } from "@/enums/rpc-connector-reconnection-event-type.enum";
 export { RpcConnectorReconnectionStopReasonEnum } from "@/enums/rpc-connector-reconnection-stop-reason.enum";
-export { RpcEventDirectionEnum } from "@/enums/rpc-event-direction.enum";
 export { RpcEventTypeEnum } from "@/enums/rpc-event-type.enum";
 export { RpcExceptionCodeEnum } from "@/enums/rpc-exception-code.enum";
 export { RpcStateStatusEnum } from "@/enums/rpc-state-status.enum";
-export { RpcStreamStatusEnum } from "@/enums/rpc-stream-status.enum";
 export { RpcException } from "@/exceptions/rpc.exception";
 export { createRemoteServiceDescriptor } from "@/factories/remote-service-descriptor.factory";
 export { createRpcAcceptor } from "@/factories/rpc-acceptor.factory";
@@ -41,6 +40,7 @@ export type {
 	IRpcConnector,
 	IRpcPeer,
 	RpcEvent,
+	RpcPeerResult,
 } from "@/interfaces/rpc-caller.interface";
 export type { IRpcConnection } from "@/interfaces/rpc-connection.interface";
 export type { IRpcConnectorReconnection } from "@/interfaces/rpc-connector-reconnection.interface";

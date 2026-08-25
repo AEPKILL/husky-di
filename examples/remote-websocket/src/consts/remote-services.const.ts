@@ -13,7 +13,7 @@ export const REMOTE_BROWSER_DISPLAY_SERVICE = createRemoteServiceDescriptor(
 	IBrowserDisplayService,
 	{
 		wireName: "example.browser-display.v1",
-		members: { showMessage: { kind: "unary" } },
+		methods: { showMessage: true },
 	},
 );
 
@@ -21,10 +21,6 @@ export const REMOTE_GREETING_SERVICE = createRemoteServiceDescriptor(
 	IGreetingService,
 	{
 		wireName: "example.greeting.v1",
-		members: {
-			clock$: { kind: "stream-property" },
-			greet: { kind: "unary" },
-			greetCancelable: { kind: "unary", cancelable: true },
-		},
+		methods: { greet: true },
 	},
 );

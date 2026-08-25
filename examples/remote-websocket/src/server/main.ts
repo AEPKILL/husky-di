@@ -15,14 +15,12 @@ import {
 } from "@husky-di/remote";
 import { createNodeWebSocketAcceptorAdapter } from "@husky-di/remote-websocket/node";
 import { Hono } from "hono";
-import { interval, map } from "rxjs";
 
 import {
 	REMOTE_BROWSER_DISPLAY_SERVICE,
 	REMOTE_GREETING_SERVICE,
 } from "@/consts/remote-services.const";
 import type { NodeDiagnosticsSnapshot } from "@/types/rpc-diagnostics.type";
-import { greet, greetCancelable } from "@/utils/greeting.util";
 
 const SERVER_HOST = "127.0.0.1";
 const SERVER_PORT = 3_000;
@@ -44,9 +42,11 @@ async function main(): Promise<void> {
 	});
 
 	acceptor.expose(REMOTE_GREETING_SERVICE, {
-		clock$: interval(1_000).pipe(map(() => new Date().toISOString())),
-		greet,
-		greetCancelable,
+		async greet(name, delayMs) {
+			assertDelay(delayMs);
+			await new Promise<void>((resolve) => setTimeout(resolve, delayMs));
+			return `Hello, ${name}!`;
+		},
 	});
 
 	const app = new Hono();
@@ -84,6 +84,12 @@ async function main(): Promise<void> {
 		} finally {
 			await close(httpServer);
 		}
+	}
+}
+
+function assertDelay(value: number): void {
+	if (!Number.isSafeInteger(value) || value < 0 || value > 10_000) {
+		throw new RangeError("delayMs must be a safe integer from 0 to 10000.");
 	}
 }
 
