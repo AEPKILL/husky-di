@@ -7,15 +7,15 @@ Parent: [协议可替换的双向 RPC 框架](../map.md)
 
 ## Question
 
-内置默认 Protocol 的规范化 message grammar 应是什么，才能精确表达 Handshake、Session Recovery、unary call、ACK、cancel、result、remote error 与 terminal 状态，并在任意有序 message Transport 上安全运行？决定 envelope 字段、Codec 与语义层的关系、wire types、版本与能力协商、未知字段/消息处理和跨语言规范形式，同时避免把默认 Protocol 的细节泄漏进通用 RPC Interface。
+内置默认 Protocol 的规范化 message grammar 应是什么，才能精确表达 Handshake、Session Recovery、unary call、ACK、cancel、result、remote error 与 terminal 状态，并在任意有序 message Transport 上安全运行？决定 envelope 字段、Codec 与语义层的关系、wire types、版本与能力协商、未知字段/消息处理和 runtime grammar source，同时避免把默认 Protocol 的细节泄漏进通用 RPC Interface。
 
 ## Answer
 
-默认 Protocol 固定为一个专用、严格、跨语言可实现的 UTF-8 JSON Protocol Profile，首个
+默认 Protocol 固定为一个专用、严格的 UTF-8 JSON Protocol Profile，首个
 profile identifier 为 `husky-di-rpc/1`。Profile 是不可拆分的完整契约：它同时固定 Codec、
 wire grammar 与所有 v1 semantic guarantees；不提供 Codec negotiation、capability bag、
 extension registry 或可静默关闭 Recovery、去重、terminal replay 的 feature flag。默认
-Protocol 的 wire types 只存在于其 private Implementation 与公开 wire specification 中，
+Protocol 的 wire types 从 package-private Zod schemas 派生，只存在于 private Implementation，
 不得进入通用 RPC Interface。
 
 本决议采用研究中的分层思路，但把最初建议的多个语义 ACK 进一步收敛为一个统一的
@@ -55,8 +55,8 @@ Message Receipt ACK。业内证据与取舍记录见
   注入 custom Protocol 不自动扩展它。
 - Application JSON number 的语义域是 finite IEEE-754 binary64；发送的十进制表示必须
   round-trip 到同一 binary64 value。Protocol 自己需要精确比较的整数另外受 safe-integer
-  schema 约束。
-- Optional member 缺席与 member value `null` 不同；只有相应 schema 允许时才可使用
+  grammar 约束。
+- Optional member 缺席与 member value `null` 不同；只有相应 grammar 允许时才可使用
   `null`。
 
 ### Wire types 与 profile selection
@@ -73,7 +73,7 @@ Message Receipt ACK。业内证据与取舍记录见
   精确比较，不做 normalization。Method name `then` 在 `husky-di-rpc/1` 中保留并拒绝，与公开
   Descriptor/proxy 的 non-thenable invariant 保持一致。
 - `ProfileId` 是 non-empty、最多 `256 B` 的 exact-match atomic string，不按 SemVer range 拆解；空字符串
-  是 schema violation而不是可协商的unsupported profile。Fresh initiator 发送非空、
+  是 tree-grammar violation而不是可协商的unsupported profile。Fresh initiator 发送非空、
   无重复、按自身偏好排序的 `profiles`；responder 选择列表中第一个自己支持的 exact string，
   并在 `accept` 中原样回显。没有交集必须显式 `reject`，至少使用
   `unsupported-profile` rejection code；不得回传支持列表后让对方猜测、按 package commit
@@ -153,7 +153,7 @@ secure Recovery/ACK guarantee。
 分离。`ackThrough: N` 是累计 Message Receipt ACK，精确表示接收方已连续接纳该方向所有
 `seq <= N` 的消息。
 
-“接纳”不是 socket/Codec 看见 bytes。ACK 只能在整条 record 完成 lexical/schema/resource
+“接纳”不是 socket/Codec 看见 bytes。ACK 只能在整条 record 完成 lexical/tree-grammar/resource
 validation、sequence continuity 检查，并且相应幂等 state transition 已登记进跨 Physical
 Connection 保留的 Session/Call State、留下足以识别重放的 evidence 后推进。它不证明
 handler 已完成、外部副作用已提交或 dedupe evidence 已可删除。
@@ -246,26 +246,29 @@ Nested untagged Protocol objects（当前只有 `error` object）对known fields
 - Profile 发布后，同一 profile 只能增加旧 endpoint 可安全忽略的 optional fields。新增 message
   kind、required transition、改变既有字段含义或改变 mandatory guarantee 必须使用新 profile。
 
-因此 JSON Schema 不能全局使用 `additionalProperties: false`。v1 不定义 ignorable extension
-message registry；unknown message kind 保持 Protocol fault。
+Zod grammar 必须让top-level wire record与nested tagged `SemanticMessage` 保持开放尾部，同时让
+nested untagged Protocol object保持封闭；不能用一个全局strict/loose策略抹平差异。v1 不定义
+ignorable extension message registry；unknown message kind 保持 Protocol fault。
 
-### 跨语言 normative artifacts
+### Normative evidence 与 runtime grammar
 
-Default Protocol 的权威规范必须同时包含：
+Default Protocol 的公开 normative evidence 包含：
 
 - normative prose：phase/state、每种 record 的前置条件、state effect、receipt point 与 fault
   scope；
-- JSON Schema 2020-12：解码后 tagged union、required members、known value domains 与开放尾部；
 - valid/invalid raw-byte vectors：UTF-8、BOM、duplicate keys、number/safe-integer boundary、
   unknown fields/kinds、phase violation、canonical base64url、JCS/HMAC/HKDF 与 profile rejection；
+- JCS/HKDF/HMAC known-answer vectors：固定 canonical transcript、derivation input 与 expected output；
 - stateful transcript vectors：fresh、accepted/rejected resume、lost ACK/replay、duplicate/gap、
   lost accept 后更高 `resumeAttempt`、signed continuity failure、immediate result、cancel intent 与
   terminal receipt。
 
-TypeScript declarations、generated bindings 与 Default Protocol Implementation 都不是 wire
-contract 的权威来源。独立 conformance runner 的 export/CLI、package placement、版本策略与
-完整验证矩阵由 [`决定规范验证与 package contract`](15-decide-verification-package-contract.md)
-决定。
+Executable decoded-tree grammar 只手写一次：由Default Protocol的package-private Zod schemas定义
+tagged union、required members、known value domains、开放/封闭尾部与phase-specific record shape；
+对应wire types使用 `z.output<typeof schema>` 派生，不再手写同一字段表。Zod schemas不是public
+Interface或发布artifact；v1不发布`schema.json`。若未来出现具体的非TypeScript互操作需求，再从Zod
+grammar生成machine-readable artifact，不维护第二份手写grammar。package placement、版本策略与完整验证矩阵由
+[`决定规范验证与 package contract`](15-decide-verification-package-contract.md)决定。
 
 ### 明确保留给后续 tickets
 
@@ -280,6 +283,6 @@ contract 的权威来源。独立 conformance runner 的 export/CLI、package pl
 - [`决定顺序、并发、缓冲与恢复资源上限`](13-decide-ordering-concurrency-resource-bounds.md)：
   message/depth/string limits、ACK timing、replay window、sequence exhaustion 与 backpressure；
 - [`决定 trust-boundary validation 与 Session Recovery 安全`](14-decide-validation-recovery-security.md)：
-  proof schema/canonicalization、认证绑定、replay resistance 与 violation fault scope。
+  proof shape/canonicalization、认证绑定、replay resistance 与 violation fault scope。
 
 本票不增加生产代码、不决定 private Module 的类/文件切分，也不改变 public Protocol seam。

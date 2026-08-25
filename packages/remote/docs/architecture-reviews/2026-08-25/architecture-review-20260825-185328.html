@@ -1,0 +1,423 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Architecture review — @husky-di/remote</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script type="module">
+      import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+      mermaid.initialize({
+        startOnLoad: true,
+        theme: "neutral",
+        securityLevel: "loose",
+        flowchart: { curve: "basis", htmlLabels: true },
+        themeVariables: {
+          fontFamily: "ui-sans-serif, system-ui, sans-serif",
+          primaryColor: "#f8fafc",
+          primaryTextColor: "#0f172a",
+          primaryBorderColor: "#94a3b8",
+          lineColor: "#64748b",
+          clusterBkg: "#f8fafc",
+          clusterBorder: "#cbd5e1"
+        }
+      });
+    </script>
+    <style>
+      :root { color-scheme: light; }
+      body {
+        background:
+          radial-gradient(circle at 12% 0%, rgba(16, 185, 129, .08), transparent 28rem),
+          #f5f3ee;
+      }
+      .paper { box-shadow: 0 20px 60px rgba(15, 23, 42, .07); }
+      .seam { border-style: dashed; }
+      .deep {
+        background: linear-gradient(145deg, #0f172a, #1e293b);
+        color: white;
+        box-shadow: inset 0 1px rgba(255,255,255,.1), 0 12px 30px rgba(15,23,42,.16);
+      }
+      .leak-line { stroke: #dc2626; stroke-width: 2.25; stroke-dasharray: 5 5; }
+      .muted-grid {
+        background-image: linear-gradient(rgba(148,163,184,.12) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(148,163,184,.12) 1px, transparent 1px);
+        background-size: 20px 20px;
+      }
+      .diagram-pane { min-height: 322px; }
+      .mermaid { display: flex; align-items: center; justify-content: center; min-height: 266px; }
+      code { font-variant-ligatures: none; }
+    </style>
+  </head>
+  <body class="text-slate-900 antialiased">
+    <main class="mx-auto max-w-6xl space-y-12 px-5 py-12 sm:px-8 lg:px-10">
+      <header class="paper overflow-hidden rounded-3xl border border-slate-200 bg-white">
+        <div class="border-b border-slate-200 px-7 py-8 sm:px-10">
+          <div class="flex flex-wrap items-start justify-between gap-6">
+            <div>
+              <p class="text-xs font-semibold uppercase tracking-[.24em] text-emerald-700">Architecture review</p>
+              <h1 class="mt-2 font-serif text-4xl tracking-tight text-slate-950 sm:text-5xl">@husky-di/remote</h1>
+              <p class="mt-3 font-mono text-sm text-slate-500">packages/remote/ · 2026-08-25 · codegraph index current</p>
+            </div>
+            <div class="grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-slate-200 bg-slate-200 text-center sm:grid-cols-4">
+              <div class="bg-stone-50 px-5 py-4"><div class="text-2xl font-semibold">91</div><div class="text-[10px] uppercase tracking-wider text-slate-500">source files</div></div>
+              <div class="bg-stone-50 px-5 py-4"><div class="text-2xl font-semibold">14,841</div><div class="text-[10px] uppercase tracking-wider text-slate-500">source LOC</div></div>
+              <div class="bg-stone-50 px-5 py-4"><div class="text-2xl font-semibold">1,663</div><div class="text-[10px] uppercase tracking-wider text-slate-500">symbols</div></div>
+              <div class="bg-stone-50 px-5 py-4"><div class="text-2xl font-semibold">5,622</div><div class="text-[10px] uppercase tracking-wider text-slate-500">edges</div></div>
+            </div>
+          </div>
+        </div>
+        <div class="flex flex-wrap gap-x-7 gap-y-3 bg-stone-50 px-7 py-4 text-xs text-slate-600 sm:px-10">
+          <span class="inline-flex items-center gap-2"><span class="h-4 w-7 rounded border border-slate-400 bg-white"></span>solid box = module</span>
+          <span class="inline-flex items-center gap-2"><span class="h-4 w-7 rounded border border-dashed border-slate-500 bg-white"></span>dashed line = seam</span>
+          <span class="inline-flex items-center gap-2"><span class="h-0 w-7 border-t-2 border-dashed border-red-600"></span>red arrow = leakage</span>
+          <span class="inline-flex items-center gap-2"><span class="h-4 w-7 rounded bg-slate-900"></span>dark box = deep module</span>
+        </div>
+      </header>
+
+      <section id="candidates" class="space-y-12">
+        <article id="validation" class="paper overflow-hidden rounded-3xl border border-slate-200 bg-white">
+          <div class="px-7 py-8 sm:px-10">
+            <div class="flex flex-wrap items-start justify-between gap-4">
+              <div>
+                <p class="text-xs font-semibold uppercase tracking-[.22em] text-slate-400">Candidate 01</p>
+                <h2 class="mt-2 font-serif text-3xl tracking-tight">Deepen validation at its owning seam</h2>
+              </div>
+              <div class="flex flex-wrap gap-2">
+                <span class="rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-800">Strong</span>
+                <span class="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">in-process</span>
+              </div>
+            </div>
+
+            <div class="mt-6 rounded-2xl border border-slate-200 bg-stone-50 px-5 py-4 font-mono text-xs leading-6 text-slate-600">
+              <div>src/utils/rpc-schema.util.ts:29–259</div>
+              <div>src/factories/remote-service-descriptor.factory.ts:34–151</div>
+              <div>src/impls/protocol/rpc-codec.impl.ts:355–559 · src/impls/rpc-peer.impl.ts:124–178, 340–528</div>
+              <div>src/factories/rpc-connector-reconnection.factory.ts:37–124 · src/utils/rpc-runtime-policy.util.ts:72–234</div>
+            </div>
+
+            <div class="mt-7 grid gap-5 lg:grid-cols-2">
+              <section class="diagram-pane muted-grid rounded-2xl border border-slate-200 p-5">
+                <div class="flex items-center justify-between"><h3 class="text-xs font-semibold uppercase tracking-[.2em] text-slate-500">Before · shallow catalog</h3><span class="font-mono text-xs text-red-700">12 callers</span></div>
+                <div class="relative mt-7 flex flex-col items-center">
+                  <div class="grid w-full max-w-md grid-cols-3 gap-2 text-center text-[10px] uppercase tracking-wider text-slate-500">
+                    <div class="rounded border border-slate-300 bg-white px-2 py-2">Descriptor</div>
+                    <div class="rounded border border-slate-300 bg-white px-2 py-2">Codec</div>
+                    <div class="rounded border border-slate-300 bg-white px-2 py-2">Peer</div>
+                  </div>
+                  <svg class="h-12 w-full max-w-md" viewBox="0 0 420 48" aria-hidden="true">
+                    <defs><marker id="arrow-red-1" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z" fill="#dc2626"/></marker></defs>
+                    <path d="M70 0 C70 28 150 18 190 46" class="leak-line" fill="none" marker-end="url(#arrow-red-1)"/>
+                    <path d="M210 0 L210 46" class="leak-line" fill="none" marker-end="url(#arrow-red-1)"/>
+                    <path d="M350 0 C350 28 270 18 230 46" class="leak-line" fill="none" marker-end="url(#arrow-red-1)"/>
+                  </svg>
+                  <div class="w-full max-w-sm overflow-hidden rounded-xl border-2 border-slate-500 bg-white shadow-sm">
+                    <div class="flex h-20 items-center justify-between bg-rose-50 px-5">
+                      <span class="text-xs font-semibold uppercase tracking-wider text-rose-800">interface</span>
+                      <span class="font-mono text-2xl font-semibold text-rose-900">47 symbols</span>
+                    </div>
+                    <div class="flex h-24 items-center justify-between border-t-2 border-slate-500 px-5">
+                      <span class="text-xs font-semibold uppercase tracking-wider text-slate-500">implementation</span>
+                      <span class="font-mono text-sm text-slate-700">raw Zod schemas</span>
+                    </div>
+                  </div>
+                  <p class="mt-4 text-center font-mono text-xs text-red-700">25 / 34 referenced symbols have one source consumer</p>
+                </div>
+              </section>
+
+              <section class="diagram-pane rounded-2xl border border-slate-800 bg-slate-950 p-5 text-white">
+                <div class="flex items-center justify-between"><h3 class="text-xs font-semibold uppercase tracking-[.2em] text-slate-400">After · domain locality</h3><span class="font-mono text-xs text-emerald-300">small interfaces</span></div>
+                <div class="mt-7 grid grid-cols-2 gap-3">
+                  <div class="deep rounded-xl border border-slate-600 p-4"><div class="text-[10px] uppercase tracking-widest text-emerald-300">Descriptor module</div><div class="mt-7 text-sm">validation inside implementation</div></div>
+                  <div class="deep rounded-xl border border-slate-600 p-4"><div class="text-[10px] uppercase tracking-widest text-emerald-300">Codec module</div><div class="mt-7 text-sm">wire grammar inside implementation</div></div>
+                  <div class="deep rounded-xl border border-slate-600 p-4"><div class="text-[10px] uppercase tracking-widest text-emerald-300">Peer module</div><div class="mt-7 text-sm">call invariants inside implementation</div></div>
+                  <div class="deep rounded-xl border border-slate-600 p-4"><div class="text-[10px] uppercase tracking-widest text-emerald-300">Policy module</div><div class="mt-7 text-sm">role constraints inside implementation</div></div>
+                </div>
+                <div class="mx-auto mt-4 w-fit rounded-lg border border-dashed border-slate-500 px-4 py-2 text-xs text-slate-300">only genuinely shared primitive checks</div>
+              </section>
+            </div>
+
+            <div class="mt-7 grid gap-px overflow-hidden rounded-2xl border border-slate-200 bg-slate-200 md:grid-cols-3">
+              <div class="bg-white p-5"><h3 class="text-[10px] font-semibold uppercase tracking-widest text-slate-400">Problem</h3><p class="mt-2 text-sm leading-6">module interface 按 schema 技术而非 Remote Service Descriptor、Default RPC Protocol、Peer seam 切分；理解 invariant 必须离开 owning implementation。</p></div>
+              <div class="bg-white p-5"><h3 class="text-[10px] font-semibold uppercase tracking-widest text-slate-400">Solution</h3><p class="mt-2 text-sm leading-6">让单-consumer validation implementation 回到 owning module；只保留确实跨多个 callers 的最小共享规则，public interfaces 不变。</p></div>
+              <div class="bg-white p-5"><h3 class="text-[10px] font-semibold uppercase tracking-widest text-slate-400">Deletion test</h3><p class="mt-2 text-sm leading-6">删除 catalog 后，25 个 symbols 只回到各自唯一 caller，复杂度被集中而非扩散：当前 module 明确 shallow。</p></div>
+            </div>
+            <ul class="mt-6 flex flex-wrap gap-2 text-xs">
+              <li class="rounded-full bg-emerald-50 px-3 py-2 text-emerald-800">locality: invariant beside owner</li>
+              <li class="rounded-full bg-emerald-50 px-3 py-2 text-emerald-800">leverage: existing tests survive</li>
+              <li class="rounded-full bg-emerald-50 px-3 py-2 text-emerald-800">delete 25 shallow exports</li>
+              <li class="rounded-full bg-emerald-50 px-3 py-2 text-emerald-800">fewer codegraph hops</li>
+            </ul>
+          </div>
+        </article>
+
+        <article id="session-projection" class="paper overflow-hidden rounded-3xl border border-slate-200 bg-white">
+          <div class="px-7 py-8 sm:px-10">
+            <div class="flex flex-wrap items-start justify-between gap-4">
+              <div>
+                <p class="text-xs font-semibold uppercase tracking-[.22em] text-slate-400">Candidate 02</p>
+                <h2 class="mt-2 font-serif text-3xl tracking-tight">Deepen Logical Session projection</h2>
+              </div>
+              <div class="flex flex-wrap gap-2">
+                <span class="rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-800">Strong</span>
+                <span class="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">in-process</span>
+              </div>
+            </div>
+            <div class="mt-6 rounded-2xl border border-slate-200 bg-stone-50 px-5 py-4 font-mono text-xs leading-6 text-slate-600">
+              <div>src/utils/rpc-session-transition.util.ts:13–52 · src/interfaces/rpc-peer.interface.ts:28–41</div>
+              <div>src/impls/rpc-connector.impl.ts:507–640 · src/impls/rpc-acceptor.impl.ts:1006–1133</div>
+              <div>src/impls/rpc-peer.impl.ts:234–264 · tests/requirements/acceptor-mutation-batch.test.ts</div>
+            </div>
+
+            <div class="mt-7 grid gap-5 lg:grid-cols-2">
+              <section class="diagram-pane rounded-2xl border border-slate-200 bg-stone-50 p-4">
+                <h3 class="px-1 text-xs font-semibold uppercase tracking-[.2em] text-slate-500">Before · policy leaks after the seam</h3>
+                <pre class="mermaid">
+flowchart TB
+  P[Protocol Session transition] --> U[boolean transition util]
+  U -. raw transition .-> C[Connector branch]
+  U -. raw transition .-> A[Acceptor branch]
+  C --> CS[map Peer state]
+  C --> CE[classify outcome + event]
+  A --> AS[map Peer state + membership]
+  A --> AE[classify outcome + event]
+  C -. stage / flush / complete .-> R[Peer runtime mechanics]
+  A -. stage / flush / complete .-> R
+  classDef leak stroke:#dc2626,stroke-width:2px,color:#991b1b;
+  class U,C,A,R leak;
+                </pre>
+              </section>
+              <section class="diagram-pane rounded-2xl border border-slate-800 bg-slate-950 p-4 text-white">
+                <h3 class="px-1 text-xs font-semibold uppercase tracking-[.2em] text-slate-400">After · one deep projection module</h3>
+                <pre class="mermaid">
+flowchart TB
+  P[Protocol Session transition] --> D[Deep Session projection module]
+  subgraph X[implementation hidden]
+    V[validation] --> S[state + outcome]
+    S --> O[notification ordering]
+  end
+  D --> X
+  X --> C[Connector adapter<br/>one Peer]
+  X --> A[Acceptor adapter<br/>membership]
+  classDef deep fill:#0f172a,stroke:#34d399,color:#fff,stroke-width:3px;
+  class D,X deep;
+                </pre>
+              </section>
+            </div>
+            <div class="mt-7 grid gap-px overflow-hidden rounded-2xl border border-slate-200 bg-slate-200 md:grid-cols-3">
+              <div class="bg-white p-5"><h3 class="text-[10px] font-semibold uppercase tracking-widest text-slate-400">Problem</h3><p class="mt-2 text-sm leading-6">当前 module 只返回 boolean；Connector 与 Acceptor 仍分别掌握 Peer state、close outcome、error、event 与 membership 投影，seam 太 shallow。</p></div>
+              <div class="bg-white p-5"><h3 class="text-[10px] font-semibold uppercase tracking-widest text-slate-400">Solution</h3><p class="mt-2 text-sm leading-6">让私有 Session projection module 吸收完整可观察投影；两个 Topology Owner 只保留一 Peer / 多 Peer 的 adapter 差异，不新增 public generic Owner interface。</p></div>
+              <div class="bg-white p-5"><h3 class="text-[10px] font-semibold uppercase tracking-widest text-slate-400">Deletion test</h3><p class="mt-2 text-sm leading-6">删除当前 predicate 会把规则复制回两个 owners；深化后若删除，完整投影政策才会跨两个 callers 重现，module 才真正形成 depth。</p></div>
+            </div>
+            <ul class="mt-6 flex flex-wrap gap-2 text-xs">
+              <li class="rounded-full bg-emerald-50 px-3 py-2 text-emerald-800">locality: one transition policy</li>
+              <li class="rounded-full bg-emerald-50 px-3 py-2 text-emerald-800">leverage: Connector + Acceptor</li>
+              <li class="rounded-full bg-emerald-50 px-3 py-2 text-emerald-800">interface loses mechanics</li>
+              <li class="rounded-full bg-emerald-50 px-3 py-2 text-emerald-800">tests keep owner test surface</li>
+            </ul>
+          </div>
+        </article>
+
+        <article id="retained-bytes" class="paper overflow-hidden rounded-3xl border border-slate-200 bg-white">
+          <div class="px-7 py-8 sm:px-10">
+            <div class="flex flex-wrap items-start justify-between gap-4">
+              <div>
+                <p class="text-xs font-semibold uppercase tracking-[.22em] text-slate-400">Candidate 03</p>
+                <h2 class="mt-2 font-serif text-3xl tracking-tight">Deepen Retained-Byte Ledgers ownership</h2>
+              </div>
+              <div class="flex flex-wrap gap-2">
+                <span class="rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-800">Strong</span>
+                <span class="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">in-process</span>
+              </div>
+            </div>
+            <div class="mt-6 rounded-2xl border border-slate-200 bg-stone-50 px-5 py-4 font-mono text-xs leading-6 text-slate-600">
+              <div>src/utils/rpc-session-retained-bytes.util.ts:12–52</div>
+              <div>src/impls/protocol/rpc-session.impl.ts:244–323, 1970–1979</div>
+              <div>src/impls/rpc-connector.impl.ts:140–155 · src/impls/rpc-acceptor.impl.ts:953–970</div>
+              <div>tests/resources/protocol-owner-retained-bytes.test.ts:9–66, 182–239</div>
+            </div>
+
+            <div class="mt-7 grid gap-5 lg:grid-cols-2">
+              <section class="diagram-pane rounded-2xl border border-slate-200 bg-stone-50 p-4">
+                <h3 class="px-1 text-xs font-semibold uppercase tracking-[.2em] text-slate-500">Before · hidden backchannel</h3>
+                <pre class="mermaid">
+flowchart LR
+  S[Default Session] -->|register / unregister| W[(global WeakMap)]
+  C[Connector] -->|lookup + fallback| W
+  A[Acceptor] -->|lookup + fallback| W
+  W -. hidden capability .-> SL[Session child ledger]
+  C --> OL[Owner ledger]
+  A --> OL
+  T[Test] -. imports private util .-> W
+  classDef leak stroke:#dc2626,stroke-width:2px,color:#991b1b;
+  class W,C,A,T leak;
+                </pre>
+              </section>
+              <section class="diagram-pane rounded-2xl border border-slate-800 bg-slate-950 p-4 text-white">
+                <h3 class="px-1 text-xs font-semibold uppercase tracking-[.2em] text-slate-400">After · accounting has one owner</h3>
+                <pre class="mermaid">
+flowchart TB
+  S[Default Session] --> D[Deep Retained-Byte Ledgers module]
+  C[Connector adapter] --> D
+  A[Acceptor adapter] --> D
+  D --> X[Session child + Owner ledger<br/>atomic acquire / release]
+  CP[Custom Protocol] -. existing public seam .-> O[Owner reservation]
+  classDef deep fill:#0f172a,stroke:#34d399,color:#fff,stroke-width:3px;
+  class D,X deep;
+                </pre>
+              </section>
+            </div>
+            <div class="mt-7 grid gap-px overflow-hidden rounded-2xl border border-slate-200 bg-slate-200 md:grid-cols-3">
+              <div class="bg-white p-5"><h3 class="text-[10px] font-semibold uppercase tracking-widest text-slate-400">Problem</h3><p class="mt-2 text-sm leading-6">两级原子 accounting 被拆到 Session、ledger implementation、WeakMap registry 与两个 Topology Owner；register/unregister 与 fallback 是未写入类型的 interface 知识。</p></div>
+              <div class="bg-white p-5"><h3 class="text-[10px] font-semibold uppercase tracking-widest text-slate-400">Solution</h3><p class="mt-2 text-sm leading-6">让私有 Retained-Byte Ledgers module 拥有 child + Owner acquisition、built-in Session association、terminal release 与 custom Protocol fallback；不扩大 public Protocol seam。</p></div>
+              <div class="bg-white p-5"><h3 class="text-[10px] font-semibold uppercase tracking-widest text-slate-400">Deletion test</h3><p class="mt-2 text-sm leading-6">当前三个操作几乎等于 implementation；直接删除会把路由复制到 Session 与两个 owners。吸收完整 invariant 后，module 才有足够 depth。</p></div>
+            </div>
+            <ul class="mt-6 flex flex-wrap gap-2 text-xs">
+              <li class="rounded-full bg-emerald-50 px-3 py-2 text-emerald-800">locality: charge + release together</li>
+              <li class="rounded-full bg-emerald-50 px-3 py-2 text-emerald-800">leverage: both owners</li>
+              <li class="rounded-full bg-emerald-50 px-3 py-2 text-emerald-800">remove global backchannel</li>
+              <li class="rounded-full bg-emerald-50 px-3 py-2 text-emerald-800">tests cross one interface</li>
+            </ul>
+          </div>
+        </article>
+
+        <article id="descriptor" class="paper overflow-hidden rounded-3xl border border-slate-200 bg-white">
+          <div class="px-7 py-8 sm:px-10">
+            <div class="flex flex-wrap items-start justify-between gap-4">
+              <div>
+                <p class="text-xs font-semibold uppercase tracking-[.22em] text-slate-400">Candidate 04</p>
+                <h2 class="mt-2 font-serif text-3xl tracking-tight">Deepen the Remote Service Descriptor module</h2>
+              </div>
+              <div class="flex flex-wrap gap-2">
+                <span class="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-800">Worth exploring</span>
+                <span class="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">in-process</span>
+              </div>
+            </div>
+            <div class="mt-6 rounded-2xl border border-slate-200 bg-stone-50 px-5 py-4 font-mono text-xs leading-6 text-slate-600">
+              <div>src/interfaces/remote-service-descriptor.interface.ts:11–23</div>
+              <div>src/factories/remote-service-descriptor.factory.ts:22–33, 123–166</div>
+              <div>src/utils/rpc-facade.util.ts:21–40 · src/utils/rpc-exposure.util.ts:59–118</div>
+              <div>src/impls/rpc-peer.impl.ts:266–337 · src/impls/rpc-acceptor.impl.ts:193–206, 487–602</div>
+            </div>
+
+            <div class="mt-7 grid gap-5 lg:grid-cols-2">
+              <section class="diagram-pane rounded-2xl border border-slate-200 bg-stone-50 p-4">
+                <h3 class="px-1 text-xs font-semibold uppercase tracking-[.2em] text-slate-500">Before · opaque outside, raw inside</h3>
+                <pre class="mermaid">
+flowchart LR
+  O[Opaque Descriptor] --> G[raw data getter]
+  G -. wireName + methods encoding .-> P[Peer resolve]
+  G -. wireName + methods encoding .-> A[Acceptor resolveAll]
+  G -. cancelable encoding .-> F[Facade util]
+  G -. allowlist encoding .-> E[Exposure util]
+  classDef leak stroke:#dc2626,stroke-width:2px,color:#991b1b;
+  class G,P,A,F,E leak;
+                </pre>
+              </section>
+              <section class="diagram-pane rounded-2xl border border-slate-800 bg-slate-950 p-4 text-white">
+                <h3 class="px-1 text-xs font-semibold uppercase tracking-[.2em] text-slate-400">After · representation stays inside</h3>
+                <div class="mx-auto mt-8 max-w-md">
+                  <div class="deep rounded-2xl border-2 border-emerald-400 p-5">
+                    <div class="flex items-center justify-between border-b border-slate-600 pb-3"><span class="text-xs font-semibold uppercase tracking-widest text-emerald-300">Remote Service Descriptor module</span><span class="text-xs text-slate-300">deep</span></div>
+                    <div class="grid grid-cols-2 gap-2 pt-4 text-center text-xs text-slate-200">
+                      <div class="rounded bg-white/5 px-2 py-4">genuine Descriptor</div>
+                      <div class="rounded bg-white/5 px-2 py-4">Wire Service Name</div>
+                      <div class="rounded bg-white/5 px-2 py-4">allowlist meaning</div>
+                      <div class="rounded bg-white/5 px-2 py-4">facade / exposure derivation</div>
+                    </div>
+                  </div>
+                  <div class="mt-5 grid grid-cols-2 gap-3 text-center text-xs"><div class="rounded-lg border border-dashed border-slate-500 px-3 py-3">Peer caller</div><div class="rounded-lg border border-dashed border-slate-500 px-3 py-3">Acceptor caller</div></div>
+                </div>
+              </section>
+            </div>
+            <div class="mt-7 grid gap-px overflow-hidden rounded-2xl border border-slate-200 bg-slate-200 md:grid-cols-3">
+              <div class="bg-white p-5"><h3 class="text-[10px] font-semibold uppercase tracking-widest text-slate-400">Problem</h3><p class="mt-2 text-sm leading-6">public Descriptor 是 opaque，package 内 interface 却是 raw record；四个 callers 都解释 Wire Service Name、allowlist 与 cancelable encoding，representation 跨 seam 泄漏。</p></div>
+              <div class="bg-white p-5"><h3 class="text-[10px] font-semibold uppercase tracking-widest text-slate-400">Solution</h3><p class="mt-2 text-sm leading-6">让 Descriptor module 保有鉴真、metadata interpretation、facade 与 exposure derivation implementation；Peer / Acceptor 不再学习 raw representation。</p></div>
+              <div class="bg-white p-5"><h3 class="text-[10px] font-semibold uppercase tracking-widest text-slate-400">Deletion test</h3><p class="mt-2 text-sm leading-6">删除 getter 与 shallow utils 会让相同 interpretation 散回四个 callers；概念 seam 真实，但当前 raw-data interface 没有足够 depth。</p></div>
+            </div>
+            <ul class="mt-6 flex flex-wrap gap-2 text-xs">
+              <li class="rounded-full bg-amber-50 px-3 py-2 text-amber-800">locality: representation stays private</li>
+              <li class="rounded-full bg-amber-50 px-3 py-2 text-amber-800">leverage: four callers</li>
+              <li class="rounded-full bg-amber-50 px-3 py-2 text-amber-800">tests use create / expose / resolve</li>
+              <li class="rounded-full bg-amber-50 px-3 py-2 text-amber-800">fewer interpretation sites</li>
+            </ul>
+          </div>
+        </article>
+
+        <article id="private-seams" class="paper overflow-hidden rounded-3xl border border-slate-200 bg-white">
+          <div class="px-7 py-8 sm:px-10">
+            <div class="flex flex-wrap items-start justify-between gap-4">
+              <div>
+                <p class="text-xs font-semibold uppercase tracking-[.22em] text-slate-400">Candidate 05</p>
+                <h2 class="mt-2 font-serif text-3xl tracking-tight">Audit one-adapter private seams</h2>
+              </div>
+              <div class="flex flex-wrap gap-2">
+                <span class="rounded-full bg-slate-200 px-3 py-1 text-xs font-semibold text-slate-700">Speculative</span>
+                <span class="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">mock</span>
+              </div>
+            </div>
+            <div class="mt-6 rounded-2xl border border-slate-200 bg-stone-50 px-5 py-4 font-mono text-xs leading-6 text-slate-600">
+              <div>src/types/protocol/rpc-protocol.type.ts:16–26 · src/factories/rpc-protocol.factory.ts:17–41</div>
+              <div>src/interfaces/protocol/{rpc-codec,rpc-cryptography,rpc-endpoint,rpc-binding-attempt,rpc-session}.interface.ts</div>
+              <div>tests/architecture/dependency-direction.test.ts:14–38 · tests/protocol/test.utils.ts:8–214</div>
+            </div>
+
+            <div class="mt-7 grid gap-5 lg:grid-cols-2">
+              <section class="diagram-pane rounded-2xl border border-slate-200 bg-stone-50 p-4">
+                <h3 class="px-1 text-xs font-semibold uppercase tracking-[.2em] text-slate-500">Before · construction graph is the interface</h3>
+                <pre class="mermaid">
+flowchart TB
+  F[Protocol factory] --> C[IRpcCodec]
+  F --> K[IRpcCryptography]
+  F --> E[IRpcEndpoint]
+  F --> B[IRpcBindingAttempt]
+  F --> S[IRpcSession]
+  C --> C1[one adapter]
+  K --> K1[one adapter]
+  E --> E1[one adapter]
+  B --> B1[one adapter]
+  S --> S1[one adapter]
+  classDef hypo stroke:#dc2626,stroke-width:2px,stroke-dasharray:5 4,color:#991b1b;
+  class C,K,E,B,S hypo;
+                </pre>
+              </section>
+              <section class="diagram-pane rounded-2xl border border-slate-800 bg-slate-950 p-4 text-white">
+                <h3 class="px-1 text-xs font-semibold uppercase tracking-[.2em] text-slate-400">After · real seams only</h3>
+                <div class="mx-auto mt-9 max-w-lg">
+                  <div class="rounded-xl border border-dashed border-emerald-400 p-3 text-center text-xs uppercase tracking-widest text-emerald-300">public RPC Protocol seam · default + custom adapters</div>
+                  <div class="mt-4 deep rounded-2xl border-2 border-slate-600 px-6 py-8 text-center">
+                    <div class="text-lg font-semibold">Deep Default RPC Protocol module</div>
+                    <div class="mx-auto mt-5 grid max-w-md grid-cols-3 gap-2 text-[10px] text-slate-300"><span class="rounded bg-white/5 py-3">Codec</span><span class="rounded bg-white/5 py-3">Binding</span><span class="rounded bg-white/5 py-3">Session</span></div>
+                    <div class="mt-4 text-xs text-slate-400">internal seams remain only where behavior actually varies</div>
+                  </div>
+                </div>
+              </section>
+            </div>
+            <div class="mt-7 grid gap-px overflow-hidden rounded-2xl border border-slate-200 bg-slate-200 md:grid-cols-3">
+              <div class="bg-white p-5"><h3 class="text-[10px] font-semibold uppercase tracking-widest text-slate-400">Problem</h3><p class="mt-2 text-sm leading-6">五个 injected private seams 各只有一个 production adapter；理解 built-in Protocol 要在 factory、type、interface 与 implementation 间跳转，hypothetical seam 增加 test surface。</p></div>
+              <div class="bg-white p-5"><h3 class="text-[10px] font-semibold uppercase tracking-widest text-slate-400">Solution</h3><p class="mt-2 text-sm leading-6">逐 seam 审计，只删除未证明变化的 private interface；保留 Codec、Session 等 deep concrete modules，也保留有 default/custom adapters 的 public RPC Protocol seam。</p></div>
+              <div class="bg-white p-5"><h3 class="text-[10px] font-semibold uppercase tracking-widest text-slate-400">Deletion test</h3><p class="mt-2 text-sm leading-6">删除单-adapter contract 只让装配集中到 built-in Protocol，不会在 N callers 重现；删除 concrete deep modules 则会破坏 locality，因此不在范围内。</p></div>
+            </div>
+            <div class="mt-6 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs leading-5 text-amber-900"><span class="font-semibold">Architecture guard:</span> <code>dependency-direction.test.ts</code> blanket-enforces factory-only implementation binding；选择此候选前应 grill 其 load-bearing 理由，避免把有价值的 internal seam 一并删除。</div>
+            <ul class="mt-6 flex flex-wrap gap-2 text-xs">
+              <li class="rounded-full bg-slate-100 px-3 py-2 text-slate-700">locality: assembly stays inside</li>
+              <li class="rounded-full bg-slate-100 px-3 py-2 text-slate-700">interface: real variation only</li>
+              <li class="rounded-full bg-slate-100 px-3 py-2 text-slate-700">tests stop mirroring topology</li>
+              <li class="rounded-full bg-slate-100 px-3 py-2 text-slate-700">YAGNI: no blanket collapse</li>
+            </ul>
+          </div>
+        </article>
+      </section>
+
+      <section id="top-recommendation" class="paper overflow-hidden rounded-3xl border border-emerald-200 bg-emerald-950 text-white">
+        <div class="grid gap-7 px-8 py-9 md:grid-cols-[1fr_auto] md:items-center sm:px-10">
+          <div>
+            <p class="text-xs font-semibold uppercase tracking-[.24em] text-emerald-300">Top recommendation</p>
+            <h2 class="mt-2 font-serif text-3xl">Deepen validation at its owning seam</h2>
+            <p class="mt-3 max-w-3xl text-sm leading-6 text-emerald-50">25 / 34 referenced schema symbols 只有一个源码 consumer；deletion test 最干净，public interfaces 与 ADR 均不变，同时以最低迁移风险获得最大的 locality 与 AI-navigability leverage。</p>
+          </div>
+          <a href="#validation" class="rounded-full bg-white px-5 py-3 text-sm font-semibold text-emerald-950 shadow-sm">View candidate 01 ↑</a>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>

@@ -91,8 +91,8 @@ evidence；后者还需要 Session 提供 fencing 与 replay-boundary 已排除�
 - Structural typing 只证明形状，不能证明 LSP。Framework 必须定义 normative semantic
   contract，并提供通过同一 Protocol Interface、成对运行 Connector/Acceptor 与 in-memory
   Connection 的黑盒 conformance harness。默认与第三方 Protocol 都必须通过同一 semantic
-  suite；默认 Protocol 还必须通过自己的跨语言 wire vectors。Harness 的导出位置、版本策略与
-  精确矩阵由后续 package-contract 决策确定。
+  suite；默认 Protocol 还必须通过自己的raw-byte、security与stateful transcript corpora。
+  Harness 的导出位置、版本策略与精确矩阵由后续 package-contract 决策确定。
 
 本票只锁定 public/private seam、职责、状态作用域、依赖方向、协商上限、故障隔离原则与
 conformance ownership。Envelope、Codec 格式、Session identity/resume proof、ACK message 与

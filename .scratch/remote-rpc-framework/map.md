@@ -17,7 +17,7 @@ Status: resolved
 - v1 只支持双向 unary 调用；本地同步结果在远端变为 Promise，不支持 notification 或 streaming。
 - `RpcPeer` 是稳定的远端对等方；`RpcConnector` 与 `RpcAcceptor` 是 Topology Owner。Logical Session 可跨瞬时 Physical Connection 断线恢复，且对调用者保持透明，但远端进程重启可以终止 Session。
 - RxJS 是公开依赖。公开事件流是 hot、multicast、无 replay 的只读 Observable；state 与 membership streams 则 multicast、replay latest，并发出完整 immutable snapshot。所有订阅只用于观察，不拥有资源，也不以 ref-count 控制底层生命周期。
-- 对外提供一个深的 Protocol seam；Handshake、Session、ACK、Codec 等可在 Implementation 内部分层。包内提供恰好一个默认 Protocol，并公开精确、可由其他语言实现的 wire specification；v1 只交付 TypeScript Implementation。
+- 对外提供一个深的 Protocol seam；Handshake、Session、ACK、Codec 等可在 Implementation 内部分层。包内提供恰好一个默认 Protocol；它的 executable decoded-tree grammar 由 package-private Zod schemas 单点定义，wire types 从这些 schemas 派生，v1 只交付 TypeScript Implementation。
 - `@husky-di/remote` 只定义 Transport Adapter seam。WebSocket 等正式 Adapter 放入独立包，例如 `@husky-di/remote-websocket`；当前地图不实施这些包。
 - `resolveAll()` 返回稳定的 Remote Service Group；每次方法调用重新截取一个 `RpcPeer` 快照，并保持结果与稳定 `RpcPeer` 的关联。
 - 复用 `@husky-di/core` 的基础类型，但 v1 不自动接入 Container。业务认证、授权和限流留给 application/Transport Adapter；Transport framing validation 与 admission limits 属于 Adapter，decoded wire input validation、Protocol state resource limits 和 Session Recovery 安全属于 RPC Protocol。
@@ -63,8 +63,9 @@ Status: resolved
   replay 保留 immutable `(seq, SemanticMessage)` 并为每次发送生成可携带最新 ACK 的 envelope；
   AckOnly 允许 cursor `0`，connection-local Ping/Pong 负责 idle activity probe；fresh/resume 使用固定
   JCS/HKDF/HMAC security carriers，而 active records 继承 protected Transport integrity；优雅停机
-  使用 unsequenced、no-ACK/no-reply顶层 Close，强制关闭不发送；最终以 prose、JSON Schema、raw-byte
-  vectors 与 stateful transcripts共同定义跨语言 contract。
+  使用 unsequenced、no-ACK/no-reply顶层 Close，强制关闭不发送；最终以 prose、raw-byte vectors、
+  security known-answer vectors 与 stateful transcripts定义normative behavior，以package-private Zod
+  schemas作为唯一手写的executable decoded-tree grammar。
 - [决定 Physical Connection Adapter 契约](issues/07-decide-physical-connection-adapter-contract.md)：
   Connector/Acceptor 统一采用先订阅 `connection$` 再启动的一次性交接，三-member Connection 提供
   完整有序 message、串行 Local Admission send 与 Direct Connection Close；Adapter 在最早入口
@@ -136,7 +137,7 @@ Status: resolved
   默认 v1 以受保护 Transport 提供 confidentiality、ordered integrity 与 responder endpoint identity，
   再用每 Session 独立 secret、固定 JCS/HKDF/HMAC transcript proof、单调 `resumeAttempt` 和 signed
   authoritative reject保护跨 binding continuity；active records 不重复加 Protocol MAC。Validation
-  从 endpoint fencing、bounded lexical/schema、proof/phase、retained semantics 到 durable capacity
+  从 endpoint fencing、bounded lexical/tree-grammar、proof/phase、retained semantics 到 durable capacity
   disposition 分层；永久 authenticated poison 第一次即 Session fault，普通容量不足则原子返回
   Definite Non-Execution。`sessionId` 不授予 authority，通用 telemetry 无 payload/secret/raw error，
   plaintext Adapter 只满足 functional conformance、不享有 secure Recovery guarantee。
@@ -166,7 +167,7 @@ Status: resolved
   requirement必须以稳定ID映射到runtime/type/raw-wire/transcript/resource/conformance/package/browser
   evidence；默认Protocol另有JCS/HKDF/HMAC known-answer corpus及断线、错序、stale binding和双方状态分歧
   门禁。`@husky-di/remote@1.0.0`发布root、`/protocol`、`/transport`、`/conformance`四个ESM/CJS/types
-  entry及normative wire assets；Node >=23.6、三套Playwright engines和真实packed-tarball consumers为
+  entry及normative wire corpora；Node >=23.6、三套Playwright engines和真实packed-tarball consumers为
   compatibility gate，独立Adapter包必须运行共享conformance与自身bounded-allocation/security probes。
 - [审计 Wayfinder 完成状态并交接 specification](issues/16-determine-specification-handoff.md)：19/19
   children可达且恰好索引一次，dependency graph无环、所有blocker resolved、local sources与固定prototype
@@ -182,7 +183,8 @@ Status: resolved
 - v1 的 streaming、notification、自动 Container integration、业务 middleware/interceptor。
 - 业务认证、授权策略、限流、服务发现和隐式环境路由。
 - 任一对等端进程重启后的持久化 Session Recovery，以及跨进程故障的 exactly-once 保证。
-- 发布非 TypeScript SDK；默认 Protocol 的 wire specification 仍需允许独立实现。
+- 发布非 TypeScript SDK 或 machine-readable cross-language grammar；出现真实互操作需求后再从 Zod
+  grammar 生成相应 artifact。
 - 把 Deno、Bun 或 Worker 纳入 v1 的正式兼容性验证矩阵。
 - 默认 Protocol 不影响 normative contract 的 private Interface、类/函数切分与文件落点。
 - 在本地图内实际编写 `SPECIFICATION.md`、最终 requirement matrix 或 implementation tickets；这些分别属于 `/to-spec` 与 `/to-tickets`。

@@ -70,11 +70,12 @@ DOM-only adapter类型；browser fixture不得因root import引入Node、WebSock
 
 ### Default Protocol wire and security evidence
 
-发布的 `husky-di-rpc/1` corpus是normative asset而非implementation snapshot，包含JSON Schema、canonical
-positive/negative raw bytes、JCS/HKDF/HMAC known-answer vectors及stateful transcripts。Schema只负责decoded
-tree shape；raw vectors另行覆盖strict UTF-8、BOM、duplicate keys、trailing bytes、unsafe integer、depth/
-node/string/record-size边界和oversize-before-copy。Known-answer vectors固定input bytes、salt/info/key、
-canonical transcript和expected digest/tag；Node与三个browser engines都必须得到相同结果。
+发布的 `husky-di-rpc/1` corpus是normative asset而非implementation snapshot，包含canonical
+positive/negative raw bytes、JCS/HKDF/HMAC known-answer vectors及stateful transcripts。Package-private
+Zod schemas是唯一手写的executable decoded-tree grammar，不作为published asset；raw vectors覆盖
+strict UTF-8、BOM、duplicate keys、trailing bytes、unsafe integer、depth/node/string/record-size边界和
+oversize-before-copy。Known-answer vectors固定input bytes、salt/info/key、canonical transcript和
+expected digest/tag；Node与三个browser engines都必须得到相同结果。
 
 Transcript matrix至少覆盖fresh、lost fresh accept、normal resume、lost resume accept后更高
 `resumeAttempt`、replay barrier、ACK/GC、duplicate old seq、expected seq、gap/wrong seq、wrong call ordinal、
@@ -199,15 +200,16 @@ fault injector；它是test infrastructure，不加入root caller exports。
 
 同一symbol可以从root和一个专门implementor subpath re-export，但必须解析到同一declaration/value，不能
 形成第二套nominal identity。发布包另包含可直接读取的
-`wire/husky-di-rpc-1/{schema,vectors,transcripts,security-vectors}` assets，并分别以封闭的
-`./wire/husky-di-rpc-1/schema`、`./vectors`、`./transcripts`、`./security-vectors` package exports
-开放；不使用wildcard暴露未来文件，wire assets也没有可执行default Protocol export。
+`wire/husky-di-rpc-1/{vectors,transcripts,security-vectors}` assets，并分别以封闭的
+`./wire/husky-di-rpc-1/vectors`、`./transcripts`、`./security-vectors` package exports开放；不使用
+wildcard暴露未来文件，wire assets也没有可执行default Protocol export。Package不发布JSON Schema、
+Zod schema或default wire types。
 
 四个code entry points都必须提供ESM `import`、CJS `require`和匹配的`.d.ts` conditional exports；
 `package.json`保持`type: module`、公开access、`engines.node: ">=23.6"`、source maps和
 `sideEffects: false`。Packed tarball只能包含
 声明的dist、wire assets、`docs/SPECIFICATION.md`、README、CHANGELOG、LICENSE与package metadata，不能
-依赖workspace source、examples或未发布path。Runtime dependencies固定为`@husky-di/core`和`rxjs`；
+依赖workspace source、examples或未发布path。Runtime dependencies固定为`@husky-di/core`、`rxjs`和`zod`；
 default Protocol使用平台Web Crypto/Encoding primitives，core包不得引入`ws`、Node-only polyfill或测试框架；
 packed manifest也不得残留`workspace:*`或dev-only dependency。
 
@@ -227,6 +229,6 @@ Adapter runners及自身instrumented/security tests，并在README声明queue/fr
 条件。Core不为具体Adapter添加special case；不满足`1 MiB` compatibility、ownership或bounded admission
 的Adapter不能宣称v1-compatible。
 
-拒绝以单一end-to-end test、golden snapshot、coverage百分比、只跑Node、只验证Schema或“第三方包自行
+拒绝以单一end-to-end test、golden snapshot、coverage百分比、只跑Node、只验证decoded-tree grammar或“第三方包自行
 解释SPI”作为验收。它们都无法证明Recovery continuity、raw-byte边界、browser portability、资源
 有限性或published artifact真实性。
