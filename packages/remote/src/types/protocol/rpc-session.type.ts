@@ -16,13 +16,13 @@ export type CreateRpcSessionOptions<TKey> = {
 	readonly host: IRpcProtocolHost;
 	readonly sessionId: string;
 	readonly proofKey: TKey;
-	readonly codec: IRpcCodec;
 	readonly onTerminal: () => void;
-	readonly counterExhausted?: boolean;
 };
 
 export type CreateRpcSessionImplOptions<TKey> = CreateRpcSessionOptions<TKey> &
 	Readonly<{
+		readonly codec: IRpcCodec;
+		readonly counterExhausted?: boolean;
 		readonly retainedBytesLedger: IRpcRetainedBytesLedger;
 	}>;
 

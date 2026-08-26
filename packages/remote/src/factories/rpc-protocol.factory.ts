@@ -8,37 +8,61 @@ import { RpcBindingAttemptImpl } from "@/impls/protocol/rpc-binding-attempt.impl
 import { RpcCodecImpl } from "@/impls/protocol/rpc-codec.impl";
 import { RpcCryptographyImpl } from "@/impls/protocol/rpc-cryptography.impl";
 import { RpcEndpointImpl } from "@/impls/protocol/rpc-endpoint.impl";
-import { RpcProtocolImpl } from "@/impls/protocol/rpc-protocol.impl";
+import {
+	RpcProtocolAcceptorRuntimeImpl,
+	RpcProtocolConnectorRuntimeImpl,
+} from "@/impls/protocol/rpc-protocol.impl";
 import { RpcRetainedBytesLedgerImpl } from "@/impls/protocol/rpc-retained-bytes-ledger.impl";
 import { RpcSessionImpl } from "@/impls/protocol/rpc-session.impl";
+import type { IRpcEndpoint } from "@/interfaces/protocol/rpc-endpoint.interface";
 import type { IRpcProtocol } from "@/interfaces/protocol/rpc-protocol.interface";
-import type { CreateRpcProtocolOptions } from "@/types/protocol/rpc-protocol.type";
+import type { CreateRpcEndpointOptions } from "@/types/protocol/rpc-endpoint.type";
+import type {
+	RpcBindingAttemptFactory,
+	RpcSessionFactory,
+} from "@/types/protocol/rpc-protocol.type";
 
 const codec = Object.freeze(new RpcCodecImpl());
 const cryptography = Object.freeze(new RpcCryptographyImpl());
 
-function createConfiguredRpcProtocol<TKey>(
-	options: CreateRpcProtocolOptions<TKey>,
-): IRpcProtocol {
-	const snapshot = Object.freeze({ ...options });
-	return Object.freeze(new RpcProtocolImpl(snapshot));
-}
+const createEndpoint = (options: CreateRpcEndpointOptions): IRpcEndpoint =>
+	new RpcEndpointImpl(options);
+
+const createBindingAttempt: RpcBindingAttemptFactory<CryptoKey> = (options) =>
+	new RpcBindingAttemptImpl<CryptoKey>({
+		...options,
+		createEndpoint,
+	});
 
 function createBuiltInRpcProtocol(counterExhausted: boolean): IRpcProtocol {
-	return createConfiguredRpcProtocol({
-		codec,
-		cryptography,
-		createEndpoint: (options) => new RpcEndpointImpl(options),
-		createBindingAttempt: (options) => new RpcBindingAttemptImpl(options),
-		createSession: (options) =>
-			new RpcSessionImpl({
-				...options,
-				retainedBytesLedger: new RpcRetainedBytesLedgerImpl(
-					options.host.policy.maxRetainedBytesPerSession,
-				),
-			}),
-		counterExhausted,
-	});
+	const createSession: RpcSessionFactory<CryptoKey> = (options) =>
+		new RpcSessionImpl<CryptoKey>({
+			...options,
+			codec,
+			counterExhausted,
+			retainedBytesLedger: new RpcRetainedBytesLedgerImpl(
+				options.host.policy.maxRetainedBytesPerSession,
+			),
+		});
+
+	return Object.freeze({
+		createConnector: (host) =>
+			new RpcProtocolConnectorRuntimeImpl<CryptoKey>(
+				host,
+				codec,
+				cryptography,
+				createBindingAttempt,
+				createSession,
+			),
+		createAcceptor: (host) =>
+			new RpcProtocolAcceptorRuntimeImpl<CryptoKey>(
+				host,
+				codec,
+				cryptography,
+				createBindingAttempt,
+				createSession,
+			),
+	} satisfies IRpcProtocol);
 }
 
 const protocol = createBuiltInRpcProtocol(false);

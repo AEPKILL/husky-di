@@ -15,7 +15,6 @@ export type CreateRpcBindingAttemptOptions = Readonly<{
 	readonly timeoutMs: number;
 	readonly timeoutError: string;
 	readonly abortError: string;
-	readonly createEndpoint: (options: CreateRpcEndpointOptions) => IRpcEndpoint;
 	readonly reserveRetainedBytes: (
 		bytes: number,
 	) => IRpcRetainedBytesReservation | undefined;
@@ -23,6 +22,14 @@ export type CreateRpcBindingAttemptOptions = Readonly<{
 	readonly onMessage: (message: Uint8Array) => Promise<void> | void;
 	readonly onTerminal: () => void;
 }>;
+
+export type CreateRpcBindingAttemptImplOptions =
+	CreateRpcBindingAttemptOptions &
+		Readonly<{
+			readonly createEndpoint: (
+				options: CreateRpcEndpointOptions,
+			) => IRpcEndpoint;
+		}>;
 
 export type RpcBindingAttemptLease = Readonly<{
 	release(): void;

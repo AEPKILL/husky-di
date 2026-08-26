@@ -9,6 +9,7 @@ import type { IRpcBindingAttempt } from "@/interfaces/protocol/rpc-binding-attem
 import type { IRpcEndpoint } from "@/interfaces/protocol/rpc-endpoint.interface";
 import type { IRpcSession } from "@/interfaces/protocol/rpc-session.interface";
 import type {
+	CreateRpcBindingAttemptImplOptions,
 	CreateRpcBindingAttemptOptions,
 	RpcBindingAttemptLease,
 } from "@/types/protocol/rpc-binding-attempt.type";
@@ -40,7 +41,7 @@ export class RpcBindingAttemptImpl<TKey> implements IRpcBindingAttempt<TKey> {
 	_terminal = false;
 	_handshakeReleased = false;
 
-	public constructor(options: CreateRpcBindingAttemptOptions) {
+	public constructor(options: CreateRpcBindingAttemptImplOptions) {
 		const {
 			abortError,
 			connection,
