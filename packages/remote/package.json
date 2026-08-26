@@ -45,8 +45,9 @@
 	"scripts": {
 		"build": "rslib build",
 		"dev": "rslib build --watch",
-		"test": "pnpm run typecheck && vitest run && pnpm run test:browser",
+		"test": "pnpm run typecheck && pnpm run test:types && vitest run && pnpm run test:browser",
 		"test:browser": "playwright test --config playwright.config.ts",
+		"test:types": "vitest run --typecheck --typecheck.only",
 		"typecheck": "tsc -p tsconfig.json && tsc -p tests/tsconfig.json"
 	},
 	"devDependencies": {

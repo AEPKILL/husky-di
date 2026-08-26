@@ -36,7 +36,11 @@ export function validateFilePlacement(
 
 	const packageArea = pathSegments[sourceIndex];
 	if (packageArea === getTestsDirectoryName(config.sourceDirectories)) {
-		if (fileName === "test.utils.ts" || fileName.endsWith(".test.ts")) {
+		if (
+			fileName === "test.utils.ts" ||
+			fileName.endsWith(".test.ts") ||
+			fileName.endsWith(".test-d.ts")
+		) {
 			return [];
 		}
 
@@ -46,7 +50,7 @@ export function validateFilePlacement(
 				relativeFilePath,
 				sourceFile,
 				0,
-				`Files in package tests must be named *.test.ts or test.utils.ts.`,
+				`Files in package tests must be named *.test.ts, *.test-d.ts, or test.utils.ts.`,
 			),
 		];
 	}

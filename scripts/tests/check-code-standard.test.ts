@@ -62,6 +62,24 @@ describe("validateCodeStandard", () => {
 		assert.deepEqual(getRuleIds(rootDirectoryPath), []);
 	});
 
+	it("allows Vitest type test files under package tests", () => {
+		const rootDirectoryPath = createWorkspace({
+			"packages/core/tests/container.test-d.ts": `/**
+ * @overview Container type tests.
+ * @author AEPKILL
+ * @created 2026-08-26 15:05:00
+ */
+import { expectTypeOf, test } from "vitest";
+
+test("resolves service types", () => {
+	expectTypeOf<string>().toEqualTypeOf<string>();
+});
+`,
+		});
+
+		assert.deepEqual(getRuleIds(rootDirectoryPath), []);
+	});
+
 	it("reports source files whose names do not match directory conventions", () => {
 		const rootDirectoryPath = createWorkspace({
 			"packages/core/src/interfaces/container.ts": `/**
