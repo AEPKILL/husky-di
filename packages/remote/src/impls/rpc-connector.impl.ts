@@ -50,25 +50,24 @@ import {
 	readRpcAbortSignalAborted,
 } from "@/utils/rpc-cancellation.util";
 import { readRpcClosedOptionsRecord } from "@/utils/rpc-runtime-policy.util";
-import {
-	rpcCallableSchema,
-	rpcNonNullObjectSchema,
-	rpcUndefinedSchema,
-} from "@/utils/rpc-schema.util";
 import { reserveRpcSessionRetainedBytes } from "@/utils/rpc-session-retained-bytes.util";
 import { isRpcSessionTransitionAllowed } from "@/utils/rpc-session-transition.util";
+import {
+	isCallable,
+	isNonNullObject,
+	isUndefined,
+} from "@/utils/type-guard.util";
 
 const connectorConnectOptionKeys = new Set(["adapter", "signal"]);
 
 function isProtocolSession(value: unknown): value is IRpcProtocolSession {
-	if (!rpcNonNullObjectSchema.safeParse(value).success) {
+	if (!isNonNullObject(value)) {
 		return false;
 	}
 	const session = value as object;
 	return (
-		rpcCallableSchema.safeParse(Reflect.get(session, "reserveInvocation"))
-			.success &&
-		rpcCallableSchema.safeParse(Reflect.get(session, "forceClose")).success
+		isCallable(Reflect.get(session, "reserveInvocation")) &&
+		isCallable(Reflect.get(session, "forceClose"))
 	);
 }
 
@@ -195,19 +194,18 @@ export class RpcConnectorImpl implements IRpcConnector {
 			);
 		}
 		const adapter = optionRecord.adapter as IRpcConnectorAdapter;
-		if (!rpcNonNullObjectSchema.safeParse(adapter).success) {
+		if (!isNonNullObject(adapter)) {
 			return Promise.reject(new TypeError("adapter must be an object."));
 		}
 
 		const connectionSource = Reflect.get(adapter, "connection$") as unknown;
 		const connect = Reflect.get(adapter, "connect");
-		const subscribe = rpcUndefinedSchema.safeParse(connectionSource).success
+		const subscribe = isUndefined(connectionSource)
 			? undefined
 			: Reflect.get(connectionSource as object, "subscribe");
 		// A Connector Adapter must provide callable subscription and connect entrypoints.
 		const adapterShapeIsInvalid =
-			!rpcCallableSchema.safeParse(subscribe).success ||
-			!rpcCallableSchema.safeParse(connect).success;
+			!isCallable(subscribe) || !isCallable(connect);
 		if (adapterShapeIsInvalid) {
 			return Promise.reject(new TypeError("adapter has an invalid shape."));
 		}

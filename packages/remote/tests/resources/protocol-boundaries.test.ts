@@ -260,7 +260,7 @@ describe("Default RPC Protocol resource boundaries", () => {
 		}
 	});
 
-	it("RPC-CORPUS-004 executes limit-1, limit, and limit+1 for every fixed Codec allocation boundary", () => {
+	it("RPC-CORPUS-004 executes limit-1, limit, and limit+1 for every fixed Codec allocation boundary RPC-CORPUS-001", () => {
 		const objectWithMembers = (members: number) =>
 			`{"kind":"ping","future":{${Array.from(
 				{ length: members },

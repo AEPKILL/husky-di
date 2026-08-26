@@ -66,23 +66,22 @@ import {
 } from "@/utils/rpc-cancellation.util";
 import { installRpcExposure } from "@/utils/rpc-exposure.util";
 import { createRpcFacade } from "@/utils/rpc-facade.util";
-import {
-	rpcCallableSchema,
-	rpcNonNullObjectSchema,
-	rpcUndefinedSchema,
-} from "@/utils/rpc-schema.util";
 import { reserveRpcSessionRetainedBytes } from "@/utils/rpc-session-retained-bytes.util";
 import { isRpcSessionTransitionAllowed } from "@/utils/rpc-session-transition.util";
+import {
+	isCallable,
+	isNonNullObject,
+	isUndefined,
+} from "@/utils/type-guard.util";
 
 function isProtocolSession(value: unknown): value is IRpcProtocolSession {
-	if (!rpcNonNullObjectSchema.safeParse(value).success) {
+	if (!isNonNullObject(value)) {
 		return false;
 	}
 	const session = value as object;
 	return (
-		rpcCallableSchema.safeParse(Reflect.get(session, "reserveInvocation"))
-			.success &&
-		rpcCallableSchema.safeParse(Reflect.get(session, "forceClose")).success
+		isCallable(Reflect.get(session, "reserveInvocation")) &&
+		isCallable(Reflect.get(session, "forceClose"))
 	);
 }
 
@@ -223,18 +222,16 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 				createRpcException(RpcExceptionCodeEnum.unavailable),
 			);
 		}
-		if (!rpcNonNullObjectSchema.safeParse(adapter).success) {
+		if (!isNonNullObject(adapter)) {
 			return Promise.reject(new TypeError("adapter must be an object."));
 		}
 		const connectionSource = Reflect.get(adapter, "connection$") as unknown;
 		const listen = Reflect.get(adapter, "listen");
-		const subscribe = rpcUndefinedSchema.safeParse(connectionSource).success
+		const subscribe = isUndefined(connectionSource)
 			? undefined
 			: Reflect.get(connectionSource as object, "subscribe");
 		// An Acceptor Adapter must provide callable subscription and listen entrypoints.
-		const adapterShapeIsInvalid =
-			!rpcCallableSchema.safeParse(subscribe).success ||
-			!rpcCallableSchema.safeParse(listen).success;
+		const adapterShapeIsInvalid = !isCallable(subscribe) || !isCallable(listen);
 		if (adapterShapeIsInvalid) {
 			return Promise.reject(new TypeError("adapter has an invalid shape."));
 		}

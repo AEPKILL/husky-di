@@ -18,7 +18,7 @@ import type {
 	RpcJsonValue,
 	RpcResumeRequest,
 } from "@/types/protocol/rpc-wire-record.type";
-import { rpcBase64Url32Schema } from "@/utils/rpc-schema.util";
+import { rpcBase64Url32Schema } from "@/utils/protocol/rpc-base64-url-32-schema.util";
 
 export class RpcCryptographyImpl implements IRpcCryptography<CryptoKey> {
 	public createRandomCarrier(): {

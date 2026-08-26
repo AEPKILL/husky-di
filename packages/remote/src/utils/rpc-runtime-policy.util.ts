@@ -16,11 +16,12 @@ import type {
 	RpcConnectorRuntimePolicyOptions,
 } from "@/types/rpc-caller.type";
 import {
-	rpcClosedOptionsPlainRecordSchema,
-	rpcPlatformTimerDelaySchema,
-	rpcPositiveSafeIntegerSchema,
-	rpcStringSchema,
-} from "@/utils/rpc-schema.util";
+	isPlainRecord,
+	isPositiveSafeInteger,
+	isString,
+} from "@/utils/type-guard.util";
+
+const maximumPlatformTimerDelayMs = 2_147_483_647;
 
 const mebibyte = 1024 * 1024;
 const handshakeTransientBytes = 4 * mebibyte;
@@ -69,8 +70,8 @@ const timingPolicyKeys = new Set<keyof IRpcProtocolRuntimePolicy>([
 	"shutdownDeadlineMs",
 ]);
 
-function isPlainRecord(value: unknown): value is Record<PropertyKey, unknown> {
-	return rpcClosedOptionsPlainRecordSchema.safeParse(value).success;
+function isPlatformTimerDelay(value: unknown): value is number {
+	return isPositiveSafeInteger(value) && value <= maximumPlatformTimerDelayMs;
 }
 
 export function readRpcClosedOptionsRecord(
@@ -84,11 +85,10 @@ export function readRpcClosedOptionsRecord(
 
 	const snapshot = Object.create(null) as Record<string, unknown>;
 	for (const key of Reflect.ownKeys(value)) {
-		const keyResult = rpcStringSchema.safeParse(key);
-		if (!keyResult.success || !allowedKeys.has(keyResult.data)) {
+		if (!isString(key) || !allowedKeys.has(key)) {
 			throw new TypeError(`${label} contains an unknown option.`);
 		}
-		const optionKey = keyResult.data;
+		const optionKey = key;
 
 		const descriptor = Object.getOwnPropertyDescriptor(value, optionKey);
 		// Policy options must be enumerable data properties to avoid accessor effects.
@@ -128,10 +128,10 @@ export function validateRpcPositiveSafeInteger(
 	value: unknown,
 	key: string,
 ): number {
-	if (!rpcPositiveSafeIntegerSchema.safeParse(value).success) {
+	if (!isPositiveSafeInteger(value)) {
 		throw new TypeError(`${key} must be a positive safe integer.`);
 	}
-	return value as number;
+	return value;
 }
 
 function validatePolicy(policy: IRpcProtocolRuntimePolicy): void {
@@ -139,8 +139,7 @@ function validatePolicy(policy: IRpcProtocolRuntimePolicy): void {
 		const value = validateRpcPositiveSafeInteger(policy[key], key);
 		// Timer-backed policy values must also fit the platform timer range.
 		const exceedsPlatformTimerLimit =
-			timingPolicyKeys.has(key) &&
-			!rpcPlatformTimerDelaySchema.safeParse(value).success;
+			timingPolicyKeys.has(key) && !isPlatformTimerDelay(value);
 		if (exceedsPlatformTimerLimit) {
 			throw new TypeError(
 				`${key} must not exceed the platform timer delay limit.`,

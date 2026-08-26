@@ -6,6 +6,7 @@
 
 import type { Cleanup } from "@husky-di/core";
 import { Observable, Subject } from "rxjs";
+import { z } from "zod";
 import { RpcCallTerminalTypeEnum } from "@/enums/protocol/rpc-call-terminal-type.enum";
 import { RpcIncomingCallKindEnum } from "@/enums/protocol/rpc-incoming-call-kind.enum";
 import { RpcCallDirectionEnum } from "@/enums/rpc-call-direction.enum";
@@ -49,6 +50,8 @@ import type {
 } from "@/types/rpc-exposure.type";
 import type { CreateRpcPeerOptions } from "@/types/rpc-peer.type";
 import {
+	isRpcApplicationArgumentsSnapshot,
+	isRpcApplicationSnapshot,
 	normalizeRpcApplicationArguments,
 	normalizeRpcApplicationValue,
 } from "@/utils/rpc-application-value.util";
@@ -58,14 +61,128 @@ import {
 } from "@/utils/rpc-cancellation.util";
 import { installRpcExposure } from "@/utils/rpc-exposure.util";
 import { createRpcFacade } from "@/utils/rpc-facade.util";
-import {
-	createRpcExpectedUnknownTerminalSchema,
-	rpcCallOutcomeSchema,
-	rpcCommittedInvocationSchema,
-	rpcHandlerTerminalSchema,
-	rpcIncomingCallRequestSchema,
-	rpcInvocationReservationSchema,
-} from "@/utils/rpc-schema.util";
+import { isCallable, isNonNullObject } from "@/utils/type-guard.util";
+
+const rpcApplicationSnapshotSchema = z.custom<IRpcApplicationSnapshot>(
+	isRpcApplicationSnapshot,
+);
+const rpcApplicationArgumentsSnapshotSchema =
+	z.custom<IRpcApplicationArgumentsSnapshot>(isRpcApplicationArgumentsSnapshot);
+const rpcOutgoingFailureCodeSchema = z.enum([
+	RpcExceptionCodeEnum.canceled,
+	RpcExceptionCodeEnum.unavailable,
+	RpcExceptionCodeEnum.outcomeUnknown,
+	RpcExceptionCodeEnum.handlerFailed,
+	RpcExceptionCodeEnum.unknownService,
+	RpcExceptionCodeEnum.unknownMethod,
+]);
+const rpcTypeOnlyFieldNamesSchema = z.array(z.literal("type")).length(1);
+const rpcTypeValueFieldNamesSchema = z
+	.array(z.enum(["type", "value"]))
+	.length(2);
+const rpcTypeCodeFieldNamesSchema = z.array(z.enum(["type", "code"])).length(2);
+const rpcIncomingCallFieldNamesSchema = z
+	.array(z.enum(["service", "method", "args"]))
+	.length(3);
+const rpcCallOutcomeSchema = z.union([
+	z.object({
+		fieldNames: rpcTypeOnlyFieldNamesSchema,
+		fields: z.object({
+			type: z.literal(RpcCallTerminalTypeEnum.returnedVoid),
+		}),
+	}),
+	z.object({
+		fieldNames: rpcTypeValueFieldNamesSchema,
+		fields: z.object({
+			type: z.literal(RpcCallTerminalTypeEnum.returned),
+			value: rpcApplicationSnapshotSchema,
+		}),
+	}),
+	z.object({
+		fieldNames: rpcTypeCodeFieldNamesSchema,
+		fields: z.object({
+			type: z.literal(RpcCallTerminalTypeEnum.failed),
+			code: rpcOutgoingFailureCodeSchema,
+		}),
+	}),
+]);
+const rpcHandlerTerminalSchema = z.union([
+	z.object({
+		fieldNames: rpcTypeOnlyFieldNamesSchema,
+		fields: z.object({
+			type: z.enum([
+				RpcCallTerminalTypeEnum.sessionTerminated,
+				RpcCallTerminalTypeEnum.returnedVoid,
+			]),
+		}),
+	}),
+	z.object({
+		fieldNames: rpcTypeValueFieldNamesSchema,
+		fields: z.object({
+			type: z.literal(RpcCallTerminalTypeEnum.returned),
+			value: rpcApplicationSnapshotSchema,
+		}),
+	}),
+	z.object({
+		fieldNames: rpcTypeCodeFieldNamesSchema,
+		fields: z.object({
+			type: z.literal(RpcCallTerminalTypeEnum.failed),
+			code: z.enum([
+				RpcExceptionCodeEnum.canceled,
+				RpcExceptionCodeEnum.handlerFailed,
+			]),
+		}),
+	}),
+]);
+const rpcIncomingCallRequestSchema = z.object({
+	fieldNames: rpcIncomingCallFieldNamesSchema,
+	fields: z.object({
+		service: z.string().min(1),
+		method: z
+			.string()
+			.min(1)
+			.refine((method) => method !== "then"),
+		args: rpcApplicationArgumentsSnapshotSchema,
+	}),
+});
+
+function createRpcProtocolObjectSchema(methodNames: readonly string[]) {
+	return z.unknown().superRefine((value, context) => {
+		if (!isNonNullObject(value)) {
+			context.addIssue({ code: "custom", message: "Expected an object." });
+			return;
+		}
+		const protocolObject = value as object;
+		for (const methodName of methodNames) {
+			if (!isCallable(Reflect.get(protocolObject, methodName))) {
+				context.addIssue({
+					code: "custom",
+					message: `Expected ${methodName} to be callable.`,
+				});
+				return;
+			}
+		}
+	});
+}
+
+const rpcInvocationReservationSchema = createRpcProtocolObjectSchema([
+	"commit",
+	"release",
+]);
+const rpcCommittedInvocationSchema = createRpcProtocolObjectSchema([
+	"start",
+	"cancel",
+]);
+
+function createRpcExpectedUnknownTerminalSchema(code: RpcUnknownCallFailure) {
+	return z.object({
+		fieldNames: rpcTypeCodeFieldNamesSchema,
+		fields: z.object({
+			type: z.literal(RpcCallTerminalTypeEnum.failed),
+			code: z.literal(code),
+		}),
+	});
+}
 
 let nextObservationOrdinal = 0;
 

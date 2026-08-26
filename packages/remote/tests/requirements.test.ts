@@ -4,7 +4,7 @@
  * @created 2026-08-19 00:00:00
  */
 
-import { readFileSync, statSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -25,13 +25,22 @@ const normativeRuntimePath = resolve(
 	repositoryRoot,
 	"packages/remote/tests/specification.test.ts",
 );
+const protocolGrammarPath = resolve(
+	repositoryRoot,
+	"packages/remote/src/utils/protocol/rpc-wire-grammar.util.ts",
+);
+const protocolRecordTypesPath = resolve(
+	repositoryRoot,
+	"packages/remote/src/types/protocol/rpc-wire-record.type.ts",
+);
+const rpcTypeGuardPath = resolve(
+	repositoryRoot,
+	"packages/remote/src/utils/type-guard.util.ts",
+);
 const canonicalIdPattern = /^RPC-[A-Z]+-[0-9]{3}$/;
 const allowedEvidenceKinds = new Set([
 	"RT",
 	"TY",
-	"RW",
-	"TX",
-	"KA",
 	"RP",
 	"PC",
 	"AC",
@@ -84,30 +93,12 @@ function getNormativeTestTitles(source: string): readonly string[] {
 	].map(([, title]) => title as string);
 }
 
-function findJsonEvidence(value: unknown, selector: string): unknown {
-	if (typeof value !== "object" || value === null) {
-		return undefined;
-	}
-	if ("id" in value && (value as { readonly id?: unknown }).id === selector) {
-		return value;
-	}
-	for (const child of Array.isArray(value) ? value : Object.values(value)) {
-		const match = findJsonEvidence(child, selector);
-		if (match !== undefined) {
-			return match;
-		}
-	}
-	return undefined;
-}
-
 function validateReference(
 	requirementId: string,
 	reference: string,
 	diagnostics: string[],
 ): string | undefined {
-	const match = /^(RT|TY|RW|TX|KA|RP|PC|AC|PK|BR|IR)::([^:]+)::(.+)$/u.exec(
-		reference,
-	);
+	const match = /^(RT|TY|RP|PC|AC|PK|BR|IR)::([^:]+)::(.+)$/u.exec(reference);
 	if (match === null) {
 		diagnostics.push(
 			`${requirementId}: malformed evidence reference ${JSON.stringify(reference)}`,
@@ -140,44 +131,164 @@ function validateReference(
 	}
 
 	const source = readFileSync(evidencePath, "utf8");
-	if (repositoryPath.endsWith(".json")) {
-		let evidence: unknown;
-		try {
-			evidence = findJsonEvidence(JSON.parse(source), selector);
-		} catch {
-			diagnostics.push(
-				`${requirementId}: evidence JSON is invalid: ${repositoryPath}`,
-			);
-			return kind;
-		}
-		if (evidence === undefined) {
-			diagnostics.push(
-				`${requirementId}: JSON selector does not resolve: ${repositoryPath}#${selector}`,
-			);
-		} else {
-			const covers = (evidence as { readonly covers?: unknown }).covers;
-			if (!Array.isArray(covers) || !covers.includes(requirementId)) {
-				diagnostics.push(
-					`${requirementId}: JSON selector does not canonically cover the requirement: ${repositoryPath}#${selector}`,
-				);
-			}
-		}
-	} else {
-		if (!selector.includes(requirementId)) {
-			diagnostics.push(
-				`${requirementId}: text selector omits the full canonical ID: ${selector}`,
-			);
-		}
-		if (!source.includes(selector)) {
-			diagnostics.push(
-				`${requirementId}: text selector does not resolve: ${repositoryPath}#${selector}`,
-			);
-		}
+	if (!selector.includes(requirementId)) {
+		diagnostics.push(
+			`${requirementId}: text selector omits the full canonical ID: ${selector}`,
+		);
+	}
+	if (!source.includes(selector)) {
+		diagnostics.push(
+			`${requirementId}: text selector does not resolve: ${repositoryPath}#${selector}`,
+		);
 	}
 	return kind;
 }
 
 describe("Remote RPC requirement evidence", () => {
+	it("RPC-PKG-004 keeps composite Zod validation private, derives record types, and uses native primitive guards", () => {
+		const grammarSource = readFileSync(protocolGrammarPath, "utf8");
+		const recordTypesSource = readFileSync(protocolRecordTypesPath, "utf8");
+		const rpcTypeGuardSource = readFileSync(rpcTypeGuardPath, "utf8");
+		const compactRecordTypesSource = recordTypesSource.replaceAll(/\s+/gu, "");
+		const recordSchemaNames = [
+			"rpcJsonRecordSchema",
+			"rpcFreshRequestSchema",
+			"rpcFreshAcceptSchema",
+			"rpcResumeRequestSchema",
+			"rpcBootstrapRequestSchema",
+			"rpcResumeAcceptSchema",
+			"rpcResumeRejectSchema",
+			"rpcResumeOutcomeSchema",
+			"rpcCallMessageSchema",
+			"rpcCancelMessageSchema",
+			"rpcResultMessageSchema",
+			"rpcWireErrorCodeSchema",
+			"rpcErrorMessageSchema",
+			"rpcSemanticMessageSchema",
+			"rpcMessageEnvelopeSchema",
+			"rpcAckRecordSchema",
+			"rpcControlRecordSchema",
+			"rpcActiveRecordSchema",
+		] as const;
+		const ownerValidationPaths = [
+			"packages/remote/src/factories/remote-service-descriptor.factory.ts",
+			"packages/remote/src/impls/rpc-peer.impl.ts",
+			"packages/remote/src/utils/protocol/rpc-base64-url-32-schema.util.ts",
+			"packages/remote/src/utils/protocol/rpc-wire-grammar.util.ts",
+			"packages/remote/src/utils/protocol/rpc-wire-identifier-schema.util.ts",
+		] as const;
+		const nativeGuardOwnerPaths = [
+			"packages/remote/src/conformance/rpc-protocol-conformance.util.ts",
+			"packages/remote/src/factories/rpc-connector-reconnection.factory.ts",
+			"packages/remote/src/impls/protocol/rpc-endpoint.impl.ts",
+			"packages/remote/src/impls/protocol/rpc-retained-bytes-ledger.impl.ts",
+			"packages/remote/src/utils/rpc-exposure.util.ts",
+			"packages/remote/src/utils/rpc-runtime-policy.util.ts",
+		] as const;
+		const callableGuardConsumerPaths = [
+			"packages/remote/src/conformance/rpc-protocol-conformance.util.ts",
+			"packages/remote/src/factories/rpc-connector-reconnection.factory.ts",
+			"packages/remote/src/impls/rpc-acceptor.impl.ts",
+			"packages/remote/src/impls/rpc-connector.impl.ts",
+			"packages/remote/src/impls/rpc-peer.impl.ts",
+			"packages/remote/src/utils/rpc-exposure.util.ts",
+			"packages/remote/src/utils/rpc-protocol-runtime.util.ts",
+		] as const;
+		const nonNullObjectGuardConsumerPaths = [
+			"packages/remote/src/conformance/rpc-protocol-conformance.util.ts",
+			"packages/remote/src/factories/rpc-connector-reconnection.factory.ts",
+			"packages/remote/src/impls/rpc-acceptor.impl.ts",
+			"packages/remote/src/impls/rpc-connector.impl.ts",
+			"packages/remote/src/impls/rpc-peer.impl.ts",
+			"packages/remote/src/utils/rpc-protocol-runtime.util.ts",
+		] as const;
+		const undefinedGuardConsumerPaths = [
+			"packages/remote/src/impls/rpc-acceptor.impl.ts",
+			"packages/remote/src/impls/rpc-connector.impl.ts",
+		] as const;
+
+		expect(grammarSource).toContain('from "zod"');
+		expect(grammarSource).toContain("z.custom<number>(isPositiveSafeInteger)");
+		expect(grammarSource).toContain("isNonNegativeSafeInteger");
+		expect(rpcTypeGuardSource).toContain('return typeof value === "function";');
+		expect(rpcTypeGuardSource).toContain(
+			'return typeof value === "object" && value !== null;',
+		);
+		expect(rpcTypeGuardSource).toContain("return value === undefined;");
+		for (const guardName of [
+			"isArray",
+			"isCallable",
+			"isFiniteNumber",
+			"isNonNegativeSafeInteger",
+			"isNonNullObject",
+			"isNull",
+			"isObjectOrFunction",
+			"isObjectType",
+			"isPlainRecord",
+			"isPositiveSafeInteger",
+			"isString",
+			"isUndefined",
+			"isUint8Array",
+		] as const) {
+			expect(rpcTypeGuardSource).toContain(`export function ${guardName}`);
+		}
+		for (const schemaName of recordSchemaNames) {
+			expect(compactRecordTypesSource).toContain(
+				`RpcSchemaOutput<typeof${schemaName}>`,
+			);
+		}
+		for (const ownerPath of ownerValidationPaths) {
+			expect(
+				readFileSync(resolve(repositoryRoot, ownerPath), "utf8"),
+			).toContain('from "zod"');
+		}
+		for (const ownerPath of nativeGuardOwnerPaths) {
+			const ownerSource = readFileSync(
+				resolve(repositoryRoot, ownerPath),
+				"utf8",
+			);
+			expect(ownerSource).toContain("@/utils/type-guard.util");
+			expect(ownerSource).not.toContain('from "zod"');
+		}
+		for (const consumerPath of callableGuardConsumerPaths) {
+			const consumerSource = readFileSync(
+				resolve(repositoryRoot, consumerPath),
+				"utf8",
+			);
+			expect(consumerSource).toContain("isCallable");
+			expect(consumerSource).not.toContain("z.function()");
+		}
+		for (const consumerPath of nonNullObjectGuardConsumerPaths) {
+			expect(
+				readFileSync(resolve(repositoryRoot, consumerPath), "utf8"),
+			).toContain("isNonNullObject");
+		}
+		for (const consumerPath of undefinedGuardConsumerPaths) {
+			expect(
+				readFileSync(resolve(repositoryRoot, consumerPath), "utf8"),
+			).toContain("isUndefined");
+		}
+		expect(
+			existsSync(
+				resolve(repositoryRoot, "packages/remote/src/utils/rpc-schema.util.ts"),
+			),
+		).toBe(false);
+		for (const publicEntry of [
+			"index",
+			"protocol",
+			"transport",
+			"conformance",
+		]) {
+			const publicSource = readFileSync(
+				resolve(repositoryRoot, `packages/remote/src/${publicEntry}.ts`),
+				"utf8",
+			);
+			expect(publicSource).not.toContain("type-guard");
+			expect(publicSource).not.toContain("rpc-wire-grammar");
+			expect(publicSource).not.toContain('from "zod"');
+		}
+	});
+
 	it("RPC-EVIDENCE-003 keeps the normative runtime entry on canonical public seams", () => {
 		const source = readFileSync(normativeRuntimePath, "utf8");
 		const titles = getNormativeTestTitles(source);

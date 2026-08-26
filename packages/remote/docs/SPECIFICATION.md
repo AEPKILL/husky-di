@@ -84,20 +84,22 @@ provider package can delegate to the same immutable implementation. The package 
 `defaultRpcProtocol` value, concrete
 Protocol implementation class, or public default Codec, Handshake, proof, ledger, or scheduler type.
 
-**RPC-PKG-004 — Wire assets.** The package **MUST** publish readable `husky-di-rpc/1` schema, raw vectors,
-stateful transcripts, and security vectors through the closed exports
-`./wire/husky-di-rpc-1/schema`, `./vectors`, `./transcripts`, and `./security-vectors`. It **MUST NOT** use a
-wildcard that can expose future private files.
+**RPC-PKG-004 — Private validation grammar.** Every package-owned materialized record, tuple, and tagged-union
+grammar **MUST** use package-private Zod schemas, and corresponding internal decoded-record types **MUST** derive
+from schema output. Primitive JavaScript brand checks, such as whether a value is callable, **MAY** use
+package-private native type guards. The package **MUST NOT** publish a built-in Protocol schema, validator,
+decoded-record type, data corpus, or any `./wire/*` subpath. Raw-byte parsing, safe Application Value
+normalization, and retained state/security/resource decisions **MUST** remain with their owning modules and
+**MUST NOT** be replaced by ordinary Zod parsing.
 
 **RPC-PKG-005 — Manifest.** The published manifest **MUST** declare `type: "module"`, public access,
 `engines.node: ">=23.6"`, source maps, and `sideEffects: false`. Runtime dependencies **MUST** be limited to
 `@husky-di/core`, `rxjs`, and `zod`; the packed manifest **MUST NOT** contain `workspace:*`, a test framework,
 `ws`, or a Node-only polyfill.
 
-**RPC-PKG-006 — Artifact.** The packed tarball **MUST** contain only declared build output, normative wire
-assets, the architecture source and rendered diagram, declared package documentation, README, CHANGELOG,
-LICENSE, and package metadata. Every public subpath
-**MUST** resolve from the installed tarball without workspace source or examples.
+**RPC-PKG-006 — Artifact.** The packed tarball **MUST** contain only declared build output, the architecture
+source and rendered diagram, declared package documentation, README, CHANGELOG, LICENSE, and package metadata.
+Every public subpath **MUST** resolve from the installed tarball without workspace source or examples.
 
 **RPC-PKG-007 — Root inventory.** The root **MUST** export runtime values
 `createRemoteServiceDescriptor`, `createRpcConnector`, `createRpcAcceptor`, `createRpcConnectorReconnection`,
@@ -2220,18 +2222,18 @@ and only then fulfill/reject the cached task.
 
 **RPC-EVIDENCE-001 — Stable mapping.** Every normative requirement ID in this document **MUST** have exactly one
 row in the repository requirement matrix and at least one reproducible evidence reference. IDs **MUST NOT** be
-renumbered or reused after publication. Matrix references **MUST** resolve to an existing test case, vector,
-transcript, instrumented probe, review artifact, or installed-package consumer.
+renumbered or reused after publication. Matrix references **MUST** resolve to an existing test case,
+instrumented probe, review artifact, or installed-package consumer.
 
 **RPC-EVIDENCE-002 — Evidence classes.** The matrix **MUST** classify evidence as runtime (`RT`), TypeScript
-(`TY`), raw wire (`RW`), stateful transcript (`TX`), crypto known-answer (`KA`), resource probe (`RP`), Protocol
-conformance (`PC`), Adapter conformance (`AC`), packed consumer (`PK`), browser (`BR`), or
-instrumentation/fuzz/review (`IR`). Before release no requirement **MAY** remain planned, missing, or skipped.
+(`TY`), resource probe (`RP`), Protocol conformance (`PC`), Adapter conformance (`AC`), packed consumer (`PK`),
+browser (`BR`), or instrumentation/fuzz/review (`IR`). Before release no requirement **MAY** remain planned,
+missing, or skipped.
 
 **RPC-EVIDENCE-003 — Normative runtime entry.** `packages/remote/tests/specification.test.ts` **MUST** be the
 top-level caller-facing normative suite. It **MAY** import split fixtures, but every test name **MUST** include
-the corresponding requirement/case ID and observe only public caller, Protocol, Adapter, or published wire
-seams. It **MUST NOT** assert private class layout, private scheduler turns, or incidental microtask count.
+the corresponding requirement/case ID and observe only public caller, Protocol, or Adapter seams. It
+**MUST NOT** assert private class layout, private scheduler turns, or incidental microtask count.
 
 ### 14.2 Conformance runners
 
@@ -2318,16 +2320,16 @@ on failure. It **MUST** run all cases that remain possible after a case failure 
 non-throwing reporter once after each attempted case with the same failure object used by `AggregateError`.
 Case IDs **MUST** be documented by the conformance entry point, remain stable after publication, and use plain
 `string` rather than a closed exported literal union so additive cases do not break fixture types. It
-**MUST NOT** expose Default-Protocol private wire/module types through its fixture contract.
+**MUST NOT** expose Default-Protocol private module or decoded-record types through its fixture contract.
 
 **RPC-CONFORMANCE-002 — Protocol suite.** Protocol runner **MUST** cover construction non-reentrancy, handoff,
 normalized snapshots, outgoing reserve/commit/sink, incoming resource/semantic/handler dispositions, handler
 permit ownership, fault scope, counter drain, and shutdown/close/cleanup phases. The package-private default and
-an independent minimal custom Protocol **MUST** both pass; the default **MUST** additionally pass wire/security
-corpora. `counterExhaustionProtocol` **MUST** be the same candidate under test-only configuration such that the
-first otherwise admissible call on a fresh Session reaches counter drain. `createActiveProtocolFaultMessage()`
-**MUST** return one candidate-grammar byte message that faults an active Session; neither hook changes the
-production SPI or exposes the built-in grammar.
+an independent minimal custom Protocol **MUST** both pass; the default **MUST** additionally pass its runtime
+validation and security suites. `counterExhaustionProtocol` **MUST** be the same candidate under test-only
+configuration such that the first otherwise admissible call on a fresh Session reaches counter drain.
+`createActiveProtocolFaultMessage()` **MUST** return one candidate-grammar byte message that faults an active
+Session; neither hook changes the production SPI or exposes the built-in grammar.
 
 **RPC-CONFORMANCE-003 — Adapter suite.** Both Adapter runners **MUST** cover subscribe-before-start, handoff and
 ownership, source/message identity/order/hot terminal behavior, Local Admission/single send/backpressure,
@@ -2341,17 +2343,22 @@ Each fixture `create()` **MUST** return a fresh single-use Adapter. Its driver m
 control only the remote/test side, preserve supplied Error identity, and let `cleanup()` release only
 fixture-owned external resources; they **MUST NOT** close or settle candidate-owned resources on its behalf.
 
-### 14.3 Default corpus and abnormal-state matrix
+### 14.3 Default Protocol validation and abnormal-state matrix
 
-**RPC-CORPUS-001 — Published corpus.** `husky-di-rpc/1` **MUST** publish JSON Schema 2020-12, valid/invalid raw
-bytes, JCS/HKDF/HMAC known-answer vectors, and stateful transcripts. Schema **MUST NOT** substitute for raw UTF-8,
-BOM, duplicate-key, trailing-data, number, limit, base64, or allocation-boundary cases.
+**RPC-CORPUS-001 — Runtime validation coverage.** Node release tests **MUST** directly exercise the built-in
+Protocol's raw byte parser, decoded-record Zod grammar, and cryptographic derivations. Browser release tests
+**MUST** exercise the built-in round trip plus WebCrypto proof and derivation behavior. The bounded raw parser
+**MUST** independently cover strict UTF-8, BOM, duplicate keys, trailing data, number spelling, and allocation
+boundaries because those facts do not survive ordinary object materialization. Decoded-record tests **MUST**
+cover every Codec-accepted inbound phase entry and tagged branch, required and forbidden fields, scalar domains,
+and open or closed tail policy. This evidence **MUST NOT** be published as a schema, vector, transcript, or corpus
+artifact.
 
-**RPC-CORPUS-002 — Recovery transcripts.** Transcripts **MUST** cover fresh, lost fresh accept, normal resume,
-lost resume accept with higher attempt, replay barrier, lost ACK, duplicate/gap/regressed seq, stale/equal/future
-ACK, cursor lower/upper bounds, wrong epoch/stale Connection, wrong proof/profile/session, generic/authenticated
-reject, Ping/Pong, Close, and counter exhaustion. Each step **MUST** assert both endpoint states, current binding,
-dispatch count, caller outcome, retained evidence, and next permitted records.
+**RPC-CORPUS-002 — Recovery scenarios.** Release runtime tests **MUST** execute fresh, lost fresh accept, normal
+resume, lost resume accept with higher attempt, replay barrier, lost ACK, duplicate/gap/regressed seq,
+stale/equal/future ACK, cursor lower/upper bounds, wrong epoch/stale Connection, wrong proof/profile/session,
+generic/authenticated reject, Ping/Pong, Close, and counter exhaustion. Each step **MUST** assert both endpoint
+states, current binding, dispatch count, caller outcome, retained evidence, and next permitted records.
 
 **RPC-CORPUS-003 — State disagreement.** Release tests **MUST** inject at least: responder installed binding with
 lost accept; initiator still connected after responder fenced old epoch; durable receipt with lower resume cursor;
@@ -2372,18 +2379,18 @@ role policy, and custom Protocol/Adapter shape. Node consumer **MUST NOT** requi
 root import **MUST NOT** introduce `Buffer`, Node server, or `ws`.
 
 **RPC-RELEASE-002 — Runtime targets.** Release **MUST** pass Node `>=23.6` and lockfile-pinned Playwright Chromium,
-Firefox, and WebKit, including WebCrypto vectors, cross-realm AbortSignal/intrinsic listener behavior, facade
-assimilation, Recovery, and termination. Deno, Bun, and Workers **MAY** run non-blocking smoke checks only.
+Firefox, and WebKit, including WebCrypto proof and derivation cases, cross-realm AbortSignal/intrinsic listener
+behavior, facade assimilation, Recovery, and termination. Deno, Bun, and Workers **MAY** run non-blocking smoke
+checks only.
 
 **RPC-RELEASE-003 — Packed consumers.** CI **MUST** install the actual `pnpm pack` tarball into isolated Node ESM,
-Node CJS, declaration, DOM-only, and browser-bundle consumers and resolve every public code/wire subpath. Source
+Node CJS, declaration, DOM-only, and browser-bundle consumers and resolve every public code subpath. Source
 imports inside the workspace **MUST NOT** count as package evidence. Private deep import **MUST** fail.
 
 **RPC-RELEASE-004 — Release contents.** A stable release **MUST** include this specification, requirement matrix,
-normative suite, architecture source and rendered diagram, caller and implementor documentation, wire corpus,
-CHANGELOG, and a Changeset that moves
-`@husky-di/remote` from `0.0.0` to `1.0.0`. Build, code-standard, type, conformance, corpus, packed-consumer, and
-browser gates **MUST** pass without skips.
+normative suite, architecture source and rendered diagram, caller and implementor documentation, CHANGELOG, and
+a Changeset that moves `@husky-di/remote` from `0.0.0` to `1.0.0`. Build, code-standard, type, conformance,
+Protocol validation/security, packed-consumer, and browser gates **MUST** pass without skips.
 
 **RPC-RELEASE-005 — Independent Adapters.** A package claiming v1 Adapter compatibility **MUST** depend on a
 compatible `@husky-di/remote` major, import only public root/transport/conformance paths, run the matching shared
@@ -2403,11 +2410,11 @@ only for navigation.
 | `RPC-VALUE`, `RPC-DESC`, `RPC-CALL`, `RPC-GROUP`, `RPC-EVENT` | Framework + all Protocols | RT, TY, PC | `tests/specification.test.ts`, `tests/conformance/` | planned |
 | `RPC-START`, `RPC-TRANSPORT` | Framework + Adapters | AC, RT, IR | `tests/conformance/`, Adapter package tests | planned |
 | `RPC-SPI` | Custom/default Protocol | PC, TY, RT | `tests/conformance/`, `tests/types/` | planned |
-| `RPC-WIRE`, `RPC-ACK`, `RPC-LEDGER` | Default Protocol | RW, TX, RT | `wire/husky-di-rpc-1/`, `tests/wire/` | planned |
-| `RPC-SESSION`, `RPC-RECOVERY`, `RPC-SEC`, `RPC-VALID` | Default Protocol / secure deployment | TX, KA, RW, BR | `wire/husky-di-rpc-1/`, `tests/browser/` | planned |
+| `RPC-WIRE`, `RPC-ACK`, `RPC-LEDGER` | Default Protocol | RT, RP, BR | `tests/protocol.test.ts`, `tests/protocol/`, `tests/resources/` | planned |
+| `RPC-SESSION`, `RPC-RECOVERY`, `RPC-SEC`, `RPC-VALID` | Default Protocol / secure deployment | RT, RP, BR | `tests/protocol.test.ts`, `tests/recovery/`, `tests/browser/` | planned |
 | `RPC-RESOURCE`, `RPC-POLICY`, `RPC-SCHEDULE`, `RPC-TIME`, `RPC-COUNTER` | Framework + Protocol | RP, RT, PC | `tests/resources/`, `tests/specification.test.ts` | planned |
-| `RPC-SHUTDOWN`, `RPC-CLOSE`, `RPC-CLEANUP` | Framework + Protocol + Adapter | RT, TX, RP | `tests/specification.test.ts`, `tests/recovery/` | planned |
-| `RPC-EVIDENCE`, `RPC-CONFORMANCE`, `RPC-CORPUS` | Distribution | matrix lint, PC, AC, RW, TX, KA | `tests/conformance/`, `wire/husky-di-rpc-1/` | planned |
+| `RPC-SHUTDOWN`, `RPC-CLOSE`, `RPC-CLEANUP` | Framework + Protocol + Adapter | RT, RP | `tests/specification.test.ts`, `tests/recovery/` | planned |
+| `RPC-EVIDENCE`, `RPC-CONFORMANCE`, `RPC-CORPUS` | Distribution | matrix lint, PC, AC, RT, RP, BR | `tests/conformance/`, `tests/protocol/`, `tests/resources/`, `tests/browser/` | planned |
 
 ## Appendix B. Non-normative implementation boundary
 

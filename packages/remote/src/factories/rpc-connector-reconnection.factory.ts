@@ -21,29 +21,31 @@ import {
 	validateRpcPositiveSafeInteger,
 } from "@/utils/rpc-runtime-policy.util";
 import {
-	rpcArrayBrandSchema,
-	rpcCallableSchema,
-	rpcNonNullObjectSchema,
-	rpcNullSchema,
-	rpcObjectOrFunctionSchema,
-	rpcObjectTypeSchema,
-	rpcRetryDelayCountSchema,
-	rpcRetryDelaySchema,
-} from "@/utils/rpc-schema.util";
+	isArray,
+	isCallable,
+	isNonNegativeSafeInteger,
+	isNonNullObject,
+	isNull,
+	isObjectOrFunction,
+	isObjectType,
+} from "@/utils/type-guard.util";
 
 const optionKeys = new Set(["connector", "adapterFactory", "policy"]);
 const policyKeys = new Set(["retryDelaysMs", "attemptTimeoutMs"]);
 
 function hasObservableShape(value: unknown): boolean {
-	if (!rpcObjectOrFunctionSchema.safeParse(value).success) {
+	if (!isObjectOrFunction(value)) {
 		return false;
 	}
-	return rpcCallableSchema.safeParse(Reflect.get(value as object, "subscribe"))
-		.success;
+	return isCallable(Reflect.get(value, "subscribe"));
+}
+
+function isRetryDelayCount(value: unknown): value is number {
+	return isNonNegativeSafeInteger(value) && value <= 64;
 }
 
 function validateConnector(value: unknown): asserts value is IRpcConnector {
-	if (!rpcNonNullObjectSchema.safeParse(value).success) {
+	if (!isNonNullObject(value)) {
 		throw new TypeError("connector must be an object.");
 	}
 	const connector = value as object;
@@ -51,13 +53,12 @@ function validateConnector(value: unknown): asserts value is IRpcConnector {
 	const state = Reflect.get(connector, "state") as unknown;
 	// Preserve the legacy short-circuit reads for potentially accessor-backed SPI objects.
 	const connectorShapeIsInvalid =
-		!rpcCallableSchema.safeParse(Reflect.get(connector, "connect")).success ||
-		!rpcNonNullObjectSchema.safeParse(state).success ||
+		!isCallable(Reflect.get(connector, "connect")) ||
+		!isNonNullObject(state) ||
 		!hasObservableShape(Reflect.get(connector, "state$")) ||
-		!rpcNonNullObjectSchema.safeParse(peer).success ||
-		!rpcObjectTypeSchema.safeParse(Reflect.get(peer as object, "state"))
-			.success ||
-		rpcNullSchema.safeParse(Reflect.get(peer as object, "state")).success ||
+		!isNonNullObject(peer) ||
+		!isObjectType(Reflect.get(peer as object, "state")) ||
+		isNull(Reflect.get(peer as object, "state")) ||
 		!hasObservableShape(Reflect.get(peer as object, "state$"));
 	if (connectorShapeIsInvalid) {
 		throw new TypeError("connector has an invalid shape.");
@@ -65,22 +66,22 @@ function validateConnector(value: unknown): asserts value is IRpcConnector {
 }
 
 function snapshotRetryDelays(value: unknown): readonly number[] {
-	if (!rpcArrayBrandSchema.safeParse(value).success) {
+	if (!isArray(value)) {
 		throw new TypeError("retryDelaysMs must contain at most 64 delays.");
 	}
-	const delays = value as readonly unknown[];
+	const delays = value;
 	const length = Reflect.get(delays, "length") as unknown;
-	if (!rpcRetryDelayCountSchema.safeParse(length).success) {
+	if (!isRetryDelayCount(length)) {
 		throw new TypeError("retryDelaysMs must contain at most 64 delays.");
 	}
 	const snapshot: number[] = [];
-	for (let index = 0; index < (length as number); index += 1) {
+	for (let index = 0; index < length; index += 1) {
 		const descriptor = Reflect.getOwnPropertyDescriptor(delays, `${index}`);
 		// Retry delays must be represented by data properties containing valid delays.
 		const retryDelayIsInvalid =
 			descriptor === undefined ||
 			!("value" in descriptor) ||
-			!rpcRetryDelaySchema.safeParse(descriptor.value).success;
+			!isNonNegativeSafeInteger(descriptor.value);
 		if (retryDelayIsInvalid) {
 			throw new TypeError(
 				"retryDelaysMs must contain non-negative safe integers.",
@@ -99,7 +100,7 @@ export function createRpcConnectorReconnection(
 	const connector = record.connector;
 	validateConnector(connector);
 	const adapterFactory = record.adapterFactory;
-	if (!rpcCallableSchema.safeParse(adapterFactory).success) {
+	if (!isCallable(adapterFactory)) {
 		throw new TypeError("adapterFactory must be a function.");
 	}
 	const policyRecord =

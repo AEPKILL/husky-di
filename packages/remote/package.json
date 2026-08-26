@@ -26,17 +26,12 @@
 			"types": "./dist/conformance.d.ts",
 			"import": "./dist/conformance.js",
 			"require": "./dist/conformance.cjs"
-		},
-		"./wire/husky-di-rpc-1/schema": "./wire/husky-di-rpc-1/schema.json",
-		"./wire/husky-di-rpc-1/vectors": "./wire/husky-di-rpc-1/raw-vectors.json",
-		"./wire/husky-di-rpc-1/transcripts": "./wire/husky-di-rpc-1/transcripts.json",
-		"./wire/husky-di-rpc-1/security-vectors": "./wire/husky-di-rpc-1/known-answer-vectors.json"
+		}
 	},
 	"main": "./dist/index.cjs",
 	"types": "./dist/index.d.ts",
 	"files": [
 		"dist",
-		"wire",
 		"docs/ARCHITECTURE.drawio",
 		"docs/ARCHITECTURE.png",
 		"docs/PROTOCOL.md",

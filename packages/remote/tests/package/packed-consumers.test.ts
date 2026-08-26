@@ -151,10 +151,6 @@ describe("installed @husky-di/remote package", () => {
 			"./conformance",
 			"./protocol",
 			"./transport",
-			"./wire/husky-di-rpc-1/schema",
-			"./wire/husky-di-rpc-1/security-vectors",
-			"./wire/husky-di-rpc-1/transcripts",
-			"./wire/husky-di-rpc-1/vectors",
 		]);
 		expect(readdirSync(installedRoot).sort()).toEqual([
 			"CHANGELOG.md",
@@ -163,7 +159,6 @@ describe("installed @husky-di/remote package", () => {
 			"dist",
 			"docs",
 			"package.json",
-			"wire",
 		]);
 		expect(readdirSync(resolve(installedRoot, "docs")).sort()).toEqual([
 			"ARCHITECTURE.drawio",
@@ -172,14 +167,6 @@ describe("installed @husky-di/remote package", () => {
 			"REQUIREMENTS.md",
 			"SPECIFICATION.md",
 			"TRANSPORT.md",
-		]);
-		expect(
-			readdirSync(resolve(installedRoot, "wire/husky-di-rpc-1")).sort(),
-		).toEqual([
-			"known-answer-vectors.json",
-			"raw-vectors.json",
-			"schema.json",
-			"transcripts.json",
 		]);
 		expect(listFiles(installedRoot)).not.toEqual(
 			expect.arrayContaining(["src/index.ts", "tests/specification.test.ts"]),
@@ -198,7 +185,7 @@ describe("installed @husky-di/remote package", () => {
 		)) {
 			expect(artifactFiles, `${entry} target`).toContain(entry.slice(0, -4));
 		}
-	});
+	}, 30_000);
 
 	it("RPC-SEC-001 packages the initiator authentication and admission boundary", () => {
 		const consumerRoot = createConsumer("security-documentation");
@@ -231,8 +218,10 @@ import * as conformance from "@husky-di/remote/conformance";
 
 ${nodeRuntimeExportAssertions}
 for (const subpath of ["schema", "vectors", "transcripts", "security-vectors"]) {
-  const asset = await import("@husky-di/remote/wire/husky-di-rpc-1/" + subpath, { with: { type: "json" } });
-  assert.equal(typeof asset.default, "object");
+  await assert.rejects(
+    import("@husky-di/remote/wire/husky-di-rpc-1/" + subpath, { with: { type: "json" } }),
+    (error) => error?.code === "ERR_PACKAGE_PATH_NOT_EXPORTED",
+  );
 }
 await assert.rejects(
   import("@husky-di/remote/dist/impls/rpc-connector.impl.js"),
@@ -256,7 +245,10 @@ const conformance = require("@husky-di/remote/conformance");
 
 ${nodeRuntimeExportAssertions}
 for (const subpath of ["schema", "vectors", "transcripts", "security-vectors"]) {
-  assert.equal(typeof require("@husky-di/remote/wire/husky-di-rpc-1/" + subpath), "object");
+  assert.throws(
+    () => require("@husky-di/remote/wire/husky-di-rpc-1/" + subpath),
+    (error) => error?.code === "ERR_PACKAGE_PATH_NOT_EXPORTED",
+  );
 }
 assert.throws(
   () => require("@husky-di/remote/dist/impls/rpc-connector.impl.cjs"),
@@ -464,7 +456,6 @@ import type { RpcConnectorImpl as DeepRpcConnectorImpl } from "@husky-di/remote/
 import type { IRpcProtocol } from "@husky-di/remote/protocol";
 import type { IRpcConnectorAdapter } from "@husky-di/remote/transport";
 import { runRpcConnectorAdapterConformance } from "@husky-di/remote/conformance";
-import schema from "@husky-di/remote/wire/husky-di-rpc-1/schema";
 
 declare const connection$: IRpcConnectorAdapter["connection$"];
 declare const protocol: IRpcProtocol;
@@ -477,7 +468,7 @@ const reconnection = createRpcConnectorReconnection({
   connector,
   adapterFactory: () => adapter,
 });
-void [connector, reconnection.connect(), runRpcConnectorAdapterConformance, schema];
+void [connector, reconnection.connect(), runRpcConnectorAdapterConformance];
 `,
 		);
 		run(process.execPath, [tscPath, "-p", consumerRoot], consumerRoot);

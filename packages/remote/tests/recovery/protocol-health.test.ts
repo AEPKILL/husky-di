@@ -20,7 +20,7 @@ const healthPolicy = {
 describe("Default RPC Protocol health", () => {
 	afterEach(() => vi.useRealTimers());
 
-	it("RPC-WIRE-014 RPC-TIME-001 schedules an unsequenced Ping and a coalesced Pong after idle activity", async () => {
+	it("RPC-WIRE-014 RPC-TIME-001 schedules an unsequenced Ping and a coalesced Pong after idle activity RPC-VALID-002 RPC-CORPUS-002", async () => {
 		vi.useFakeTimers();
 		const network = createRpcTestNetwork();
 		const acceptor = createRpcAcceptor({ runtimePolicy: healthPolicy });

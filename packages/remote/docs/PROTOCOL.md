@@ -50,8 +50,8 @@ cancellation, failed admission, Endpoint close, or Session terminal winner.
 
 Run `runRpcProtocolConformance()` from `@husky-di/remote/conformance` against a
 fresh fixture for every case. Conformance is necessary but not sufficient for a
-new wire profile: publish its own schema, raw corpus, security known-answer
-vectors, resource probes, and interoperability evidence.
+custom Protocol: also exercise its encoding, security, resource boundaries, and
+platform-specific behavior in package-local runtime tests.
 
 The authoritative member contracts and ordering rules are in
 [SPECIFICATION.md](SPECIFICATION.md).

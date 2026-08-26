@@ -12,10 +12,7 @@ import type {
 	RpcExposureRegistry,
 	RpcHandlerRoute,
 } from "@/types/rpc-exposure.type";
-import {
-	rpcCallableSchema,
-	rpcObjectOrFunctionSchema,
-} from "@/utils/rpc-schema.util";
+import { isCallable, isObjectOrFunction } from "@/utils/type-guard.util";
 
 function findHandler(
 	implementation: object,
@@ -33,8 +30,7 @@ function findHandler(
 			if (descriptor !== undefined) {
 				// Exposed handlers must be callable data properties, never accessors.
 				const handlerDescriptorIsInvalid =
-					!("value" in descriptor) ||
-					!rpcCallableSchema.safeParse(descriptor.value).success;
+					!("value" in descriptor) || !isCallable(descriptor.value);
 				if (handlerDescriptorIsInvalid) {
 					throw new TypeError(
 						`Selected implementation member ${method} must be a data function.`,
@@ -61,11 +57,11 @@ function prepareExposure(
 	implementation: unknown,
 ): RpcExposure {
 	const data = getRemoteServiceDescriptorData(descriptor);
-	if (!rpcObjectOrFunctionSchema.safeParse(implementation).success) {
+	if (!isObjectOrFunction(implementation)) {
 		throw new TypeError("implementation must be an object.");
 	}
 
-	const objectImplementation = implementation as object;
+	const objectImplementation = implementation;
 	const methods = new Map<string, RpcHandlerRoute>();
 	for (const method of Object.keys(data.methods)) {
 		methods.set(

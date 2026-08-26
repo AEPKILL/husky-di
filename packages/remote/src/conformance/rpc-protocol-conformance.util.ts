@@ -47,6 +47,11 @@ import {
 	normalizeRpcApplicationValue,
 	rpcApplicationValuesEqual,
 } from "@/utils/rpc-application-value.util";
+import {
+	isCallable,
+	isFiniteNumber,
+	isNonNullObject,
+} from "@/utils/type-guard.util";
 
 const CONFORMANCE_POLICY: IRpcProtocolRuntimePolicy = Object.freeze({
 	maxSessions: 4,
@@ -417,12 +422,12 @@ function createSnapshot(value: unknown): unknown {
 
 function assertRoleRuntime(value: unknown): void {
 	assertRpcConformance(
-		typeof value === "object" && value !== null,
+		isNonNullObject(value),
 		"Protocol factory must return a runtime.",
 	);
 	for (const member of ["shutdown", "close", "cleanup"] as const) {
 		assertRpcConformance(
-			typeof Reflect.get(value, member) === "function",
+			isCallable(Reflect.get(value as object, member)),
 			`Protocol runtime is missing ${member}().`,
 		);
 	}
@@ -905,11 +910,11 @@ function outcomesEqual(left: RpcCallOutcome, right: RpcCallOutcome): boolean {
 }
 
 function readRecordNumber(value: unknown, key: string): number | undefined {
-	if (typeof value !== "object" || value === null) {
+	if (!isNonNullObject(value)) {
 		return undefined;
 	}
-	const member = Reflect.get(value, key);
-	return typeof member === "number" ? member : undefined;
+	const member = Reflect.get(value, key) as unknown;
+	return isFiniteNumber(member) ? member : undefined;
 }
 
 function isCounterDrain(transition: RpcProtocolSessionTransition): boolean {

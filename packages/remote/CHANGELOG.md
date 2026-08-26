@@ -9,7 +9,7 @@
 - Add the authenticated, resumable, resource-bounded `husky-di-rpc/1` Protocol and its immutable `createRpcProtocol()` provider factory.
 - Add framework-neutral Protocol and Adapter conformance runners.
 - Export enums for the stable caller, Protocol, and conformance vocabularies.
-- Publish normative specification, requirement matrix, and wire corpus.
+- Publish the normative specification and requirement matrix.
 - Enforce Session and Owner aggregate retained-byte budgets across protected
   reserves, Protocol replay, handler arguments, and Endpoint ingress.
 - Release completed incoming request arguments and call handles, duplicate

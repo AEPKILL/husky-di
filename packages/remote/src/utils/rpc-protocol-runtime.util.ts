@@ -27,10 +27,7 @@ import {
 	normalizeRpcApplicationValue,
 	rpcApplicationValuesEqual,
 } from "@/utils/rpc-application-value.util";
-import {
-	rpcCallableSchema,
-	rpcNonNullObjectSchema,
-} from "@/utils/rpc-schema.util";
+import { isCallable, isNonNullObject } from "@/utils/type-guard.util";
 
 interface ConstructionGuard {
 	active: boolean;
@@ -121,10 +118,10 @@ function createHostBase(
 }
 
 function isRuntimeMember(value: unknown, key: string): boolean {
-	if (!rpcNonNullObjectSchema.safeParse(value).success) {
+	if (!isNonNullObject(value)) {
 		return false;
 	}
-	return rpcCallableSchema.safeParse(Reflect.get(value as object, key)).success;
+	return isCallable(Reflect.get(value, key));
 }
 
 function validateRoleRuntime(

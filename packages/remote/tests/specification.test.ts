@@ -351,7 +351,7 @@ describe("cold Topology Owner factories", () => {
 		expect(connector.state).toEqual({ status: "active" });
 	});
 
-	it("RPC-PKG-005 exposes portable package metadata", () => {
+	it("RPC-PKG-004 RPC-PKG-005 keeps validation private and exposes portable package metadata", () => {
 		expect(packageManifest).toMatchObject({
 			type: "module",
 			sideEffects: false,
@@ -359,7 +359,6 @@ describe("cold Topology Owner factories", () => {
 			publishConfig: { access: "public" },
 			files: [
 				"dist",
-				"wire",
 				"docs/ARCHITECTURE.drawio",
 				"docs/ARCHITECTURE.png",
 				"docs/PROTOCOL.md",
@@ -371,6 +370,9 @@ describe("cold Topology Owner factories", () => {
 				"LICENSE",
 			],
 		});
+		expect(Object.keys(packageManifest.exports)).not.toEqual(
+			expect.arrayContaining([expect.stringMatching(/^\.\/wire\//u)]),
+		);
 	});
 
 	it("RPC-API-001 RPC-SPI-001 constructs only the selected custom Protocol role", () => {

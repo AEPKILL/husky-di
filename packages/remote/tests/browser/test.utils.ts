@@ -16,7 +16,20 @@ import {
 	type IRpcConnectorAdapter,
 	RpcException,
 } from "../../src/index";
-import knownAnswerVectors from "../../wire/husky-di-rpc-1/known-answer-vectors.json";
+
+const hmacSha256KnownAnswer = Object.freeze({
+	keyHex: "0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b",
+	dataHex: "4869205468657265",
+	tagHex: "b0344c61d8db38535ca8afceaf0bf12b881dc200c9833da726e9376c2e32cff7",
+});
+const hkdfSha256KnownAnswer = Object.freeze({
+	ikmHex: "0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b",
+	saltHex: "000102030405060708090a0b0c",
+	infoHex: "f0f1f2f3f4f5f6f7f8f9",
+	length: 42,
+	okmHex:
+		"3cb25f25faacd57a90434f64d0362f2a2d2d0a90cf1a5a4c5db02d56ecc4c5bf34007208d5b887185865",
+});
 
 interface IBrowserRpcService {
 	add(left: number, right: number): number;
@@ -141,7 +154,7 @@ function encodeHex(value: ArrayBuffer): string {
 }
 
 async function verifyBrowserWebCryptoVectors(): Promise<boolean> {
-	const hmacVector = knownAnswerVectors.hmacSha256;
+	const hmacVector = hmacSha256KnownAnswer;
 	const hmacKey = await crypto.subtle.importKey(
 		"raw",
 		decodeHex(hmacVector.keyHex),
@@ -154,7 +167,7 @@ async function verifyBrowserWebCryptoVectors(): Promise<boolean> {
 		hmacKey,
 		decodeHex(hmacVector.dataHex),
 	);
-	const hkdfVector = knownAnswerVectors.hkdfSha256;
+	const hkdfVector = hkdfSha256KnownAnswer;
 	const hkdfKey = await crypto.subtle.importKey(
 		"raw",
 		decodeHex(hkdfVector.ikmHex),

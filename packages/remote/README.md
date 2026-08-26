@@ -15,7 +15,7 @@ Use this package when you need:
 - a stable logical peer that can survive replacement of its physical connection
 - one connector talking to one peer, or one acceptor serving many peers
 - bounded concurrency, retained data, recovery, and shutdown behavior
-- a replaceable wire Protocol or Transport Adapter
+- a replaceable semantic Protocol or Transport Adapter
 
 This package currently supports unary calls whose arguments and results fit the
 [RPC application value model](docs/SPECIFICATION.md#4-common-application-value-model).
@@ -376,10 +376,6 @@ Both methods are idempotent and return the owner's cached termination task.
 | `@husky-di/remote/protocol` | SPI for third-party semantic Protocol implementations. |
 | `@husky-di/remote/transport` | Physical Connection and Adapter contracts. |
 | `@husky-di/remote/conformance` | Protocol and Adapter conformance runners. |
-| `@husky-di/remote/wire/husky-di-rpc-1/schema` | Closed normative wire schema. |
-| `@husky-di/remote/wire/husky-di-rpc-1/vectors` | Raw wire vectors. |
-| `@husky-di/remote/wire/husky-di-rpc-1/transcripts` | Normative protocol transcripts. |
-| `@husky-di/remote/wire/husky-di-rpc-1/security-vectors` | Cryptographic known-answer vectors. |
 
 Keep implementation seams private unless you are building a Protocol or
 Transport Adapter. Applications normally need only the root entry point plus a

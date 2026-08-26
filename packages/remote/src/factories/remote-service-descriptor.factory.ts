@@ -5,6 +5,7 @@
  */
 
 import type { ServiceIdentifier } from "@husky-di/core";
+import { z } from "zod";
 
 import type { IRemoteServiceDescriptor } from "@/interfaces/remote-service-descriptor.interface";
 import type {
@@ -12,12 +13,12 @@ import type {
 	RpcMethodDefinitions,
 	ValidateMethodDefinitions,
 } from "@/types/remote-service-descriptor.type";
-import {
-	rpcCancelableMethodDefinitionSchema,
-	rpcDescriptorPlainRecordSchema,
-	rpcStringSchema,
-	rpcWireIdentifierSchema,
-} from "@/utils/rpc-schema.util";
+import { rpcWireIdentifierSchema } from "@/utils/protocol/rpc-wire-identifier-schema.util";
+import { isPlainRecord, isString } from "@/utils/type-guard.util";
+
+const rpcCancelableMethodDefinitionSchema = z.strictObject({
+	cancelable: z.literal(true),
+});
 
 export interface RemoteServiceDescriptorData {
 	readonly serviceIdentifier: ServiceIdentifier<unknown>;
@@ -33,10 +34,6 @@ const remoteServiceDescriptorData = new WeakMap<
 >();
 
 const cancelableMethodDefinition = Object.freeze({ cancelable: true });
-
-function isPlainRecord(value: unknown): value is Record<PropertyKey, unknown> {
-	return rpcDescriptorPlainRecordSchema.safeParse(value).success;
-}
 
 function validateWireIdentifier(
 	value: unknown,
@@ -85,11 +82,10 @@ function snapshotMethods(
 		true | { readonly cancelable: true }
 	>;
 	for (const key of keys) {
-		const keyResult = rpcStringSchema.safeParse(key);
-		if (!keyResult.success) {
+		if (!isString(key)) {
 			throw new TypeError("methods must contain only string-named methods.");
 		}
-		const methodName = keyResult.data;
+		const methodName = key;
 
 		validateWireIdentifier(methodName, "method name");
 		if (methodName === "then") {

@@ -614,7 +614,7 @@ describe("Default RPC Protocol", () => {
 		await acceptor.close();
 	});
 
-	it("RPC-SHUTDOWN-009 applies Close only to the exact current binding and peer", async () => {
+	it("RPC-SHUTDOWN-009 applies Close only to the exact current binding and peer RPC-CORPUS-002", async () => {
 		const network = createRecoveryNetwork();
 		const acceptor = createRpcAcceptor();
 		const firstConnector = createRpcConnector();
@@ -765,7 +765,7 @@ describe("Default RPC Protocol", () => {
 		await acceptor.close();
 	});
 
-	it("ORDER-003 exposes a package-private real-ledger counter exhaustion seam", async () => {
+	it("ORDER-003 exposes a package-private real-ledger counter exhaustion seam RPC-CORPUS-002", async () => {
 		const protocol = createRpcCounterExhaustionProtocolForTest();
 		const descriptor = createRemoteServiceDescriptor(ICalculatorService, {
 			wireName: "example.calculator.v1",
@@ -790,7 +790,7 @@ describe("Default RPC Protocol", () => {
 		await expect(call).rejects.toMatchObject({ code: "unavailable" });
 	});
 
-	it("RPC-PKG-003 RPC-WIRE-001 RPC-ACK-001 RPC-ACK-003 performs one authenticated fresh unary call with directional ledgers", async () => {
+	it("RPC-PKG-003 RPC-WIRE-001 RPC-ACK-001 RPC-ACK-003 performs one authenticated fresh unary call with directional ledgers RPC-CORPUS-002", async () => {
 		const descriptor = createRemoteServiceDescriptor(ICalculatorService, {
 			wireName: "example.calculator.v1",
 			methods: { add: true },
@@ -898,7 +898,7 @@ describe("Default RPC Protocol", () => {
 		expect(acceptor.peers).toHaveLength(1);
 	});
 
-	it("RPC-SESSION-001 RPC-SESSION-005 RPC-SESSION-006 RPC-RECOVERY-004 RPC-ACK-007 RPC-LEDGER-002 RPC-CORPUS-003 resumes the retained Session and replays an unreceived call identity", async () => {
+	it("RPC-SESSION-001 RPC-SESSION-005 RPC-SESSION-006 RPC-RECOVERY-004 RPC-ACK-007 RPC-LEDGER-002 RPC-CORPUS-003 resumes the retained Session and replays an unreceived call identity RPC-CORPUS-002", async () => {
 		const descriptor = createRemoteServiceDescriptor(ICalculatorService, {
 			wireName: "example.calculator.v1",
 			methods: { add: true },
@@ -994,7 +994,7 @@ describe("Default RPC Protocol", () => {
 		).toEqual(["1", "1"]);
 	});
 
-	it("RPC-ACK-002 RPC-ACK-006 RPC-ACK-007 authenticates durable receipt before handler completion and replay release", async () => {
+	it("RPC-ACK-002 RPC-ACK-006 RPC-ACK-007 authenticates durable receipt before handler completion and replay release RPC-VALID-002 RPC-CORPUS-002", async () => {
 		const descriptor = createRemoteServiceDescriptor(
 			IDeferredCalculatorService,
 			{
@@ -1062,7 +1062,7 @@ describe("Default RPC Protocol", () => {
 	it.each([
 		["lower", 0],
 		["upper", 2],
-	] as const)("RPC-SESSION-008 RPC-SEC-006 RPC-VALID-004 RPC-CORPUS-003 authenticates a %s resume cursor as continuity-failure", async (_position, receivedThrough) => {
+	] as const)("RPC-SESSION-008 RPC-SEC-006 RPC-VALID-004 RPC-CORPUS-003 authenticates a %s resume cursor as continuity-failure RPC-CORPUS-002", async (_position, receivedThrough) => {
 		const descriptor = createRemoteServiceDescriptor(ICalculatorService, {
 			wireName: "example.calculator.v1",
 			methods: { add: true },
@@ -1160,7 +1160,7 @@ describe("Default RPC Protocol", () => {
 		});
 	});
 
-	it("RPC-SESSION-006 RPC-SESSION-007 RPC-RECOVERY-002 RPC-CORPUS-003 recovers a lost resume accept with a higher attempt", async () => {
+	it("RPC-SESSION-006 RPC-SESSION-007 RPC-RECOVERY-002 RPC-CORPUS-003 recovers a lost resume accept with a higher attempt RPC-CORPUS-002", async () => {
 		const descriptor = createRemoteServiceDescriptor(ICalculatorService, {
 			wireName: "example.calculator.v1",
 			methods: { add: true },
@@ -1527,7 +1527,7 @@ describe("Default RPC Protocol", () => {
 		"profile",
 		"session",
 		"proof",
-	] as const)("RPC-SEC-005 RPC-RECOVERY-006 keeps a %s mismatch generic and non-authoritative", async (mismatch) => {
+	] as const)("RPC-SEC-005 RPC-RECOVERY-006 keeps a %s mismatch generic and non-authoritative RPC-CORPUS-002", async (mismatch) => {
 		const network = createRecoveryNetwork();
 		const policy = {
 			bindingAttemptTimeoutMs: 50,

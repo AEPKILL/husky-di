@@ -16,10 +16,7 @@ import type { IRpcEndpoint } from "@/interfaces/protocol/rpc-endpoint.interface"
 import type { IRpcRetainedBytesReservation } from "@/interfaces/protocol/rpc-protocol.interface";
 import type { IRpcConnection } from "@/interfaces/rpc-connection.interface";
 import type { CreateRpcEndpointOptions } from "@/types/protocol/rpc-endpoint.type";
-import {
-	rpcByteMessageSchema,
-	rpcPositiveSafeIntegerSchema,
-} from "@/utils/rpc-schema.util";
+import { isPositiveSafeInteger, isUint8Array } from "@/utils/type-guard.util";
 
 interface IRpcIngressEntry {
 	readonly message: Uint8Array;
@@ -77,7 +74,7 @@ export class RpcEndpointImpl implements IRpcEndpoint {
 	}
 
 	configureSendProgressTimeout(timeoutMs: number): void {
-		if (!rpcPositiveSafeIntegerSchema.safeParse(timeoutMs).success) {
+		if (!isPositiveSafeInteger(timeoutMs)) {
 			throw new Error("RPC endpoint send-progress timeout is invalid.");
 		}
 		this._sendProgressTimeoutMs = timeoutMs;
@@ -125,7 +122,7 @@ export class RpcEndpointImpl implements IRpcEndpoint {
 		if (this._closed || this._failed) {
 			return;
 		}
-		if (!rpcByteMessageSchema.safeParse(message).success) {
+		if (!isUint8Array(message)) {
 			this._fail(
 				RpcEndpointFailureEnum.protocol,
 				new Error("RPC Connection emitted a non-byte message."),

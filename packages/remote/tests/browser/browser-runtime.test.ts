@@ -48,7 +48,7 @@ test.afterAll(async () => {
 	}
 });
 
-test("RPC-RELEASE-002 runs WebCrypto, cross-realm cancellation, Recovery, and termination", async ({
+test("RPC-CORPUS-001 RPC-RELEASE-002 runs WebCrypto, cross-realm cancellation, Recovery, and termination", async ({
 	page,
 }) => {
 	await page.goto(browserOrigin);
