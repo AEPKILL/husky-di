@@ -35,7 +35,7 @@ import type {
 import type { IRpcRetainedBytesLedger } from "@/interfaces/protocol/rpc-retained-bytes-ledger.interface";
 import type { IRpcSession } from "@/interfaces/protocol/rpc-session.interface";
 import type {
-	CreateRpcSessionImplOptions,
+	CreateRpcSessionOptions,
 	RpcBindingCandidate,
 	RpcBindingCommit,
 	RpcBindingEpoch,
@@ -47,6 +47,7 @@ import type {
 	RpcResponderResumeRequest,
 	RpcResponderResumeReview,
 	RpcSessionAuthorityCommit,
+	RpcSessionImplDependencies,
 	RpcSessionRecovery,
 } from "@/types/protocol/rpc-session.type";
 import type {
@@ -241,16 +242,16 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 	_gracefulCloseStarted = false;
 	_closed = false;
 
-	public constructor(options: CreateRpcSessionImplOptions<TKey>) {
+	public constructor(
+		options: CreateRpcSessionOptions<TKey>,
+		dependencies: RpcSessionImplDependencies,
+	) {
+		const { host, onTerminal, proofKey, sessionId } = options;
 		const {
 			codec,
 			counterExhausted = false,
-			host,
-			onTerminal,
-			proofKey,
 			retainedBytesLedger,
-			sessionId,
-		} = options;
+		} = dependencies;
 		this._host = host;
 		this._retainedBytesLedger = retainedBytesLedger;
 		const protectedRetainedBytesReservation = this._retainedBytesLedger.reserve(

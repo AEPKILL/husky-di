@@ -19,12 +19,11 @@ export type CreateRpcSessionOptions<TKey> = {
 	readonly onTerminal: () => void;
 };
 
-export type CreateRpcSessionImplOptions<TKey> = CreateRpcSessionOptions<TKey> &
-	Readonly<{
-		readonly codec: IRpcCodec;
-		readonly counterExhausted?: boolean;
-		readonly retainedBytesLedger: IRpcRetainedBytesLedger;
-	}>;
+export type RpcSessionImplDependencies = Readonly<{
+	readonly codec: IRpcCodec;
+	readonly counterExhausted?: boolean;
+	readonly retainedBytesLedger: IRpcRetainedBytesLedger;
+}>;
 
 export type RpcSessionRecovery = Readonly<{
 	readonly reclaimDeadline: number;

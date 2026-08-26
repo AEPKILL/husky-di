@@ -36,8 +36,7 @@ const createBindingAttempt: RpcBindingAttemptFactory<CryptoKey> = (options) =>
 
 function createBuiltInRpcProtocol(counterExhausted: boolean): IRpcProtocol {
 	const createSession: RpcSessionFactory<CryptoKey> = (options) =>
-		new RpcSessionImpl<CryptoKey>({
-			...options,
+		new RpcSessionImpl<CryptoKey>(options, {
 			codec,
 			counterExhausted,
 			retainedBytesLedger: new RpcRetainedBytesLedgerImpl(

@@ -145,16 +145,20 @@ export function createRpcDirectSessionHarness(
 			},
 		};
 	};
-	const created = new RpcSessionImpl({
-		host,
-		sessionId: "direct-session",
-		proofKey: {} as CryptoKey,
-		codec,
-		onTerminal: () => {},
-		retainedBytesLedger: new RpcRetainedBytesLedgerImpl(
-			policy.maxRetainedBytesPerSession,
-		),
-	});
+	const created = new RpcSessionImpl(
+		{
+			host,
+			sessionId: "direct-session",
+			proofKey: {} as CryptoKey,
+			onTerminal: () => {},
+		},
+		{
+			codec,
+			retainedBytesLedger: new RpcRetainedBytesLedgerImpl(
+				policy.maxRetainedBytesPerSession,
+			),
+		},
+	);
 	const sessionHost: IRpcProtocolSessionHost = {
 		reserveIncomingCall: () => undefined,
 		transition: (transition) => transitions.push(transition),

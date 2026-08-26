@@ -164,16 +164,20 @@ function createSession(
 		applicationValuesEqual: rpcApplicationValuesEqual,
 		fault() {},
 	};
-	return new RpcSessionImpl({
-		host,
-		sessionId: "boundary-session",
-		proofKey: {} as CryptoKey,
-		codec,
-		onTerminal: () => {},
-		retainedBytesLedger: new RpcRetainedBytesLedgerImpl(
-			runtimePolicy.maxRetainedBytesPerSession,
-		),
-	});
+	return new RpcSessionImpl(
+		{
+			host,
+			sessionId: "boundary-session",
+			proofKey: {} as CryptoKey,
+			onTerminal: () => {},
+		},
+		{
+			codec,
+			retainedBytesLedger: new RpcRetainedBytesLedgerImpl(
+				runtimePolicy.maxRetainedBytesPerSession,
+			),
+		},
+	);
 }
 
 describe("Default RPC Protocol resource boundaries", () => {
