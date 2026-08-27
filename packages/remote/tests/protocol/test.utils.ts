@@ -5,10 +5,10 @@
  */
 
 import { Subject } from "rxjs";
+import { RpcRetainedBytesLedgerImpl } from "../../src/impls/common/rpc-retained-bytes-ledger.impl";
+import { RpcEndpointImpl } from "../../src/impls/endpoint/rpc-endpoint.impl";
 import { RpcCodecImpl } from "../../src/impls/protocol/rpc-codec.impl";
-import { RpcEndpointImpl } from "../../src/impls/protocol/rpc-endpoint.impl";
-import { RpcRetainedBytesLedgerImpl } from "../../src/impls/protocol/rpc-retained-bytes-ledger.impl";
-import { RpcSessionImpl } from "../../src/impls/protocol/rpc-session.impl";
+import { RpcSessionImpl } from "../../src/impls/session/rpc-session.impl";
 import type {
 	IRpcProtocolHost,
 	IRpcProtocolRuntimePolicy,

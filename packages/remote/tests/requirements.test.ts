@@ -172,7 +172,7 @@ describe("Remote RPC requirement evidence", () => {
 		] as const;
 		const ownerValidationPaths = [
 			"packages/remote/src/factories/remote-service-descriptor.factory.ts",
-			"packages/remote/src/impls/rpc-peer.impl.ts",
+			"packages/remote/src/impls/peer/rpc-peer.impl.ts",
 			"packages/remote/src/utils/protocol/rpc-base64-url-32-schema.util.ts",
 			"packages/remote/src/utils/protocol/rpc-wire-grammar.util.ts",
 			"packages/remote/src/utils/protocol/rpc-wire-identifier-schema.util.ts",
@@ -180,31 +180,31 @@ describe("Remote RPC requirement evidence", () => {
 		const nativeGuardOwnerPaths = [
 			"packages/remote/src/conformance/rpc-protocol-conformance.util.ts",
 			"packages/remote/src/factories/rpc-connector-reconnection.factory.ts",
-			"packages/remote/src/impls/protocol/rpc-endpoint.impl.ts",
-			"packages/remote/src/impls/protocol/rpc-retained-bytes-ledger.impl.ts",
+			"packages/remote/src/impls/endpoint/rpc-endpoint.impl.ts",
+			"packages/remote/src/impls/common/rpc-retained-bytes-ledger.impl.ts",
 			"packages/remote/src/utils/rpc-exposure.util.ts",
 			"packages/remote/src/utils/rpc-runtime-policy.util.ts",
 		] as const;
 		const callableGuardConsumerPaths = [
 			"packages/remote/src/conformance/rpc-protocol-conformance.util.ts",
 			"packages/remote/src/factories/rpc-connector-reconnection.factory.ts",
-			"packages/remote/src/impls/rpc-acceptor.impl.ts",
-			"packages/remote/src/impls/rpc-connector.impl.ts",
-			"packages/remote/src/impls/rpc-peer.impl.ts",
+			"packages/remote/src/impls/owner/rpc-acceptor.impl.ts",
+			"packages/remote/src/impls/owner/rpc-connector.impl.ts",
+			"packages/remote/src/impls/peer/rpc-peer.impl.ts",
 			"packages/remote/src/utils/rpc-exposure.util.ts",
 			"packages/remote/src/utils/rpc-protocol-runtime.util.ts",
 		] as const;
 		const nonNullObjectGuardConsumerPaths = [
 			"packages/remote/src/conformance/rpc-protocol-conformance.util.ts",
 			"packages/remote/src/factories/rpc-connector-reconnection.factory.ts",
-			"packages/remote/src/impls/rpc-acceptor.impl.ts",
-			"packages/remote/src/impls/rpc-connector.impl.ts",
-			"packages/remote/src/impls/rpc-peer.impl.ts",
+			"packages/remote/src/impls/owner/rpc-acceptor.impl.ts",
+			"packages/remote/src/impls/owner/rpc-connector.impl.ts",
+			"packages/remote/src/impls/peer/rpc-peer.impl.ts",
 			"packages/remote/src/utils/rpc-protocol-runtime.util.ts",
 		] as const;
 		const undefinedGuardConsumerPaths = [
-			"packages/remote/src/impls/rpc-acceptor.impl.ts",
-			"packages/remote/src/impls/rpc-connector.impl.ts",
+			"packages/remote/src/impls/owner/rpc-acceptor.impl.ts",
+			"packages/remote/src/impls/owner/rpc-connector.impl.ts",
 		] as const;
 
 		expect(grammarSource).toContain('from "zod"');

@@ -1,5 +1,5 @@
 /**
- * @overview Supervises one Connector's initial and recovery connection attempts.
+ * @overview External supervisor for one Connector's initial and recovery attempts.
  * @author AEPKILL
  * @created 2026-08-21 02:14:00
  */

@@ -6,7 +6,7 @@
 
 import { NEVER } from "rxjs";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { RpcEndpointImpl } from "../../src/impls/protocol/rpc-endpoint.impl";
+import { RpcEndpointImpl } from "../../src/impls/endpoint/rpc-endpoint.impl";
 import { createRpcAcceptor, createRpcConnector } from "../../src/index";
 import { createRpcTestNetwork } from "../protocol/test.utils";
 

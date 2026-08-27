@@ -8,8 +8,8 @@ import { createServiceIdentifier } from "@husky-di/core";
 import { describe, expect, it } from "vitest";
 
 import { RpcCallTerminalTypeEnum } from "../../src/enums/protocol/rpc-call-terminal-type.enum";
-import { RpcHandlerSchedulerImpl } from "../../src/impls/rpc-handler-scheduler.impl";
-import { RpcPeerImpl } from "../../src/impls/rpc-peer.impl";
+import { RpcHandlerSchedulerImpl } from "../../src/impls/owner/rpc-handler-scheduler.impl";
+import { RpcPeerImpl } from "../../src/impls/peer/rpc-peer.impl";
 import {
 	createRemoteServiceDescriptor,
 	createRpcAcceptor,

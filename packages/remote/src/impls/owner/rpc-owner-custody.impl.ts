@@ -1,5 +1,5 @@
 /**
- * @overview RPC Topology Owner resource custody and final cleanup barrier.
+ * @overview Private RPC Topology Owner resource custody and final cleanup barrier.
  * @author AEPKILL
  * @created 2026-08-22 15:32:32
  */

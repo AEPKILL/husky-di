@@ -14,10 +14,10 @@ import { RpcDecodePhaseEnum } from "../../src/enums/protocol/rpc-decode-phase.en
 import type { RpcEndpointFailureEnum } from "../../src/enums/protocol/rpc-endpoint-failure.enum";
 import { RpcWireRecordKindEnum } from "../../src/enums/protocol/rpc-wire-record-kind.enum";
 import { RpcExceptionCodeEnum } from "../../src/enums/rpc-exception-code.enum";
+import { RpcRetainedBytesLedgerImpl } from "../../src/impls/common/rpc-retained-bytes-ledger.impl";
+import { RpcEndpointImpl } from "../../src/impls/endpoint/rpc-endpoint.impl";
 import { RpcCodecImpl } from "../../src/impls/protocol/rpc-codec.impl";
-import { RpcEndpointImpl } from "../../src/impls/protocol/rpc-endpoint.impl";
-import { RpcRetainedBytesLedgerImpl } from "../../src/impls/protocol/rpc-retained-bytes-ledger.impl";
-import { RpcSessionImpl } from "../../src/impls/protocol/rpc-session.impl";
+import { RpcSessionImpl } from "../../src/impls/session/rpc-session.impl";
 import type {
 	IRpcProtocolHost,
 	IRpcProtocolRuntimePolicy,

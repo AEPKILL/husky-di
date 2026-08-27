@@ -1,5 +1,5 @@
 /**
- * @overview Serialized ingress and single-send Physical Connection driver.
+ * @overview Private serialized ingress and single-send Physical Connection Endpoint driver.
  * @author AEPKILL
  * @created 2026-08-19 00:00:00
  */

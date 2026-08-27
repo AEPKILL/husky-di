@@ -1,5 +1,5 @@
 /**
- * @overview One-shot Physical Connection Binding Attempt and exact Endpoint bridge.
+ * @overview Private one-shot Physical Connection Binding Attempt and exact Endpoint bridge.
  * @author AEPKILL
  * @created 2026-08-22 00:00:00
  */

@@ -1,5 +1,5 @@
 /**
- * @overview Retained husky-di-rpc/1 Logical Session, call, sequence, ACK, and replay state.
+ * @overview Private retained husky-di-rpc/1 Logical Session and replay state.
  * @author AEPKILL
  * @created 2026-08-19 00:00:00
  */

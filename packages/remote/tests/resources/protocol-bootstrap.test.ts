@@ -10,9 +10,9 @@ import { RpcDecodePhaseEnum } from "../../src/enums/protocol/rpc-decode-phase.en
 import { RpcProofOperationKindEnum } from "../../src/enums/protocol/rpc-proof-operation-kind.enum";
 import { RpcWireRecordKindEnum } from "../../src/enums/protocol/rpc-wire-record-kind.enum";
 import { createRpcProtocol } from "../../src/factories/rpc-protocol.factory";
+import { RpcRetainedBytesLedgerImpl } from "../../src/impls/common/rpc-retained-bytes-ledger.impl";
 import { RpcCodecImpl } from "../../src/impls/protocol/rpc-codec.impl";
 import { RpcCryptographyImpl } from "../../src/impls/protocol/rpc-cryptography.impl";
-import { RpcRetainedBytesLedgerImpl } from "../../src/impls/protocol/rpc-retained-bytes-ledger.impl";
 import type {
 	IRpcProtocolAcceptorHost,
 	IRpcProtocolAcceptorRuntime,

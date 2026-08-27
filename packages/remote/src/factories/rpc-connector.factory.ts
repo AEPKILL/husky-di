@@ -5,11 +5,11 @@
  */
 
 import { createRpcProtocol } from "@/factories/rpc-protocol.factory";
-import { RpcRetainedBytesLedgerImpl } from "@/impls/protocol/rpc-retained-bytes-ledger.impl";
-import { RpcConnectorImpl } from "@/impls/rpc-connector.impl";
-import { RpcHandlerSchedulerImpl } from "@/impls/rpc-handler-scheduler.impl";
-import { RpcOwnerCustodyImpl } from "@/impls/rpc-owner-custody.impl";
-import { RpcPeerImpl } from "@/impls/rpc-peer.impl";
+import { RpcRetainedBytesLedgerImpl } from "@/impls/common/rpc-retained-bytes-ledger.impl";
+import { RpcConnectorImpl } from "@/impls/owner/rpc-connector.impl";
+import { RpcHandlerSchedulerImpl } from "@/impls/owner/rpc-handler-scheduler.impl";
+import { RpcOwnerCustodyImpl } from "@/impls/owner/rpc-owner-custody.impl";
+import { RpcPeerImpl } from "@/impls/peer/rpc-peer.impl";
 import type { IRpcConnector } from "@/interfaces/owner/rpc-connector.interface";
 import type { RpcConnectorOptions } from "@/types/rpc-caller.type";
 import { createRpcProtocolConnectorRuntime } from "@/utils/rpc-protocol-runtime.util";

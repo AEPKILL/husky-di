@@ -1,5 +1,5 @@
 /**
- * @overview Owner and built-in Session retained-byte reservation ledger implementation.
+ * @overview Shared Owner and Session retained-byte reservation ledger implementation.
  * @author AEPKILL
  * @created 2026-08-21 00:00:00
  */

@@ -1,5 +1,5 @@
 /**
- * @overview Fair owner-wide scheduler for captured incoming RPC handlers.
+ * @overview Private fair owner-wide scheduler for captured incoming RPC handlers.
  * @author AEPKILL
  * @created 2026-08-19 00:00:00
  */

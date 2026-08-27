@@ -12,8 +12,8 @@ import { RpcWireRecordKindEnum } from "../../src/enums/protocol/rpc-wire-record-
 import { RpcCallDirectionEnum } from "../../src/enums/rpc-call-direction.enum";
 import { RpcEventTypeEnum } from "../../src/enums/rpc-event-type.enum";
 import { createRpcProtocol } from "../../src/factories/rpc-protocol.factory";
+import type { RpcRetainedBytesLedgerImpl } from "../../src/impls/common/rpc-retained-bytes-ledger.impl";
 import { RpcCodecImpl } from "../../src/impls/protocol/rpc-codec.impl";
-import type { RpcRetainedBytesLedgerImpl } from "../../src/impls/protocol/rpc-retained-bytes-ledger.impl";
 import {
 	createRemoteServiceDescriptor,
 	createRpcAcceptor,

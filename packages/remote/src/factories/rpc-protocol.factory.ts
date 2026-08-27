@@ -4,16 +4,16 @@
  * @created 2026-08-19 00:00:00
  */
 
-import { RpcBindingAttemptImpl } from "@/impls/protocol/rpc-binding-attempt.impl";
+import { RpcRetainedBytesLedgerImpl } from "@/impls/common/rpc-retained-bytes-ledger.impl";
+import { RpcBindingAttemptImpl } from "@/impls/endpoint/rpc-binding-attempt.impl";
+import { RpcEndpointImpl } from "@/impls/endpoint/rpc-endpoint.impl";
 import { RpcCodecImpl } from "@/impls/protocol/rpc-codec.impl";
 import { RpcCryptographyImpl } from "@/impls/protocol/rpc-cryptography.impl";
-import { RpcEndpointImpl } from "@/impls/protocol/rpc-endpoint.impl";
 import {
 	RpcProtocolAcceptorRuntimeImpl,
 	RpcProtocolConnectorRuntimeImpl,
 } from "@/impls/protocol/rpc-protocol.impl";
-import { RpcRetainedBytesLedgerImpl } from "@/impls/protocol/rpc-retained-bytes-ledger.impl";
-import { RpcSessionImpl } from "@/impls/protocol/rpc-session.impl";
+import { RpcSessionImpl } from "@/impls/session/rpc-session.impl";
 import type { IRpcEndpoint } from "@/interfaces/endpoint/rpc-endpoint.interface";
 import type { IRpcProtocol } from "@/interfaces/protocol/rpc-protocol.interface";
 import type { CreateRpcEndpointOptions } from "@/types/protocol/rpc-endpoint.type";

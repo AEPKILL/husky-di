@@ -8,7 +8,7 @@ import {
 	DEFAULT_RPC_CONNECTOR_RECONNECTION_ATTEMPT_TIMEOUT_MS,
 	DEFAULT_RPC_CONNECTOR_RECONNECTION_RETRY_DELAYS_MS,
 } from "@/constants/rpc-connector-reconnection.const";
-import { RpcConnectorReconnectionImpl } from "@/impls/rpc-connector-reconnection.impl";
+import { RpcConnectorReconnectionImpl } from "@/impls/reconnection/rpc-connector-reconnection.impl";
 import type { IRpcConnector } from "@/interfaces/owner/rpc-connector.interface";
 import type { IRpcConnectorReconnection } from "@/interfaces/reconnection/rpc-connector-reconnection.interface";
 import type {

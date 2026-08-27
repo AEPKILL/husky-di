@@ -175,9 +175,9 @@ describe("installed @husky-di/remote package", () => {
 		expect(artifactFiles).toEqual(
 			expect.arrayContaining([
 				"dist/index.cjs.map",
-				"dist/impls/rpc-acceptor.impl.js.map",
-				"dist/impls/rpc-connector.impl.js.map",
-				"dist/impls/rpc-peer.impl.js.map",
+				"dist/impls/owner/rpc-acceptor.impl.js.map",
+				"dist/impls/owner/rpc-connector.impl.js.map",
+				"dist/impls/peer/rpc-peer.impl.js.map",
 			]),
 		);
 		for (const entry of artifactFiles.filter((path) =>
@@ -224,7 +224,7 @@ for (const subpath of ["schema", "vectors", "transcripts", "security-vectors"]) 
   );
 }
 await assert.rejects(
-  import("@husky-di/remote/dist/impls/rpc-connector.impl.js"),
+  import("@husky-di/remote/dist/impls/owner/rpc-connector.impl.js"),
   (error) => error?.code === "ERR_PACKAGE_PATH_NOT_EXPORTED",
 );
 `,
@@ -251,7 +251,7 @@ for (const subpath of ["schema", "vectors", "transcripts", "security-vectors"]) 
   );
 }
 assert.throws(
-  () => require("@husky-di/remote/dist/impls/rpc-connector.impl.cjs"),
+  () => require("@husky-di/remote/dist/impls/owner/rpc-connector.impl.cjs"),
   (error) => error?.code === "ERR_PACKAGE_PATH_NOT_EXPORTED",
 );
 `,
@@ -426,7 +426,7 @@ import type { RemoteService, RpcMethodDefinitions } from "@husky-di/remote";
 // @ts-expect-error Concrete implementation classes are private.
 import type { RpcConnectorImpl as RootRpcConnectorImpl } from "@husky-di/remote";
 // @ts-expect-error Implementation deep imports are private.
-import type { RpcConnectorImpl as DeepRpcConnectorImpl } from "@husky-di/remote/dist/impls/rpc-connector.impl.js";
+import type { RpcConnectorImpl as DeepRpcConnectorImpl } from "@husky-di/remote/dist/impls/owner/rpc-connector.impl.js";
 `,
 		);
 		run(process.execPath, [tscPath, "-p", consumerRoot], consumerRoot);

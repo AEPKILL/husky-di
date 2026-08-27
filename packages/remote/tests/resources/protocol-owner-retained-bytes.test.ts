@@ -7,8 +7,8 @@
 import { Subject } from "rxjs";
 import { describe, expect, it, vi } from "vitest";
 import { createRpcProtocol } from "../../src/factories/rpc-protocol.factory";
-import { RpcEndpointImpl } from "../../src/impls/protocol/rpc-endpoint.impl";
-import { RpcRetainedBytesLedgerImpl } from "../../src/impls/protocol/rpc-retained-bytes-ledger.impl";
+import { RpcRetainedBytesLedgerImpl } from "../../src/impls/common/rpc-retained-bytes-ledger.impl";
+import { RpcEndpointImpl } from "../../src/impls/endpoint/rpc-endpoint.impl";
 import { createRpcAcceptor, createRpcConnector } from "../../src/index";
 import type {
 	IRpcProtocol,

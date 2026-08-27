@@ -1,5 +1,5 @@
 /**
- * @overview Stable caller-facing RPC Peer implementation.
+ * @overview Stable caller-facing and Protocol-hosting RPC Peer implementation.
  * @author AEPKILL
  * @created 2026-08-19 00:00:00
  */
