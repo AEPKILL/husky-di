@@ -10,12 +10,12 @@ import {
 } from "@/constants/rpc-connector-reconnection.const";
 import { RpcConnectorReconnectionImpl } from "@/impls/reconnection/rpc-connector-reconnection.impl";
 import type { IRpcConnector } from "@/interfaces/owner/rpc-connector.interface";
-import type { IRpcConnectorReconnection } from "@/interfaces/reconnection/rpc-connector-reconnection.interface";
 import type {
 	CreateRpcConnectorReconnectionOptions,
+	IRpcConnectorReconnection,
 	RpcConnectorAdapterFactory,
 	RpcConnectorReconnectionPolicy,
-} from "@/types/rpc-connector-reconnection.type";
+} from "@/interfaces/reconnection/rpc-connector-reconnection.interface";
 import {
 	readRpcClosedOptionsRecord,
 	validateRpcPositiveSafeInteger,

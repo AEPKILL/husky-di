@@ -4,7 +4,7 @@
  * @created 2026-08-22 17:54:40
  */
 
-import type { RpcHandlerJob } from "@/types/rpc-handler-scheduler.type";
+export type RpcHandlerJob = (releasePermit: () => void) => boolean;
 
 export interface IRpcHandlerScheduler {
 	enqueue(session: object, job: RpcHandlerJob): () => void;

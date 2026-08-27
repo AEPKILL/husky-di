@@ -7,12 +7,12 @@
 import type { Cleanup } from "@husky-di/core";
 import type { Observable } from "rxjs";
 
-import type { IRemoteServiceDescriptor } from "@/interfaces/peer/remote-service-descriptor.interface";
 import type {
+	IRemoteServiceDescriptor,
 	RemoteService,
 	RemoteServiceImplementation,
 	RpcMethodDefinitions,
-} from "@/types/remote-service-descriptor.type";
+} from "@/interfaces/peer/remote-service-descriptor.interface";
 import type { RpcPeerState } from "@/types/rpc-caller.type";
 
 export interface IRpcPeer {

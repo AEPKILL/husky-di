@@ -16,12 +16,12 @@ import type {
 	RpcProtocolFaultReason,
 	RpcProtocolSessionTransition,
 } from "../../src/interfaces/protocol/rpc-protocol.interface";
+import type { RpcBindingEpoch } from "../../src/interfaces/session/rpc-session.interface";
 import type {
 	IRpcAcceptorAdapter,
 	IRpcConnectorAdapter,
 } from "../../src/interfaces/transport/rpc-adapter.interface";
 import type { IRpcConnection } from "../../src/interfaces/transport/rpc-connection.interface";
-import type { RpcBindingEpoch } from "../../src/types/protocol/rpc-session.type";
 import {
 	normalizeRpcApplicationArguments,
 	normalizeRpcApplicationValue,

@@ -7,12 +7,12 @@
 import type { ServiceIdentifier } from "@husky-di/core";
 import { z } from "zod";
 
-import type { IRemoteServiceDescriptor } from "@/interfaces/peer/remote-service-descriptor.interface";
 import type {
+	IRemoteServiceDescriptor,
 	NonEmptyMethodDefinitions,
 	RpcMethodDefinitions,
 	ValidateMethodDefinitions,
-} from "@/types/remote-service-descriptor.type";
+} from "@/interfaces/peer/remote-service-descriptor.interface";
 import { rpcWireIdentifierSchema } from "@/utils/protocol/rpc-wire-identifier-schema.util";
 import { isPlainRecord, isString } from "@/utils/type-guard.util";
 

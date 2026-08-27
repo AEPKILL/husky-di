@@ -7,12 +7,12 @@
 import type { IRpcRetainedBytesLedger } from "@/interfaces/common/rpc-retained-bytes-ledger.interface";
 import type { IRpcHandlerScheduler } from "@/interfaces/owner/rpc-handler-scheduler.interface";
 import type { IRpcOwnerCustody } from "@/interfaces/owner/rpc-owner-custody.interface";
+import type { RpcPeerFactory } from "@/interfaces/peer/rpc-peer-runtime.interface";
 import type {
 	IRpcProtocolAcceptorRuntime,
 	IRpcProtocolConnectorRuntime,
 	IRpcProtocolRuntimePolicy,
 } from "@/interfaces/protocol/rpc-protocol.interface";
-import type { RpcPeerFactory } from "@/types/rpc-peer.type";
 
 type CreateRpcOwnerImplOptions = Readonly<{
 	readonly policy: IRpcProtocolRuntimePolicy;

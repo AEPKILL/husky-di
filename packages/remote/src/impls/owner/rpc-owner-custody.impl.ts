@@ -5,12 +5,12 @@
  */
 
 import type { Subscription } from "rxjs";
-import type { IRpcOwnerCustody } from "@/interfaces/owner/rpc-owner-custody.interface";
-import type { IRpcConnection } from "@/interfaces/transport/rpc-connection.interface";
 import type {
+	IRpcOwnerCustody,
 	RpcOwnedCleanup,
 	RpcOwnedConnection,
-} from "@/types/rpc-owner-custody.type";
+} from "@/interfaces/owner/rpc-owner-custody.interface";
+import type { IRpcConnection } from "@/interfaces/transport/rpc-connection.interface";
 
 const cleanupDeadline = Symbol("RPC Owner cleanup deadline");
 

@@ -12,10 +12,12 @@ import {
 	RPC_MAX_MESSAGE_BYTES,
 } from "@/constants/protocol/rpc-profile.const";
 import { RpcEndpointFailureEnum } from "@/enums/protocol/rpc-endpoint-failure.enum";
-import type { IRpcEndpoint } from "@/interfaces/endpoint/rpc-endpoint.interface";
+import type {
+	CreateRpcEndpointOptions,
+	IRpcEndpoint,
+} from "@/interfaces/endpoint/rpc-endpoint.interface";
 import type { IRpcRetainedBytesReservation } from "@/interfaces/protocol/rpc-protocol.interface";
 import type { IRpcConnection } from "@/interfaces/transport/rpc-connection.interface";
-import type { CreateRpcEndpointOptions } from "@/types/protocol/rpc-endpoint.type";
 import { isPositiveSafeInteger, isUint8Array } from "@/utils/type-guard.util";
 
 interface IRpcIngressEntry {

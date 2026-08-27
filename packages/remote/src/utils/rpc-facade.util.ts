@@ -5,11 +5,11 @@
  */
 
 import { getRemoteServiceDescriptorData } from "@/factories/remote-service-descriptor.factory";
-import type { IRemoteServiceDescriptor } from "@/interfaces/peer/remote-service-descriptor.interface";
 import type {
+	IRemoteServiceDescriptor,
 	RemoteService,
 	RpcMethodDefinitions,
-} from "@/types/remote-service-descriptor.type";
+} from "@/interfaces/peer/remote-service-descriptor.interface";
 
 export type RpcFacadeInvocation = (
 	method: string,

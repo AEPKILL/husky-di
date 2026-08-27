@@ -33,9 +33,9 @@ import type {
 	RpcHandlerOutcome,
 	RpcIncomingTerminal,
 } from "@/interfaces/protocol/rpc-protocol.interface";
-import type { IRpcSession } from "@/interfaces/session/rpc-session.interface";
 import type {
 	CreateRpcSessionOptions,
+	IRpcSession,
 	RpcBindingCandidate,
 	RpcBindingCommit,
 	RpcBindingEpoch,
@@ -47,9 +47,8 @@ import type {
 	RpcResponderResumeRequest,
 	RpcResponderResumeReview,
 	RpcSessionAuthorityCommit,
-	RpcSessionImplDependencies,
 	RpcSessionRecovery,
-} from "@/types/protocol/rpc-session.type";
+} from "@/interfaces/session/rpc-session.interface";
 import type {
 	RpcActiveRecord,
 	RpcCallMessage,
@@ -64,6 +63,12 @@ import {
 	registerRpcSessionRetainedBytes,
 	unregisterRpcSessionRetainedBytes,
 } from "@/utils/rpc-session-retained-bytes.util";
+
+type RpcSessionImplDependencies = Readonly<{
+	readonly codec: IRpcCodec;
+	readonly counterExhausted?: boolean;
+	readonly retainedBytesLedger: IRpcRetainedBytesLedger;
+}>;
 
 const RPC_SEQUENCE_RESERVE = 512;
 const RPC_LAST_ORDINARY_SEQUENCE =

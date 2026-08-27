@@ -37,7 +37,14 @@ export type {
 	RpcProtocolFaultReason,
 	RpcSessionCloseReason,
 } from "@/interfaces/protocol/rpc-protocol.interface";
-export type { IRpcConnectorReconnection } from "@/interfaces/reconnection/rpc-connector-reconnection.interface";
+export type {
+	CreateRpcConnectorReconnectionOptions,
+	IRpcConnectorReconnection,
+	RpcConnectorAdapterFactory,
+	RpcConnectorReconnectionEvent,
+	RpcConnectorReconnectionPolicyOptions,
+	RpcConnectorReconnectionState,
+} from "@/interfaces/reconnection/rpc-connector-reconnection.interface";
 export type {
 	IRpcAcceptorAdapter,
 	IRpcConnectorAdapter,
@@ -55,10 +62,3 @@ export type {
 	RpcConnectorState,
 	RpcPeerState,
 } from "@/types/rpc-caller.type";
-export type {
-	CreateRpcConnectorReconnectionOptions,
-	RpcConnectorAdapterFactory,
-	RpcConnectorReconnectionEvent,
-	RpcConnectorReconnectionPolicyOptions,
-	RpcConnectorReconnectionState,
-} from "@/types/rpc-connector-reconnection.type";

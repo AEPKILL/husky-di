@@ -23,12 +23,23 @@ import type {
 	RpcPeerResult,
 } from "@/interfaces/owner/rpc-acceptor.interface";
 import type { IRpcHandlerScheduler } from "@/interfaces/owner/rpc-handler-scheduler.interface";
-import type { IRpcOwnerCustody } from "@/interfaces/owner/rpc-owner-custody.interface";
-import type { IRemoteServiceDescriptor } from "@/interfaces/peer/remote-service-descriptor.interface";
+import type {
+	IRpcOwnerCustody,
+	RpcOwnedCleanup,
+	RpcOwnedConnection,
+} from "@/interfaces/owner/rpc-owner-custody.interface";
+import type {
+	IRemoteServiceDescriptor,
+	RemoteServiceImplementation,
+	RpcMethodDefinitions,
+} from "@/interfaces/peer/remote-service-descriptor.interface";
 import type { IRpcPeer } from "@/interfaces/peer/rpc-peer.interface";
-import type { IRpcPeerCommittedInvocation } from "@/interfaces/peer/rpc-peer-committed-invocation.interface";
-import type { IRpcPeerInvocationReservation } from "@/interfaces/peer/rpc-peer-invocation-reservation.interface";
-import type { IRpcPeerRuntime } from "@/interfaces/peer/rpc-peer-runtime.interface";
+import type {
+	IRpcPeerCommittedInvocation,
+	IRpcPeerInvocationReservation,
+	IRpcPeerRuntime,
+	RpcPeerFactory,
+} from "@/interfaces/peer/rpc-peer-runtime.interface";
 import type {
 	IRpcProtocolAcceptorRuntime,
 	IRpcProtocolRuntimePolicy,
@@ -43,20 +54,11 @@ import type { IRpcAcceptorAdapter } from "@/interfaces/transport/rpc-adapter.int
 import type { IRpcConnection } from "@/interfaces/transport/rpc-connection.interface";
 import type { RpcEvent } from "@/types/owner/rpc-event.type";
 import type {
-	RemoteServiceImplementation,
-	RpcMethodDefinitions,
-} from "@/types/remote-service-descriptor.type";
-import type {
 	RpcAcceptorListenerState,
 	RpcAcceptorState,
 } from "@/types/rpc-caller.type";
 import type { RpcExposureRegistry } from "@/types/rpc-exposure.type";
 import type { CreateRpcAcceptorImplOptions } from "@/types/rpc-owner.type";
-import type {
-	RpcOwnedCleanup,
-	RpcOwnedConnection,
-} from "@/types/rpc-owner-custody.type";
-import type { RpcPeerFactory } from "@/types/rpc-peer.type";
 import { normalizeRpcApplicationArguments } from "@/utils/rpc-application-value.util";
 import {
 	installRpcAbortListener,

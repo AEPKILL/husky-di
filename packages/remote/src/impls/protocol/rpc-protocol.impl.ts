@@ -13,7 +13,10 @@ import { RpcProofOperationKindEnum } from "@/enums/protocol/rpc-proof-operation-
 import { RpcResumeRejectCodeEnum } from "@/enums/protocol/rpc-resume-reject-code.enum";
 import { RpcWireRecordKindEnum } from "@/enums/protocol/rpc-wire-record-kind.enum";
 import { RpcCloseReasonEnum } from "@/enums/rpc-close-reason.enum";
-import type { IRpcBindingAttempt } from "@/interfaces/endpoint/rpc-binding-attempt.interface";
+import type {
+	IRpcBindingAttempt,
+	RpcBindingAttemptFactory,
+} from "@/interfaces/endpoint/rpc-binding-attempt.interface";
 import type { IRpcCodec } from "@/interfaces/protocol/rpc-codec.interface";
 import type { IRpcHandshakeCryptography } from "@/interfaces/protocol/rpc-handshake-cryptography.interface";
 import type {
@@ -23,17 +26,14 @@ import type {
 	IRpcProtocolConnectorRuntime,
 	IRpcRetainedBytesReservation,
 } from "@/interfaces/protocol/rpc-protocol.interface";
-import type { IRpcSession } from "@/interfaces/session/rpc-session.interface";
-import type { IRpcConnection } from "@/interfaces/transport/rpc-connection.interface";
 import type {
-	RpcBindingAttemptFactory,
-	RpcSessionFactory,
-} from "@/types/protocol/rpc-protocol.type";
-import type {
+	IRpcSession,
 	RpcBindingCandidate,
 	RpcInitiatorResume,
 	RpcResponderResumeReview,
-} from "@/types/protocol/rpc-session.type";
+	RpcSessionFactory,
+} from "@/interfaces/session/rpc-session.interface";
+import type { IRpcConnection } from "@/interfaces/transport/rpc-connection.interface";
 import type {
 	RpcFreshAccept,
 	RpcFreshRequest,

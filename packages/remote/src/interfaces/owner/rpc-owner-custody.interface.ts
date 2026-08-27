@@ -5,10 +5,15 @@
  */
 
 import type { IRpcConnection } from "@/interfaces/transport/rpc-connection.interface";
-import type {
-	RpcOwnedCleanup,
-	RpcOwnedConnection,
-} from "@/types/rpc-owner-custody.type";
+
+export type RpcOwnedConnection = {
+	readonly connection: IRpcConnection;
+	directClose(): Promise<void>;
+};
+
+export type RpcOwnedCleanup = {
+	start(): Promise<void>;
+};
 
 export interface IRpcOwnerCustody {
 	readonly connectionCount: number;

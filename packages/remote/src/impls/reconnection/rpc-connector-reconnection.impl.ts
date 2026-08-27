@@ -13,13 +13,13 @@ import { RpcExceptionCodeEnum } from "@/enums/rpc-exception-code.enum";
 import { RpcStateStatusEnum } from "@/enums/rpc-state-status.enum";
 import { createRpcException } from "@/factories/rpc-exception.factory";
 import type { IRpcConnector } from "@/interfaces/owner/rpc-connector.interface";
-import type { IRpcConnectorReconnection } from "@/interfaces/reconnection/rpc-connector-reconnection.interface";
 import type {
+	IRpcConnectorReconnection,
 	RpcConnectorAdapterFactory,
 	RpcConnectorReconnectionEvent,
 	RpcConnectorReconnectionPolicy,
 	RpcConnectorReconnectionState,
-} from "@/types/rpc-connector-reconnection.type";
+} from "@/interfaces/reconnection/rpc-connector-reconnection.interface";
 
 const maximumPlatformTimerDelayMs = 2_147_483_647;
 

@@ -5,15 +5,26 @@
  */
 
 import { RpcEndpointFailureEnum } from "@/enums/protocol/rpc-endpoint-failure.enum";
-import type { IRpcBindingAttempt } from "@/interfaces/endpoint/rpc-binding-attempt.interface";
-import type { IRpcEndpoint } from "@/interfaces/endpoint/rpc-endpoint.interface";
-import type { IRpcSession } from "@/interfaces/session/rpc-session.interface";
 import type {
-	CreateRpcBindingAttemptImplOptions,
 	CreateRpcBindingAttemptOptions,
+	IRpcBindingAttempt,
 	RpcBindingAttemptLease,
-} from "@/types/protocol/rpc-binding-attempt.type";
-import type { RpcBindingEpoch } from "@/types/protocol/rpc-session.type";
+} from "@/interfaces/endpoint/rpc-binding-attempt.interface";
+import type {
+	CreateRpcEndpointOptions,
+	IRpcEndpoint,
+} from "@/interfaces/endpoint/rpc-endpoint.interface";
+import type {
+	IRpcSession,
+	RpcBindingEpoch,
+} from "@/interfaces/session/rpc-session.interface";
+
+type CreateRpcBindingAttemptImplOptions = CreateRpcBindingAttemptOptions &
+	Readonly<{
+		readonly createEndpoint: (
+			options: CreateRpcEndpointOptions,
+		) => IRpcEndpoint;
+	}>;
 
 type RpcProvisionalSession<TKey> = Readonly<{
 	readonly session: IRpcSession<TKey>;

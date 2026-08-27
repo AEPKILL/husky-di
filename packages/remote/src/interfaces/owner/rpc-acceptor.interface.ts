@@ -9,18 +9,18 @@ import type { Observable } from "rxjs";
 
 import type { RpcCallStatusEnum } from "@/enums/rpc-call-status.enum";
 import type { RpcException } from "@/exceptions/rpc.exception";
-import type { IRemoteServiceDescriptor } from "@/interfaces/peer/remote-service-descriptor.interface";
-import type { IRpcPeer } from "@/interfaces/peer/rpc-peer.interface";
-import type { IRpcAcceptorAdapter } from "@/interfaces/transport/rpc-adapter.interface";
-import type { RpcEvent } from "@/types/owner/rpc-event.type";
 import type {
 	AnyMethod,
+	IRemoteServiceDescriptor,
 	IsCancelableMethod,
 	RemoteMethodKey,
 	RemoteServiceImplementation,
 	RpcMethodDefinitions,
 	SelectedMethodKey,
-} from "@/types/remote-service-descriptor.type";
+} from "@/interfaces/peer/remote-service-descriptor.interface";
+import type { IRpcPeer } from "@/interfaces/peer/rpc-peer.interface";
+import type { IRpcAcceptorAdapter } from "@/interfaces/transport/rpc-adapter.interface";
+import type { RpcEvent } from "@/types/owner/rpc-event.type";
 import type { RpcAcceptorState } from "@/types/rpc-caller.type";
 
 export type RpcPeerResult<T> =

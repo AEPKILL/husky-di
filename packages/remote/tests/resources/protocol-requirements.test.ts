@@ -16,7 +16,7 @@ import {
 	createRpcConnector,
 	RpcStateStatusEnum,
 } from "../../src/index";
-import type { RpcHandlerJob } from "../../src/types/rpc-handler-scheduler.type";
+import type { RpcHandlerJob } from "../../src/interfaces/owner/rpc-handler-scheduler.interface";
 import { normalizeRpcApplicationArguments } from "../../src/utils/rpc-application-value.util";
 import {
 	createRpcDirectSessionHarness,

@@ -14,13 +14,13 @@ import {
 	RpcProtocolConnectorRuntimeImpl,
 } from "@/impls/protocol/rpc-protocol.impl";
 import { RpcSessionImpl } from "@/impls/session/rpc-session.impl";
-import type { IRpcEndpoint } from "@/interfaces/endpoint/rpc-endpoint.interface";
-import type { IRpcProtocol } from "@/interfaces/protocol/rpc-protocol.interface";
-import type { CreateRpcEndpointOptions } from "@/types/protocol/rpc-endpoint.type";
+import type { RpcBindingAttemptFactory } from "@/interfaces/endpoint/rpc-binding-attempt.interface";
 import type {
-	RpcBindingAttemptFactory,
-	RpcSessionFactory,
-} from "@/types/protocol/rpc-protocol.type";
+	CreateRpcEndpointOptions,
+	IRpcEndpoint,
+} from "@/interfaces/endpoint/rpc-endpoint.interface";
+import type { IRpcProtocol } from "@/interfaces/protocol/rpc-protocol.interface";
+import type { RpcSessionFactory } from "@/interfaces/session/rpc-session.interface";
 
 const codec = Object.freeze(new RpcCodecImpl());
 const handshakeCryptography = Object.freeze(new RpcHandshakeCryptographyImpl());

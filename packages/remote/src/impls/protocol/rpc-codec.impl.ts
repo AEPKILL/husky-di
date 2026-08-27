@@ -11,8 +11,10 @@ import {
 	RPC_MAX_WIRE_NODES,
 } from "@/constants/protocol/rpc-profile.const";
 import { RpcDecodePhaseEnum } from "@/enums/protocol/rpc-decode-phase.enum";
-import type { IRpcCodec } from "@/interfaces/protocol/rpc-codec.interface";
-import type { RpcDecodedRecord } from "@/types/protocol/rpc-codec.type";
+import type {
+	IRpcCodec,
+	RpcDecodedRecord,
+} from "@/interfaces/protocol/rpc-codec.interface";
 import type {
 	RpcJsonRecord,
 	RpcJsonValue,
