@@ -9,7 +9,10 @@ import type { RpcIncomingCallKindEnum } from "@/enums/protocol/rpc-incoming-call
 import type { RpcProtocolSessionTransitionTypeEnum } from "@/enums/protocol/rpc-protocol-session-transition-type.enum";
 import type { RpcCloseReasonEnum } from "@/enums/rpc-close-reason.enum";
 import type { RpcExceptionCodeEnum } from "@/enums/rpc-exception-code.enum";
+import type { IRpcRetainedBytesReservation } from "@/interfaces/common/rpc-retained-bytes-ledger.interface";
 import type { IRpcConnection } from "@/interfaces/transport/rpc-connection.interface";
+
+export type { IRpcRetainedBytesReservation };
 
 export type RpcApplicationValue =
 	| null
@@ -109,10 +112,6 @@ export type RpcProtocolFaultReason = Extract<
 	RpcCloseReasonEnum,
 	RpcCloseReasonEnum.protocolFault | RpcCloseReasonEnum.resourceFault
 >;
-
-export interface IRpcRetainedBytesReservation {
-	release(): void;
-}
 
 export interface IRpcProtocolHost {
 	readonly policy: IRpcProtocolRuntimePolicy;
