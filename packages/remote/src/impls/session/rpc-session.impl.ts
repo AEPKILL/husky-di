@@ -43,7 +43,6 @@ import type {
 	RpcInitiatorBindingPreparation,
 	RpcInitiatorResume,
 	RpcInitiatorResumeAccept,
-	RpcResponderProof,
 	RpcResponderResumeRequest,
 	RpcResponderResumeReview,
 	RpcSessionAuthorityCommit,
@@ -59,6 +58,7 @@ import type {
 	RpcSemanticMessage,
 	RpcWireErrorCode,
 } from "@/types/protocol/rpc-wire-record.type";
+import { rpcSecurityCarriersEqual } from "@/utils/protocol/rpc-base64-url-32-schema.util";
 import {
 	registerRpcSessionRetainedBytes,
 	unregisterRpcSessionRetainedBytes,
@@ -74,19 +74,18 @@ const RPC_SEQUENCE_RESERVE = 512;
 const RPC_LAST_ORDINARY_SEQUENCE =
 	Number.MAX_SAFE_INTEGER - RPC_SEQUENCE_RESERVE;
 
-type RpcSessionCandidateFacts<TKey> = Readonly<{
-	readonly binding: RpcBindingEpochImpl<TKey> | undefined;
+type RpcSessionCandidateFacts = Readonly<{
+	readonly binding: RpcBindingEpochImpl | undefined;
 	readonly bindingEpoch: number;
 	readonly highestSentSequence: number;
 	readonly peerReceivedThrough: number;
-	readonly proofKey: TKey;
 	readonly receivedThrough: number;
 	readonly recovering: boolean;
 	readonly recoveryDeadline: number | undefined;
 }>;
 
-type RpcBindingCandidateFacts<TKey> = Readonly<{
-	readonly facts: RpcSessionCandidateFacts<TKey>;
+type RpcBindingCandidateFacts = Readonly<{
+	readonly facts: RpcSessionCandidateFacts;
 	readonly host?: IRpcProtocolSessionHost;
 	readonly kind: "fresh" | "initiator-resume" | "responder-resume";
 	readonly nextBindingEpoch: number;
@@ -94,26 +93,26 @@ type RpcBindingCandidateFacts<TKey> = Readonly<{
 	readonly resumeAttempt?: number;
 }>;
 
-type RpcContinuityCandidateFacts<TKey> = Readonly<{
-	readonly facts: RpcSessionCandidateFacts<TKey>;
+type RpcContinuityCandidateFacts = Readonly<{
+	readonly facts: RpcSessionCandidateFacts;
 	readonly peerReceivedThrough?: number;
 	readonly resumeAttempt?: number;
 	readonly source: "initiator" | "responder";
 }>;
 
-type RpcInitiatorResumeFacts<TKey> = Readonly<{
-	readonly facts: RpcSessionCandidateFacts<TKey>;
+type RpcInitiatorResumeFacts = Readonly<{
+	readonly facts: RpcSessionCandidateFacts;
 	readonly resumeAttempt: number;
 }>;
 
 /** Exact authority for one installed Physical Connection Binding Epoch. */
-class RpcBindingEpochImpl<TKey> {
-	readonly _session: RpcSessionImpl<TKey>;
+class RpcBindingEpochImpl {
+	readonly _session: RpcSessionImpl;
 	readonly _endpoint: IRpcEndpoint;
 	_active = false;
 	_activationAttempted = false;
 
-	constructor(session: RpcSessionImpl<TKey>, endpoint: IRpcEndpoint) {
+	constructor(session: RpcSessionImpl, endpoint: IRpcEndpoint) {
 		this._session = session;
 		this._endpoint = endpoint;
 	}
@@ -175,29 +174,25 @@ interface IRpcQueuedSemantic {
 }
 
 /** Retains one Session Incarnation independently from its current Connection. */
-export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
+export class RpcSessionImpl implements IRpcSession {
 	readonly _host: IRpcProtocolHost;
 	readonly _sessionId: string;
 	readonly _codec: IRpcCodec;
 	readonly _onTerminal: () => void;
 	readonly _retainedBytesLedger: IRpcRetainedBytesLedger;
 	readonly _protectedRetainedBytesReservation: IRpcRetainedBytesReservation;
-	readonly _bindingCandidates = new WeakMap<
-		object,
-		RpcBindingCandidateFacts<TKey>
-	>();
+	readonly _bindingCandidates = new WeakMap<object, RpcBindingCandidateFacts>();
 	readonly _continuityCandidates = new WeakMap<
 		object,
-		RpcContinuityCandidateFacts<TKey>
+		RpcContinuityCandidateFacts
 	>();
 	readonly _initiatorResumeCandidates = new WeakMap<
 		object,
-		RpcInitiatorResumeFacts<TKey>
+		RpcInitiatorResumeFacts
 	>();
-	readonly _responderProofCandidates = new WeakMap<object, TKey>();
-	_proofKey: TKey | undefined;
+	_resumeToken: string | undefined;
 	_sessionHost: IRpcProtocolSessionHost | undefined;
-	_binding: RpcBindingEpochImpl<TKey> | undefined;
+	_binding: RpcBindingEpochImpl | undefined;
 	_bindingEpoch = 0;
 	_resumeAttempt = 0;
 	_highestAcceptedResumeAttempt = 0;
@@ -248,10 +243,10 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 	_closed = false;
 
 	public constructor(
-		options: CreateRpcSessionOptions<TKey>,
+		options: CreateRpcSessionOptions,
 		dependencies: RpcSessionImplDependencies,
 	) {
-		const { host, onTerminal, proofKey, sessionId } = options;
+		const { host, onTerminal, resumeToken, sessionId } = options;
 		const {
 			codec,
 			counterExhausted = false,
@@ -273,7 +268,7 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 		);
 		this._sessionId = sessionId;
 		this._codec = codec;
-		this._proofKey = proofKey;
+		this._resumeToken = resumeToken;
 		this._onTerminal = onTerminal;
 		if (counterExhausted) {
 			this._nextOutgoingSequence = RPC_LAST_ORDINARY_SEQUENCE + 1;
@@ -329,14 +324,12 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 		});
 	}
 
-	prepareFreshBinding(
-		host: IRpcProtocolSessionHost,
-	): RpcBindingCandidate<TKey> {
-		const proofKey = this._proofKey;
+	prepareFreshBinding(host: IRpcProtocolSessionHost): RpcBindingCandidate {
+		const resumeToken = this._resumeToken;
 		// Fresh binding is legal only for an open, unbound, never-recovered Session.
 		const cannotPrepareFreshBinding =
 			this._closed ||
-			proofKey === undefined ||
+			resumeToken === undefined ||
 			this._sessionHost !== undefined ||
 			this._binding !== undefined ||
 			this._bindingEpoch !== 0 ||
@@ -344,9 +337,9 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 		if (cannotPrepareFreshBinding) {
 			throw new Error("Default RPC fresh binding candidate is invalid.");
 		}
-		const candidate = Object.freeze({}) as RpcBindingCandidate<TKey>;
+		const candidate = Object.freeze({}) as RpcBindingCandidate;
 		this._bindingCandidates.set(candidate, {
-			facts: this._snapshotCandidateFacts(proofKey),
+			facts: this._snapshotCandidateFacts(),
 			host,
 			kind: "fresh",
 			nextBindingEpoch: 1,
@@ -355,15 +348,15 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 		return candidate;
 	}
 
-	beginInitiatorResume(): RpcInitiatorResume<TKey> {
-		const proofKey = this._proofKey;
+	beginInitiatorResume(): RpcInitiatorResume {
+		const resumeToken = this._resumeToken;
 		const recoveryDeadline = this._recoveryDeadline;
 		// Resume requires live retained authority within the active recovery window.
 		const sessionIsNotRecoverable =
 			this._closed ||
 			!this._recovering ||
 			this._binding !== undefined ||
-			proofKey === undefined ||
+			resumeToken === undefined ||
 			recoveryDeadline === undefined ||
 			Date.now() >= recoveryDeadline;
 		if (sessionIsNotRecoverable) {
@@ -375,26 +368,21 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 		this._resumeAttempt += 1;
 		const resume = Object.freeze({
 			sessionId: this._sessionId,
-			proofKey,
+			resumeToken,
 			resumeAttempt: this._resumeAttempt,
 			receivedThrough: this._receivedThrough,
-		}) as RpcInitiatorResume<TKey>;
+		}) as RpcInitiatorResume;
 		this._initiatorResumeCandidates.set(resume, {
-			facts: this._snapshotCandidateFacts(proofKey),
+			facts: this._snapshotCandidateFacts(),
 			resumeAttempt: this._resumeAttempt,
 		});
 		return resume;
 	}
 
-	confirmInitiatorResume(resume: RpcInitiatorResume<TKey>): boolean {
-		const candidate = this._initiatorResumeCandidates.get(resume);
-		return candidate !== undefined && this._initiatorResumeCurrent(candidate);
-	}
-
 	prepareInitiatorBinding(
-		resume: RpcInitiatorResume<TKey>,
+		resume: RpcInitiatorResume,
 		accept: RpcInitiatorResumeAccept,
-	): RpcInitiatorBindingPreparation<TKey> {
+	): RpcInitiatorBindingPreparation {
 		const candidate = this._initiatorResumeCandidates.get(resume);
 		this._initiatorResumeCandidates.delete(resume);
 		if (candidate === undefined || !this._initiatorResumeCurrent(candidate)) {
@@ -415,7 +403,7 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 		if (contradictory) {
 			const contradiction = Object.freeze({
 				kind: "contradiction",
-			}) as RpcInitiatorBindingPreparation<TKey> & object;
+			}) as RpcInitiatorBindingPreparation & object;
 			this._continuityCandidates.set(contradiction, {
 				facts: candidate.facts,
 				resumeAttempt: candidate.resumeAttempt,
@@ -425,7 +413,7 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 		}
 		const ready = Object.freeze({
 			kind: "ready",
-		}) as RpcInitiatorBindingPreparation<TKey> & object;
+		}) as RpcInitiatorBindingPreparation & object;
 		this._bindingCandidates.set(ready, {
 			facts: candidate.facts,
 			kind: "initiator-resume",
@@ -436,40 +424,27 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 		return ready;
 	}
 
-	openResponderProof(): RpcResponderProof<TKey> | undefined {
-		const proofKey = this._proofKey;
-		if (this._closed || proofKey === undefined) {
-			return undefined;
-		}
-		const proof = Object.freeze({ proofKey }) as RpcResponderProof<TKey>;
-		this._responderProofCandidates.set(proof, proofKey);
-		return proof;
-	}
-
 	reviewResponderResume(
-		proof: RpcResponderProof<TKey>,
 		request: RpcResponderResumeRequest,
-	): RpcResponderResumeReview<TKey> {
-		const proofKey = this._responderProofCandidates.get(proof);
-		this._responderProofCandidates.delete(proof);
-		// A responder proof must retain current Session authority and a newer attempt.
-		const responderProofIsInvalid =
-			proofKey === undefined ||
+	): RpcResponderResumeReview {
+		const resumeToken = this._resumeToken;
+		// A responder resume must present current Session authority and a newer attempt.
+		const responderAuthorityIsInvalid =
+			resumeToken === undefined ||
 			this._closed ||
-			this._proofKey !== proofKey ||
+			!rpcSecurityCarriersEqual(request.resumeToken, resumeToken) ||
 			!this._canAcceptResumeAttempt(request.resumeAttempt);
-		if (responderProofIsInvalid) {
+		if (responderAuthorityIsInvalid) {
 			return Object.freeze({ kind: "generic-reject" });
 		}
-		const facts = this._snapshotCandidateFacts(proofKey);
+		const facts = this._snapshotCandidateFacts();
 		if (
 			this._classifyPeerCursor(request.peerReceivedThrough) !==
 			RpcPeerCursorClassificationEnum.valid
 		) {
 			const continuity = Object.freeze({
 				kind: "continuity-reject",
-				proofKey,
-			}) as RpcResponderResumeReview<TKey> & object;
+			}) as RpcResponderResumeReview & object;
 			this._continuityCandidates.set(continuity, {
 				facts,
 				peerReceivedThrough: request.peerReceivedThrough,
@@ -480,10 +455,9 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 		}
 		const accept = Object.freeze({
 			kind: "accept",
-			proofKey,
 			bindingEpoch: this._bindingEpoch + 1,
 			receivedThrough: this._receivedThrough,
-		}) as RpcResponderResumeReview<TKey> & object;
+		}) as RpcResponderResumeReview & object;
 		this._bindingCandidates.set(accept, {
 			facts,
 			kind: "responder-resume",
@@ -495,7 +469,7 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 	}
 
 	commitContinuityFailure(
-		candidate: RpcContinuityCandidate<TKey> | RpcInitiatorResume<TKey>,
+		candidate: RpcContinuityCandidate | RpcInitiatorResume,
 		cause?: Error,
 	): RpcSessionAuthorityCommit {
 		const continuity = this._continuityCandidates.get(candidate);
@@ -535,8 +509,8 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 		});
 	}
 
-	terminateAuthenticatedRemote(
-		resume: RpcInitiatorResume<TKey>,
+	terminateRemoteResume(
+		resume: RpcInitiatorResume,
 		cause?: Error,
 	): RpcSessionAuthorityCommit {
 		const candidate = this._initiatorResumeCandidates.get(resume);
@@ -544,9 +518,7 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 		if (candidate === undefined || !this._initiatorResumeCurrent(candidate)) {
 			return Object.freeze({
 				kind: "discarded",
-				error: new Error(
-					"Default RPC authenticated terminal candidate became stale.",
-				),
+				error: new Error("Default RPC remote terminal candidate became stale."),
 			});
 		}
 		this._terminateRetainedSession(RpcCloseReasonEnum.remoteTerminated, cause);
@@ -558,7 +530,7 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 	}
 
 	commitBinding(
-		candidate: RpcBindingCandidate<TKey>,
+		candidate: RpcBindingCandidate,
 		endpoint: IRpcEndpoint,
 	): RpcBindingCommit {
 		const prepared = this._bindingCandidates.get(candidate);
@@ -622,7 +594,7 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 	}
 
 	_reserveBindingRetainedBytes(
-		binding: RpcBindingEpochImpl<TKey>,
+		binding: RpcBindingEpochImpl,
 		bytes: number,
 	): IRpcRetainedBytesReservation | undefined {
 		return this._binding === binding && !this._closed
@@ -630,7 +602,7 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 			: undefined;
 	}
 
-	_activateBinding(binding: RpcBindingEpochImpl<TKey>): boolean {
+	_activateBinding(binding: RpcBindingEpochImpl): boolean {
 		// Activation applies once to the current binding of an open Session.
 		const cannotActivateBinding =
 			this._binding !== binding || binding._active || this._closed;
@@ -657,7 +629,7 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 		return this._binding === binding && !this._closed;
 	}
 
-	_receiveBinding(binding: RpcBindingEpochImpl<TKey>, bytes: Uint8Array): void {
+	_receiveBinding(binding: RpcBindingEpochImpl, bytes: Uint8Array): void {
 		// Ingress is accepted only from the active current binding of an open Session.
 		const bindingCannotReceive =
 			this._closed || this._binding !== binding || !binding._active;
@@ -712,7 +684,7 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 	}
 
 	_bindingFailed(
-		binding: RpcBindingEpochImpl<TKey>,
+		binding: RpcBindingEpochImpl,
 		reason: RpcEndpointFailureEnum,
 		error?: Error,
 	): void {
@@ -735,7 +707,7 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 		this._enterRecovery(error);
 	}
 
-	_bindingIngressIdle(binding: RpcBindingEpochImpl<TKey>): void {
+	_bindingIngressIdle(binding: RpcBindingEpochImpl): void {
 		if (this._binding !== binding || this._closed) {
 			return;
 		}
@@ -743,23 +715,22 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 		this._checkGracefulShutdown();
 	}
 
-	_snapshotCandidateFacts(proofKey: TKey): RpcSessionCandidateFacts<TKey> {
+	_snapshotCandidateFacts(): RpcSessionCandidateFacts {
 		return Object.freeze({
 			binding: this._binding,
 			bindingEpoch: this._bindingEpoch,
 			highestSentSequence: this._highestSentSequence,
 			peerReceivedThrough: this._peerReceivedThrough,
-			proofKey,
 			receivedThrough: this._receivedThrough,
 			recovering: this._recovering,
 			recoveryDeadline: this._recoveryDeadline,
 		});
 	}
 
-	_candidateFactsCurrent(facts: RpcSessionCandidateFacts<TKey>): boolean {
+	_candidateFactsCurrent(facts: RpcSessionCandidateFacts): boolean {
 		return (
 			!this._closed &&
-			this._proofKey === facts.proofKey &&
+			this._resumeToken !== undefined &&
 			this._binding === facts.binding &&
 			this._bindingEpoch === facts.bindingEpoch &&
 			this._highestSentSequence === facts.highestSentSequence &&
@@ -770,7 +741,7 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 		);
 	}
 
-	_initiatorRecoveryCurrent(facts: RpcSessionCandidateFacts<TKey>): boolean {
+	_initiatorRecoveryCurrent(facts: RpcSessionCandidateFacts): boolean {
 		return (
 			facts.recovering &&
 			facts.binding === undefined &&
@@ -779,7 +750,7 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 		);
 	}
 
-	_initiatorResumeCurrent(candidate: RpcInitiatorResumeFacts<TKey>): boolean {
+	_initiatorResumeCurrent(candidate: RpcInitiatorResumeFacts): boolean {
 		return (
 			candidate.resumeAttempt === this._resumeAttempt &&
 			this._candidateFactsCurrent(candidate.facts) &&
@@ -788,7 +759,7 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 	}
 
 	_validateBindingCandidate(
-		candidate: RpcBindingCandidateFacts<TKey>,
+		candidate: RpcBindingCandidateFacts,
 		endpoint: IRpcEndpoint,
 	): string | undefined {
 		if (!this._candidateFactsCurrent(candidate.facts)) {
@@ -845,7 +816,7 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 			Number.isSafeInteger(resumeAttempt) &&
 			resumeAttempt > 0 &&
 			!this._closed &&
-			this._proofKey !== undefined &&
+			this._resumeToken !== undefined &&
 			resumeAttempt > this._highestAcceptedResumeAttempt &&
 			(!this._recovering ||
 				this._binding !== undefined ||
@@ -1361,7 +1332,7 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 	}
 
 	_admitInvocation(
-		binding: RpcBindingEpochImpl<TKey>,
+		binding: RpcBindingEpochImpl,
 		entry: IRpcInvocationEntry,
 	): void {
 		// Admission stops before either call or delivery sequencing can overflow.
@@ -1477,7 +1448,7 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 	}
 
 	_admitSemantic(
-		binding: RpcBindingEpochImpl<TKey>,
+		binding: RpcBindingEpochImpl,
 		queued: IRpcQueuedSemantic,
 	): void {
 		const { message, replay } = queued;
@@ -1529,7 +1500,7 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 	}
 
 	_sendEnvelope(
-		binding: RpcBindingEpochImpl<TKey>,
+		binding: RpcBindingEpochImpl,
 		sequence: number,
 		message: RpcSemanticMessage,
 	): void {
@@ -1676,10 +1647,7 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 		}
 	}
 
-	_sendUnsequenced(
-		binding: RpcBindingEpochImpl<TKey>,
-		record: RpcJsonRecord,
-	): void {
+	_sendUnsequenced(binding: RpcBindingEpochImpl, record: RpcJsonRecord): void {
 		let encoded: Uint8Array;
 		try {
 			encoded = this._codec.encode(record);
@@ -1695,7 +1663,7 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 		this._sendEncoded(binding, encoded);
 	}
 
-	_sendEncoded(binding: RpcBindingEpochImpl<TKey>, encoded: Uint8Array): void {
+	_sendEncoded(binding: RpcBindingEpochImpl, encoded: Uint8Array): void {
 		void binding._endpoint.sendNow(encoded).then(
 			() => {
 				if (this._binding === binding) {
@@ -1982,7 +1950,7 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 		this._releaseReplayState();
 		this._protectedRetainedBytesReservation.release();
 		unregisterRpcSessionRetainedBytes(this);
-		this._proofKey = undefined;
+		this._resumeToken = undefined;
 		try {
 			binding?._endpoint.fenceAndClose();
 		} catch {
@@ -2036,7 +2004,7 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 		this._recoveryDeadline = undefined;
 	}
 
-	_startHealthTimer(binding: RpcBindingEpochImpl<TKey>): void {
+	_startHealthTimer(binding: RpcBindingEpochImpl): void {
 		this._stopHealthTimer();
 		const now = Date.now();
 		this._healthStallGraceUntil = 0;
@@ -2045,7 +2013,7 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 		this._scheduleHealthTimer(binding);
 	}
 
-	_recordInboundActivity(binding: RpcBindingEpochImpl<TKey>): void {
+	_recordInboundActivity(binding: RpcBindingEpochImpl): void {
 		// Activity belongs only to the active current binding of an open Session.
 		const bindingIsStale =
 			this._binding !== binding || !binding._active || this._closed;
@@ -2060,7 +2028,7 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 		this._scheduleHealthTimer(binding);
 	}
 
-	_scheduleHealthTimer(binding: RpcBindingEpochImpl<TKey>): void {
+	_scheduleHealthTimer(binding: RpcBindingEpochImpl): void {
 		this._stopHealthTimer();
 		// Health checks run only for the active current binding of an open Session.
 		const bindingIsStale =
@@ -2079,7 +2047,7 @@ export class RpcSessionImpl<TKey = CryptoKey> implements IRpcSession<TKey> {
 		);
 	}
 
-	_healthTimerFired(binding: RpcBindingEpochImpl<TKey>): void {
+	_healthTimerFired(binding: RpcBindingEpochImpl): void {
 		this._healthTimer = undefined;
 		// A timer firing from any replaced or inactive binding has no authority.
 		const timerIsStale =

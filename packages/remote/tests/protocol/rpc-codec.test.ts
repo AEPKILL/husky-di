@@ -54,8 +54,7 @@ const validRecordCases = [
 		{
 			kind: "fresh",
 			profiles: ["future/2", RPC_PROFILE],
-			initiatorNonce: base64Url32,
-			future: { proof: "nested-kept" },
+			future: { marker: "nested-kept" },
 		},
 	],
 	[
@@ -65,10 +64,9 @@ const validRecordCases = [
 			kind: "resume",
 			profile: RPC_PROFILE,
 			sessionId: base64Url32,
+			resumeToken: base64Url32,
 			receivedThrough: 0,
 			resumeAttempt: 1,
-			initiatorNonce: base64Url32,
-			proof: base64Url32,
 			future: true,
 		},
 	],
@@ -80,9 +78,7 @@ const validRecordCases = [
 			profile: RPC_PROFILE,
 			sessionId: base64Url32,
 			bindingEpoch: 1,
-			responderNonce: base64Url32,
-			sessionSecret: base64Url32,
-			proof: base64Url32,
+			resumeToken: base64Url32,
 			future: ["kept"],
 		},
 	],
@@ -95,8 +91,6 @@ const validRecordCases = [
 			sessionId: base64Url32,
 			bindingEpoch: 2,
 			receivedThrough: 0,
-			responderNonce: base64Url32,
-			proof: base64Url32,
 			future: false,
 		},
 	],
@@ -106,9 +100,6 @@ const validRecordCases = [
 		{
 			kind: "reject",
 			code: "resume-rejected",
-			responderNonce: base64Url32,
-			proof: base64Url32,
-			future: true,
 		},
 	],
 	[
@@ -123,7 +114,7 @@ const validRecordCases = [
 				callId: "1",
 				service: "calculator",
 				method: "add",
-				args: [1, 2, { proof: "application-data" }],
+				args: [1, 2, { marker: "application-data" }],
 				futureMessage: true,
 			},
 		},
@@ -188,7 +179,7 @@ const invalidRecordCases = [
 	[
 		"an empty profile offer",
 		RpcDecodePhaseEnum.bootstrapRequest,
-		{ kind: "fresh", profiles: [], initiatorNonce: base64Url32 },
+		{ kind: "fresh", profiles: [] },
 	],
 	[
 		"a duplicate profile offer",
@@ -196,43 +187,51 @@ const invalidRecordCases = [
 		{
 			kind: "fresh",
 			profiles: [RPC_PROFILE, RPC_PROFILE],
-			initiatorNonce: base64Url32,
 		},
 	],
 	[
 		"an empty ProfileId",
 		RpcDecodePhaseEnum.bootstrapRequest,
-		{ kind: "fresh", profiles: [""], initiatorNonce: base64Url32 },
+		{ kind: "fresh", profiles: [""] },
 	],
 	[
-		"a padded Base64Url32 carrier",
+		"a padded resume token",
 		RpcDecodePhaseEnum.bootstrapRequest,
 		{
-			kind: "fresh",
-			profiles: [RPC_PROFILE],
-			initiatorNonce: `${base64Url32}=`,
+			kind: "resume",
+			profile: RPC_PROFILE,
+			sessionId: base64Url32,
+			resumeToken: `${base64Url32}=`,
+			receivedThrough: 0,
+			resumeAttempt: 1,
 		},
 	],
 	[
-		"a non-URL Base64Url32 carrier",
+		"a non-URL resume token",
 		RpcDecodePhaseEnum.bootstrapRequest,
 		{
-			kind: "fresh",
-			profiles: [RPC_PROFILE],
-			initiatorNonce: `+${base64Url32.slice(1)}`,
+			kind: "resume",
+			profile: RPC_PROFILE,
+			sessionId: base64Url32,
+			resumeToken: `+${base64Url32.slice(1)}`,
+			receivedThrough: 0,
+			resumeAttempt: 1,
 		},
 	],
 	[
-		"a short Base64Url32 carrier",
+		"a short resume token",
 		RpcDecodePhaseEnum.bootstrapRequest,
 		{
-			kind: "fresh",
-			profiles: [RPC_PROFILE],
-			initiatorNonce: base64Url32.slice(1),
+			kind: "resume",
+			profile: RPC_PROFILE,
+			sessionId: base64Url32,
+			resumeToken: base64Url32.slice(1),
+			receivedThrough: 0,
+			resumeAttempt: 1,
 		},
 	],
 	[
-		"a missing resume proof",
+		"a missing resume token",
 		RpcDecodePhaseEnum.bootstrapRequest,
 		{
 			kind: "resume",
@@ -240,7 +239,6 @@ const invalidRecordCases = [
 			sessionId: base64Url32,
 			receivedThrough: 0,
 			resumeAttempt: 1,
-			initiatorNonce: base64Url32,
 		},
 	],
 	[
@@ -250,10 +248,9 @@ const invalidRecordCases = [
 			kind: "resume",
 			profile: RPC_PROFILE,
 			sessionId: base64Url32,
+			resumeToken: base64Url32,
 			receivedThrough: -1,
 			resumeAttempt: 1,
-			initiatorNonce: base64Url32,
-			proof: base64Url32,
 		},
 	],
 	[
@@ -263,16 +260,25 @@ const invalidRecordCases = [
 			kind: "resume",
 			profile: RPC_PROFILE,
 			sessionId: base64Url32,
+			resumeToken: base64Url32,
 			receivedThrough: 0,
 			resumeAttempt: 0,
-			initiatorNonce: base64Url32,
-			proof: base64Url32,
 		},
 	],
 	[
 		"a reject during fresh accept",
 		RpcDecodePhaseEnum.freshAccept,
 		{ kind: "reject", code: "unsupported-profile" },
+	],
+	[
+		"a fresh accept missing its resume token",
+		RpcDecodePhaseEnum.freshAccept,
+		{
+			kind: "accept",
+			profile: RPC_PROFILE,
+			sessionId: base64Url32,
+			bindingEpoch: 1,
+		},
 	],
 	[
 		"a different fresh profile",
@@ -282,9 +288,7 @@ const invalidRecordCases = [
 			profile: "future/2",
 			sessionId: base64Url32,
 			bindingEpoch: 1,
-			responderNonce: base64Url32,
-			sessionSecret: base64Url32,
-			proof: base64Url32,
+			resumeToken: base64Url32,
 		},
 	],
 	[
@@ -295,9 +299,7 @@ const invalidRecordCases = [
 			profile: RPC_PROFILE,
 			sessionId: base64Url32,
 			bindingEpoch: 2,
-			responderNonce: base64Url32,
-			sessionSecret: base64Url32,
-			proof: base64Url32,
+			resumeToken: base64Url32,
 		},
 	],
 	[
@@ -309,18 +311,16 @@ const invalidRecordCases = [
 			sessionId: base64Url32,
 			bindingEpoch: 1,
 			receivedThrough: 0,
-			responderNonce: base64Url32,
-			sessionSecret: base64Url32,
-			proof: base64Url32,
+			resumeToken: base64Url32,
 		},
 	],
 	[
 		"a fresh request during resume outcome",
 		RpcDecodePhaseEnum.resumeOutcome,
-		{ kind: "fresh", profiles: [RPC_PROFILE], initiatorNonce: base64Url32 },
+		{ kind: "fresh", profiles: [RPC_PROFILE] },
 	],
 	[
-		"a resume accept carrying a session secret",
+		"a resume accept carrying a resume token",
 		RpcDecodePhaseEnum.resumeOutcome,
 		{
 			kind: "accept",
@@ -328,9 +328,7 @@ const invalidRecordCases = [
 			sessionId: base64Url32,
 			bindingEpoch: 2,
 			receivedThrough: 0,
-			responderNonce: base64Url32,
-			sessionSecret: base64Url32,
-			proof: base64Url32,
+			resumeToken: base64Url32,
 		},
 	],
 	[
@@ -342,8 +340,6 @@ const invalidRecordCases = [
 			sessionId: base64Url32,
 			bindingEpoch: 2,
 			receivedThrough: Number.MAX_SAFE_INTEGER + 1,
-			responderNonce: base64Url32,
-			proof: base64Url32,
 		},
 	],
 	[
@@ -352,8 +348,6 @@ const invalidRecordCases = [
 		{
 			kind: "reject",
 			code: "future-reject",
-			responderNonce: base64Url32,
-			proof: base64Url32,
 		},
 	],
 	[
@@ -362,15 +356,13 @@ const invalidRecordCases = [
 		{
 			kind: "reject",
 			code: "resume-rejected",
-			responderNonce: base64Url32,
-			proof: base64Url32,
 			message: "secret",
 		},
 	],
 	[
 		"a bootstrap record during the active phase",
 		RpcDecodePhaseEnum.active,
-		{ kind: "fresh", profiles: [RPC_PROFILE], initiatorNonce: base64Url32 },
+		{ kind: "fresh", profiles: [RPC_PROFILE] },
 	],
 	[
 		"an unknown active kind",
@@ -533,10 +525,7 @@ describe("Default RPC Codec Zod grammar", () => {
 		"bindingEpoch",
 		"resumeAttempt",
 		"receivedThrough",
-		"initiatorNonce",
-		"responderNonce",
-		"sessionSecret",
-		"proof",
+		"resumeToken",
 		"callId",
 		"service",
 		"method",
@@ -556,10 +545,10 @@ describe("Default RPC Codec Zod grammar", () => {
 		);
 	});
 
-	it("RPC-CORPUS-001 RPC-WIRE-005 RPC-SEC-003 preserves own __proto__ open tails after Zod validation", () => {
+	it("RPC-CORPUS-001 RPC-WIRE-005 preserves own __proto__ open tails after Zod validation", () => {
 		const decoded = codec.decode(
 			encoder.encode(
-				'{"kind":"message","seq":1,"__proto__":{"proof":"top-kept"},"message":{"kind":"call","callId":"1","service":"service","method":"run","args":[{"__proto__":"application-data"}],"__proto__":{"proof":"nested-kept"}}}',
+				'{"kind":"message","seq":1,"__proto__":{"marker":"top-kept"},"message":{"kind":"call","callId":"1","service":"service","method":"run","args":[{"__proto__":"application-data"}],"__proto__":{"marker":"nested-kept"}}}',
 			),
 			RpcDecodePhaseEnum.active,
 		) as Readonly<Record<string, unknown>>;
@@ -567,10 +556,10 @@ describe("Default RPC Codec Zod grammar", () => {
 		const args = message.args as readonly Readonly<Record<string, unknown>>[];
 
 		expect(Object.hasOwn(decoded, "__proto__")).toBe(true);
-		expect(Reflect.get(decoded, "__proto__")).toEqual({ proof: "top-kept" });
+		expect(Reflect.get(decoded, "__proto__")).toEqual({ marker: "top-kept" });
 		expect(Object.hasOwn(message, "__proto__")).toBe(true);
 		expect(Reflect.get(message, "__proto__")).toEqual({
-			proof: "nested-kept",
+			marker: "nested-kept",
 		});
 		expect(Object.hasOwn(args[0] as object, "__proto__")).toBe(true);
 	});

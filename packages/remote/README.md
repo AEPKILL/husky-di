@@ -383,27 +383,40 @@ Transport package.
 
 ## Security
 
-The built-in Protocol authenticates its fresh and recovery transcripts, but its
-active-session authority comes from the protected physical binding. The
-Transport must provide confidentiality, ordered integrity and anti-replay, and
-authentication of the intended endpoint.
+The built-in Protocol issues one independent 256-bit opaque `resumeToken` in the
+protected fresh accept and requires that same bearer credential on every
+recovery request for the Session Incarnation. The token is stable for that
+incarnation and is not rotated. Active-session authority comes from the exact
+protected physical binding. The Transport must provide confidentiality, ordered
+integrity and anti-replay, and authentication of the intended endpoint.
 
 The built-in Protocol does not authenticate the initiating application or
-authorize services and methods. A Session proof establishes continuity with an
-existing Session; it is not a user or tenant identity. Before handing an
-untrusted inbound Connection to an Acceptor, deployments must authenticate and
-admit the initiator at the transport or gateway boundary and enforce
-per-principal connection, Session, request-rate, and handler-duration limits.
+authorize services and methods. Possession of a `resumeToken` authorizes
+continuity with one retained Session; it is not a user or tenant identity.
+Deployments accepting an untrusted inbound Connection must authenticate and
+admit the initiator before Acceptor handoff, at the transport or gateway
+boundary, and enforce per-principal connection, Session, request-rate, and
+handler-duration limits.
 
 Do not deploy over an untrusted plaintext channel. For WebSockets, `ws:` is
 plaintext. A `wss:` deployment is suitable only when the application correctly
 validates the intended TLS endpoint and trust policy. Ordinary
 server-authenticated TLS authenticates the responder to the initiator; it does
-not by itself authenticate the initiator to the responder.
+not by itself authenticate the initiator to the responder. Anyone who obtains a
+`resumeToken` from plaintext traffic, decrypted proxy traces, logs, telemetry,
+errors, or compromised process memory can exercise its bearer authority for the
+remainder of that retained Session Incarnation.
+
+Do not send `FreshRequest` or `ResumeRequest` as TLS 0-RTT or any other
+replayable early data. The Transport must complete its handshake and establish
+the protected anti-replay channel before handing the Connection to the RPC
+Protocol.
 
 Call telemetry deliberately excludes raw arguments, results, remote errors,
-credentials, and wire data. Applications that record payloads at their own
-caller or handler boundaries remain responsible for redaction and data handling.
+credentials including `resumeToken`, and wire data. The Framework and built-in
+Protocol must not place a token in logs, telemetry, public state, or errors.
+Applications that record payloads at their own caller or handler boundaries
+remain responsible for redaction and data handling.
 
 ## Related Documentation
 

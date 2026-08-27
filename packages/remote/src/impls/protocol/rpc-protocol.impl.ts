@@ -9,7 +9,6 @@ import {
 	RPC_PROTECTED_SESSION_BYTES,
 } from "@/constants/protocol/rpc-profile.const";
 import { RpcDecodePhaseEnum } from "@/enums/protocol/rpc-decode-phase.enum";
-import { RpcProofOperationKindEnum } from "@/enums/protocol/rpc-proof-operation-kind.enum";
 import { RpcResumeRejectCodeEnum } from "@/enums/protocol/rpc-resume-reject-code.enum";
 import { RpcWireRecordKindEnum } from "@/enums/protocol/rpc-wire-record-kind.enum";
 import { RpcCloseReasonEnum } from "@/enums/rpc-close-reason.enum";
@@ -18,7 +17,6 @@ import type {
 	RpcBindingAttemptFactory,
 } from "@/interfaces/endpoint/rpc-binding-attempt.interface";
 import type { IRpcCodec } from "@/interfaces/protocol/rpc-codec.interface";
-import type { IRpcHandshakeCryptography } from "@/interfaces/protocol/rpc-handshake-cryptography.interface";
 import type {
 	IRpcProtocolAcceptorHost,
 	IRpcProtocolAcceptorRuntime,
@@ -37,18 +35,17 @@ import type { IRpcConnection } from "@/interfaces/transport/rpc-connection.inter
 import type {
 	RpcFreshAccept,
 	RpcFreshRequest,
-	RpcJsonRecord,
 	RpcResumeAccept,
 	RpcResumeReject,
 	RpcResumeRequest,
 } from "@/types/protocol/rpc-wire-record.type";
 
-type RpcConnectorAttemptState<TKey> = {
+type RpcConnectorAttemptState = {
 	readonly mode: "fresh" | "resume";
-	readonly session?: IRpcSession<TKey>;
+	readonly session?: IRpcSession;
 	request?: RpcFreshRequest | RpcResumeRequest;
 	requestAdmission?: Promise<void>;
-	resume?: RpcInitiatorResume<TKey>;
+	resume?: RpcInitiatorResume;
 };
 
 type RpcAcceptorAttemptState = {
@@ -57,13 +54,13 @@ type RpcAcceptorAttemptState = {
 	transferProtectedSessionReservation?: () => void;
 };
 
-type RpcResponderContinuityCandidate<TKey> = Extract<
-	RpcResponderResumeReview<TKey>,
+type RpcResponderContinuityCandidate = Extract<
+	RpcResponderResumeReview,
 	{ readonly kind: "continuity-reject" }
 >;
 
-type RpcResponderBindingCandidate<TKey> = Extract<
-	RpcResponderResumeReview<TKey>,
+type RpcResponderBindingCandidate = Extract<
+	RpcResponderResumeReview,
 	{ readonly kind: "accept" }
 >;
 
@@ -76,20 +73,19 @@ function closeUnboundConnection(connection: IRpcConnection): void {
 }
 
 /** Active one-to-one Default Protocol runtime. */
-export class RpcProtocolConnectorRuntimeImpl<TKey>
+export class RpcProtocolConnectorRuntimeImpl
 	implements IRpcProtocolConnectorRuntime
 {
 	readonly _host: IRpcProtocolConnectorHost;
 	readonly _codec: IRpcCodec;
-	readonly _handshakeCryptography: IRpcHandshakeCryptography<TKey>;
-	readonly _createBindingAttempt: RpcBindingAttemptFactory<TKey>;
-	readonly _createSession: RpcSessionFactory<TKey>;
+	readonly _createBindingAttempt: RpcBindingAttemptFactory;
+	readonly _createSession: RpcSessionFactory;
 	readonly _attemptStates = new WeakMap<
-		IRpcBindingAttempt<TKey>,
-		RpcConnectorAttemptState<TKey>
+		IRpcBindingAttempt,
+		RpcConnectorAttemptState
 	>();
-	_attempt: IRpcBindingAttempt<TKey> | undefined;
-	_session: IRpcSession<TKey> | undefined;
+	_attempt: IRpcBindingAttempt | undefined;
+	_session: IRpcSession | undefined;
 	_handshakeSlotsInUse = 0;
 	_closing = false;
 	_cleanupTask: Promise<void> | undefined;
@@ -97,13 +93,11 @@ export class RpcProtocolConnectorRuntimeImpl<TKey>
 	public constructor(
 		host: IRpcProtocolConnectorHost,
 		codec: IRpcCodec,
-		handshakeCryptography: IRpcHandshakeCryptography<TKey>,
-		createBindingAttempt: RpcBindingAttemptFactory<TKey>,
-		createSession: RpcSessionFactory<TKey>,
+		createBindingAttempt: RpcBindingAttemptFactory,
+		createSession: RpcSessionFactory,
 	) {
 		this._host = host;
 		this._codec = codec;
-		this._handshakeCryptography = handshakeCryptography;
 		this._createBindingAttempt = createBindingAttempt;
 		this._createSession = createSession;
 	}
@@ -129,7 +123,7 @@ export class RpcProtocolConnectorRuntimeImpl<TKey>
 		}
 		const mode = retainedSession === undefined ? "fresh" : "resume";
 		this._handshakeSlotsInUse += 1;
-		let attempt: IRpcBindingAttempt<TKey>;
+		let attempt: IRpcBindingAttempt;
 		try {
 			attempt = this._createBindingAttempt({
 				connection,
@@ -162,7 +156,11 @@ export class RpcProtocolConnectorRuntimeImpl<TKey>
 				? this._startFresh(attempt)
 				: void this._startResume(attempt),
 		);
-		return attempt.task;
+		// A Transport or Codec failure may embed token-bearing bootstrap bytes.
+		// Keep the raw failure inside the built-in Protocol boundary.
+		return attempt.task.catch(() => {
+			throw new Error("Default RPC Connector binding attempt failed.");
+		});
 	}
 
 	shutdown(): Promise<void> {
@@ -182,7 +180,7 @@ export class RpcProtocolConnectorRuntimeImpl<TKey>
 		return this._cleanupTask;
 	}
 
-	_startFresh(attempt: IRpcBindingAttempt<TKey>): void {
+	_startFresh(attempt: IRpcBindingAttempt): void {
 		if (!this._isCurrent(attempt)) {
 			return;
 		}
@@ -194,12 +192,9 @@ export class RpcProtocolConnectorRuntimeImpl<TKey>
 		let request: RpcFreshRequest;
 		let encoded: Uint8Array;
 		try {
-			const initiatorNonce =
-				this._handshakeCryptography.createSecurityCarrier();
 			request = Object.freeze({
 				kind: RpcWireRecordKindEnum.fresh,
 				profiles: Object.freeze([RPC_PROFILE]),
-				initiatorNonce,
 			}) as RpcFreshRequest;
 			encoded = this._codec.encode(request);
 		} catch (error) {
@@ -211,7 +206,7 @@ export class RpcProtocolConnectorRuntimeImpl<TKey>
 		void state.requestAdmission.catch((error) => attempt.fail(error));
 	}
 
-	async _startResume(attempt: IRpcBindingAttempt<TKey>): Promise<void> {
+	_startResume(attempt: IRpcBindingAttempt): void {
 		if (!this._isCurrent(attempt)) {
 			return;
 		}
@@ -224,37 +219,13 @@ export class RpcProtocolConnectorRuntimeImpl<TKey>
 		try {
 			const resume = session.beginInitiatorResume();
 			state.resume = resume;
-			const initiatorNonce =
-				this._handshakeCryptography.createSecurityCarrier();
-			const requestWithoutProof = Object.freeze({
+			const request = Object.freeze({
 				kind: RpcWireRecordKindEnum.resume,
 				profile: RPC_PROFILE,
 				sessionId: resume.sessionId,
+				resumeToken: resume.resumeToken,
 				receivedThrough: resume.receivedThrough,
 				resumeAttempt: resume.resumeAttempt,
-				initiatorNonce,
-			}) as RpcJsonRecord;
-			const proof = await attempt.runCrypto(() =>
-				this._handshakeCryptography.signProof({
-					kind: RpcProofOperationKindEnum.resumeRequest,
-					proofKey: resume.proofKey,
-					record: requestWithoutProof,
-				}),
-			);
-			// The signed request remains usable only for the current Session resume candidate.
-			const resumeCandidateIsStale =
-				!this._isCurrent(attempt) ||
-				state.session !== session ||
-				!session.confirmInitiatorResume(resume);
-			if (resumeCandidateIsStale) {
-				attempt.fail(
-					new Error("Default RPC initiator resume candidate became stale."),
-				);
-				return;
-			}
-			const request = Object.freeze({
-				...requestWithoutProof,
-				proof,
 			}) as RpcResumeRequest;
 			state.request = request;
 			state.requestAdmission = attempt.send(this._codec.encode(request));
@@ -265,7 +236,7 @@ export class RpcProtocolConnectorRuntimeImpl<TKey>
 	}
 
 	_receiveConnectorRecord(
-		attempt: IRpcBindingAttempt<TKey>,
+		attempt: IRpcBindingAttempt,
 		bytes: Uint8Array,
 	): Promise<void> | void {
 		const state = this._attemptStates.get(attempt);
@@ -279,7 +250,7 @@ export class RpcProtocolConnectorRuntimeImpl<TKey>
 	}
 
 	async _receiveFreshAccept(
-		attempt: IRpcBindingAttempt<TKey>,
+		attempt: IRpcBindingAttempt,
 		bytes: Uint8Array,
 	): Promise<void> {
 		if (!this._isCurrent(attempt)) {
@@ -301,27 +272,10 @@ export class RpcProtocolConnectorRuntimeImpl<TKey>
 		}
 		try {
 			await requestAdmission;
-			const accept = this._codec.decode(bytes, RpcDecodePhaseEnum.freshAccept);
-			const proofKey = await attempt.runCrypto(() =>
-				this._handshakeCryptography.deriveProofKey(
-					accept.sessionSecret,
-					accept.sessionId,
-				),
-			);
 			if (!this._isCurrent(attempt)) {
 				return;
 			}
-			const valid = await attempt.runCrypto(() =>
-				this._handshakeCryptography.verifyProof({
-					kind: RpcProofOperationKindEnum.freshAccept,
-					proofKey,
-					request,
-					record: accept,
-				}),
-			);
-			if (!valid || !this._isCurrent(attempt)) {
-				throw new Error("Default RPC fresh accept proof is invalid or stale.");
-			}
+			const accept = this._codec.decode(bytes, RpcDecodePhaseEnum.freshAccept);
 			const protectedSessionReservation = this._host.reserveRetainedBytes(
 				RPC_PROTECTED_SESSION_BYTES,
 			);
@@ -333,11 +287,11 @@ export class RpcProtocolConnectorRuntimeImpl<TKey>
 			const protectedSessionLease = attempt.ownTemporary(() =>
 				protectedSessionReservation.release(),
 			);
-			let session: IRpcSession<TKey>;
+			let session: IRpcSession;
 			session = this._createSession({
 				host: this._host,
 				sessionId: accept.sessionId,
-				proofKey,
+				resumeToken: accept.resumeToken,
 				onTerminal: () => {
 					protectedSessionReservation.release();
 					if (this._session === session) {
@@ -366,7 +320,7 @@ export class RpcProtocolConnectorRuntimeImpl<TKey>
 	}
 
 	async _receiveResumeOutcome(
-		attempt: IRpcBindingAttempt<TKey>,
+		attempt: IRpcBindingAttempt,
 		bytes: Uint8Array,
 	): Promise<void> {
 		if (!this._isCurrent(attempt)) {
@@ -393,6 +347,9 @@ export class RpcProtocolConnectorRuntimeImpl<TKey>
 
 		try {
 			await requestAdmission;
+			if (!this._isCurrent(attempt)) {
+				return;
+			}
 			const outcome = this._codec.decode(
 				bytes,
 				RpcDecodePhaseEnum.resumeOutcome,
@@ -400,24 +357,6 @@ export class RpcProtocolConnectorRuntimeImpl<TKey>
 			if (outcome.kind === RpcWireRecordKindEnum.reject) {
 				if (outcome.code === RpcResumeRejectCodeEnum.resumeRejected) {
 					throw new Error("Default RPC resume was generically rejected.");
-				}
-				const valid = await attempt.runCrypto(() =>
-					this._handshakeCryptography.verifyProof({
-						kind: RpcProofOperationKindEnum.resumeReject,
-						proofKey: resume.proofKey,
-						request,
-						record: outcome,
-					}),
-				);
-				// An authenticated reject must still belong to the live resume candidate.
-				const authenticatedRejectIsInvalid =
-					!valid ||
-					!this._isCurrent(attempt) ||
-					!session.confirmInitiatorResume(resume);
-				if (authenticatedRejectIsInvalid) {
-					throw new Error(
-						"Default RPC authenticated resume reject is invalid.",
-					);
 				}
 				if (!this._isCurrent(attempt) || this._session !== session) {
 					attempt.fail(
@@ -431,7 +370,7 @@ export class RpcProtocolConnectorRuntimeImpl<TKey>
 				const authority =
 					outcome.code === RpcResumeRejectCodeEnum.continuityFailure
 						? session.commitContinuityFailure(resume)
-						: session.terminateAuthenticatedRemote(resume);
+						: session.terminateRemoteResume(resume);
 				if (authority.kind === "discarded") {
 					attempt.fail(authority.error);
 					return;
@@ -439,22 +378,6 @@ export class RpcProtocolConnectorRuntimeImpl<TKey>
 				throw new Error(`Default RPC resume ended with ${outcome.code}.`);
 			}
 
-			const valid = await attempt.runCrypto(() =>
-				this._handshakeCryptography.verifyProof({
-					kind: RpcProofOperationKindEnum.resumeAccept,
-					proofKey: resume.proofKey,
-					request,
-					record: outcome,
-				}),
-			);
-			// An authenticated accept must still belong to the live resume candidate.
-			const resumeAcceptIsInvalid =
-				!valid ||
-				!this._isCurrent(attempt) ||
-				!session.confirmInitiatorResume(resume);
-			if (resumeAcceptIsInvalid) {
-				throw new Error("Default RPC resume accept proof is invalid or stale.");
-			}
 			const preparation = session.prepareInitiatorBinding(resume, {
 				profile: outcome.profile,
 				sessionId: outcome.sessionId,
@@ -492,14 +415,14 @@ export class RpcProtocolConnectorRuntimeImpl<TKey>
 		}
 	}
 
-	_isCurrent(attempt: IRpcBindingAttempt<TKey>): boolean {
+	_isCurrent(attempt: IRpcBindingAttempt): boolean {
 		return attempt.pending && this._attempt === attempt && !this._closing;
 	}
 
 	async _installBinding(
-		attempt: IRpcBindingAttempt<TKey>,
-		session: IRpcSession<TKey>,
-		candidate: RpcBindingCandidate<TKey>,
+		attempt: IRpcBindingAttempt,
+		session: IRpcSession,
+		candidate: RpcBindingCandidate,
 	): Promise<void> {
 		const provisional = attempt.holdsProvisionalSession(session);
 		// Installation requires the current attempt to retain the expected Session ownership.
@@ -514,7 +437,7 @@ export class RpcProtocolConnectorRuntimeImpl<TKey>
 		if (endpoint === undefined) {
 			return;
 		}
-		let commit: ReturnType<IRpcSession<TKey>["commitBinding"]>;
+		let commit: ReturnType<IRpcSession["commitBinding"]>;
 		try {
 			commit = session.commitBinding(candidate, endpoint);
 		} catch (error) {
@@ -538,20 +461,20 @@ export class RpcProtocolConnectorRuntimeImpl<TKey>
 }
 
 /** Passive one-to-many Default Protocol runtime. */
-export class RpcProtocolAcceptorRuntimeImpl<TKey>
+export class RpcProtocolAcceptorRuntimeImpl
 	implements IRpcProtocolAcceptorRuntime
 {
 	readonly _host: IRpcProtocolAcceptorHost;
 	readonly _codec: IRpcCodec;
-	readonly _handshakeCryptography: IRpcHandshakeCryptography<TKey>;
-	readonly _createBindingAttempt: RpcBindingAttemptFactory<TKey>;
-	readonly _createSession: RpcSessionFactory<TKey>;
-	readonly _attempts = new Set<IRpcBindingAttempt<TKey>>();
+	readonly _createSecurityCarrier: () => string;
+	readonly _createBindingAttempt: RpcBindingAttemptFactory;
+	readonly _createSession: RpcSessionFactory;
+	readonly _attempts = new Set<IRpcBindingAttempt>();
 	readonly _attemptStates = new WeakMap<
-		IRpcBindingAttempt<TKey>,
+		IRpcBindingAttempt,
 		RpcAcceptorAttemptState
 	>();
-	readonly _sessions = new Map<string, IRpcSession<TKey>>();
+	readonly _sessions = new Map<string, IRpcSession>();
 	readonly _provisionalSessionIds = new Set<string>();
 	_handshakeSlotsInUse = 0;
 	_freshSessionReservations = 0;
@@ -561,13 +484,13 @@ export class RpcProtocolAcceptorRuntimeImpl<TKey>
 	public constructor(
 		host: IRpcProtocolAcceptorHost,
 		codec: IRpcCodec,
-		handshakeCryptography: IRpcHandshakeCryptography<TKey>,
-		createBindingAttempt: RpcBindingAttemptFactory<TKey>,
-		createSession: RpcSessionFactory<TKey>,
+		createSecurityCarrier: () => string,
+		createBindingAttempt: RpcBindingAttemptFactory,
+		createSession: RpcSessionFactory,
 	) {
 		this._host = host;
 		this._codec = codec;
-		this._handshakeCryptography = handshakeCryptography;
+		this._createSecurityCarrier = createSecurityCarrier;
 		this._createBindingAttempt = createBindingAttempt;
 		this._createSession = createSession;
 	}
@@ -584,7 +507,7 @@ export class RpcProtocolAcceptorRuntimeImpl<TKey>
 			);
 		}
 		this._handshakeSlotsInUse += 1;
-		let attempt: IRpcBindingAttempt<TKey>;
+		let attempt: IRpcBindingAttempt;
 		try {
 			attempt = this._createBindingAttempt({
 				connection,
@@ -636,7 +559,7 @@ export class RpcProtocolAcceptorRuntimeImpl<TKey>
 	}
 
 	_receiveBootstrap(
-		attempt: IRpcBindingAttempt<TKey>,
+		attempt: IRpcBindingAttempt,
 		bytes: Uint8Array,
 	): Promise<void> | void {
 		if (!this._isCurrent(attempt)) {
@@ -656,7 +579,7 @@ export class RpcProtocolAcceptorRuntimeImpl<TKey>
 	}
 
 	async _receiveFreshRequest(
-		attempt: IRpcBindingAttempt<TKey>,
+		attempt: IRpcBindingAttempt,
 		request: RpcFreshRequest,
 	): Promise<void> {
 		if (!this._isCurrent(attempt)) {
@@ -683,44 +606,20 @@ export class RpcProtocolAcceptorRuntimeImpl<TKey>
 				attempt.fail(new Error("Default RPC Session ID failed."));
 				return;
 			}
-			const sessionSecret = this._handshakeCryptography.createSecurityCarrier();
-			const responderNonce =
-				this._handshakeCryptography.createSecurityCarrier();
-			const proofKey = await attempt.runCrypto(() =>
-				this._handshakeCryptography.deriveProofKey(sessionSecret, sessionId),
-			);
+			const resumeToken = this._createSecurityCarrier();
 			const state = this._attemptStates.get(attempt);
-			// Derived proof authority belongs only to the live reserved fresh Session.
+			// Fresh authority belongs only to the live reserved Session identity.
 			const freshCandidateIsStale =
 				!this._isCurrent(attempt) || state?.provisionalSessionId !== sessionId;
 			if (freshCandidateIsStale) {
 				return;
 			}
-			const acceptWithoutProof = Object.freeze({
+			const accept = Object.freeze({
 				kind: RpcWireRecordKindEnum.accept,
 				profile: RPC_PROFILE,
 				sessionId,
 				bindingEpoch: 1,
-				responderNonce,
-				sessionSecret,
-			}) as RpcJsonRecord;
-			const proof = await attempt.runCrypto(() =>
-				this._handshakeCryptography.signProof({
-					kind: RpcProofOperationKindEnum.freshAccept,
-					proofKey,
-					request,
-					record: acceptWithoutProof,
-				}),
-			);
-			// The signed accept belongs only to the live reserved fresh Session.
-			const freshAcceptIsStale =
-				!this._isCurrent(attempt) || state?.provisionalSessionId !== sessionId;
-			if (freshAcceptIsStale) {
-				return;
-			}
-			const accept = Object.freeze({
-				...acceptWithoutProof,
-				proof,
+				resumeToken,
 			}) as RpcFreshAccept;
 			const protectedSessionReservation = state?.protectedSessionReservation;
 			const transferProtectedSessionReservation =
@@ -732,11 +631,11 @@ export class RpcProtocolAcceptorRuntimeImpl<TKey>
 			if (protectedReservationIsMissing) {
 				throw new Error("Default RPC protected Session reservation was lost.");
 			}
-			let session: IRpcSession<TKey>;
+			let session: IRpcSession;
 			session = this._createSession({
 				host: this._host,
 				sessionId,
-				proofKey,
+				resumeToken,
 				onTerminal: () => {
 					protectedSessionReservation.release();
 					if (this._sessions.get(sessionId) === session) {
@@ -773,7 +672,7 @@ export class RpcProtocolAcceptorRuntimeImpl<TKey>
 	}
 
 	async _receiveResumeRequest(
-		attempt: IRpcBindingAttempt<TKey>,
+		attempt: IRpcBindingAttempt,
 		request: RpcResumeRequest,
 	): Promise<void> {
 		if (!this._isCurrent(attempt)) {
@@ -781,44 +680,16 @@ export class RpcProtocolAcceptorRuntimeImpl<TKey>
 		}
 		const session = this._sessions.get(request.sessionId);
 		if (session === undefined || request.profile !== RPC_PROFILE) {
-			await this._rejectResumeGeneric(attempt, request);
+			await this._rejectResumeGeneric(attempt);
 			return;
 		}
-		const proofCandidate = session.openResponderProof();
-		if (proofCandidate === undefined) {
-			await this._rejectResumeGeneric(attempt, request);
-			return;
-		}
-		let proofValid = false;
-		try {
-			proofValid = await attempt.runCrypto(() =>
-				this._handshakeCryptography.verifyProof({
-					kind: RpcProofOperationKindEnum.resumeRequest,
-					proofKey: proofCandidate.proofKey,
-					request,
-				}),
-			);
-		} catch {
-			// A syntactically valid but unverifiable proof is a generic rejection.
-		}
-		// Verification remains authoritative only for the current retained Session.
-		const responderProofIsStale =
-			!this._isCurrent(attempt) ||
-			this._sessions.get(request.sessionId) !== session;
-		if (responderProofIsStale) {
-			attempt.fail(new Error("Default RPC responder proof became stale."));
-			return;
-		}
-		if (!proofValid) {
-			await this._rejectResumeGeneric(attempt, request);
-			return;
-		}
-		const review = session.reviewResponderResume(proofCandidate, {
+		const review = session.reviewResponderResume({
+			resumeToken: request.resumeToken,
 			resumeAttempt: request.resumeAttempt,
 			peerReceivedThrough: request.receivedThrough,
 		});
 		if (review.kind === "generic-reject") {
-			await this._rejectResumeGeneric(attempt, request);
+			await this._rejectResumeGeneric(attempt);
 		} else if (review.kind === "continuity-reject") {
 			await this._rejectResumeContinuity(attempt, request, session, review);
 		} else {
@@ -827,10 +698,10 @@ export class RpcProtocolAcceptorRuntimeImpl<TKey>
 	}
 
 	async _acceptResume(
-		attempt: IRpcBindingAttempt<TKey>,
+		attempt: IRpcBindingAttempt,
 		request: RpcResumeRequest,
-		session: IRpcSession<TKey>,
-		candidate: RpcResponderBindingCandidate<TKey>,
+		session: IRpcSession,
+		candidate: RpcResponderBindingCandidate,
 	): Promise<void> {
 		// Resume acceptance starts only for the live attempt's retained Session.
 		const resumeCandidateIsStale =
@@ -839,34 +710,12 @@ export class RpcProtocolAcceptorRuntimeImpl<TKey>
 		if (resumeCandidateIsStale) {
 			return;
 		}
-		const responderNonce = this._handshakeCryptography.createSecurityCarrier();
-		const acceptWithoutProof = Object.freeze({
+		const accept = Object.freeze({
 			kind: RpcWireRecordKindEnum.accept,
 			profile: RPC_PROFILE,
 			sessionId: request.sessionId,
 			bindingEpoch: candidate.bindingEpoch,
 			receivedThrough: candidate.receivedThrough,
-			responderNonce,
-		}) as RpcJsonRecord;
-		const proof = await attempt.runCrypto(() =>
-			this._handshakeCryptography.signProof({
-				kind: RpcProofOperationKindEnum.resumeAccept,
-				proofKey: candidate.proofKey,
-				request,
-				record: acceptWithoutProof,
-			}),
-		);
-		if (!this._isCurrent(attempt)) {
-			attempt.fail(new Error("Default RPC resume candidate became stale."));
-			return;
-		}
-		if (this._sessions.get(request.sessionId) !== session) {
-			attempt.fail(new Error("Default RPC resume candidate became stale."));
-			return;
-		}
-		const accept = Object.freeze({
-			...acceptWithoutProof,
-			proof,
 		}) as RpcResumeAccept;
 		await this._installBinding(
 			attempt,
@@ -877,31 +726,11 @@ export class RpcProtocolAcceptorRuntimeImpl<TKey>
 		);
 	}
 
-	async _rejectResumeGeneric(
-		attempt: IRpcBindingAttempt<TKey>,
-		request: RpcResumeRequest,
-	): Promise<void> {
+	async _rejectResumeGeneric(attempt: IRpcBindingAttempt): Promise<void> {
 		try {
-			const responderNonce =
-				this._handshakeCryptography.createSecurityCarrier();
-			const rejectWithoutProof = Object.freeze({
+			const reject = Object.freeze({
 				kind: RpcWireRecordKindEnum.reject,
 				code: RpcResumeRejectCodeEnum.resumeRejected,
-				responderNonce,
-			}) as RpcJsonRecord;
-			const proof = await attempt.runCrypto(() =>
-				this._handshakeCryptography.signProof({
-					kind: RpcProofOperationKindEnum.genericReject,
-					request,
-					record: rejectWithoutProof,
-				}),
-			);
-			if (!this._isCurrent(attempt)) {
-				return;
-			}
-			const reject = Object.freeze({
-				...rejectWithoutProof,
-				proof,
 			}) as RpcResumeReject;
 			await attempt.send(this._codec.encode(reject));
 		} catch {
@@ -912,28 +741,17 @@ export class RpcProtocolAcceptorRuntimeImpl<TKey>
 	}
 
 	async _rejectResumeContinuity(
-		attempt: IRpcBindingAttempt<TKey>,
+		attempt: IRpcBindingAttempt,
 		request: RpcResumeRequest,
-		session: IRpcSession<TKey>,
-		candidate: RpcResponderContinuityCandidate<TKey>,
+		session: IRpcSession,
+		candidate: RpcResponderContinuityCandidate,
 	): Promise<void> {
 		try {
-			const responderNonce =
-				this._handshakeCryptography.createSecurityCarrier();
-			const rejectWithoutProof = Object.freeze({
+			const reject = Object.freeze({
 				kind: RpcWireRecordKindEnum.reject,
 				code: RpcResumeRejectCodeEnum.continuityFailure,
-				responderNonce,
-			}) as RpcJsonRecord;
-			const proof = await attempt.runCrypto(() =>
-				this._handshakeCryptography.signProof({
-					kind: RpcProofOperationKindEnum.resumeReject,
-					proofKey: candidate.proofKey,
-					request,
-					record: rejectWithoutProof,
-				}),
-			);
-			// The signed continuity rejection belongs only to the live retained Session.
+			}) as RpcResumeReject;
+			// A continuity rejection belongs only to the live retained Session.
 			const continuityCandidateIsStale =
 				!this._isCurrent(attempt) ||
 				this._sessions.get(request.sessionId) !== session;
@@ -943,7 +761,7 @@ export class RpcProtocolAcceptorRuntimeImpl<TKey>
 			if (attempt.claim() === undefined) {
 				return;
 			}
-			let authority: ReturnType<IRpcSession<TKey>["commitContinuityFailure"]>;
+			let authority: ReturnType<IRpcSession["commitContinuityFailure"]>;
 			try {
 				authority = session.commitContinuityFailure(candidate);
 			} catch (error) {
@@ -954,10 +772,6 @@ export class RpcProtocolAcceptorRuntimeImpl<TKey>
 				attempt.fail(authority.error);
 				return;
 			}
-			const reject = Object.freeze({
-				...rejectWithoutProof,
-				proof,
-			}) as RpcResumeReject;
 			await attempt.send(this._codec.encode(reject));
 		} catch {
 			// The authoritative Session terminal remains selected.
@@ -967,7 +781,7 @@ export class RpcProtocolAcceptorRuntimeImpl<TKey>
 	}
 
 	async _rejectFresh(
-		attempt: IRpcBindingAttempt<TKey>,
+		attempt: IRpcBindingAttempt,
 		code: "unsupported-profile" | "admission-rejected",
 	): Promise<void> {
 		try {
@@ -982,13 +796,13 @@ export class RpcProtocolAcceptorRuntimeImpl<TKey>
 		}
 	}
 
-	_reserveFreshSession(attempt: IRpcBindingAttempt<TKey>): boolean {
+	_reserveFreshSession(attempt: IRpcBindingAttempt): boolean {
 		const state = this._attemptStates.get(attempt);
 		if (state === undefined) {
 			attempt.fail(new Error("Default RPC Acceptor attempt state was lost."));
 			return false;
 		}
-		let reclaimedSession: IRpcSession<TKey> | undefined;
+		let reclaimedSession: IRpcSession | undefined;
 		let reclaimedSessionId: string | undefined;
 		let earliestRecoveryDeadline = Number.POSITIVE_INFINITY;
 		const reclaimAt = Date.now();
@@ -1062,14 +876,14 @@ export class RpcProtocolAcceptorRuntimeImpl<TKey>
 		return true;
 	}
 
-	_reserveSessionId(attempt: IRpcBindingAttempt<TKey>): string | undefined {
+	_reserveSessionId(attempt: IRpcBindingAttempt): string | undefined {
 		const state = this._attemptStates.get(attempt);
 		if (state === undefined) {
 			attempt.fail(new Error("Default RPC Acceptor attempt state was lost."));
 			return undefined;
 		}
 		for (let candidateIndex = 0; candidateIndex < 8; candidateIndex += 1) {
-			const candidate = this._handshakeCryptography.createSecurityCarrier();
+			const candidate = this._createSecurityCarrier();
 			// Session IDs must be unique across retained and provisional Sessions.
 			const candidateIsAvailable =
 				!this._sessions.has(candidate) &&
@@ -1086,15 +900,15 @@ export class RpcProtocolAcceptorRuntimeImpl<TKey>
 		return undefined;
 	}
 
-	_isCurrent(attempt: IRpcBindingAttempt<TKey>): boolean {
+	_isCurrent(attempt: IRpcBindingAttempt): boolean {
 		return attempt.pending && this._attempts.has(attempt) && !this._closing;
 	}
 
 	async _installBinding(
-		attempt: IRpcBindingAttempt<TKey>,
-		session: IRpcSession<TKey>,
+		attempt: IRpcBindingAttempt,
+		session: IRpcSession,
 		sessionId: string,
-		candidate: RpcBindingCandidate<TKey>,
+		candidate: RpcBindingCandidate,
 		reply: Uint8Array,
 	): Promise<void> {
 		const provisional = attempt.holdsProvisionalSession(session);
@@ -1113,7 +927,7 @@ export class RpcProtocolAcceptorRuntimeImpl<TKey>
 		if (endpoint === undefined) {
 			return;
 		}
-		let commit: ReturnType<IRpcSession<TKey>["commitBinding"]>;
+		let commit: ReturnType<IRpcSession["commitBinding"]>;
 		try {
 			commit = session.commitBinding(candidate, endpoint);
 		} catch (error) {

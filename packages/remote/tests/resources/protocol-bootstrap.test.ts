@@ -1,5 +1,5 @@
 /**
- * @overview Default Protocol bootstrap transient and cryptographic job ownership.
+ * @overview Default Protocol bootstrap transient and bearer credential ownership.
  * @author AEPKILL
  * @created 2026-08-19 00:00:00
  */
@@ -7,19 +7,17 @@
 import { Observable, Subject } from "rxjs";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { RpcDecodePhaseEnum } from "../../src/enums/protocol/rpc-decode-phase.enum";
-import { RpcProofOperationKindEnum } from "../../src/enums/protocol/rpc-proof-operation-kind.enum";
 import { RpcWireRecordKindEnum } from "../../src/enums/protocol/rpc-wire-record-kind.enum";
 import { createRpcProtocol } from "../../src/factories/rpc-protocol.factory";
 import { RpcRetainedBytesLedgerImpl } from "../../src/impls/common/rpc-retained-bytes-ledger.impl";
 import { RpcCodecImpl } from "../../src/impls/protocol/rpc-codec.impl";
-import { RpcHandshakeCryptographyImpl } from "../../src/impls/protocol/rpc-handshake-cryptography.impl";
+import type { RpcSessionImpl } from "../../src/impls/session/rpc-session.impl";
 import type {
 	IRpcProtocolAcceptorHost,
 	IRpcProtocolAcceptorRuntime,
 	IRpcProtocolConnectorHost,
 	IRpcProtocolConnectorRuntime,
 	IRpcProtocolRuntimePolicy,
-	IRpcRetainedBytesReservation,
 	RpcProtocolSessionTransition,
 } from "../../src/interfaces/protocol/rpc-protocol.interface";
 import type { IRpcConnection } from "../../src/interfaces/transport/rpc-connection.interface";
@@ -28,6 +26,7 @@ import type {
 	RpcJsonRecord,
 	RpcResumeRequest,
 } from "../../src/types/protocol/rpc-wire-record.type";
+import { createRpcSecurityCarrier } from "../../src/utils/protocol/rpc-base64-url-32-schema.util";
 import {
 	normalizeRpcApplicationArguments,
 	normalizeRpcApplicationValue,
@@ -35,7 +34,8 @@ import {
 } from "../../src/utils/rpc-application-value.util";
 
 const codec = new RpcCodecImpl();
-const cryptography = new RpcHandshakeCryptographyImpl();
+const canonicalSessionId = "A".repeat(43);
+const canonicalResumeToken = `${"B".repeat(42)}E`;
 
 interface IBootstrapConnectionHarness {
 	readonly connection: IRpcConnection;
@@ -71,14 +71,17 @@ function createPolicy(
 function createAcceptorRuntime(
 	policy: IRpcProtocolRuntimePolicy,
 	onTransition: (transition: RpcProtocolSessionTransition) => void = () => {},
+	shouldAdmitSession: () => boolean = () => true,
 ): {
 	readonly runtime: IRpcProtocolAcceptorRuntime;
 	readonly ownerFaults: string[];
 	readonly admittedSessions: number[];
 	readonly retainedBytes: RpcRetainedBytesLedgerImpl;
+	readonly sessionImpls: RpcSessionImpl[];
 } {
 	const ownerFaults: string[] = [];
 	const admittedSessions: number[] = [];
+	const sessionImpls: RpcSessionImpl[] = [];
 	const retainedBytes = new RpcRetainedBytesLedgerImpl(
 		policy.maxRetainedBytesTotal,
 	);
@@ -89,8 +92,12 @@ function createAcceptorRuntime(
 		normalizeApplicationArguments: normalizeRpcApplicationArguments,
 		applicationValuesEqual: rpcApplicationValuesEqual,
 		fault: (reason) => ownerFaults.push(reason),
-		admitSession: () => {
+		admitSession: (session) => {
+			if (!shouldAdmitSession()) {
+				return undefined;
+			}
 			admittedSessions.push(1);
+			sessionImpls.push(session as RpcSessionImpl);
 			return {
 				reserveIncomingCall: () => undefined,
 				transition: onTransition,
@@ -103,6 +110,7 @@ function createAcceptorRuntime(
 		ownerFaults,
 		admittedSessions,
 		retainedBytes,
+		sessionImpls,
 	};
 }
 
@@ -139,7 +147,9 @@ function createConnectorRuntime(policy: IRpcProtocolRuntimePolicy): {
 	};
 }
 
-function createBootstrapConnection(): IBootstrapConnectionHarness {
+function createBootstrapConnection(
+	sendSettlement: Promise<void> = Promise.resolve(),
+): IBootstrapConnectionHarness {
 	const source = new Subject<Uint8Array>();
 	const responses: Readonly<Record<string, unknown>>[] = [];
 	let subscriptionCount = 0;
@@ -157,6 +167,7 @@ function createBootstrapConnection(): IBootstrapConnectionHarness {
 						Record<string, unknown>
 					>,
 				);
+				await sendSettlement;
 			},
 			async close() {
 				closeCount += 1;
@@ -179,30 +190,30 @@ function createBootstrapConnection(): IBootstrapConnectionHarness {
 }
 
 function createFreshRequest(): RpcJsonRecord {
-	const nonce = cryptography.createSecurityCarrier();
 	return {
 		kind: "fresh",
 		profiles: ["husky-di-rpc/1"],
-		initiatorNonce: nonce,
 	};
 }
 
-function createResumeRequest(): RpcJsonRecord {
-	const carrier = cryptography.createSecurityCarrier();
+function createResumeRequest(
+	sessionId: string = canonicalSessionId,
+	resumeToken: string = canonicalResumeToken,
+	resumeAttempt = 1,
+): RpcResumeRequest {
 	return {
-		kind: "resume",
+		kind: RpcWireRecordKindEnum.resume,
 		profile: "husky-di-rpc/1",
-		sessionId: carrier,
+		sessionId,
+		resumeToken,
 		receivedThrough: 0,
-		resumeAttempt: 1,
-		initiatorNonce: carrier,
-		proof: carrier,
+		resumeAttempt,
 	};
 }
 
-async function createFreshAccept(
+function createFreshAccept(
 	requestRecord: Readonly<Record<string, unknown>>,
-): Promise<RpcFreshAccept> {
+): RpcFreshAccept {
 	const request = codec.decode(
 		codec.encode(requestRecord as RpcJsonRecord),
 		RpcDecodePhaseEnum.bootstrapRequest,
@@ -210,50 +221,12 @@ async function createFreshAccept(
 	if (request.kind !== "fresh") {
 		throw new Error("Expected a fresh bootstrap request.");
 	}
-	const sessionId = cryptography.createSecurityCarrier();
-	const sessionSecret = cryptography.createSecurityCarrier();
-	const responderNonce = cryptography.createSecurityCarrier();
-	const proofKey = await cryptography.deriveProofKey(sessionSecret, sessionId);
-	const acceptWithoutProof = {
+	return {
 		kind: RpcWireRecordKindEnum.accept,
 		profile: "husky-di-rpc/1",
-		sessionId,
+		sessionId: canonicalSessionId,
 		bindingEpoch: 1,
-		responderNonce,
-		sessionSecret,
-	} as const;
-	return {
-		...acceptWithoutProof,
-		proof: await cryptography.signProof({
-			kind: RpcProofOperationKindEnum.freshAccept,
-			proofKey,
-			request,
-			record: acceptWithoutProof,
-		}),
-	};
-}
-
-async function createSignedResumeRequest(
-	sessionId: string,
-	proofKey: CryptoKey,
-	resumeAttempt: number,
-): Promise<RpcResumeRequest> {
-	const initiatorNonce = cryptography.createSecurityCarrier();
-	const requestWithoutProof = {
-		kind: RpcWireRecordKindEnum.resume,
-		profile: "husky-di-rpc/1",
-		sessionId,
-		receivedThrough: 0,
-		resumeAttempt,
-		initiatorNonce,
-	} as const;
-	return {
-		...requestWithoutProof,
-		proof: await cryptography.signProof({
-			kind: RpcProofOperationKindEnum.resumeRequest,
-			proofKey,
-			record: requestWithoutProof,
-		}),
+		resumeToken: canonicalResumeToken,
 	};
 }
 
@@ -275,7 +248,7 @@ afterEach(() => {
 });
 
 describe("Default RPC Protocol bootstrap resources", () => {
-	it("RPC-SEC-008 overwrites controlled secret bytes and retains only a non-extractable key", async () => {
+	it("RPC-SEC-002 RPC-SEC-008 creates canonical 256-bit carriers and overwrites controlled temporary bytes", () => {
 		const generatedBytes: Uint8Array[] = [];
 		vi.spyOn(globalThis.crypto, "getRandomValues").mockImplementation(((
 			bytes: Uint8Array,
@@ -284,61 +257,55 @@ describe("Default RPC Protocol bootstrap resources", () => {
 			generatedBytes.push(bytes);
 			return bytes;
 		}) as Crypto["getRandomValues"]);
-		const sessionSecret = cryptography.createSecurityCarrier();
-		const sessionId = cryptography.createSecurityCarrier();
 
-		const proofKey = await cryptography.deriveProofKey(
-			sessionSecret,
-			sessionId,
-		);
+		const first = createRpcSecurityCarrier();
+		const second = createRpcSecurityCarrier();
 
+		expect(first).toMatch(/^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$/u);
+		expect(second).toMatch(/^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$/u);
+		expect(second).not.toBe(first);
+		for (const carrier of [first, second]) {
+			const padded = `${carrier.replaceAll("-", "+").replaceAll("_", "/")}=`;
+			expect(atob(padded)).toHaveLength(32);
+		}
 		expect(generatedBytes).toHaveLength(2);
 		for (const bytes of generatedBytes) {
 			expect(bytes).toEqual(new Uint8Array(32));
 		}
-		expect(proofKey.extractable).toBe(false);
-
-		let decodedSecret: Uint8Array | undefined;
-		const uint8ArrayFrom = Uint8Array.from;
-		vi.spyOn(Uint8Array, "from").mockImplementation(((...args: unknown[]) => {
-			decodedSecret = Reflect.apply(
-				uint8ArrayFrom,
-				Uint8Array,
-				args,
-			) as Uint8Array;
-			return decodedSecret;
-		}) as typeof Uint8Array.from);
-		vi.stubGlobal("crypto", undefined);
-
-		await expect(
-			cryptography.deriveProofKey(sessionSecret, sessionId),
-		).rejects.toThrow("The Default RPC Protocol requires Web Crypto.");
-		expect(decodedSecret).toEqual(new Uint8Array(32));
 	});
 
-	it("RPC-SPI-008/RPC-SPI-012/RPC-RESOURCE-004/RPC-SEC-009/RPC-VALID-003 retains a shared slot for a never-settling digest after attempt timeout", async () => {
-		vi.spyOn(globalThis.crypto.subtle, "digest").mockImplementation(
-			() => new Promise<ArrayBuffer>(() => {}),
-		);
+	it("RPC-SPI-008 RPC-SPI-012 RPC-RESOURCE-004 RPC-SEC-009 retains the shared handshake permit until a Resume reject send settles", async () => {
+		let releaseResumeReply!: () => void;
+		const resumeReply = new Promise<void>((resolve) => {
+			releaseResumeReply = resolve;
+		});
 		const { runtime, ownerFaults, admittedSessions } = createAcceptorRuntime(
-			createPolicy(),
+			createPolicy({ bindingAttemptTimeoutMs: 1_000 }),
 		);
-		const first = createBootstrapConnection();
-		accept(runtime, first);
-		first.emit(createFreshRequest());
+		const resume = createBootstrapConnection(resumeReply);
+		const resumeTask = accept(runtime, resume);
+		resume.emit(createResumeRequest());
 		await vi.waitFor(() =>
-			expect(globalThis.crypto.subtle.digest).toHaveBeenCalledTimes(1),
+			expect(resume.responses).toEqual([
+				{ kind: "reject", code: "resume-rejected" },
+			]),
 		);
-		await vi.waitFor(() => expect(first.closeCount).toBe(1));
 
 		const overflow = createBootstrapConnection();
-		accept(runtime, overflow);
-
+		const overflowTask = accept(runtime, overflow);
+		await expect(overflowTask).rejects.toThrow(
+			"Default RPC handshake capacity is full.",
+		);
 		expect(overflow.subscriptionCount).toBe(0);
-		expect(overflow.closeCount).toBe(0);
-		await Promise.resolve();
-		expect(overflow.closeCount).toBe(1);
-		expect(overflow.responses).toEqual([]);
+		await vi.waitFor(() => expect(overflow.closeCount).toBe(1));
+
+		releaseResumeReply();
+		await expect(resumeTask).rejects.toThrow(
+			"Default RPC resume was generically rejected.",
+		);
+		const replacement = createBootstrapConnection();
+		accept(runtime, replacement);
+		expect(replacement.subscriptionCount).toBe(1);
 		expect(admittedSessions).toEqual([]);
 		expect(ownerFaults).toEqual([]);
 
@@ -346,51 +313,10 @@ describe("Default RPC Protocol bootstrap resources", () => {
 		await expect(runtime.cleanup()).resolves.toBeUndefined();
 	});
 
-	it("RPC-SESSION-003/RPC-SESSION-004 reserves fresh Session capacity before proof work", async () => {
-		const digest = vi
-			.spyOn(globalThis.crypto.subtle, "digest")
-			.mockImplementationOnce(() => new Promise<ArrayBuffer>(() => {}))
-			.mockRejectedValue(new Error("unexpected second proof job"));
-		const { runtime, ownerFaults, admittedSessions } = createAcceptorRuntime(
-			createPolicy({
-				maxSessions: 1,
-				maxHandshakes: 2,
-				bindingAttemptTimeoutMs: 1_000,
-			}),
-		);
-		const first = createBootstrapConnection();
-		accept(runtime, first);
-		first.emit(createFreshRequest());
-		await vi.waitFor(() => expect(digest).toHaveBeenCalledTimes(1));
-
-		for (let attemptIndex = 0; attemptIndex < 4; attemptIndex += 1) {
-			const overflow = createBootstrapConnection();
-			accept(runtime, overflow);
-			overflow.emit(createFreshRequest());
-			await vi.waitFor(() => expect(overflow.closeCount).toBe(1));
-			expect(overflow.responses).toEqual([
-				{ kind: "reject", code: "admission-rejected" },
-			]);
-		}
-
-		expect(digest).toHaveBeenCalledTimes(1);
-		expect(admittedSessions).toEqual([]);
-		expect(ownerFaults).toEqual([]);
-
-		runtime.close();
-	});
-
-	it("RPC-RESOURCE-003 RPC-SEC-009 retains protected Session bytes until aborted proof work settles", async () => {
-		let settleDigest!: (value: ArrayBuffer) => void;
-		vi.spyOn(globalThis.crypto.subtle, "digest").mockImplementation(
-			() =>
-				new Promise<ArrayBuffer>((resolve) => {
-					settleDigest = resolve;
-				}),
-		);
+	it("RPC-SESSION-003 RPC-SESSION-004 RPC-RESOURCE-003 reserves capacity before random generation and releases it on cleanup", async () => {
 		const protectedBytes = 512 * 1024;
 		const totalBytes = 4 * 1024 * 1024;
-		const { runtime, retainedBytes } = createAcceptorRuntime(
+		const created = createAcceptorRuntime(
 			createPolicy({
 				maxSessions: 1,
 				maxRetainedBytesPerSession: totalBytes,
@@ -398,28 +324,56 @@ describe("Default RPC Protocol bootstrap resources", () => {
 				bindingAttemptTimeoutMs: 1_000,
 			}),
 		);
-		const occupied = retainedBytes.reserve(totalBytes - protectedBytes);
+		const occupied = created.retainedBytes.reserve(totalBytes - protectedBytes);
 		if (occupied === undefined) {
-			throw new Error(
-				"Expected the legal policy's ordinary retained capacity.",
-			);
+			throw new Error("Expected ordinary bytes beside the protected Session.");
 		}
-		const connection = createBootstrapConnection();
-		accept(runtime, connection);
-		connection.emit(createFreshRequest());
-		await vi.waitFor(() =>
-			expect(globalThis.crypto.subtle.digest).toHaveBeenCalledTimes(1),
+		let generation = 0;
+		const random = vi
+			.spyOn(globalThis.crypto, "getRandomValues")
+			.mockImplementation(((bytes: Uint8Array) => {
+				expect(created.retainedBytes.reserve(1)).toBeUndefined();
+				generation += 1;
+				bytes.fill(generation);
+				return bytes;
+			}) as Crypto["getRandomValues"]);
+		const retained = createBootstrapConnection();
+		const retainedTask = accept(created.runtime, retained);
+		retained.emit(createFreshRequest());
+		await expect(retainedTask).resolves.toBeUndefined();
+
+		expect(random).toHaveBeenCalledTimes(2);
+		expect(retained.responses[0]).toMatchObject({
+			kind: "accept",
+			profile: "husky-di-rpc/1",
+			bindingEpoch: 1,
+			sessionId: expect.stringMatching(/^[A-Za-z0-9_-]{43}$/u),
+			resumeToken: expect.stringMatching(/^[A-Za-z0-9_-]{43}$/u),
+		});
+		expect(retained.responses[0]?.sessionId).not.toBe(
+			retained.responses[0]?.resumeToken,
+		);
+		const retainedSession = created.sessionImpls[0];
+		expect(retainedSession?._resumeToken).toBe(
+			retained.responses[0]?.resumeToken,
 		);
 
-		expect(retainedBytes.reserve(1)).toBeUndefined();
-		runtime.close();
-		expect(retainedBytes.reserve(protectedBytes)).toBeUndefined();
-		settleDigest(new Uint8Array(32).buffer);
-		let released: IRpcRetainedBytesReservation | undefined;
-		await vi.waitFor(() => {
-			released = retainedBytes.reserve(protectedBytes);
-			expect(released).toBeDefined();
-		});
+		const overflow = createBootstrapConnection();
+		const overflowTask = accept(created.runtime, overflow);
+		overflow.emit(createFreshRequest());
+		await expect(overflowTask).rejects.toThrow(
+			"Default RPC fresh admission-rejected.",
+		);
+		expect(overflow.responses).toEqual([
+			{ kind: "reject", code: "admission-rejected" },
+		]);
+		expect(random).toHaveBeenCalledTimes(2);
+		expect(created.retainedBytes.reserve(1)).toBeUndefined();
+
+		created.runtime.close();
+		expect(retainedSession?._resumeToken).toBeUndefined();
+		const released = created.retainedBytes.reserve(protectedBytes);
+		expect(released).toBeDefined();
 		released?.release();
 		occupied.release();
 	});
@@ -446,15 +400,9 @@ describe("Default RPC Protocol bootstrap resources", () => {
 		});
 		runtime = created.runtime;
 		const retained = createBootstrapConnection();
-		await Promise.all([
-			accept(runtime, retained),
-			(async () => {
-				retained.emit(createFreshRequest());
-				await vi.waitFor(() =>
-					expect(retained.responses.at(-1)?.kind).toBe("accept"),
-				);
-			})(),
-		]);
+		const retainedTask = accept(runtime, retained);
+		retained.emit(createFreshRequest());
+		await expect(retainedTask).resolves.toBeUndefined();
 		const occupied = created.retainedBytes.reserve(totalBytes - 512 * 1024);
 		if (occupied === undefined) {
 			throw new Error("Expected ordinary bytes beside the protected Session.");
@@ -462,9 +410,9 @@ describe("Default RPC Protocol bootstrap resources", () => {
 		retained.complete();
 
 		const fresh = createBootstrapConnection();
-		accept(runtime, fresh);
+		const freshTask = accept(runtime, fresh);
 		fresh.emit(createFreshRequest());
-		await vi.waitFor(() => expect(fresh.responses.at(-1)?.kind).toBe("accept"));
+		await expect(freshTask).resolves.toBeUndefined();
 		await vi.waitFor(() => expect(reentrant.closeCount).toBe(1));
 
 		expect(reentrant.responses).toEqual([
@@ -477,301 +425,196 @@ describe("Default RPC Protocol bootstrap resources", () => {
 		occupied.release();
 	});
 
-	it("RPC-SESSION-002 reserves a provisional ID and faults after exactly eight CSPRNG collisions", async () => {
-		const freshRequest = createFreshRequest();
+	it("RPC-SESSION-002 faults after exactly eight retained Session ID collisions", async () => {
 		const random = vi
 			.spyOn(globalThis.crypto, "getRandomValues")
-			.mockImplementation((array) => {
-				new Uint8Array(array.buffer, array.byteOffset, array.byteLength).fill(
-					0,
-				);
-				return array;
-			});
-		vi.spyOn(globalThis.crypto.subtle, "digest").mockImplementation(
-			() => new Promise<ArrayBuffer>(() => {}),
-		);
+			.mockImplementation(((bytes: Uint8Array) => {
+				bytes.fill(0);
+				return bytes;
+			}) as Crypto["getRandomValues"]);
 		const { runtime, ownerFaults, admittedSessions } = createAcceptorRuntime(
-			createPolicy({
-				maxHandshakes: 2,
-				bindingAttemptTimeoutMs: 1_000,
-			}),
+			createPolicy({ bindingAttemptTimeoutMs: 1_000 }),
 		);
-		const provisional = createBootstrapConnection();
-		accept(runtime, provisional);
-		provisional.emit(freshRequest);
-		await vi.waitFor(() =>
-			expect(globalThis.crypto.subtle.digest).toHaveBeenCalledTimes(1),
-		);
+		const retained = createBootstrapConnection();
+		const retainedTask = accept(runtime, retained);
+		retained.emit(createFreshRequest());
+		await expect(retainedTask).resolves.toBeUndefined();
 
 		const colliding = createBootstrapConnection();
-		accept(runtime, colliding);
-		colliding.emit(freshRequest);
-		await vi.waitFor(() => expect(colliding.closeCount).toBe(1));
+		const collidingTask = accept(runtime, colliding);
+		colliding.emit(createFreshRequest());
+		await expect(collidingTask).rejects.toThrow(
+			"Default RPC Session ID failed.",
+		);
 
-		expect(random).toHaveBeenCalledTimes(11);
-		expect(admittedSessions).toEqual([]);
+		expect(random).toHaveBeenCalledTimes(10);
+		expect(colliding.responses).toEqual([]);
+		expect(admittedSessions).toEqual([1]);
 		expect(ownerFaults).toEqual(["protocol-fault"]);
 
 		runtime.close();
 	});
 
-	it("RPC-SEC-009 retains a timed-out HMAC job until late settlement without installing its candidate RPC-CORPUS-004", async () => {
-		const nativeSign = globalThis.crypto.subtle.sign.bind(
-			globalThis.crypto.subtle,
-		);
-		let settleLateSign!: (value: ArrayBuffer) => void;
-		const lateSign = new Promise<ArrayBuffer>((resolve) => {
-			settleLateSign = resolve;
-		});
-		vi.spyOn(globalThis.crypto.subtle, "sign")
-			.mockImplementationOnce(() => lateSign)
-			.mockImplementation((algorithm, key, data) =>
-				nativeSign(algorithm, key, data),
-			);
+	it("RPC-SESSION-002 RPC-SESSION-004 releases provisional identity and Session ownership after admission rejection", async () => {
+		const fills = [1, 2, 1, 3];
+		let generation = 0;
+		const random = vi
+			.spyOn(globalThis.crypto, "getRandomValues")
+			.mockImplementation(((bytes: Uint8Array) => {
+				bytes.fill(fills[generation] ?? 4);
+				generation += 1;
+				return bytes;
+			}) as Crypto["getRandomValues"]);
+		let admissionAttempt = 0;
 		const { runtime, ownerFaults, admittedSessions } = createAcceptorRuntime(
-			createPolicy(),
+			createPolicy({ maxSessions: 1, bindingAttemptTimeoutMs: 1_000 }),
+			() => {},
+			() => {
+				admissionAttempt += 1;
+				return admissionAttempt > 1;
+			},
 		);
-		const stale = createBootstrapConnection();
-		accept(runtime, stale);
-		stale.emit(createFreshRequest());
-		await vi.waitFor(() =>
-			expect(globalThis.crypto.subtle.sign).toHaveBeenCalledTimes(1),
+		const rejected = createBootstrapConnection();
+		const rejectedTask = accept(runtime, rejected);
+		rejected.emit(createFreshRequest());
+		await expect(rejectedTask).rejects.toThrow(
+			"Default RPC fresh admission-rejected.",
 		);
-		await vi.waitFor(() => expect(stale.closeCount).toBe(1));
-
-		const blocked = createBootstrapConnection();
-		accept(runtime, blocked);
-		await vi.waitFor(() => expect(blocked.closeCount).toBe(1));
-		expect(blocked.subscriptionCount).toBe(0);
-
-		settleLateSign(new Uint8Array(32).buffer);
-		await new Promise<void>((resolve) => setTimeout(resolve, 0));
+		expect(rejected.responses).toEqual([
+			{ kind: "reject", code: "admission-rejected" },
+		]);
 
 		const replacement = createBootstrapConnection();
-		accept(runtime, replacement);
-		expect(replacement.subscriptionCount).toBe(1);
+		const replacementTask = accept(runtime, replacement);
 		replacement.emit(createFreshRequest());
-		await vi.waitFor(() =>
-			expect(
-				replacement.responses[replacement.responses.length - 1]?.kind,
-			).toBe("accept"),
-		);
+		await expect(replacementTask).resolves.toBeUndefined();
 
-		expect(stale.responses).toEqual([]);
+		expect(random).toHaveBeenCalledTimes(4);
+		expect(replacement.responses.at(-1)).toMatchObject({ kind: "accept" });
 		expect(admittedSessions).toEqual([1]);
 		expect(ownerFaults).toEqual([]);
 
 		runtime.close();
 	});
 
-	it("RPC-SESSION-009 discards a signed resume candidate made stale by a higher attempt", async () => {
+	it("RPC-SESSION-006 RPC-SESSION-007 RPC-SESSION-009 RPC-SEC-009 ignores late reply admission from a lower raw-token attempt", async () => {
 		const transitions: RpcProtocolSessionTransition[] = [];
-		const { runtime } = createAcceptorRuntime(
+		const { runtime, ownerFaults } = createAcceptorRuntime(
 			createPolicy({ maxHandshakes: 2, bindingAttemptTimeoutMs: 1_000 }),
 			(transition) => transitions.push(transition),
 		);
 		const fresh = createBootstrapConnection();
-		accept(runtime, fresh);
+		const freshTask = accept(runtime, fresh);
 		fresh.emit(createFreshRequest());
-		await vi.waitFor(() => expect(fresh.responses.at(-1)?.kind).toBe("accept"));
+		await expect(freshTask).resolves.toBeUndefined();
 		const freshAccept = fresh.responses.at(-1) as RpcFreshAccept;
-		const proofKey = await cryptography.deriveProofKey(
-			freshAccept.sessionSecret,
-			freshAccept.sessionId,
-		);
-		const firstRequest = await createSignedResumeRequest(
-			freshAccept.sessionId,
-			proofKey,
-			1,
-		);
-		const higherRequest = await createSignedResumeRequest(
-			freshAccept.sessionId,
-			proofKey,
-			2,
-		);
 		fresh.complete();
 		await vi.waitFor(() =>
 			expect(transitions.at(-1)).toMatchObject({ type: "recovering" }),
 		);
 
-		const nativeSign = globalThis.crypto.subtle.sign.bind(
-			globalThis.crypto.subtle,
-		);
-		let settleStaleSign!: (value: ArrayBuffer) => void;
-		const staleSign = new Promise<ArrayBuffer>((resolve) => {
-			settleStaleSign = resolve;
+		let releaseFirstReply!: () => void;
+		const firstReply = new Promise<void>((resolve) => {
+			releaseFirstReply = resolve;
 		});
-		const sign = vi
-			.spyOn(globalThis.crypto.subtle, "sign")
-			.mockImplementationOnce(() => staleSign)
-			.mockImplementation((algorithm, key, data) =>
-				nativeSign(algorithm, key, data),
-			);
-		const stale = createBootstrapConnection();
-		accept(runtime, stale);
-		stale.emit(firstRequest);
-		await vi.waitFor(() => expect(sign).toHaveBeenCalledTimes(1));
-
-		const winner = createBootstrapConnection();
-		accept(runtime, winner);
-		winner.emit(higherRequest);
+		const first = createBootstrapConnection(firstReply);
+		const firstController = new AbortController();
+		const firstTask = runtime.accept(first.connection, firstController.signal);
+		void firstTask.catch(() => {});
+		first.emit(
+			createResumeRequest(freshAccept.sessionId, freshAccept.resumeToken, 1),
+		);
 		await vi.waitFor(() =>
-			expect(winner.responses.at(-1)).toMatchObject({
+			expect(first.responses.at(-1)).toMatchObject({
 				kind: "accept",
 				bindingEpoch: 2,
 			}),
 		);
-
-		settleStaleSign(new Uint8Array(32).buffer);
-		await vi.waitFor(() => expect(stale.closeCount).toBe(1));
-
-		expect(stale.responses).toEqual([]);
-		expect(sign).toHaveBeenCalledTimes(2);
-		runtime.close();
-	});
-
-	it("RPC-SPI-008/RPC-SEC-009 bounds Connector crypto orphans with the same owner handshake cap", async () => {
-		const { runtime, ownerFaults, attachedSessions } = createConnectorRuntime(
-			createPolicy({ bindingAttemptTimeoutMs: 1_000 }),
+		firstController.abort();
+		await expect(firstTask).rejects.toThrow(
+			"Default RPC fresh acceptance was aborted.",
 		);
-		const controller = new AbortController();
-		const stale = createBootstrapConnection();
-		void runtime.bind(stale.connection, controller.signal).catch(() => {});
-		await vi.waitFor(() => expect(stale.responses).toHaveLength(1));
-		const acceptRecord = await createFreshAccept(stale.responses[0] ?? {});
-		vi.spyOn(globalThis.crypto.subtle, "digest").mockImplementation(
-			() => new Promise<ArrayBuffer>(() => {}),
-		);
-		stale.emit(acceptRecord);
-		await vi.waitFor(() =>
-			expect(globalThis.crypto.subtle.digest).toHaveBeenCalledTimes(1),
-		);
+		await vi.waitFor(() => expect(first.closeCount).toBe(1));
 
-		controller.abort();
-		await vi.waitFor(() => expect(stale.closeCount).toBe(1));
-		const blocked = createBootstrapConnection();
-		void runtime
-			.bind(blocked.connection, new AbortController().signal)
-			.catch(() => {});
+		const winner = createBootstrapConnection();
+		const winnerTask = accept(runtime, winner);
+		winner.emit(
+			createResumeRequest(freshAccept.sessionId, freshAccept.resumeToken, 2),
+		);
+		await expect(winnerTask).resolves.toBeUndefined();
+		expect(winner.responses.at(-1)).toMatchObject({
+			kind: "accept",
+			bindingEpoch: 3,
+		});
 
-		expect(blocked.subscriptionCount).toBe(0);
-		expect(blocked.closeCount).toBe(0);
-		await Promise.resolve();
-		expect(blocked.closeCount).toBe(1);
-		expect(blocked.responses).toEqual([]);
-		expect(attachedSessions).toEqual([]);
+		releaseFirstReply();
+		await new Promise<void>((resolve) => setTimeout(resolve, 0));
+		expect(
+			transitions.filter((transition) => transition.type === "recovered"),
+		).toHaveLength(1);
 		expect(ownerFaults).toEqual([]);
 
 		runtime.close();
 	});
 
-	it("RPC-SESSION-010 RPC-CORPUS-003 discards a late initiator verification after attempt abort", async () => {
+	it("RPC-SESSION-003 RPC-SESSION-010 RPC-SEC-009 discards Fresh admission after attempt abort while request admission is late", async () => {
+		let releaseRequest!: () => void;
+		const requestSettlement = new Promise<void>((resolve) => {
+			releaseRequest = resolve;
+		});
 		const { runtime, ownerFaults, attachedSessions } = createConnectorRuntime(
 			createPolicy({ bindingAttemptTimeoutMs: 1_000 }),
 		);
 		const controller = new AbortController();
-		const stale = createBootstrapConnection();
-		void runtime.bind(stale.connection, controller.signal).catch(() => {});
+		const stale = createBootstrapConnection(requestSettlement);
+		const staleTask = runtime.bind(stale.connection, controller.signal);
+		void staleTask.catch(() => {});
 		await vi.waitFor(() => expect(stale.responses).toHaveLength(1));
-		const acceptRecord = await createFreshAccept(stale.responses[0] ?? {});
-		let settleVerification!: (valid: boolean) => void;
-		vi.spyOn(globalThis.crypto.subtle, "verify").mockImplementation(
-			() =>
-				new Promise<boolean>((resolve) => {
-					settleVerification = resolve;
-				}),
-		);
+		const acceptRecord = createFreshAccept(stale.responses[0] ?? {});
 		stale.emit(acceptRecord);
-		await vi.waitFor(() =>
-			expect(globalThis.crypto.subtle.verify).toHaveBeenCalledTimes(1),
-		);
 
 		controller.abort();
+		await expect(staleTask).rejects.toThrow(
+			"Default RPC Connector binding attempt failed.",
+		);
 		await vi.waitFor(() => expect(stale.closeCount).toBe(1));
-		settleVerification(true);
-		await new Promise<void>((resolve) => setTimeout(resolve, 0));
-
-		expect(attachedSessions).toEqual([]);
 		const replacement = createBootstrapConnection();
-		void runtime
-			.bind(replacement.connection, new AbortController().signal)
-			.catch(() => {});
+		const replacementTask = runtime.bind(
+			replacement.connection,
+			new AbortController().signal,
+		);
+		void replacementTask.catch(() => {});
 		expect(replacement.subscriptionCount).toBe(1);
 		await vi.waitFor(() => expect(replacement.responses).toHaveLength(1));
-		expect(replacement.responses[0]).toMatchObject({ kind: "fresh" });
+
+		releaseRequest();
+		await new Promise<void>((resolve) => setTimeout(resolve, 0));
+		expect(attachedSessions).toEqual([]);
+		expect(replacement.responses[0]).toEqual(createFreshRequest());
 		expect(ownerFaults).toEqual([]);
 
 		runtime.close();
 	});
 
-	it("RPC-RESOURCE-003/RPC-RESOURCE-004 shares pre-classification slots across resume and fresh", async () => {
-		vi.spyOn(globalThis.crypto.subtle, "digest").mockImplementation(
-			() => new Promise<ArrayBuffer>(() => {}),
-		);
-		const { runtime, ownerFaults, admittedSessions } = createAcceptorRuntime(
-			createPolicy(),
-		);
-		const resume = createBootstrapConnection();
-		accept(runtime, resume);
-		resume.emit(createResumeRequest());
-		await vi.waitFor(() =>
-			expect(globalThis.crypto.subtle.digest).toHaveBeenCalled(),
-		);
-		await vi.waitFor(() => expect(resume.closeCount).toBe(1));
-
-		const fresh = createBootstrapConnection();
-		accept(runtime, fresh);
-		await vi.waitFor(() => expect(fresh.closeCount).toBe(1));
-
-		expect(fresh.subscriptionCount).toBe(0);
-		expect(fresh.responses).toEqual([]);
-		expect(resume.responses).toEqual([]);
-		expect(admittedSessions).toEqual([]);
-		expect(ownerFaults).toEqual([]);
-
-		runtime.close();
-	});
-
-	it("RPC-RESOURCE-004/RPC-SEC-009 does not fan out an untracked digest after transcript failure", async () => {
-		const digest = vi
-			.spyOn(globalThis.crypto.subtle, "digest")
-			.mockRejectedValueOnce(new Error("first transcript digest failed"))
-			.mockImplementation(() => new Promise<ArrayBuffer>(() => {}));
-		const { runtime, ownerFaults, admittedSessions } = createAcceptorRuntime(
-			createPolicy({ bindingAttemptTimeoutMs: 1_000 }),
-		);
-		const rejected = createBootstrapConnection();
-		accept(runtime, rejected);
-		rejected.emit(createResumeRequest());
-		await vi.waitFor(() => expect(rejected.closeCount).toBe(1));
-
-		expect(digest).toHaveBeenCalledTimes(1);
-		const replacement = createBootstrapConnection();
-		accept(runtime, replacement);
-		expect(replacement.subscriptionCount).toBe(1);
-		expect(admittedSessions).toEqual([]);
-		expect(ownerFaults).toEqual([]);
-
-		runtime.close();
-	});
-
-	it("RPC-SESSION-004/RPC-VALID-003 keeps bounded fresh rejection attempt-scoped", async () => {
-		const digest = vi.spyOn(globalThis.crypto.subtle, "digest");
+	it("RPC-SESSION-004 RPC-VALID-003 rejects an unsupported Fresh profile before random generation", async () => {
+		const random = vi.spyOn(globalThis.crypto, "getRandomValues");
 		const { runtime, ownerFaults, admittedSessions } = createAcceptorRuntime(
 			createPolicy(),
 		);
 		const connection = createBootstrapConnection();
-		accept(runtime, connection);
+		const task = accept(runtime, connection);
 		connection.emit({
 			...createFreshRequest(),
 			profiles: ["unsupported-profile"],
 		});
-		await vi.waitFor(() => expect(connection.closeCount).toBe(1));
+		await expect(task).rejects.toThrow(
+			"Default RPC fresh unsupported-profile.",
+		);
 
 		expect(connection.responses).toEqual([
 			{ kind: "reject", code: "unsupported-profile" },
 		]);
-		expect(digest).not.toHaveBeenCalled();
+		expect(random).not.toHaveBeenCalled();
 		expect(admittedSessions).toEqual([]);
 		expect(ownerFaults).toEqual([]);
 
@@ -783,9 +626,9 @@ describe("Default RPC Protocol bootstrap resources", () => {
 			createPolicy(),
 		);
 		const connection = createBootstrapConnection();
-		accept(runtime, connection);
+		const task = accept(runtime, connection);
 		connection.emit({ kind: "bogus" });
-		await vi.waitFor(() => expect(connection.closeCount).toBe(1));
+		await expect(task).rejects.toThrow();
 
 		expect(connection.responses).toEqual([]);
 		expect(admittedSessions).toEqual([]);

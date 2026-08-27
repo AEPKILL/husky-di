@@ -193,7 +193,7 @@ describe("Connector termination cleanup", () => {
 	it("RPC-START-004 RPC-SPI-011 faults a provisional fresh Session without publishing it", async () => {
 		let sessionHost: IRpcProtocolSessionHost | undefined;
 		let forceCalls = 0;
-		const fault = new Error("fresh Session proof invariant failed");
+		const fault = new Error("fresh Session token invariant failed");
 		const session: IRpcProtocolSession = {
 			reserveInvocation: () => undefined,
 			forceClose() {

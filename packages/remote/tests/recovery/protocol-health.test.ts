@@ -142,11 +142,15 @@ describe("Default RPC Protocol health", () => {
 		await connector.connect({
 			adapter: network.createConnectorAdapter("silent"),
 		});
-		network.setInterceptor((record) =>
-			record.direction === "acceptor" && record.value.kind === "ping"
+		// Isolate the acceptor send stall from peer activity that can postpone its probe.
+		network.setInterceptor((record) => {
+			if (record.value.kind !== "ping") {
+				return undefined;
+			}
+			return record.direction === "acceptor"
 				? { drop: true, settlement: neverSettles }
-				: undefined,
-		);
+				: { drop: true };
+		});
 
 		await vi.advanceTimersByTimeAsync(20);
 

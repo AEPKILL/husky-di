@@ -158,7 +158,7 @@ describe("Default RPC Protocol remaining requirements", () => {
 		await Promise.all([connector.close(), acceptor.close()]);
 	});
 
-	it("RPC-SEC-001 ignores Adapter security-shaped properties and makes no secure-Recovery claim for plaintext fixtures", async () => {
+	it("RPC-SEC-001 RPC-SEC-004 exposes the bearer resume token on plaintext fixtures and makes no secure-Recovery claim", async () => {
 		const network = createRpcTestNetwork();
 		const descriptor = createRemoteServiceDescriptor(IRequirementsService, {
 			wireName: "example.plaintext-deployment.v1",
@@ -192,6 +192,9 @@ describe("Default RPC Protocol remaining requirements", () => {
 
 		expect(securityPropertyReads).toBe(0);
 		expect(plaintextRecords.every((record) => JSON.parse(record))).toBe(true);
+		expect(
+			plaintextRecords.some((record) => record.includes('"resumeToken"')),
+		).toBe(true);
 		expect(connector).not.toHaveProperty("isSecure");
 		expect(connector.peer).not.toHaveProperty("isSecure");
 		expect(connector.peer.state).not.toHaveProperty("secureRecovery");
@@ -199,7 +202,7 @@ describe("Default RPC Protocol remaining requirements", () => {
 		await Promise.all([connector.close(), acceptor.close()]);
 	});
 
-	it("RPC-SEC-004 generates one independent secret per Session and carries each only in its verified fresh accept", async () => {
+	it("RPC-SEC-002 generates one independent resume token per Session and carries each only in its fresh accept", async () => {
 		const network = createRpcTestNetwork();
 		const acceptor = createRpcAcceptor();
 		const firstConnector = createRpcConnector();
@@ -215,18 +218,17 @@ describe("Default RPC Protocol remaining requirements", () => {
 			(record) =>
 				record.direction === "acceptor" && record.value.kind === "accept",
 		);
-		const secrets = accepts.map((record) => record.value.sessionSecret);
+		const tokens = accepts.map((record) => record.value.resumeToken);
 		expect(accepts).toHaveLength(2);
-		expect(new Set(secrets).size).toBe(2);
+		expect(new Set(tokens).size).toBe(2);
 		for (const accept of accepts) {
 			expect(accept.value).toMatchObject({
 				profile: "husky-di-rpc/1",
-				proof: expect.stringMatching(/^[A-Za-z0-9_-]{43}$/),
-				sessionSecret: expect.stringMatching(/^[A-Za-z0-9_-]{43}$/),
+				resumeToken: expect.stringMatching(/^[A-Za-z0-9_-]{43}$/),
 			});
 		}
 		expect(
-			network.records.filter((record) => "sessionSecret" in record.value),
+			network.records.filter((record) => "resumeToken" in record.value),
 		).toEqual(accepts);
 
 		await Promise.all([

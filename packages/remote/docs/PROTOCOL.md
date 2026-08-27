@@ -10,8 +10,11 @@ frozen idempotent release token on success; custom Protocols must hold one for
 every retained representation covered by `maxRetainedBytesTotal`.
 
 The seam is deliberately semantic. A custom Protocol owns its encoding,
-handshake, continuity proof, ordering, replay, ACK, and wire scheduler; none of
-the built-in `husky-di-rpc/1` internals are public extension points.
+handshake, continuity credential, ordering, replay, ACK, and wire scheduler;
+none of the built-in `husky-di-rpc/1` internals are public extension points. The
+built-in profile uses one stable opaque bearer `resumeToken` per retained Session
+Incarnation and therefore depends on a confidential, integrity-protected,
+endpoint-authenticated Transport such as correctly validated TLS/WSS.
 
 An independent provider package that wants the built-in semantics without
 copying its state machines can delegate to `createRpcProtocol()`, exported with

@@ -6,7 +6,16 @@
 - Use the breaking `connector.connect({ adapter, signal? })` options record for extensible, cancellable Connector attempts.
 - Add the opt-in `createRpcConnectorReconnection()` supervisor with configurable finite retries, fresh Adapter creation, orchestration state, and payload-free failure telemetry.
 - Add the semantic third-party Protocol SPI and Transport Adapter seams.
-- Add the authenticated, resumable, resource-bounded `husky-di-rpc/1` Protocol and its immutable `createRpcProtocol()` provider factory.
+- Add the resumable, resource-bounded `husky-di-rpc/1` Protocol and its immutable
+  `createRpcProtocol()` provider factory.
+- Establish Session continuity with one independent stable 256-bit opaque
+  `resumeToken` bearer credential per retained Session Incarnation. The token is
+  issued only in the protected fresh accept, repeated only in resume requests,
+  never rotated within that incarnation, and depends on confidential,
+  integrity-protected, endpoint-authenticated Transport deployment.
+- Keep `resumeToken` out of logs, telemetry, public state, and errors, and release
+  the retained JavaScript string reference when its Session terminates without
+  claiming in-place JavaScript heap or physical-memory erasure.
 - Add framework-neutral Protocol and Adapter conformance runners.
 - Export enums for the stable caller, Protocol, and conformance vocabularies.
 - Publish the normative specification and requirement matrix.

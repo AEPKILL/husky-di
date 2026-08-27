@@ -314,7 +314,7 @@ function validateRpcRecord<TRecord>(
 	}
 
 	// Zod validates a materialized copy; the bounded parser's original preserves
-	// every open-tail member needed by proof canonicalization, including __proto__.
+	// every bounded open-tail member, including __proto__.
 	return record as TRecord;
 }
 

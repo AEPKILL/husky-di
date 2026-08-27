@@ -17,19 +17,7 @@ import {
 	RpcException,
 } from "../../src/index";
 
-const hmacSha256KnownAnswer = Object.freeze({
-	keyHex: "0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b",
-	dataHex: "4869205468657265",
-	tagHex: "b0344c61d8db38535ca8afceaf0bf12b881dc200c9833da726e9376c2e32cff7",
-});
-const hkdfSha256KnownAnswer = Object.freeze({
-	ikmHex: "0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b",
-	saltHex: "000102030405060708090a0b0c",
-	infoHex: "f0f1f2f3f4f5f6f7f8f9",
-	length: 42,
-	okmHex:
-		"3cb25f25faacd57a90434f64d0362f2a2d2d0a90cf1a5a4c5db02d56ecc4c5bf34007208d5b887185865",
-});
+const base64Url32Pattern = /^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$/u;
 
 interface IBrowserRpcService {
 	add(left: number, right: number): number;
@@ -41,18 +29,27 @@ interface IBrowserMemoryLink {
 	readonly connectorIngress: Subject<Uint8Array>;
 }
 
+interface IBrowserWireRecord {
+	readonly connectionIndex: number;
+	readonly origin: "acceptor" | "connector";
+	readonly record: Readonly<Record<string, unknown>>;
+}
+
 interface IBrowserRoundtripResult {
 	readonly acceptorStatus: string;
 	readonly assimilated: boolean;
+	readonly browserCsprng: boolean;
 	readonly canceledCode: string;
 	readonly connectorStatus: string;
 	readonly initialResult: number;
+	readonly profileV1: boolean;
 	readonly recoveredResult: number;
+	readonly resumeAcceptOmitsToken: boolean;
+	readonly resumeTokenCanonical: boolean;
+	readonly resumeTokenStable: boolean;
 	readonly sameAcceptorPeer: boolean;
 	readonly sameConnectorPeer: boolean;
 	readonly shadowListenerCalls: number;
-	readonly webCrypto: boolean;
-	readonly webCryptoVectors: boolean;
 }
 
 const IBrowserRpcService =
@@ -60,11 +57,14 @@ const IBrowserRpcService =
 
 function createBrowserMemoryNetwork(): {
 	readonly acceptorAdapter: IRpcAcceptorAdapter;
+	readonly records: readonly IBrowserWireRecord[];
 	createConnectorAdapter(): IRpcConnectorAdapter;
 	disconnect(connectionIndex: number): void;
 } {
 	const acceptorConnections = new Subject<IRpcConnection>();
+	const decoder = new TextDecoder();
 	const links: IBrowserMemoryLink[] = [];
+	const records: IBrowserWireRecord[] = [];
 
 	return {
 		acceptorAdapter: {
@@ -79,6 +79,7 @@ function createBrowserMemoryNetwork(): {
 				connection$: connectorConnections.asObservable(),
 				async connect(signal) {
 					signal.throwIfAborted();
+					const connectionIndex = links.length;
 					const connectorIngress = new Subject<Uint8Array>();
 					const acceptorIngress = new Subject<Uint8Array>();
 					const link = { connectorIngress, acceptorIngress };
@@ -94,6 +95,7 @@ function createBrowserMemoryNetwork(): {
 					const createConnection = (
 						messageSource: Subject<Uint8Array>,
 						peerSource: Subject<Uint8Array>,
+						origin: IBrowserWireRecord["origin"],
 					): IRpcConnection => ({
 						message$: messageSource.asObservable(),
 						async send(message) {
@@ -101,6 +103,13 @@ function createBrowserMemoryNetwork(): {
 								throw new Error("Browser test Connection is closed.");
 							}
 							const snapshot = message.slice();
+							records.push({
+								connectionIndex,
+								origin,
+								record: JSON.parse(decoder.decode(snapshot)) as Readonly<
+									Record<string, unknown>
+								>,
+							});
 							await Promise.resolve();
 							if (!closed) {
 								peerSource.next(snapshot);
@@ -109,15 +118,16 @@ function createBrowserMemoryNetwork(): {
 						close,
 					});
 					connectorConnections.next(
-						createConnection(connectorIngress, acceptorIngress),
+						createConnection(connectorIngress, acceptorIngress, "connector"),
 					);
 					acceptorConnections.next(
-						createConnection(acceptorIngress, connectorIngress),
+						createConnection(acceptorIngress, connectorIngress, "acceptor"),
 					);
 					connectorConnections.complete();
 				},
 			};
 		},
+		records,
 		disconnect(connectionIndex) {
 			const link = links[connectionIndex];
 			link?.connectorIngress.complete();
@@ -139,60 +149,21 @@ async function waitFor(
 	}
 }
 
-function decodeHex(value: string): ArrayBuffer {
-	const bytes = new Uint8Array(value.length / 2);
-	for (let index = 0; index < bytes.length; index += 1) {
-		bytes[index] = Number.parseInt(value.slice(index * 2, index * 2 + 2), 16);
-	}
-	return bytes.buffer;
-}
-
-function encodeHex(value: ArrayBuffer): string {
-	return Array.from(new Uint8Array(value), (byte) =>
-		byte.toString(16).padStart(2, "0"),
-	).join("");
-}
-
-async function verifyBrowserWebCryptoVectors(): Promise<boolean> {
-	const hmacVector = hmacSha256KnownAnswer;
-	const hmacKey = await crypto.subtle.importKey(
-		"raw",
-		decodeHex(hmacVector.keyHex),
-		{ name: "HMAC", hash: "SHA-256" },
-		false,
-		["sign"],
-	);
-	const hmac = await crypto.subtle.sign(
-		"HMAC",
-		hmacKey,
-		decodeHex(hmacVector.dataHex),
-	);
-	const hkdfVector = hkdfSha256KnownAnswer;
-	const hkdfKey = await crypto.subtle.importKey(
-		"raw",
-		decodeHex(hkdfVector.ikmHex),
-		"HKDF",
-		false,
-		["deriveBits"],
-	);
-	const hkdf = await crypto.subtle.deriveBits(
-		{
-			name: "HKDF",
-			hash: "SHA-256",
-			salt: decodeHex(hkdfVector.saltHex),
-			info: decodeHex(hkdfVector.infoHex),
-		},
-		hkdfKey,
-		hkdfVector.length * 8,
-	);
-	return (
-		encodeHex(hmac) === hmacVector.tagHex &&
-		encodeHex(hkdf) === hkdfVector.okmHex
-	);
+function findBrowserWireRecord(
+	records: readonly IBrowserWireRecord[],
+	connectionIndex: number,
+	origin: IBrowserWireRecord["origin"],
+	kind: string,
+): Readonly<Record<string, unknown>> | undefined {
+	return records.find(
+		(entry) =>
+			entry.connectionIndex === connectionIndex &&
+			entry.origin === origin &&
+			entry.record.kind === kind,
+	)?.record;
 }
 
 export async function runRpcBrowserRoundtrip(): Promise<IBrowserRoundtripResult> {
-	const webCryptoVectors = await verifyBrowserWebCryptoVectors();
 	const descriptor = createRemoteServiceDescriptor(IBrowserRpcService, {
 		wireName: "browser.release.v1",
 		methods: {
@@ -299,6 +270,37 @@ export async function runRpcBrowserRoundtrip(): Promise<IBrowserRoundtripResult>
 	const recoveredResult = await remote.add(20, 22);
 	const sameConnectorPeer = connector.peer === connectorPeer;
 	const sameAcceptorPeer = acceptor.peers[0] === acceptorPeer;
+	const freshAccept = findBrowserWireRecord(
+		network.records,
+		0,
+		"acceptor",
+		"accept",
+	);
+	const resumeRequest = findBrowserWireRecord(
+		network.records,
+		1,
+		"connector",
+		"resume",
+	);
+	const resumeAccept = findBrowserWireRecord(
+		network.records,
+		1,
+		"acceptor",
+		"accept",
+	);
+	const freshResumeToken = freshAccept?.resumeToken;
+	const resumedToken = resumeRequest?.resumeToken;
+	const resumeTokenCanonical =
+		typeof freshResumeToken === "string" &&
+		base64Url32Pattern.test(freshResumeToken);
+	const resumeTokenStable =
+		resumeTokenCanonical && resumedToken === freshResumeToken;
+	const profileV1 =
+		freshAccept?.profile === "husky-di-rpc/1" &&
+		resumeRequest?.profile === "husky-di-rpc/1" &&
+		resumeAccept?.profile === "husky-di-rpc/1";
+	const resumeAcceptOmitsToken =
+		resumeAccept !== undefined && !Object.hasOwn(resumeAccept, "resumeToken");
 
 	await connector.shutdown();
 	await acceptor.shutdown();
@@ -306,14 +308,17 @@ export async function runRpcBrowserRoundtrip(): Promise<IBrowserRoundtripResult>
 	return {
 		acceptorStatus: acceptor.state.status,
 		assimilated,
+		browserCsprng: typeof crypto.getRandomValues === "function",
 		canceledCode,
 		connectorStatus: connector.state.status,
 		initialResult,
+		profileV1,
 		recoveredResult,
+		resumeAcceptOmitsToken,
+		resumeTokenCanonical,
+		resumeTokenStable,
 		sameAcceptorPeer,
 		sameConnectorPeer,
 		shadowListenerCalls,
-		webCrypto: typeof crypto.subtle?.digest === "function",
-		webCryptoVectors,
 	};
 }

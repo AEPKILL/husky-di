@@ -26,13 +26,13 @@ type CreateRpcBindingAttemptImplOptions = CreateRpcBindingAttemptOptions &
 		) => IRpcEndpoint;
 	}>;
 
-type RpcProvisionalSession<TKey> = Readonly<{
-	readonly session: IRpcSession<TKey>;
+type RpcProvisionalSession = Readonly<{
+	readonly session: IRpcSession;
 	readonly discard: () => void;
 }>;
 
 /** Owns one bootstrap attempt until it transfers an exact Binding Epoch. */
-export class RpcBindingAttemptImpl<TKey> implements IRpcBindingAttempt<TKey> {
+export class RpcBindingAttemptImpl implements IRpcBindingAttempt {
 	readonly task: Promise<void>;
 	readonly _endpoint: IRpcEndpoint;
 	readonly _resolve: () => void;
@@ -43,10 +43,9 @@ export class RpcBindingAttemptImpl<TKey> implements IRpcBindingAttempt<TKey> {
 	readonly _releaseHandshakeSlot: () => void;
 	readonly _temporaryReleases = new Set<() => void>();
 	_binding: RpcBindingEpoch | undefined;
-	_provisionalSession: RpcProvisionalSession<TKey> | undefined;
+	_provisionalSession: RpcProvisionalSession | undefined;
 	_timer: ReturnType<typeof setTimeout> | undefined;
 	_removeAbortListener: (() => void) | undefined;
-	_cryptoJobCount = 0;
 	_resourcesFinished = false;
 	_bindingClaimed = false;
 	_terminal = false;
@@ -126,16 +125,6 @@ export class RpcBindingAttemptImpl<TKey> implements IRpcBindingAttempt<TKey> {
 		return this._endpoint.sendNow(message);
 	}
 
-	async runCrypto<T>(operation: () => Promise<T>): Promise<T> {
-		this._cryptoJobCount += 1;
-		try {
-			return await operation();
-		} finally {
-			this._cryptoJobCount -= 1;
-			this._releaseFinishedResources();
-		}
-	}
-
 	ownTemporary(release: () => void): RpcBindingAttemptLease {
 		let owned = true;
 		let finish: () => void;
@@ -150,7 +139,7 @@ export class RpcBindingAttemptImpl<TKey> implements IRpcBindingAttempt<TKey> {
 			}
 		};
 		finish = () => forget(true);
-		if (this._resourcesFinished && this._cryptoJobCount === 0) {
+		if (this._resourcesFinished) {
 			finish();
 		} else {
 			this._temporaryReleases.add(finish);
@@ -161,10 +150,7 @@ export class RpcBindingAttemptImpl<TKey> implements IRpcBindingAttempt<TKey> {
 		});
 	}
 
-	ownProvisionalSession(
-		session: IRpcSession<TKey>,
-		discard: () => void,
-	): boolean {
+	ownProvisionalSession(session: IRpcSession, discard: () => void): boolean {
 		if (this._provisionalSession !== undefined || this._terminal) {
 			discard();
 			return false;
@@ -173,7 +159,7 @@ export class RpcBindingAttemptImpl<TKey> implements IRpcBindingAttempt<TKey> {
 		return true;
 	}
 
-	holdsProvisionalSession(session: IRpcSession<TKey>): boolean {
+	holdsProvisionalSession(session: IRpcSession): boolean {
 		return this._provisionalSession?.session === session;
 	}
 
@@ -185,7 +171,7 @@ export class RpcBindingAttemptImpl<TKey> implements IRpcBindingAttempt<TKey> {
 		return this._endpoint;
 	}
 
-	transferProvisionalSession(session: IRpcSession<TKey>): boolean {
+	transferProvisionalSession(session: IRpcSession): boolean {
 		const provisional = this._provisionalSession;
 		if (provisional === undefined) {
 			return true;
@@ -340,9 +326,6 @@ export class RpcBindingAttemptImpl<TKey> implements IRpcBindingAttempt<TKey> {
 	}
 
 	_releaseFinishedResources(): void {
-		if (this._cryptoJobCount !== 0) {
-			return;
-		}
 		if (this._resourcesFinished) {
 			for (const release of this._temporaryReleases) {
 				release();

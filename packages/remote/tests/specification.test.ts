@@ -1141,7 +1141,7 @@ describe("Default Protocol Session capacity", () => {
 				record.connectionId === 2 &&
 				record.direction === "acceptor" &&
 				record.value.kind === "accept" &&
-				!("sessionSecret" in record.value)
+				!("resumeToken" in record.value)
 					? { settlement: acceptSettlement.promise }
 					: undefined,
 			);

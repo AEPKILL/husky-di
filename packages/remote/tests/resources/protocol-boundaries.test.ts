@@ -168,7 +168,7 @@ function createSession(
 		{
 			host,
 			sessionId: "boundary-session",
-			proofKey: {} as CryptoKey,
+			resumeToken: "boundary-resume-token",
 			onTerminal: () => {},
 		},
 		{

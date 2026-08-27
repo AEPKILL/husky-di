@@ -48,7 +48,7 @@ test.afterAll(async () => {
 	}
 });
 
-test("RPC-CORPUS-001 RPC-RELEASE-002 runs WebCrypto, cross-realm cancellation, Recovery, and termination", async ({
+test("RPC-CORPUS-001 RPC-RELEASE-002 runs CSPRNG bearer Recovery, cross-realm cancellation, and termination", async ({
 	page,
 }) => {
 	await page.goto(browserOrigin);
@@ -60,15 +60,18 @@ test("RPC-CORPUS-001 RPC-RELEASE-002 runs WebCrypto, cross-realm cancellation, R
 					runRpcBrowserRoundtrip(): Promise<{
 						readonly acceptorStatus: string;
 						readonly assimilated: boolean;
+						readonly browserCsprng: boolean;
 						readonly canceledCode: string;
 						readonly connectorStatus: string;
 						readonly initialResult: number;
+						readonly profileV1: boolean;
 						readonly recoveredResult: number;
+						readonly resumeAcceptOmitsToken: boolean;
+						readonly resumeTokenCanonical: boolean;
+						readonly resumeTokenStable: boolean;
 						readonly sameAcceptorPeer: boolean;
 						readonly sameConnectorPeer: boolean;
 						readonly shadowListenerCalls: number;
-						readonly webCrypto: boolean;
-						readonly webCryptoVectors: boolean;
 					}>;
 				};
 			}
@@ -79,14 +82,17 @@ test("RPC-CORPUS-001 RPC-RELEASE-002 runs WebCrypto, cross-realm cancellation, R
 	expect(result).toEqual({
 		acceptorStatus: "closed",
 		assimilated: true,
+		browserCsprng: true,
 		canceledCode: "canceled",
 		connectorStatus: "closed",
 		initialResult: 42,
+		profileV1: true,
 		recoveredResult: 42,
+		resumeAcceptOmitsToken: true,
+		resumeTokenCanonical: true,
+		resumeTokenStable: true,
 		sameAcceptorPeer: true,
 		sameConnectorPeer: true,
 		shadowListenerCalls: 0,
-		webCrypto: true,
-		webCryptoVectors: true,
 	});
 });

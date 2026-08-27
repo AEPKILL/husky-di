@@ -149,7 +149,7 @@ export function createRpcDirectSessionHarness(
 		{
 			host,
 			sessionId: "direct-session",
-			proofKey: {} as CryptoKey,
+			resumeToken: "direct-resume-token",
 			onTerminal: () => {},
 		},
 		{

@@ -8,7 +8,6 @@ import { RpcRetainedBytesLedgerImpl } from "@/impls/common/rpc-retained-bytes-le
 import { RpcBindingAttemptImpl } from "@/impls/endpoint/rpc-binding-attempt.impl";
 import { RpcEndpointImpl } from "@/impls/endpoint/rpc-endpoint.impl";
 import { RpcCodecImpl } from "@/impls/protocol/rpc-codec.impl";
-import { RpcHandshakeCryptographyImpl } from "@/impls/protocol/rpc-handshake-cryptography.impl";
 import {
 	RpcProtocolAcceptorRuntimeImpl,
 	RpcProtocolConnectorRuntimeImpl,
@@ -21,22 +20,22 @@ import type {
 } from "@/interfaces/endpoint/rpc-endpoint.interface";
 import type { IRpcProtocol } from "@/interfaces/protocol/rpc-protocol.interface";
 import type { RpcSessionFactory } from "@/interfaces/session/rpc-session.interface";
+import { createRpcSecurityCarrier } from "@/utils/protocol/rpc-base64-url-32-schema.util";
 
 const codec = Object.freeze(new RpcCodecImpl());
-const handshakeCryptography = Object.freeze(new RpcHandshakeCryptographyImpl());
 
 const createEndpoint = (options: CreateRpcEndpointOptions): IRpcEndpoint =>
 	new RpcEndpointImpl(options);
 
-const createBindingAttempt: RpcBindingAttemptFactory<CryptoKey> = (options) =>
-	new RpcBindingAttemptImpl<CryptoKey>({
+const createBindingAttempt: RpcBindingAttemptFactory = (options) =>
+	new RpcBindingAttemptImpl({
 		...options,
 		createEndpoint,
 	});
 
 function createBuiltInRpcProtocol(counterExhausted: boolean): IRpcProtocol {
-	const createSession: RpcSessionFactory<CryptoKey> = (options) =>
-		new RpcSessionImpl<CryptoKey>(options, {
+	const createSession: RpcSessionFactory = (options) =>
+		new RpcSessionImpl(options, {
 			codec,
 			counterExhausted,
 			retainedBytesLedger: new RpcRetainedBytesLedgerImpl(
@@ -46,18 +45,17 @@ function createBuiltInRpcProtocol(counterExhausted: boolean): IRpcProtocol {
 
 	return Object.freeze({
 		createConnector: (host) =>
-			new RpcProtocolConnectorRuntimeImpl<CryptoKey>(
+			new RpcProtocolConnectorRuntimeImpl(
 				host,
 				codec,
-				handshakeCryptography,
 				createBindingAttempt,
 				createSession,
 			),
 		createAcceptor: (host) =>
-			new RpcProtocolAcceptorRuntimeImpl<CryptoKey>(
+			new RpcProtocolAcceptorRuntimeImpl(
 				host,
 				codec,
-				handshakeCryptography,
+				createRpcSecurityCarrier,
 				createBindingAttempt,
 				createSession,
 			),

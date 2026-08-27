@@ -13,19 +13,15 @@ import type {
 } from "@/interfaces/session/rpc-session.interface";
 import type { IRpcConnection } from "@/interfaces/transport/rpc-connection.interface";
 
-export interface IRpcBindingAttempt<TKey> {
+export interface IRpcBindingAttempt {
 	readonly task: Promise<void>;
 	readonly pending: boolean;
 	send(message: Uint8Array): Promise<void>;
-	runCrypto<T>(operation: () => Promise<T>): Promise<T>;
 	ownTemporary(release: () => void): RpcBindingAttemptLease;
-	ownProvisionalSession(
-		session: IRpcSession<TKey>,
-		discard: () => void,
-	): boolean;
-	holdsProvisionalSession(session: IRpcSession<TKey>): boolean;
+	ownProvisionalSession(session: IRpcSession, discard: () => void): boolean;
+	holdsProvisionalSession(session: IRpcSession): boolean;
 	claim(): IRpcEndpoint | undefined;
-	transferProvisionalSession(session: IRpcSession<TKey>): boolean;
+	transferProvisionalSession(session: IRpcSession): boolean;
 	failInstalledBinding(binding: RpcBindingEpoch, error: Error): void;
 	transferBinding(binding: RpcBindingEpoch, reply?: Uint8Array): Promise<void>;
 	fail(error: unknown, reason?: RpcEndpointFailureEnum): void;
@@ -45,9 +41,9 @@ export type CreateRpcBindingAttemptOptions = Readonly<{
 	readonly onTerminal: () => void;
 }>;
 
-export type RpcBindingAttemptFactory<TKey> = (
+export type RpcBindingAttemptFactory = (
 	options: CreateRpcBindingAttemptOptions,
-) => IRpcBindingAttempt<TKey>;
+) => IRpcBindingAttempt;
 
 export type RpcBindingAttemptLease = Readonly<{
 	release(): void;

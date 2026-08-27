@@ -680,7 +680,7 @@ describe("Framework requirement evidence", () => {
 			expect(serialized).not.toContain("argument-secret");
 			expect(serialized).not.toContain("result-secret");
 			expect(serialized).not.toMatch(
-				/(args|result|details|stack|cause|sessionId|callId|sequence|ack|cursor|epoch|proof|credential)/iu,
+				/(args|result|details|stack|cause|sessionId|callId|sequence|ack|cursor|epoch|proof|credential|resumeToken|token)/iu,
 			);
 			expect(Object.values(event).some((value) => value instanceof Error)).toBe(
 				false,

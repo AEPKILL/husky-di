@@ -41,8 +41,8 @@ Recovery, and exactly-once external side effects are outside this specification.
 - **Remote Resource Rejection**: a durable `unavailable` terminal that guarantees no handler dispatch.
 - **Message Receipt ACK**: a cumulative acknowledgement that a sequenced message has a durable idempotent
   disposition; it is not proof that a handler or external side effect completed.
-- **Recovery**: rebinding a retained Logical Session to a replacement Physical Connection after continuity is
-  authenticated.
+- **Recovery**: rebinding a retained Logical Session to a replacement Physical Connection after the requester
+  presents that Session Incarnation's bearer credential.
 - **Local Admission**: successful return from `IRpcConnection.send()`; it is not proof of remote receipt.
 - **Direct Close**: `IRpcConnection.close()`; it is distinct from the Protocol's graceful Session-close record.
 - **Definite Non-Execution**: evidence that the remote handler did not and cannot execute for that invocation.
@@ -58,8 +58,8 @@ create, start, stop, or own a Transport, Session, listener, or handler. Resource
 role-specific lifecycle methods in this specification.
 
 **RPC-BASE-003 — Deep boundaries.** The public Protocol seam **MUST** be semantic and role-specific. Default
-Codec, Handshake, proof, ACK, sequence, replay, call-ledger, and scheduler modules **MUST NOT** become public
-extension points merely because the built-in Protocol contains them.
+Codec, Handshake, resume-credential, ACK, sequence, replay, call-ledger, and scheduler modules **MUST NOT**
+become public extension points merely because the built-in Protocol contains them.
 
 ## 3. Package contract
 
@@ -82,7 +82,7 @@ to the same declaration and runtime value. The package **MUST NOT** create paral
 The root and implementor entries **MAY** expose the same `createRpcProtocol()` runtime identity so an independent
 provider package can delegate to the same immutable implementation. The package **MUST NOT** export a
 `defaultRpcProtocol` value, concrete
-Protocol implementation class, or public default Codec, Handshake, proof, ledger, or scheduler type.
+Protocol implementation class, or public default Codec, Handshake, resume-credential, ledger, or scheduler type.
 
 **RPC-PKG-004 — Private validation grammar.** Every package-owned materialized record, tuple, and tagged-union
 grammar **MUST** use package-private Zod schemas, and corresponding internal decoded-record types **MUST** derive
@@ -196,9 +196,9 @@ subtree at each occurrence; an ancestor cycle **MUST** be rejected. Application 
 **MUST NOT** contain an unpaired UTF-16 surrogate.
 
 **RPC-VALUE-005 — Deterministic weight.** Compact-JSON budget weight **MUST** use UTF-8 length with no
-whitespace, the ECMAScript JSON number serialization adopted by RFC 8785 JCS, and the minimum required JSON
-string escaping. It is not a globally shortest alternate number grammar: for example `1e20` has the same
-21-byte decimal spelling as `JSON.stringify(1e20)`, and `1e21` retains the JCS `1e+21` spelling. Member order
+whitespace, ECMAScript JSON number serialization, and the minimum required JSON string escaping. It is not a
+globally shortest alternate number grammar: for example `1e20` has the same 21-byte decimal spelling as
+`JSON.stringify(1e20)`, and `1e21` retains the `1e+21` spelling. Member order
 **MUST NOT** change the weight. A sender **MUST** validate value shape and weight before retaining caller-owned
 data, allocating a Call Identity, or committing a handler terminal.
 
@@ -852,7 +852,7 @@ or `terminated`. Unknown-service and unknown-method events **MUST** be rejected 
 code. `terminated` **MUST** be incoming-only and carry no code, Error, or Session reason.
 
 **RPC-EVENT-004 — Payload safety.** Events **MUST NOT** contain raw wire, args, result, details, thrown value,
-remote message/stack/cause, Session/call identity, sequence/ACK/cursor/epoch, proof material, unknown fields,
+remote message/stack/cause, Session/call identity, sequence/ACK/cursor/epoch, `resumeToken`, unknown fields,
 Adapter URL/header/credential, or Error objects. Duration **MUST** be a floored non-negative safe-integer number
 of milliseconds; duration/count overflow **MUST** saturate at `Number.MAX_SAFE_INTEGER`.
 
@@ -1299,8 +1299,8 @@ Framework **MAY** reject attachment/admission for capacity before any public pee
 
 **RPC-SPI-010 — Transition ownership.** Protocol Session host **MAY** project recovering, recovered, closed, and
 single-Session `draining(counter-exhaustion)`. Framework alone **MUST** bulk-project Owner graceful drain and
-`shutdown-deadline`; Protocol **MUST NOT** duplicate those transitions. Authenticated active Close and signed
-session-terminated reject **MUST** normalize to `remote-terminated`.
+`shutdown-deadline`; Protocol **MUST NOT** duplicate those transitions. A valid active Close and a
+token-authorized `session-terminated` reject **MUST** normalize to `remote-terminated`.
 
 **RPC-SPI-011 — Fault scope.** Session Protocol/resource fault **MUST** synchronously reenter a Framework fault
 transaction that calls `session.forceClose()` before projecting peer terminal. A shared owner fault **MUST**
@@ -1311,18 +1311,18 @@ transition for the same fault.
 only when every semantic Session shell has gracefully completed or locally terminalled and Direct Close has
 been invoked; it **MUST NOT** await physical cleanup. Runtime `close()` **MUST** synchronously force gates, finish
 sinks, fence endpoints, and invoke Direct Close before returning, without sending Protocol Close. `cleanup()`
-**MUST** be a cached Protocol-owned final task and **MUST NOT** include Connection/listener cleanup, running
-handlers, or WebCrypto late sinks, which Framework tracks separately.
+**MUST** be a cached Protocol-owned final task and **MUST NOT** include Connection/listener cleanup or running
+handlers, which Framework tracks separately.
 
 ## 9. Built-in Protocol profile
 
 ### 9.1 Profile and Codec
 
 **RPC-WIRE-001 — Atomic profile.** The built-in identifier **MUST** be the exact string `husky-di-rpc/1`.
-This profile **MUST** atomically fix Codec, grammar, security algorithms, Recovery, deduplication, receipt ACK,
-and terminal replay. It **MUST NOT** expose Codec negotiation, a capability bag, feature flags that weaken those
-guarantees, or an extension registry. A Session **MUST** freeze its selected profile; resume **MUST NOT**
-renegotiate it.
+This profile **MUST** atomically fix Codec, grammar, bearer-credential security, Recovery, deduplication,
+receipt ACK, and terminal replay. It **MUST NOT** expose Codec negotiation, a capability bag, feature flags that
+weaken those guarantees, or an extension registry. A Session **MUST** freeze its selected profile; resume
+**MUST NOT** renegotiate it.
 
 **RPC-WIRE-002 — JSON message.** Each Transport message **MUST** contain exactly one RFC 8259 UTF-8 JSON text
 whose root is an object. The Protocol **MUST NOT** add a stream header such as `Content-Length`; framing belongs
@@ -1360,8 +1360,7 @@ Base64Url32 = canonical unpadded base64url encoding of exactly 32 bytes
 
 FreshRequest = {
   kind: "fresh",
-  profiles: [ProfileId, ...],
-  initiatorNonce: Base64Url32
+  profiles: [ProfileId, ...]
 }
 
 FreshAccept = {
@@ -1369,19 +1368,16 @@ FreshAccept = {
   profile: ProfileId,
   sessionId: Base64Url32,
   bindingEpoch: 1,
-  responderNonce: Base64Url32,
-  sessionSecret: Base64Url32,
-  proof: Base64Url32
+  resumeToken: Base64Url32
 }
 
 ResumeRequest = {
   kind: "resume",
   profile: ProfileId,
   sessionId: Base64Url32,
+  resumeToken: Base64Url32,
   receivedThrough: AckCursor,
-  resumeAttempt: Sequence,
-  initiatorNonce: Base64Url32,
-  proof: Base64Url32
+  resumeAttempt: Sequence
 }
 
 ResumeAccept = {
@@ -1389,9 +1385,7 @@ ResumeAccept = {
   profile: ProfileId,
   sessionId: Base64Url32,
   bindingEpoch: Sequence,
-  receivedThrough: AckCursor,
-  responderNonce: Base64Url32,
-  proof: Base64Url32
+  receivedThrough: AckCursor
 }
 
 FreshReject = {
@@ -1402,16 +1396,12 @@ FreshReject = {
 
 GenericResumeReject = {
   kind: "reject",
-  code: "resume-rejected",
-  responderNonce: Base64Url32,
-  proof: Base64Url32
+  code: "resume-rejected"
 }
 
-AuthenticatedResumeReject = {
+AuthorizedResumeReject = {
   kind: "reject",
-  code: "continuity-failure" | "session-terminated",
-  responderNonce: Base64Url32,
-  proof: Base64Url32
+  code: "continuity-failure" | "session-terminated"
 }
 
 SequencedEnvelope = {
@@ -1432,9 +1422,9 @@ initiator preference order. Responder **MUST** select the first exact supported 
 profile **MUST** produce `unsupported-profile` without revealing a supported list or silently downgrading. An
 empty ProfileId **MUST** be a schema violation, not an unsupported profile.
 
-**RPC-WIRE-008 — Security carriers.** Each `sessionId`, `sessionSecret`, nonce, and proof **MUST** use
-`Base64Url32`. Decoder **MUST** reject padding, non-URL alphabet, wrong length, or any alternate spelling for the
-same bytes. A `sessionId` **MUST NOT** grant authority without the corresponding proof key.
+**RPC-WIRE-008 — Security carriers.** Each `sessionId` and `resumeToken` **MUST** use `Base64Url32`. Decoder
+**MUST** reject padding, non-URL alphabet, wrong length, or any alternate spelling for the same bytes. A
+`sessionId` **MUST NOT** grant authority without the corresponding `resumeToken`.
 
 **RPC-WIRE-009 — Phases.** The first initiator record on a new Connection **MUST** be `fresh` or `resume`; the
 responder outcome **MUST** be `accept` or `reject`. Bootstrap records **MUST NOT** have sequence or ACK semantics.
@@ -1443,8 +1433,9 @@ Active phase **MUST** accept only `message`, `ack`, `ping`, `pong`, or `close`. 
 **MUST** fault at the scope in Section 11.2.
 
 **RPC-WIRE-010 — Reject shape.** Only a fresh `unsupported-profile` or `admission-rejected` **MAY** carry the
-optional bounded `message`. Generic and authenticated resume rejects **MUST** use exactly their four known
-fields and **MUST NOT** carry `message`, although the normal top-level unknown-tail rule still applies to input.
+optional bounded `message`. Generic and token-authorized resume rejects **MUST** use exactly their two known
+fields, `kind` and `code`, and **MUST NOT** carry `message`, although the normal top-level unknown-tail rule still
+applies to input.
 
 The complete v1 sequenced semantic union is:
 
@@ -1500,7 +1491,7 @@ unacknowledged, unreplayed, absent from call state and public events. A Ping **M
 a Pong **MUST NOT** trigger a reply.
 
 **RPC-WIRE-015 — Graceful Close.** Close **MUST** be active-phase, connection-local, unsequenced,
-unacknowledged, unreplayed, and contain no known seq/ACK/proof/reason/identity field. A receiver **MUST**
+unacknowledged, unreplayed, and contain no known seq/ACK/token/reason/identity field. A receiver **MUST**
 authoritatively terminal the exact current Session, reply with nothing, and map the public reason to
 `remote-terminated`. Forced public `close()` **MUST NOT** send this record.
 
@@ -1534,7 +1525,7 @@ sent sequence **MUST** terminal the Session as a Protocol/continuity fault witho
 ACK and `ackThrough: 0` **MUST** be valid no-ops.
 
 **RPC-ACK-007 — Replay barrier.** A replacement binding **MUST** freeze a finite replay set and transmit every
-retained entry above the authenticated peer cursor in original sequence order before allocating a new seq.
+retained entry above the token-authorized peer cursor in original sequence order before allocating a new seq.
 New work **MAY** queue during the barrier but **MUST NOT** extend it.
 
 ### 9.4 Logical Call ledger
@@ -1573,25 +1564,26 @@ replay entry **MUST NOT** leave request arguments retained while the call awaits
 
 ### 10.1 Incarnation and fresh establishment
 
-**RPC-SESSION-001 — Incarnation.** Responder **MUST** create the `sessionId` for one in-memory retained Session
-Incarnation containing stable peer, profile, proof key, both sequence/replay directions, call ledger, binding
-epoch, and resume-attempt high-watermark. A process restart or retained-state loss **MUST** end the incarnation;
-v1 **MUST NOT** persist or silently reconstruct it.
+**RPC-SESSION-001 — Incarnation.** Responder **MUST** create the `sessionId` and an independent `resumeToken` for
+one in-memory retained Session Incarnation containing stable peer, profile, both sequence/replay directions,
+call ledger, binding epoch, and resume-attempt high-watermark. The token **MUST** remain stable and **MUST NOT**
+rotate within that incarnation. A process restart or retained-state loss **MUST** end the incarnation; v1
+**MUST NOT** persist or silently reconstruct it.
 
 **RPC-SESSION-002 — Session ID generation.** For each fresh attempt responder **MUST** test at most eight
 independent 32-byte CSPRNG candidates against the Owner's retained and provisional ID set in a non-awaiting step.
-A selected candidate **MUST** be provisionally reserved before asynchronous proof work. Eight collisions
-**MUST** be a shared crypto invariant fault, not a duplicate Session. Released historical IDs need no tombstone;
-historical uniqueness is probabilistic and authority remains the independent secret.
+A selected candidate **MUST** be provisionally reserved before Session installation. Eight collisions **MUST**
+be a shared CSPRNG invariant fault, not a duplicate Session. Released historical IDs need no tombstone;
+historical uniqueness is probabilistic and authority remains the independent `resumeToken`.
 
-**RPC-SESSION-003 — Fresh install.** Before Session-ID generation, secret/nonces, or proof work, responder
-**MUST** reserve Session capacity and protected control state in one non-awaiting step that counts retained
-Sessions plus all provisional fresh reservations. When that capacity is full, the reservation **MUST** first
-claim the eligible Recovery with the earliest active absolute deadline under `RPC-RESOURCE-006`, or fail without
-evicting a connected or replacement-bound Session. It **MUST** generate independent `sessionSecret` and nonces,
-and install the Session only if Owner, endpoint, provisional identity, profile, and reservations remain current
-after proof preparation. Initiator **MUST** derive a non-extractable proof key and verify the fresh transcript
-before attaching the Session to its stable peer.
+**RPC-SESSION-003 — Fresh install.** Before Session-ID or `resumeToken` generation, responder **MUST** reserve
+Session capacity and protected control state in one non-awaiting step that counts retained Sessions plus all
+provisional fresh reservations. When that capacity is full, the reservation **MUST** first claim the eligible
+Recovery with the earliest active absolute deadline under `RPC-RESOURCE-006`, or fail without evicting a
+connected or replacement-bound Session. It **MUST** generate the Session ID and token from independent 32-byte
+CSPRNG outputs and install the Session only if Owner, endpoint, provisional identity, profile, and reservations
+remain current. Initiator **MUST** validate the protected fresh accept and retain its token before attaching the
+Session to its stable peer.
 
 **RPC-SESSION-004 — Fresh failure.** Unsupported profile or bounded post-classification Session capacity
 **MUST** be attempt-scoped. A fresh accept that was installed by responder but lost **MUST** leave responder's
@@ -1606,30 +1598,31 @@ binding **MUST** atomically fence the old endpoint before it can affect state. A
 epoch greater than its last verified value, not exactly plus one, because an accept may have been lost.
 
 **RPC-SESSION-006 — Resume attempt.** Initiator `resumeAttempt` **MUST** start at one, strictly increase, allow
-gaps, never be reused or wrapped, and be consumed before proof preparation. Failure, timeout, or lost request/
-accept **MUST NOT** roll it back. Responder **MUST** retain `highestAcceptedResumeAttempt` and accept only a
-higher proof-valid attempt at binding linearization.
+gaps, never be reused or wrapped, and be consumed before preparing the token-bearing request. Failure, timeout,
+or lost request/accept **MUST NOT** roll it back. Responder **MUST** retain `highestAcceptedResumeAttempt` and
+accept only a higher token-valid attempt at binding linearization.
 
-**RPC-SESSION-007 — Last valid resume wins.** Concurrent proof-valid resumes **MAY** linearize successively; the
+**RPC-SESSION-007 — Last valid resume wins.** Concurrent token-valid resumes **MAY** linearize successively; the
 last installed endpoint **MUST** be current and all prior endpoints **MUST** be fenced. A valid replacement
 **MAY** supersede a binding the other side still believes healthy. Lost accept **MUST** remain recoverable by a
-higher attempt using the same proof key.
+higher attempt using the same stable `resumeToken`.
 
 **RPC-SESSION-008 — Cursor meaning.** Resume request `receivedThrough` **MUST** describe initiator receipt of
 responder messages; accept `receivedThrough` **MUST** describe responder receipt of initiator messages. For each
-direction, the authenticated allowed interval **MUST** be `[peerReceivedThrough, highestSentSeq]`. A value in
-that interval **MAY** advance knowledge after a lost ACK; a lower or higher value **MUST** produce authenticated
+direction, the token-authorized allowed interval **MUST** be `[peerReceivedThrough, highestSentSeq]`. A value in
+that interval **MAY** advance knowledge after a lost ACK; a lower or higher value **MUST** produce
 `continuity-failure`, never a silent maximum.
 
-**RPC-SESSION-009 — Resume linearization.** After asynchronous proof work and without another await, responder
-**MUST** atomically recheck Owner/Session non-terminal state, exact attempt endpoint, profile/session, Recovery
-deadline, attempt high-watermark, both current cursor bounds, next epoch, and binding/Connection reservations.
-Only then may it advance attempt, epoch, fencing, and binding. Any changed fact **MUST** cause reclassification or
-discard of the stale candidate.
+**RPC-SESSION-009 — Resume linearization.** After token comparison and without an intervening await, responder
+**MUST** atomically recheck Owner/Session non-terminal state, exact attempt endpoint, profile/session, stable
+token, Recovery deadline, attempt high-watermark, both current cursor bounds, next epoch, and
+binding/Connection reservations. Only then may it advance attempt, epoch, fencing, and binding. Any changed fact
+**MUST** cause reclassification or discard of the stale candidate.
 
-**RPC-SESSION-010 — Initiator verification.** Before installing an accept or terminaling from an authenticated
-reject, initiator **MUST** recheck exact attempt endpoint, transcript, current state/deadline, last verified epoch,
-and higher-attempt winner. Timeout, cutoff, fencing, or later winner **MUST** make late verification a no-op.
+**RPC-SESSION-010 — Initiator verification.** Before installing an accept or terminaling from a
+token-authorized reject, initiator **MUST** recheck the exact attempt endpoint, profile/session, current
+state/deadline, last verified epoch, retained cursor bounds, and higher-attempt winner. Timeout, cutoff, fencing,
+or later winner **MUST** make a late outcome a no-op.
 
 ### 10.3 Recovery lifecycle
 
@@ -1660,8 +1653,8 @@ alone **MUST NOT** settle a call or emit a second `peer-opened`.
 fenced endpoint **MUST** be rejected by the endpoint/epoch gate before Codec or activity accounting and **MUST**
 have no Session authority. The endpoint **MAY** be Direct Closed.
 
-**RPC-RECOVERY-006 — No restart authority.** Unknown/expired Session, lost proof key, abrupt remote restart,
-wrong profile, bad proof, stale attempt, or resume-specific capacity **MUST** receive only generic
+**RPC-RECOVERY-006 — No restart authority.** Unknown/expired Session, lost token state, abrupt remote restart,
+wrong profile, mismatched token, stale attempt, or resume-specific capacity **MUST** receive only generic
 `resume-rejected` after bounded classification. It **MUST NOT** terminate the retained Session or claim the
 remote process restarted. Initiator **MUST** remain recovering until another successful attempt or its existing
 deadline.
@@ -1770,73 +1763,52 @@ payload, Session identity, credentials, or other caller-controlled values.
 
 ## 11. Recovery security and validation
 
-### 11.1 Deployment prerequisite and cryptographic transcript
+### 11.1 Deployment prerequisite and bearer credential
 
 **RPC-SEC-001 — Conditional security.** Secure `husky-di-rpc/1` Recovery **MUST** run each fresh/replacement
 Connection over a Transport deployment providing confidentiality, ordered integrity/anti-replay, and expected
-responder endpoint authentication. The Framework **MUST NOT** infer this from an Adapter boolean. Plaintext or
-unauthenticated deployment **MAY** exercise functional grammar but **MUST NOT** claim secure Recovery or ACK
-authority. The Session proof establishes continuity, not a user, tenant, or initiating-application identity;
-ordinary server-authenticated TLS likewise authenticates only the responder. A deployment accepting untrusted
-inbound Connections **MUST** authenticate and admit the initiator before Acceptor handoff and enforce
-per-principal connection, Session, request-rate, and handler-duration limits outside this Protocol.
+responder endpoint authentication. The protected channel **MUST** be established after the Transport handshake;
+a `FreshRequest` or `ResumeRequest` **MUST NOT** be sent as TLS 0-RTT or any other replayable early data. The
+Framework **MUST NOT** infer this from an Adapter boolean. Plaintext or unauthenticated deployment **MAY**
+exercise functional grammar but **MUST NOT** claim secure Recovery or ACK authority: observing a fresh accept or
+resume request reveals the bearer credential. The `resumeToken` establishes continuity, not a user, tenant, or
+initiating-application identity; ordinary server-authenticated TLS likewise authenticates only the responder. A
+deployment accepting untrusted inbound Connections **MUST** authenticate and admit the initiator before Acceptor
+handoff and enforce per-principal connection, Session, request-rate, and handler-duration limits outside this
+Protocol.
 
-**RPC-SEC-002 — Algorithms.** The profile **MUST** use a CSPRNG, SHA-256, HKDF-SHA-256, HMAC-SHA-256, and RFC
-8785 JCS without negotiation. Changing any algorithm **MUST** require a new profile. Verification **MUST** use
-Web Crypto `subtle.verify` or an equivalent platform primitive rather than a handwritten early-exit byte compare;
-conformance **MUST NOT** claim constant-time network behavior.
+**RPC-SEC-002 — Entropy.** The profile **MUST** use a platform CSPRNG without negotiation. Every fresh Session
+**MUST** receive an independent uniformly random 32-byte `resumeToken`, separately generated from its 32-byte
+`sessionId`, and both values **MUST** use their single canonical `Base64Url32` spelling. Token comparison occurs
+only after grammar validation and **MUST** compare that exact canonical string. Constant-time JavaScript or
+network behavior is not a conformance promise.
 
-Define:
+**RPC-SEC-003 — Stable bearer.** A `resumeToken` **MUST** grant authority only for its one retained Session
+Incarnation. The responder **MUST** send it only in that Session's protected `FreshAccept`; the initiator
+**MUST** retain it and carry the exact same value in every `ResumeRequest`. The Protocol **MUST NOT** rotate,
+derive, transform, echo in a resume outcome, or reuse the token for another Session Incarnation. A `sessionId`
+without the matching token has no resume authority.
 
-```text
-D(label)       = UTF8("husky-di-rpc/1\0" + label + "\0")
-H(record)      = SHA-256(JCS(record with exact top-level `proof` omitted))
-sessionContext = SHA-256(JCS({ profile, sessionId }))
-proofKey       = HKDF-SHA-256(
-                   IKM = sessionSecret,
-                   salt = sessionContext,
-                   info = D("proof-key"),
-                   length = 32)
-```
-
-The following byte concatenations are exact:
-
-```text
-freshAcceptProof = HMAC-SHA-256(
-  proofKey,
-  D("fresh-accept") || SHA-256(JCS(freshRequest)) || H(freshAccept))
-
-resumeRequestProof = HMAC-SHA-256(
-  proofKey,
-  D("resume-request") || H(resumeRequest))
-
-resumeAcceptProof = HMAC-SHA-256(
-  proofKey,
-  D("resume-accept") || H(resumeRequest) || H(resumeAccept))
-
-authenticatedRejectProof = HMAC-SHA-256(
-  proofKey,
-  D("resume-reject") || H(resumeRequest) || H(authenticatedReject))
-```
-
-**RPC-SEC-003 — Canonical proof input.** JCS proof input **MUST** contain every bounded top-level unknown member
-and **MUST** remove only the exact top-level `proof` member from the record being signed. Nested members named
-`proof` **MUST** remain. NUL-terminated domain labels and fixed 32-byte hashes **MUST** be concatenated exactly as
-shown.
-
-**RPC-SEC-004 — Fresh secret.** Responder **MUST** generate an independent secret for every Session and send it
-only in the one protected fresh accept. Fresh proof **MUST** confirm transcript/key possession but **MUST NOT** be
-presented as a substitute for Transport endpoint authentication.
+**RPC-SEC-004 — Transport root.** A deployment claiming secure Recovery **MUST** wait for the Transport
+handshake to establish the protected anti-replay channel before handing off a Connection that can carry
+`FreshRequest` or `ResumeRequest`. It **MUST** carry fresh issuance and every later presentation of a
+`resumeToken` only inside that channel. The bearer credential **MUST NOT** be presented as a substitute for
+Transport confidentiality, integrity/anti-replay, or expected responder endpoint authentication. Anyone who
+obtains the token can exercise its authority while the retained Session exists.
 
 **RPC-SEC-005 — Generic reject.** After obtaining a bounded handshake slot, unknown/expired Session, wrong
-profile, invalid proof, stale attempt, and resume-specific capacity **MUST** use the same code, known field set,
-carrier lengths, dummy-key HMAC-shaped work, and no authoritative state effect. Generic dummy proof **MUST NOT**
-grant Session authority. Strict timing equivalence is not a conformance promise.
+profile, mismatched token, stale attempt, and resume-specific capacity **MUST** use the same `resume-rejected`
+code, known field set, bounded classification path, and no authoritative state effect. The response **MUST NOT**
+echo the token, attempt, Session identity, cursor, or any supplied value. Strict timing equivalence is not a
+conformance promise.
 
-**RPC-SEC-006 — Authenticated reject.** Only after valid Session proof **MAY** responder emit signed
-`continuity-failure` or `session-terminated`. The proof **MUST** bind the exact resume request. Before Session
-terminal linearization responder **MUST** recheck attempt, endpoint, state, deadline, transcript, and current
-retained facts so an old signed candidate cannot terminate a higher winning attempt.
+**RPC-SEC-006 — Token-authorized reject.** Only after exact `resumeToken` match and a currently admissible newer
+attempt **MAY** responder reveal `session-terminated`. Only such a token-valid attempt whose `receivedThrough`
+contradicts the current allowed interval **MAY** produce `continuity-failure` and terminal the Session. A token
+mismatch or stale attempt **MUST** remain a generic reject and **MUST NOT** terminal the Session. Before
+continuity-terminal linearization responder **MUST** recheck attempt, endpoint, state, deadline, token, cursor,
+and current retained facts so a stale candidate cannot terminate a higher winning attempt. The protected exact
+Connection supplies outcome integrity; the reject carries no additional authenticator.
 
 **RPC-SEC-007 — Active records.** After successful binding, active records **MUST** derive integrity/order/
 anti-replay authority from the protected exact current Connection and local epoch fencing. The built-in Protocol
@@ -1852,7 +1824,7 @@ all later effects:
 3. raw byte, UTF-8, JSON lexical, duplicate, depth/count/size checks;
 4. bounded tree, tagged-union, known-field, scalar-carrier, and unknown-tail checks;
 5. bootstrap/active phase and Transport-security prerequisite;
-6. proof/attempt or active current-binding authority;
+6. token/attempt or active current-binding authority;
 7. retained profile/session/cursor/sequence/ACK/Call-Ordinal/terminal semantics;
 8. mutable capacity, then route lookup, then durable disposition;
 9. receipt/state/activity/event commit and release of transient representations.
@@ -1864,13 +1836,13 @@ no-op such as stale ACK or coalesced Ping/Pong. Raw, malformed, or stale-endpoin
 **RPC-VALID-003 — Attempt failures.** Adapter raw failure or invalid unbound first record **MUST** remain
 Connection/attempt-scoped. The shared generic handshake permit **MUST** be acquired before endpoint
 subscription, Codec entry, or fresh/resume classification. Pre-bootstrap Connection/handshake capacity failure
-**MUST** Direct Close without subscription, parsing, Session lookup, or wire reject. Bad/unmatched accept proof
-**MUST** fail only the attempt; fresh returns unbound and resume remains recovering.
+**MUST** Direct Close without subscription, parsing, Session lookup, or wire reject. A malformed or contradictory
+accept **MUST** fail only the attempt; fresh returns unbound and resume remains recovering.
 
-**RPC-VALID-004 — Continuity failures.** A proof-valid resume cursor outside retained bounds or a proof-valid
-resume accept contradicting retained cursor/epoch/transcript **MUST** terminal the affected Session as
-`continuity-failure`. A contradictory proof-valid fresh accept **MUST** fail the attempt before local Session
-installation.
+**RPC-VALID-004 — Continuity failures.** A token-valid resume cursor outside retained bounds or a resume accept
+on the exact protected attempt that contradicts retained profile/session/cursor/epoch facts **MUST** terminal the
+affected Session as `continuity-failure`. A contradictory protected fresh accept **MUST** fail the attempt before
+local Session installation.
 
 **RPC-VALID-005 — Active poison.** A lexical, schema, phase, fixed-limit, unknown-kind, identity-reuse,
 conflicting-terminal, sequence-gap, or ACK-upper-bound violation attributable to the protected current endpoint
@@ -1879,26 +1851,28 @@ after entering the Codec **MUST** terminal that Session as Protocol fault, with 
 
 **RPC-VALID-006 — Ordinary overload.** Valid expected call ordinary-capacity failure with intact reserve
 **MUST** produce protected terminal `unavailable`, receipt, and Definite Non-Execution. Protected reserve failure
-**MUST** be Session `resource-fault`, not a call error. Shared crypto/runtime invariant corruption **MUST** fault
+**MUST** be Session `resource-fault`, not a call error. Shared CSPRNG/runtime invariant corruption **MUST** fault
 the Owner; only a truly shared Acceptor failure may affect siblings.
 
 **RPC-VALID-007 — Name and handler failures.** Unknown service/method and handler throw/invalid result **MUST**
 remain call-scoped, except reserved `then`, which **MUST** be a profile violation. Business authorization remains
 outside the Session authority model.
 
-### 11.3 Secret and asynchronous-job lifetime
+### 11.3 Credential and candidate lifetime
 
-**RPC-SEC-008 — Secret lifetime.** Each side **MUST** import root secret into a non-extractable key, best-effort
-overwrite temporary byte arrays it controls, retain only required proof key/high-watermark/current handshake
-metadata, and release key references at Session terminal. It **MUST NOT** export, persist, rotate, log, or reuse
-the Session secret across incarnations. JavaScript heap/physical-memory erasure is not promised.
+**RPC-SEC-008 — Credential lifetime.** Each side **MUST** retain only the `resumeToken` reference and current
+handshake metadata required by its live Session Incarnation. The token **MUST NOT** be durably persisted,
+rotated, logged, placed in telemetry, public state, or an Error, or reused across incarnations. Session terminal
+**MUST** release the retained JavaScript string reference and all candidate references to it. A built-in
+Connector binding failure crossing the Protocol boundary **MUST** replace any Adapter or Codec Error that may
+contain token-bearing frame bytes with a fixed credential-free Error. JavaScript strings are immutable, so
+in-place overwrite and JavaScript heap or physical-memory erasure are not promised.
 
-**RPC-SEC-009 — Crypto candidate.** An asynchronous digest/HMAC result **MUST** be treated only as a candidate.
-Timeout, fence, cutoff, higher attempt, or terminal **MUST** remove its state authority. Once started, a crypto job
-**MUST** retain its handshake permit and full transient budget until the real Promise settles; late settlement
-**MUST** be consumed by a bounded no-authority sink so repeated timeout cannot accumulate unbounded jobs.
-Marking an attempt failed or removing it from the active-attempt set **MUST NOT** release that permit or budget
-before settlement.
+**RPC-SEC-009 — Authority candidate.** A token match **MUST** create only a candidate. Timeout, fence, cutoff,
+higher attempt, changed Session/token facts, or terminal **MUST** remove its state authority. Responder
+linearization **MUST** synchronously recheck the candidate as required by `RPC-SESSION-009`; late reply-send or
+Connection settlement **MUST NOT** restore stale Session authority. The handshake permit and transient budget
+**MUST** remain owned until bootstrap processing transfers the exact binding or the attempt settles.
 
 ## 12. Resources, scheduling, and time
 
@@ -1917,7 +1891,7 @@ before settlement.
 | Retained terminal application payload | `256 records / 8 MiB`, inside replay cap |
 | All retained Session state | `32 MiB` |
 | Protected control/terminal reserve | `512 KiB`, inside Session cap |
-| Proof/key/nonce state | `64 KiB`, inside protected reserve |
+| Session ID/token/handshake state | `64 KiB`, inside protected reserve |
 
 Each built-in Session **MUST** initialize one aggregate child ledger with its `512 KiB` protected reserve.
 Every Session-attributable ordinary charge **MUST** atomically acquire both that child ledger and the Owner
@@ -1959,7 +1933,7 @@ Endpoint close, and Session terminal **MUST** release its unique charge exactly 
 occupying its ordinary/overflow slot. Fresh admission pressure **MUST NOT** evict an existing connected Session.
 When retained Sessions plus provisional fresh reservations reach `maxSessions`, an Acceptor fresh attempt
 **MUST** reserve against and synchronously force one recovering Session with no current or linearized replacement
-binding whose absolute Recovery deadline has not won, before Session-ID generation or proof work. The reservation
+binding whose absolute Recovery deadline has not won, before Session-ID or token generation. The reservation
 **MUST** precede the victim's public terminal notification so reentrant admission cannot overcommit capacity. If
 multiple Sessions are reclaimable, the victim **MUST** have the earliest active absolute Recovery deadline;
 equal deadlines **MAY** be resolved in retained Session order. If no reclaimable recovering Session exists, the
@@ -1968,8 +1942,9 @@ fresh attempt **MUST** be rejected.
 **RPC-RESOURCE-004 — Bootstrap transient.** Before endpoint subscription or first-record parsing, each admitted
 handshake **MUST** acquire one Owner-global generic slot that is shared by fresh and resume without a role
 subpool. Each slot **MUST** charge exactly `4 MiB` transient weight: up to `1 MiB` raw Adapter carrier, `1 MiB`
-Codec/tree, `1 MiB` JCS/crypto input, and `1 MiB` accept/reject output plus fixed bookkeeping. The reservation
-**MUST** stay until any started crypto actually settles. Policy validation **MUST** safely derive
+Codec/tree, `1 MiB` bounded bootstrap working representation, and `1 MiB` accept/reject output plus fixed
+bookkeeping. The reservation **MUST** stay until bootstrap processing transfers the binding or the attempt
+settles. Policy validation **MUST** safely derive
 `maxHandshakes * 4 MiB`; default 16 slots therefore have a distinct `64 MiB` transient budget.
 Representational reuse **MUST NOT** reduce the admission charge. The first Endpoint record being processed is
 covered by this fixed transient reservation; every later record retained or processed by that Endpoint **MUST**
@@ -2175,7 +2150,7 @@ terminal and Direct Close was invoked; an initially empty snapshot **MUST** comp
 terminal the Session `remote-terminated`, settle remaining calls/handlers, fence, update membership, release
 evidence, and Direct Close without ACK, terminal message, Pong, Close reply, or Recovery. In Acceptor it
 **MUST** affect only that peer. Stale Close **MUST** be a no-op. If the Close itself is lost, receiver **MUST**
-treat the resulting connection loss as ordinary Recovery and eventually expire absent proof.
+treat the resulting connection loss as ordinary Recovery and eventually expire absent a valid bearer resume.
 
 ### 13.3 Forced cutoff and cleanup
 
@@ -2200,8 +2175,8 @@ configured intervals (default 10 seconds) and direct close at most one (default 
 count.
 
 **RPC-CLEANUP-002 — Cleanup barrier.** Framework **MUST** wait exactly once, by resource identity, for handed-off
-Connection, listener, and accepted startup cleanup plus Protocol-owned `cleanup()`. Running handlers, actual
-WebCrypto execution, and egress notification success **MUST NOT** be in the barrier. Deadline **MUST** fence and
+Connection, listener, and accepted startup cleanup plus Protocol-owned `cleanup()`. Running handlers and egress
+notification success **MUST NOT** be in the barrier. Deadline **MUST** fence and
 detach a broken resource and consume late settlement; Framework cannot promise to stop arbitrary third-party
 code outside the seam.
 
@@ -2346,8 +2321,9 @@ fixture-owned external resources; they **MUST NOT** close or settle candidate-ow
 ### 14.3 Default Protocol validation and abnormal-state matrix
 
 **RPC-CORPUS-001 — Runtime validation coverage.** Node release tests **MUST** directly exercise the built-in
-Protocol's raw byte parser, decoded-record Zod grammar, and cryptographic derivations. Browser release tests
-**MUST** exercise the built-in round trip plus WebCrypto proof and derivation behavior. The bounded raw parser
+Protocol's raw byte parser, decoded-record Zod grammar, and CSPRNG bearer-token behavior. Browser release tests
+**MUST** exercise the built-in round trip plus fresh token issuance and cross-Connection presentation. The
+bounded raw parser
 **MUST** independently cover strict UTF-8, BOM, duplicate keys, trailing data, number spelling, and allocation
 boundaries because those facts do not survive ordinary object materialization. Decoded-record tests **MUST**
 cover every Codec-accepted inbound phase entry and tagged branch, required and forbidden fields, scalar domains,
@@ -2355,21 +2331,22 @@ and open or closed tail policy. This evidence **MUST NOT** be published as a sch
 artifact.
 
 **RPC-CORPUS-002 — Recovery scenarios.** Release runtime tests **MUST** execute fresh, lost fresh accept, normal
-resume, lost resume accept with higher attempt, replay barrier, lost ACK, duplicate/gap/regressed seq,
-stale/equal/future ACK, cursor lower/upper bounds, wrong epoch/stale Connection, wrong proof/profile/session,
-generic/authenticated reject, Ping/Pong, Close, and counter exhaustion. Each step **MUST** assert both endpoint
-states, current binding, dispatch count, caller outcome, retained evidence, and next permitted records.
+resume, lost resume accept with higher attempt and the same token, replay barrier, lost ACK,
+duplicate/gap/regressed seq, stale/equal/future ACK, cursor lower/upper bounds, wrong epoch/stale Connection,
+wrong token/profile/session, generic/token-authorized reject, Ping/Pong, Close, and counter exhaustion. Each step
+**MUST** assert both endpoint states, current binding, dispatch count, caller outcome, retained evidence, and next
+permitted records.
 
 **RPC-CORPUS-003 — State disagreement.** Release tests **MUST** inject at least: responder installed binding with
 lost accept; initiator still connected after responder fenced old epoch; durable receipt with lower resume cursor;
-simultaneous replacement while old Connection continues; out-of-order higher/lower crypto completion; Close vs
-loss/force; late accept/reject after timeout/cutoff; and responder key loss while initiator recovers. Legal
+simultaneous token-valid replacement while old Connection continues; higher/lower attempt races; Close vs
+loss/force; late accept/reject after timeout/cutoff; and responder token-state loss while initiator recovers. Legal
 disagreement **MUST** converge through higher attempt/replay; unprovable continuity **MUST** expose the specified
 continuity/expiry/outcome-unknown boundary and **MUST NOT** redispatch a Logical Call.
 
 **RPC-CORPUS-004 — Resource boundaries.** Every fixed/configurable limit **MUST** have `limit-1`, `limit`, and
 `limit+1` evidence, including protected reserve, last counters, fairness under replay/control/data/Ping flood,
-64-peer parallel shutdown, withheld ACK, stuck send/close, never-settling handler, and late crypto.
+64-peer parallel shutdown, withheld ACK, stuck send/close, never-settling handler, and late bootstrap settlement.
 
 ### 14.4 Type, runtime, and package compatibility
 
@@ -2379,7 +2356,7 @@ role policy, and custom Protocol/Adapter shape. Node consumer **MUST NOT** requi
 root import **MUST NOT** introduce `Buffer`, Node server, or `ws`.
 
 **RPC-RELEASE-002 — Runtime targets.** Release **MUST** pass Node `>=23.6` and lockfile-pinned Playwright Chromium,
-Firefox, and WebKit, including WebCrypto proof and derivation cases, cross-realm AbortSignal/intrinsic listener
+Firefox, and WebKit, including CSPRNG token issuance and Recovery cases, cross-realm AbortSignal/intrinsic listener
 behavior, facade assimilation, Recovery, and termination. Deno, Bun, and Workers **MAY** run non-blocking smoke
 checks only.
 

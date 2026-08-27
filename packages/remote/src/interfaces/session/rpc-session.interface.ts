@@ -13,60 +13,56 @@ import type {
 	IRpcRetainedBytesReservation,
 } from "@/interfaces/protocol/rpc-protocol.interface";
 
-export interface IRpcSession<TKey> extends IRpcProtocolSession {
+export interface IRpcSession extends IRpcProtocolSession {
 	readonly sessionId: string;
 	readonly recovery: RpcSessionRecovery | undefined;
-	prepareFreshBinding(host: IRpcProtocolSessionHost): RpcBindingCandidate<TKey>;
-	beginInitiatorResume(): RpcInitiatorResume<TKey>;
-	confirmInitiatorResume(resume: RpcInitiatorResume<TKey>): boolean;
+	prepareFreshBinding(host: IRpcProtocolSessionHost): RpcBindingCandidate;
+	beginInitiatorResume(): RpcInitiatorResume;
 	prepareInitiatorBinding(
-		resume: RpcInitiatorResume<TKey>,
+		resume: RpcInitiatorResume,
 		accept: RpcInitiatorResumeAccept,
-	): RpcInitiatorBindingPreparation<TKey>;
-	openResponderProof(): RpcResponderProof<TKey> | undefined;
+	): RpcInitiatorBindingPreparation;
 	reviewResponderResume(
-		proof: RpcResponderProof<TKey>,
 		request: RpcResponderResumeRequest,
-	): RpcResponderResumeReview<TKey>;
+	): RpcResponderResumeReview;
 	commitContinuityFailure(
-		candidate: RpcContinuityCandidate<TKey> | RpcInitiatorResume<TKey>,
+		candidate: RpcContinuityCandidate | RpcInitiatorResume,
 		cause?: Error,
 	): RpcSessionAuthorityCommit;
-	terminateAuthenticatedRemote(
-		resume: RpcInitiatorResume<TKey>,
+	terminateRemoteResume(
+		resume: RpcInitiatorResume,
 		cause?: Error,
 	): RpcSessionAuthorityCommit;
 	terminateForced(): void;
 	commitBinding(
-		candidate: RpcBindingCandidate<TKey>,
+		candidate: RpcBindingCandidate,
 		endpoint: IRpcEndpoint,
 	): RpcBindingCommit;
 	shutdown(): Promise<void>;
 }
 
-export type CreateRpcSessionOptions<TKey> = {
+export type CreateRpcSessionOptions = {
 	readonly host: IRpcProtocolHost;
 	readonly sessionId: string;
-	readonly proofKey: TKey;
+	readonly resumeToken: string;
 	readonly onTerminal: () => void;
 };
 
-export type RpcSessionFactory<TKey> = (
-	options: CreateRpcSessionOptions<TKey>,
-) => IRpcSession<TKey>;
+export type RpcSessionFactory = (
+	options: CreateRpcSessionOptions,
+) => IRpcSession;
 
 export type RpcSessionRecovery = Readonly<{
 	readonly reclaimDeadline: number;
 }>;
 
-export type RpcBindingCandidate<TKey> = Readonly<{
+export type RpcBindingCandidate = Readonly<{
 	readonly rpcBindingCandidateType: unique symbol;
-	readonly rpcBindingCandidateKey: TKey;
 }>;
 
-export type RpcInitiatorResume<TKey> = Readonly<{
+export type RpcInitiatorResume = Readonly<{
 	readonly sessionId: string;
-	readonly proofKey: TKey;
+	readonly resumeToken: string;
 	readonly resumeAttempt: number;
 	readonly receivedThrough: number;
 	readonly rpcInitiatorResumeType: unique symbol;
@@ -79,17 +75,16 @@ export type RpcInitiatorResumeAccept = Readonly<{
 	readonly peerReceivedThrough: number;
 }>;
 
-export type RpcContinuityCandidate<TKey> = Readonly<{
+export type RpcContinuityCandidate = Readonly<{
 	readonly rpcContinuityCandidateType: unique symbol;
-	readonly rpcContinuityCandidateKey: TKey;
 }>;
 
-export type RpcInitiatorBindingPreparation<TKey> =
-	| (RpcBindingCandidate<TKey> &
+export type RpcInitiatorBindingPreparation =
+	| (RpcBindingCandidate &
 			Readonly<{
 				readonly kind: "ready";
 			}>)
-	| (RpcContinuityCandidate<TKey> &
+	| (RpcContinuityCandidate &
 			Readonly<{
 				readonly kind: "contradiction";
 			}>)
@@ -97,28 +92,21 @@ export type RpcInitiatorBindingPreparation<TKey> =
 			readonly kind: "stale";
 			readonly error: Error;
 	  }>;
-
-export type RpcResponderProof<TKey> = Readonly<{
-	readonly proofKey: TKey;
-	readonly rpcResponderProofType: unique symbol;
-}>;
-
 export type RpcResponderResumeRequest = Readonly<{
+	readonly resumeToken: string;
 	readonly resumeAttempt: number;
 	readonly peerReceivedThrough: number;
 }>;
 
-export type RpcResponderResumeReview<TKey> =
+export type RpcResponderResumeReview =
 	| Readonly<{ readonly kind: "generic-reject" }>
-	| (RpcContinuityCandidate<TKey> &
+	| (RpcContinuityCandidate &
 			Readonly<{
 				readonly kind: "continuity-reject";
-				readonly proofKey: TKey;
 			}>)
-	| (RpcBindingCandidate<TKey> &
+	| (RpcBindingCandidate &
 			Readonly<{
 				readonly kind: "accept";
-				readonly proofKey: TKey;
 				readonly bindingEpoch: number;
 				readonly receivedThrough: number;
 			}>);

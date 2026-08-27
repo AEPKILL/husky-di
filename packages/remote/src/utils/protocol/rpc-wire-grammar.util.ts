@@ -37,10 +37,7 @@ const closeForbiddenMembers = new Set([
 	"bindingEpoch",
 	"resumeAttempt",
 	"receivedThrough",
-	"initiatorNonce",
-	"responderNonce",
-	"sessionSecret",
-	"proof",
+	"resumeToken",
 	"callId",
 	"service",
 	"method",
@@ -147,7 +144,6 @@ export const rpcFreshRequestSchema = z
 	.object({
 		kind: z.literal(RpcWireRecordKindEnum.fresh),
 		profiles: rpcProfileOfferSchema,
-		initiatorNonce: rpcBase64Url32Schema,
 	})
 	.catchall(rpcJsonValueSchema);
 
@@ -157,9 +153,7 @@ export const rpcFreshAcceptSchema = z
 		profile: z.literal(RPC_PROFILE),
 		sessionId: rpcBase64Url32Schema,
 		bindingEpoch: z.literal(1),
-		responderNonce: rpcBase64Url32Schema,
-		sessionSecret: rpcBase64Url32Schema,
-		proof: rpcBase64Url32Schema,
+		resumeToken: rpcBase64Url32Schema,
 	})
 	.catchall(rpcJsonValueSchema)
 	.refine((record) => !Object.hasOwn(record, "receivedThrough"));
@@ -169,10 +163,9 @@ export const rpcResumeRequestSchema = z
 		kind: z.literal(RpcWireRecordKindEnum.resume),
 		profile: rpcWireIdentifierSchema,
 		sessionId: rpcBase64Url32Schema,
+		resumeToken: rpcBase64Url32Schema,
 		receivedThrough: nonNegativeSafeIntegerSchema,
 		resumeAttempt: positiveSafeIntegerSchema,
-		initiatorNonce: rpcBase64Url32Schema,
-		proof: rpcBase64Url32Schema,
 	})
 	.catchall(rpcJsonValueSchema);
 
@@ -183,11 +176,9 @@ export const rpcResumeAcceptSchema = z
 		sessionId: rpcBase64Url32Schema,
 		bindingEpoch: positiveSafeIntegerSchema,
 		receivedThrough: nonNegativeSafeIntegerSchema,
-		responderNonce: rpcBase64Url32Schema,
-		proof: rpcBase64Url32Schema,
 	})
 	.catchall(rpcJsonValueSchema)
-	.refine((record) => !Object.hasOwn(record, "sessionSecret"));
+	.refine((record) => !Object.hasOwn(record, "resumeToken"));
 
 export const rpcResumeRejectSchema = z
 	.object({
@@ -197,8 +188,6 @@ export const rpcResumeRejectSchema = z
 			RpcResumeRejectCodeEnum.continuityFailure,
 			RpcResumeRejectCodeEnum.sessionTerminated,
 		]),
-		responderNonce: rpcBase64Url32Schema,
-		proof: rpcBase64Url32Schema,
 	})
 	.catchall(rpcJsonValueSchema)
 	.refine((record) => !Object.hasOwn(record, "message"));

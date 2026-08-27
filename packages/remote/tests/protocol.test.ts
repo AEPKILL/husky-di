@@ -7,9 +7,7 @@
 import { createServiceIdentifier } from "@husky-di/core";
 import { Subject } from "rxjs";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { RpcProofOperationKindEnum } from "../src/enums/protocol/rpc-proof-operation-kind.enum";
 import { createRpcCounterExhaustionProtocolForTest } from "../src/factories/rpc-protocol.factory";
-import { RpcHandshakeCryptographyImpl } from "../src/impls/protocol/rpc-handshake-cryptography.impl";
 import {
 	createRemoteServiceDescriptor,
 	createRpcAcceptor,
@@ -18,16 +16,11 @@ import {
 	type IRpcConnection,
 	type IRpcConnectorAdapter,
 } from "../src/index";
-import type {
-	RpcResumeReject,
-	RpcResumeRequest,
-} from "../src/types/protocol/rpc-wire-record.type";
+import { createRpcSecurityCarrier } from "../src/utils/protocol/rpc-base64-url-32-schema.util";
 
 interface CalculatorService {
 	add(left: number, right: number): number;
 }
-
-const cryptography = new RpcHandshakeCryptographyImpl();
 
 afterEach(() => vi.useRealTimers());
 
@@ -48,6 +41,7 @@ interface RecoverySendFault {
 	readonly drop?: boolean;
 	readonly error?: Error;
 	readonly message?: Uint8Array;
+	readonly peerError?: Error;
 	readonly settlement?: Promise<void>;
 }
 
@@ -68,6 +62,17 @@ const IDeferredCalculatorService =
 	createServiceIdentifier<DeferredCalculatorService>(
 		"IDeferredCalculatorService",
 	);
+
+function collectPublicErrorText(error: unknown): string {
+	const cause =
+		error instanceof Error && "cause" in error ? error.cause : undefined;
+	return [
+		String(error),
+		error instanceof Error ? error.stack : undefined,
+		String(cause),
+		cause instanceof Error ? cause.stack : undefined,
+	].join("\n");
+}
 
 function createMemoryAdapters(
 	transform?: (
@@ -234,6 +239,9 @@ function createRecoveryNetwork(): {
 							await Promise.resolve();
 							if (selected?.drop !== true) {
 								peerSource.next(selected?.message ?? snapshot);
+							}
+							if (selected?.peerError !== undefined) {
+								peerSource.error(selected.peerError);
 							}
 							await selected?.settlement;
 							if (selected?.error !== undefined) {
@@ -790,7 +798,7 @@ describe("Default RPC Protocol", () => {
 		await expect(call).rejects.toMatchObject({ code: "unavailable" });
 	});
 
-	it("RPC-PKG-003 RPC-WIRE-001 RPC-ACK-001 RPC-ACK-003 performs one authenticated fresh unary call with directional ledgers RPC-CORPUS-002", async () => {
+	it("RPC-PKG-003 RPC-WIRE-001 RPC-ACK-001 RPC-ACK-003 performs one fresh unary call with directional ledgers RPC-CORPUS-002", async () => {
 		const descriptor = createRemoteServiceDescriptor(ICalculatorService, {
 			wireName: "example.calculator.v1",
 			methods: { add: true },
@@ -864,38 +872,71 @@ describe("Default RPC Protocol", () => {
 		});
 	});
 
-	it("RPC-SEC-002 rejects a modified fresh transcript without installing initiator authority", async () => {
-		const decoder = new TextDecoder();
-		const encoder = new TextEncoder();
-		const adapters = createMemoryAdapters((direction, message) => {
-			const record = JSON.parse(decoder.decode(message)) as Record<
-				string,
-				unknown
-			>;
-			if (direction !== "acceptor" || record.kind !== "accept") {
-				return message;
-			}
-			const proof = record.proof as string;
-			return encoder.encode(
-				JSON.stringify({
-					...record,
-					proof: `${proof[0] === "A" ? "B" : "A"}${proof.slice(1)}`,
-				}),
-			);
-		});
+	it("RPC-SEC-002 issues an independent 256-bit bearer resume token in FreshAccept", async () => {
+		const adapters = createMemoryAdapters();
 		const acceptor = createRpcAcceptor();
 		const connector = createRpcConnector();
 
 		await acceptor.listen(adapters.acceptorAdapter);
-		await expect(
-			connector.connect({ adapter: adapters.connectorAdapter }),
-		).rejects.toMatchObject({ code: "unavailable" });
+		await connector.connect({ adapter: adapters.connectorAdapter });
+		const freshRequest = adapters.records[0]?.value;
+		const freshAccept = adapters.records.find(
+			(record) =>
+				record.direction === "acceptor" && record.value.kind === "accept",
+		)?.value;
 
-		await vi.waitFor(() => {
-			expect(acceptor.peers[0]?.state.status).toBe("recovering");
+		expect(freshRequest).toEqual({
+			kind: "fresh",
+			profiles: ["husky-di-rpc/1"],
 		});
-		expect(connector.peer.state).toEqual({ status: "unbound" });
-		expect(acceptor.peers).toHaveLength(1);
+		expect(freshAccept).toMatchObject({
+			kind: "accept",
+			profile: "husky-di-rpc/1",
+			bindingEpoch: 1,
+			sessionId: expect.stringMatching(/^[A-Za-z0-9_-]{43}$/),
+			resumeToken: expect.stringMatching(/^[A-Za-z0-9_-]{43}$/),
+		});
+		expect(freshAccept?.resumeToken).not.toBe(freshAccept?.sessionId);
+		expect(
+			adapters.records.filter((record) => "resumeToken" in record.value),
+		).toHaveLength(1);
+		await Promise.all([connector.close(), acceptor.close()]);
+	});
+
+	it("RPC-SEC-008 redacts a token-bearing FreshAccept Adapter failure at the public Connector boundary", async () => {
+		const network = createRecoveryNetwork();
+		const acceptor = createRpcAcceptor();
+		const connector = createRpcConnector();
+		const decoder = new TextDecoder();
+		let resumeToken: unknown;
+		await acceptor.listen(network.acceptorAdapter);
+
+		const failure = await connector
+			.connect({
+				adapter: network.createConnectorAdapter((record, message) => {
+					const isFreshAccept =
+						record.direction === "acceptor" &&
+						record.value.kind === "accept" &&
+						!("receivedThrough" in record.value);
+					if (!isFreshAccept) {
+						return {};
+					}
+					resumeToken = record.value.resumeToken;
+					return { peerError: new Error(decoder.decode(message)) };
+				}),
+			})
+			.then(
+				() => undefined,
+				(error: unknown) => error,
+			);
+
+		if (typeof resumeToken !== "string") {
+			throw new Error("Expected a captured resume token.");
+		}
+		expect(failure).toMatchObject({ code: "unavailable" });
+		expect(collectPublicErrorText(failure)).not.toContain(resumeToken);
+		expect(connector.peer.state.status).toBe("unbound");
+		await Promise.all([connector.close(), acceptor.close()]);
 	});
 
 	it("RPC-SESSION-001 RPC-SESSION-005 RPC-SESSION-006 RPC-RECOVERY-004 RPC-ACK-007 RPC-LEDGER-002 RPC-CORPUS-003 resumes the retained Session and replays an unreceived call identity RPC-CORPUS-002", async () => {
@@ -994,7 +1035,7 @@ describe("Default RPC Protocol", () => {
 		).toEqual(["1", "1"]);
 	});
 
-	it("RPC-ACK-002 RPC-ACK-006 RPC-ACK-007 authenticates durable receipt before handler completion and replay release RPC-VALID-002 RPC-CORPUS-002", async () => {
+	it("RPC-ACK-002 RPC-ACK-006 RPC-ACK-007 confirms durable receipt before handler completion and replay release RPC-VALID-002 RPC-CORPUS-002", async () => {
 		const descriptor = createRemoteServiceDescriptor(
 			IDeferredCalculatorService,
 			{
@@ -1062,7 +1103,7 @@ describe("Default RPC Protocol", () => {
 	it.each([
 		["lower", 0],
 		["upper", 2],
-	] as const)("RPC-SESSION-008 RPC-SEC-006 RPC-VALID-004 RPC-CORPUS-003 authenticates a %s resume cursor as continuity-failure RPC-CORPUS-002", async (_position, receivedThrough) => {
+	] as const)("RPC-SESSION-008 RPC-SEC-006 RPC-VALID-004 RPC-CORPUS-003 treats a token-authorized %s resume cursor as continuity-failure RPC-CORPUS-002", async (_position, receivedThrough) => {
 		const descriptor = createRemoteServiceDescriptor(ICalculatorService, {
 			wireName: "example.calculator.v1",
 			methods: { add: true },
@@ -1100,55 +1141,24 @@ describe("Default RPC Protocol", () => {
 		if (freshAccept === undefined) {
 			throw new Error("Expected a captured fresh accept.");
 		}
-		const proofKey = await cryptography.deriveProofKey(
-			freshAccept.sessionSecret as string,
-			freshAccept.sessionId as string,
-		);
-		const nonce = cryptography.createSecurityCarrier();
-		const requestWithoutProof = {
+		const request = {
 			kind: "resume",
 			profile: "husky-di-rpc/1",
 			sessionId: freshAccept.sessionId as string,
+			resumeToken: freshAccept.resumeToken as string,
 			receivedThrough,
 			resumeAttempt: 1,
-			initiatorNonce: nonce,
 		};
-		const proof = await cryptography.signProof({
-			kind: RpcProofOperationKindEnum.resumeRequest,
-			proofKey,
-			record: requestWithoutProof,
-		});
 		const raw = network.openRawConnection();
 
-		raw.send({ ...requestWithoutProof, proof });
+		raw.send(request);
 
 		await vi.waitFor(() => {
-			expect(raw.responses[0]).toMatchObject({
+			expect(raw.responses[0]).toEqual({
 				kind: "reject",
 				code: "continuity-failure",
 			});
 		});
-		const request = {
-			...requestWithoutProof,
-			proof,
-		} as RpcResumeRequest;
-		const reject = raw.responses[0] as RpcResumeReject;
-		expect(
-			await cryptography.verifyProof({
-				kind: RpcProofOperationKindEnum.resumeReject,
-				proofKey,
-				request,
-				record: reject,
-			}),
-		).toBe(true);
-		expect(
-			await cryptography.verifyProof({
-				kind: RpcProofOperationKindEnum.resumeReject,
-				proofKey,
-				request: { ...request, receivedThrough: receivedThrough + 1 },
-				record: reject,
-			}),
-		).toBe(false);
 		await vi.waitFor(() => {
 			expect(acceptorPeer?.state).toMatchObject({
 				status: "closed",
@@ -1159,7 +1169,7 @@ describe("Default RPC Protocol", () => {
 		});
 	});
 
-	it("RPC-SESSION-006 RPC-SESSION-007 RPC-RECOVERY-002 RPC-CORPUS-003 recovers a lost resume accept with a higher attempt RPC-CORPUS-002", async () => {
+	it("RPC-SESSION-006 RPC-SESSION-007 RPC-RECOVERY-002 RPC-SEC-003 RPC-CORPUS-003 recovers a lost resume accept with the stable token and a higher attempt RPC-CORPUS-002", async () => {
 		const descriptor = createRemoteServiceDescriptor(ICalculatorService, {
 			wireName: "example.calculator.v1",
 			methods: { add: true },
@@ -1176,6 +1186,15 @@ describe("Default RPC Protocol", () => {
 		await acceptor.listen(network.acceptorAdapter);
 		await connector.connect({ adapter: network.createConnectorAdapter() });
 		const acceptorPeer = acceptor.peers[0];
+		const resumeToken = network.records.find(
+			(record) =>
+				record.connectionId === 1 &&
+				record.direction === "acceptor" &&
+				record.value.kind === "accept",
+		)?.value.resumeToken;
+		if (typeof resumeToken !== "string") {
+			throw new Error("Expected a captured resume token.");
+		}
 		network.disconnect(1);
 		await vi.waitFor(() => {
 			expect(connector.peer.state.status).toBe("recovering");
@@ -1211,6 +1230,14 @@ describe("Default RPC Protocol", () => {
 				)
 				.map((record) => record.value.resumeAttempt),
 		).toEqual([1, 2]);
+		expect(
+			network.records
+				.filter(
+					(record) =>
+						record.direction === "connector" && record.value.kind === "resume",
+				)
+				.map((record) => record.value.resumeToken),
+		).toEqual([resumeToken, resumeToken]);
 		expect(
 			network.records
 				.filter(
@@ -1338,10 +1365,6 @@ describe("Default RPC Protocol", () => {
 		if (freshAccept === undefined) {
 			throw new Error("Expected a captured fresh accept.");
 		}
-		const proofKey = await cryptography.deriveProofKey(
-			freshAccept.sessionSecret as string,
-			freshAccept.sessionId as string,
-		);
 		network.disconnect(1);
 		await vi.waitFor(() => {
 			expect(connector.peer.state.status).toBe("recovering");
@@ -1358,23 +1381,17 @@ describe("Default RPC Protocol", () => {
 						: undefined,
 			})),
 		});
-		const nonce = cryptography.createSecurityCarrier();
-		const higherWithoutProof = {
+		const higherRequest = {
 			kind: "resume",
 			profile: "husky-di-rpc/1",
 			sessionId: freshAccept.sessionId as string,
+			resumeToken: freshAccept.resumeToken as string,
 			receivedThrough: 0,
 			resumeAttempt: 2,
-			initiatorNonce: nonce,
 		};
-		const higherProof = await cryptography.signProof({
-			kind: RpcProofOperationKindEnum.resumeRequest,
-			proofKey,
-			record: higherWithoutProof,
-		});
 		const raw = network.openRawConnection();
 
-		raw.send({ ...higherWithoutProof, proof: higherProof });
+		raw.send(higherRequest);
 		await vi.waitFor(() => {
 			expect(raw.responses[0]).toMatchObject({
 				kind: "accept",
@@ -1438,27 +1455,17 @@ describe("Default RPC Protocol", () => {
 		if (freshAccept === undefined) {
 			throw new Error("Expected a captured fresh accept.");
 		}
-		const proofKey = await cryptography.deriveProofKey(
-			freshAccept.sessionSecret as string,
-			freshAccept.sessionId as string,
-		);
-		const nonce = cryptography.createSecurityCarrier();
-		const rawRequestWithoutProof = {
+		const rawRequest = {
 			kind: "resume",
 			profile: "husky-di-rpc/1",
 			sessionId: freshAccept.sessionId as string,
+			resumeToken: freshAccept.resumeToken as string,
 			receivedThrough: 0,
 			resumeAttempt: 1,
-			initiatorNonce: nonce,
 		};
-		const rawProof = await cryptography.signProof({
-			kind: RpcProofOperationKindEnum.resumeRequest,
-			proofKey,
-			record: rawRequestWithoutProof,
-		});
 		const raw = network.openRawConnection();
 
-		raw.send({ ...rawRequestWithoutProof, proof: rawProof });
+		raw.send(rawRequest);
 		await vi.waitFor(() => {
 			expect(raw.responses[0]).toMatchObject({
 				kind: "accept",
@@ -1523,8 +1530,8 @@ describe("Default RPC Protocol", () => {
 	it.each([
 		"profile",
 		"session",
-		"proof",
-	] as const)("RPC-SEC-005 RPC-RECOVERY-006 keeps a %s mismatch generic and non-authoritative RPC-CORPUS-002", async (mismatch) => {
+		"token",
+	] as const)("RPC-SEC-005 RPC-SEC-008 RPC-RECOVERY-006 keeps a %s mismatch generic, redacted, and non-authoritative RPC-CORPUS-002", async (mismatch) => {
 		const network = createRecoveryNetwork();
 		const policy = {
 			bindingAttemptTimeoutMs: 50,
@@ -1535,17 +1542,27 @@ describe("Default RPC Protocol", () => {
 		await acceptor.listen(network.acceptorAdapter);
 		await connector.connect({ adapter: network.createConnectorAdapter() });
 		const acceptorPeer = acceptor.peers[0];
+		const resumeToken = network.records.find(
+			(record) =>
+				record.connectionId === 1 &&
+				record.direction === "acceptor" &&
+				record.value.kind === "accept",
+		)?.value.resumeToken;
+		if (typeof resumeToken !== "string") {
+			throw new Error("Expected a captured resume token.");
+		}
 		network.disconnect(1);
 		await vi.waitFor(() => {
 			expect(connector.peer.state.status).toBe("recovering");
 			expect(acceptorPeer?.state.status).toBe("recovering");
 		});
-		const replacementSessionId = cryptography.createSecurityCarrier();
+		const replacementSessionId = createRpcSecurityCarrier();
+		const replacementResumeToken = createRpcSecurityCarrier();
 		const decoder = new TextDecoder();
 		const encoder = new TextEncoder();
 
-		await expect(
-			connector.connect({
+		const failure = await connector
+			.connect({
 				adapter: network.createConnectorAdapter((record, message) => {
 					if (
 						record.direction !== "connector" ||
@@ -1562,13 +1579,20 @@ describe("Default RPC Protocol", () => {
 					} else if (mismatch === "session") {
 						value.sessionId = replacementSessionId;
 					} else {
-						const proof = value.proof as string;
-						value.proof = `${proof[0] === "A" ? "B" : "A"}${proof.slice(1)}`;
+						value.resumeToken = replacementResumeToken;
 					}
 					return { message: encoder.encode(JSON.stringify(value)) };
 				}),
-			}),
-		).rejects.toMatchObject({ code: "unavailable" });
+			})
+			.then(
+				() => undefined,
+				(error: unknown) => error,
+			);
+		expect(failure).toMatchObject({ code: "unavailable" });
+		expect(String(failure)).not.toContain(resumeToken);
+		expect(String(failure)).not.toContain(replacementResumeToken);
+		expect(JSON.stringify(connector.peer.state)).not.toContain(resumeToken);
+		expect(JSON.stringify(acceptorPeer?.state)).not.toContain(resumeToken);
 
 		expect(
 			network.records.find(
@@ -1577,7 +1601,7 @@ describe("Default RPC Protocol", () => {
 					record.direction === "acceptor" &&
 					record.value.kind === "reject",
 			)?.value,
-		).toMatchObject({ kind: "reject", code: "resume-rejected" });
+		).toEqual({ kind: "reject", code: "resume-rejected" });
 		expect(connector.peer.state.status).toBe("recovering");
 		expect(acceptorPeer?.state.status).toBe("recovering");
 
@@ -1594,7 +1618,65 @@ describe("Default RPC Protocol", () => {
 		).toEqual([1, 2]);
 	});
 
-	it("RPC-SESSION-001 RPC-RECOVERY-003 RPC-RECOVERY-006 RPC-CORPUS-003 expires retained authority after key loss without sliding the deadline", async () => {
+	it("RPC-SEC-008 redacts a token-bearing ResumeRequest Adapter failure at the public Connector boundary", async () => {
+		const network = createRecoveryNetwork();
+		const policy = {
+			bindingAttemptTimeoutMs: 50,
+			recoveryGraceMs: 500,
+		};
+		const acceptor = createRpcAcceptor({ runtimePolicy: policy });
+		const connector = createRpcConnector({ runtimePolicy: policy });
+		await acceptor.listen(network.acceptorAdapter);
+		await connector.connect({ adapter: network.createConnectorAdapter() });
+		const resumeToken = network.records.find(
+			(record) =>
+				record.connectionId === 1 &&
+				record.direction === "acceptor" &&
+				record.value.kind === "accept",
+		)?.value.resumeToken;
+		if (typeof resumeToken !== "string") {
+			throw new Error("Expected a captured resume token.");
+		}
+		network.disconnect(1);
+		await vi.waitFor(() => {
+			expect(connector.peer.state.status).toBe("recovering");
+		});
+		const decoder = new TextDecoder();
+
+		const failure = await connector
+			.connect({
+				adapter: network.createConnectorAdapter((record, message) => ({
+					drop:
+						record.direction === "connector" && record.value.kind === "resume",
+					error:
+						record.direction === "connector" && record.value.kind === "resume"
+							? new Error(decoder.decode(message))
+							: undefined,
+				})),
+			})
+			.then(
+				() => undefined,
+				(error: unknown) => error,
+			);
+
+		expect(failure).toMatchObject({ code: "unavailable" });
+		expect(collectPublicErrorText(failure)).not.toContain(resumeToken);
+		expect(connector.peer.state.status).toBe("recovering");
+
+		await connector.connect({ adapter: network.createConnectorAdapter() });
+		expect(connector.peer.state.status).toBe("connected");
+		expect(
+			network.records
+				.filter(
+					(record) =>
+						record.direction === "connector" && record.value.kind === "resume",
+				)
+				.map((record) => record.value.resumeAttempt),
+		).toEqual([1, 2]);
+		await Promise.all([connector.close(), acceptor.close()]);
+	});
+
+	it("RPC-SESSION-001 RPC-RECOVERY-003 RPC-RECOVERY-006 RPC-CORPUS-003 expires retained authority after token loss without sliding the deadline", async () => {
 		const descriptor = createRemoteServiceDescriptor(ICalculatorService, {
 			wireName: "example.calculator.v1",
 			methods: { add: true },

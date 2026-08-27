@@ -2,7 +2,8 @@
 
 Import `IRpcConnection`, `IRpcConnectorAdapter`, and `IRpcAcceptorAdapter` from
 `@husky-di/remote/transport`. The Adapter seam carries complete encoded Protocol
-messages; it does not interpret calls, ACKs, recovery, or security proofs.
+messages; it does not interpret calls, ACKs, recovery, or Session bearer
+credentials.
 
 ## Connection contract
 
@@ -38,6 +39,8 @@ runner cannot observe.
 
 Document finite frame and queue limits and the secure deployment conditions. The
 built-in Protocol assumes the physical channel provides confidentiality,
-integrity, and endpoint authentication.
+integrity, anti-replay, and endpoint authentication after the Transport
+handshake. An Adapter must not hand off a Connection whose `FreshRequest` or
+`ResumeRequest` could be sent as TLS 0-RTT or other replayable early data.
 
 The authoritative seam is in [SPECIFICATION.md](SPECIFICATION.md).
