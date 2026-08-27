@@ -16,10 +16,6 @@ import type {
 import { rpcWireIdentifierSchema } from "@/utils/protocol/rpc-wire-identifier-schema.util";
 import { isPlainRecord, isString } from "@/utils/type-guard.util";
 
-const rpcCancelableMethodDefinitionSchema = z.strictObject({
-	cancelable: z.literal(true),
-});
-
 export interface RemoteServiceDescriptorData {
 	readonly serviceIdentifier: ServiceIdentifier<unknown>;
 	readonly wireName: string;
@@ -27,6 +23,56 @@ export interface RemoteServiceDescriptorData {
 		Record<string, true | { readonly cancelable: true }>
 	>;
 }
+
+/** Creates an opaque Descriptor and retains a detached allowlist snapshot. */
+export function createRemoteServiceDescriptor<
+	T,
+	const Definitions extends RpcMethodDefinitions<T>,
+>(
+	serviceIdentifier: ServiceIdentifier<T>,
+	options: {
+		readonly wireName: string;
+		readonly methods: Definitions &
+			ValidateMethodDefinitions<T, Definitions> &
+			NonEmptyMethodDefinitions<Definitions>;
+	},
+): IRemoteServiceDescriptor<T, Definitions> {
+	validateWireIdentifier(options.wireName, "wireName");
+	const methods = snapshotMethods(options.methods);
+	const descriptor = Object.freeze(
+		Object.create(null),
+	) as IRemoteServiceDescriptor<T, Definitions>;
+
+	remoteServiceDescriptorData.set(
+		descriptor,
+		Object.freeze({
+			serviceIdentifier: serviceIdentifier as ServiceIdentifier<unknown>,
+			wireName: options.wireName,
+			methods,
+		}),
+	);
+
+	return descriptor;
+}
+
+/** Reads package-private metadata from a genuine Descriptor. */
+export function getRemoteServiceDescriptorData(
+	descriptor: unknown,
+): RemoteServiceDescriptorData {
+	if (typeof descriptor !== "object" || descriptor === null) {
+		throw new TypeError("descriptor must be created by this package instance.");
+	}
+
+	const data = remoteServiceDescriptorData.get(descriptor);
+	if (data === undefined) {
+		throw new TypeError("descriptor must be created by this package instance.");
+	}
+	return data;
+}
+
+const rpcCancelableMethodDefinitionSchema = z.strictObject({
+	cancelable: z.literal(true),
+});
 
 const remoteServiceDescriptorData = new WeakMap<
 	object,
@@ -113,50 +159,4 @@ function snapshotMethods(
 	}
 
 	return Object.freeze(snapshot);
-}
-
-/** Creates an opaque Descriptor and retains a detached allowlist snapshot. */
-export function createRemoteServiceDescriptor<
-	T,
-	const Definitions extends RpcMethodDefinitions<T>,
->(
-	serviceIdentifier: ServiceIdentifier<T>,
-	options: {
-		readonly wireName: string;
-		readonly methods: Definitions &
-			ValidateMethodDefinitions<T, Definitions> &
-			NonEmptyMethodDefinitions<Definitions>;
-	},
-): IRemoteServiceDescriptor<T, Definitions> {
-	validateWireIdentifier(options.wireName, "wireName");
-	const methods = snapshotMethods(options.methods);
-	const descriptor = Object.freeze(
-		Object.create(null),
-	) as IRemoteServiceDescriptor<T, Definitions>;
-
-	remoteServiceDescriptorData.set(
-		descriptor,
-		Object.freeze({
-			serviceIdentifier: serviceIdentifier as ServiceIdentifier<unknown>,
-			wireName: options.wireName,
-			methods,
-		}),
-	);
-
-	return descriptor;
-}
-
-/** Reads package-private metadata from a genuine Descriptor. */
-export function getRemoteServiceDescriptorData(
-	descriptor: unknown,
-): RemoteServiceDescriptorData {
-	if (typeof descriptor !== "object" || descriptor === null) {
-		throw new TypeError("descriptor must be created by this package instance.");
-	}
-
-	const data = remoteServiceDescriptorData.get(descriptor);
-	if (data === undefined) {
-		throw new TypeError("descriptor must be created by this package instance.");
-	}
-	return data;
 }

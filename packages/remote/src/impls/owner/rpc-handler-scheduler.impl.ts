@@ -9,12 +9,6 @@ import type {
 	RpcHandlerJob,
 } from "@/interfaces/owner/rpc-handler-scheduler.interface";
 
-interface RpcHandlerSessionQueue {
-	readonly jobs: RpcHandlerJob[];
-	running: number;
-	ready: boolean;
-}
-
 /** Acquires one owner permit and one per-Session permit before handler start. */
 export class RpcHandlerSchedulerImpl implements IRpcHandlerScheduler {
 	readonly #maximumOwnerHandlers: number;
@@ -136,4 +130,10 @@ export class RpcHandlerSchedulerImpl implements IRpcHandlerScheduler {
 			this.#sessions.delete(session);
 		}
 	}
+}
+
+interface RpcHandlerSessionQueue {
+	readonly jobs: RpcHandlerJob[];
+	running: number;
+	ready: boolean;
 }

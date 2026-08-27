@@ -26,8 +26,6 @@ export interface IRpcApplicationRecord {
 	readonly [key: string]: RpcApplicationValue;
 }
 
-declare const RPC_APPLICATION_SNAPSHOT_TYPE: unique symbol;
-
 export interface IRpcApplicationSnapshot<
 	T extends RpcApplicationValue = RpcApplicationValue,
 > {
@@ -253,3 +251,5 @@ export interface IRpcProtocol {
 	): IRpcProtocolConnectorRuntime;
 	createAcceptor(host: IRpcProtocolAcceptorHost): IRpcProtocolAcceptorRuntime;
 }
+
+declare const RPC_APPLICATION_SNAPSHOT_TYPE: unique symbol;

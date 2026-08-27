@@ -60,35 +60,6 @@ import {
 	isUndefined,
 } from "@/utils/type-guard.util";
 
-function isProtocolSession(value: unknown): value is IRpcProtocolSession {
-	if (!isNonNullObject(value)) {
-		return false;
-	}
-	const session = value as object;
-	return (
-		isCallable(Reflect.get(session, "reserveInvocation")) &&
-		isCallable(Reflect.get(session, "forceClose"))
-	);
-}
-
-interface RpcAcceptorListenerAttempt {
-	readonly abortController: AbortController;
-	readonly resolve: () => void;
-	readonly reject: (error: unknown) => void;
-	readonly listenerCleanup: RpcOwnedCleanup;
-	readonly startupCleanup: RpcOwnedCleanup;
-	subscription?: Subscription;
-	ready: boolean;
-	terminal: boolean;
-	cleanupRequested: boolean;
-	cleanupBarrier?: Promise<void>;
-}
-
-type RpcAcceptorClosedState = Extract<
-	RpcAcceptorState,
-	{ readonly status: RpcStateStatusEnum.closed }
->;
-
 /** Owns Acceptor listener state and its current stable peer membership. */
 export class RpcAcceptorImpl implements IRpcAcceptor {
 	readonly #runtime: IRpcProtocolAcceptorRuntime;
@@ -1063,4 +1034,33 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 			}),
 		);
 	}
+}
+
+interface RpcAcceptorListenerAttempt {
+	readonly abortController: AbortController;
+	readonly resolve: () => void;
+	readonly reject: (error: unknown) => void;
+	readonly listenerCleanup: RpcOwnedCleanup;
+	readonly startupCleanup: RpcOwnedCleanup;
+	subscription?: Subscription;
+	ready: boolean;
+	terminal: boolean;
+	cleanupRequested: boolean;
+	cleanupBarrier?: Promise<void>;
+}
+
+type RpcAcceptorClosedState = Extract<
+	RpcAcceptorState,
+	{ readonly status: RpcStateStatusEnum.closed }
+>;
+
+function isProtocolSession(value: unknown): value is IRpcProtocolSession {
+	if (!isNonNullObject(value)) {
+		return false;
+	}
+	const session = value as object;
+	return (
+		isCallable(Reflect.get(session, "reserveInvocation")) &&
+		isCallable(Reflect.get(session, "forceClose"))
+	);
 }

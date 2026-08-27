@@ -33,11 +33,11 @@ interface ILedgerService {
 	run(value: number): number;
 }
 
-const codec = new RpcCodecImpl();
-
 interface ILargeLedgerService {
 	run(): string;
 }
+
+const codec = new RpcCodecImpl();
 
 const ILedgerService =
 	createServiceIdentifier<ILedgerService>("ILedgerService");

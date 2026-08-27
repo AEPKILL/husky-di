@@ -138,7 +138,8 @@ boundary—not for speculative flexibility.
 - Use the package's `@/` alias inside package source.
 - Use package imports such as `@husky-di/core` across packages.
 - In tests and tools, follow the nearest stable import style.
-- Prefer named exports and keep exported declarations near the top of the file.
+- Prefer named exports and follow the top-level declaration order under File
+  Shape.
 - Keep `index.ts` focused on exports; route public APIs through the package
   entrypoint.
 - Keep implementation classes and assembly seams private unless the public API
@@ -158,10 +159,34 @@ Files that support comments carry the repository header:
  */
 ```
 
-Keep the local timestamp format. Use the predictable order: header, imports,
-exported declarations, then file-local support. Within classes, follow the nearest
-stable class ordering; otherwise prefer public API, state, constructor, public
-methods, and internal helpers.
+Keep the local timestamp format. Use header, directive prologue (such as
+`"use client"`), and imports before declarations. Then partition top-level
+statements into these blocks, in order:
+
+1. exported type declarations and type-only re-exports;
+2. exported runtime declarations and value re-exports;
+3. file-local type declarations;
+4. file-local runtime declarations and executable statements.
+
+Type declarations are statements erased by TypeScript, such as `interface`,
+`type`, ambient declarations, and type-only re-exports. Classes, enums,
+namespaces with runtime members, variables, and functions are runtime code. Keep
+documentation comments attached to their declaration, and treat overload sets,
+declaration merges, and a declaration plus its implementation as indivisible.
+A merged symbol that includes a runtime value belongs to the runtime block.
+Preserve dependency order within each block. When moving an exported runtime
+declaration ahead of file-local support would create a temporal-dead-zone or
+side-effect change, put an early named export binding such as `export { value }`
+in the exported-runtime block and keep the dependency-sensitive declaration in
+its original runtime order. Use a behavior-preserving hoisted declaration or
+equivalent design when an export binding cannot express the required API.
+Apply the order at a generated file's source template or generator configuration
+and regenerate it. When an external generator fixes the output shape, preserve
+the generated artifact and its explicit lint or format exclusion instead of
+hand-editing output that will be overwritten.
+
+Within classes, follow the nearest stable class ordering; otherwise prefer public
+API, state, constructor, public methods, and internal helpers.
 
 ## Implementation Style
 

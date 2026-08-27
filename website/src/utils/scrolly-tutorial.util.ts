@@ -16,41 +16,6 @@ import {
 import type { ScrollyTutorialStep } from "@/types/scrolly-tutorial-step.type";
 import { createScrollyTutorialStepId } from "@/utils/scrolly-tutorial-step-id.util";
 
-const DEFAULT_SCROLLY_TUTORIAL_FILE_NAME = "tutorial.ts";
-
-type ScrollyTutorialDefinition = Readonly<{
-	codeblock: RawCode;
-	fileName: string;
-	id: string;
-	title: string;
-}>;
-
-type ScrollyTutorialSection = {
-	hasContentBeforeCodeBlock: boolean;
-	hasLateCodeBlock: boolean;
-	id: string;
-	leadingCodeBlock: ScrollyTutorialCodeBlock | null;
-	title: string;
-};
-
-type ScrollyTutorialCodeBlock = Readonly<{
-	lang: string;
-	value: string;
-}>;
-
-type WithChildrenProps = Readonly<{
-	children?: ReactNode;
-	className?: string;
-	id?: string;
-}>;
-
-type ScrollyTutorialDocument = (props: Record<string, never>) => ReactNode;
-type ScrollyTutorialTheme = Parameters<typeof highlight>[1];
-
-const DEFAULT_SCROLLY_TUTORIAL_THEME = "slack-dark" as ScrollyTutorialTheme;
-
-const PROSE_TAG_NAMES = new Set(["p", "ul", "ol", "blockquote"]);
-
 export type CreateScrollyTutorialStepsOptions = Readonly<{
 	document: ScrollyTutorialDocument;
 	fileName?: string;
@@ -93,10 +58,45 @@ export async function createScrollyTutorialSteps({
 	return highlightedSteps;
 }
 
+type ScrollyTutorialDefinition = Readonly<{
+	codeblock: RawCode;
+	fileName: string;
+	id: string;
+	title: string;
+}>;
+
+type ScrollyTutorialSection = {
+	hasContentBeforeCodeBlock: boolean;
+	hasLateCodeBlock: boolean;
+	id: string;
+	leadingCodeBlock: ScrollyTutorialCodeBlock | null;
+	title: string;
+};
+
+type ScrollyTutorialCodeBlock = Readonly<{
+	lang: string;
+	value: string;
+}>;
+
+type WithChildrenProps = Readonly<{
+	children?: ReactNode;
+	className?: string;
+	id?: string;
+}>;
+
+type ScrollyTutorialDocument = (props: Record<string, never>) => ReactNode;
+type ScrollyTutorialTheme = Parameters<typeof highlight>[1];
+
 type CreateScrollyTutorialDefinitionsOptions = Readonly<{
 	document: ScrollyTutorialDocument;
 	fileName: string;
 }>;
+
+const DEFAULT_SCROLLY_TUTORIAL_FILE_NAME = "tutorial.ts";
+
+const DEFAULT_SCROLLY_TUTORIAL_THEME = "slack-dark" as ScrollyTutorialTheme;
+
+const PROSE_TAG_NAMES = new Set(["p", "ul", "ol", "blockquote"]);
 
 function createScrollyTutorialDefinitions({
 	document,

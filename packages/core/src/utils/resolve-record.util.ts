@@ -25,6 +25,18 @@ import { resolveRecordRef } from "@/shared/instances";
 import { getServiceIdentifierName } from "./service-identifier.util";
 
 /**
+ * Options for generating resolve record error messages.
+ */
+export interface GetResolveRecordMessageOptions {
+	/** The main error message */
+	message: string;
+	/** The resolution path records */
+	paths: Array<ResolveRecordData<unknown>>;
+	/** Optional cycle node if a circular dependency was detected */
+	cycleNode?: ResolveRecordData<unknown> | undefined;
+}
+
+/**
  * Gets the active resolution record without creating one.
  *
  * @returns The active resolution record, if one exists
@@ -219,21 +231,6 @@ export function getResolveRecordName(
 	return "";
 }
 
-/** Separator used when joining resolve paths in error messages. */
-const ResolvePathSeparator = " -> ";
-
-/**
- * Options for generating resolve record error messages.
- */
-export interface GetResolveRecordMessageOptions {
-	/** The main error message */
-	message: string;
-	/** The resolution path records */
-	paths: Array<ResolveRecordData<unknown>>;
-	/** Optional cycle node if a circular dependency was detected */
-	cycleNode?: ResolveRecordData<unknown> | undefined;
-}
-
 /**
  * Generates a formatted error message from resolve record data.
  *
@@ -277,6 +274,9 @@ export function getResolveRecordMessage(
 		),
 	].join("\n");
 }
+
+/** Separator used when joining resolve paths in error messages. */
+const ResolvePathSeparator = " -> ";
 
 /** Whitespace used for indenting nested messages. */
 const IndentWhitespace = "  ";

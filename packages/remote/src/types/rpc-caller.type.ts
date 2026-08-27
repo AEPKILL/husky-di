@@ -18,47 +18,6 @@ import type {
 } from "@/interfaces/protocol/rpc-protocol.interface";
 import type { IRpcConnectorAdapter } from "@/interfaces/transport/rpc-adapter.interface";
 
-type RpcNormalSessionCloseReason = Extract<
-	RpcSessionCloseReason,
-	| RpcCloseReasonEnum.gracefulShutdown
-	| RpcCloseReasonEnum.forcedClose
-	| RpcCloseReasonEnum.shutdownDeadline
-	| RpcCloseReasonEnum.remoteTerminated
->;
-
-type RpcUnavailableSessionFailureReason = Extract<
-	RpcSessionCloseReason,
-	RpcCloseReasonEnum.recoveryExpired | RpcCloseReasonEnum.counterExhaustion
->;
-
-type RpcProtocolSessionFailureReason = Extract<
-	RpcSessionCloseReason,
-	RpcCloseReasonEnum.continuityFailure | RpcProtocolFaultReason
->;
-
-type RpcSessionClosedState =
-	| {
-			readonly status: RpcStateStatusEnum.closed;
-			readonly outcome: RpcCloseOutcomeEnum.normal;
-			readonly reason: RpcNormalSessionCloseReason;
-	  }
-	| {
-			readonly status: RpcStateStatusEnum.closed;
-			readonly outcome: RpcCloseOutcomeEnum.failed;
-			readonly reason: RpcUnavailableSessionFailureReason;
-			readonly error: RpcException & {
-				readonly code: RpcExceptionCodeEnum.unavailable;
-			};
-	  }
-	| {
-			readonly status: RpcStateStatusEnum.closed;
-			readonly outcome: RpcCloseOutcomeEnum.failed;
-			readonly reason: RpcProtocolSessionFailureReason;
-			readonly error: RpcException & {
-				readonly code: RpcExceptionCodeEnum.protocol;
-			};
-	  };
-
 export type RpcPeerState =
 	| { readonly status: RpcStateStatusEnum.unbound }
 	| { readonly status: RpcStateStatusEnum.connecting }
@@ -71,15 +30,6 @@ export type RpcPeerState =
 	  }
 	| { readonly status: RpcStateStatusEnum.recovering }
 	| RpcSessionClosedState;
-
-type RpcConnectorClosedState =
-	| RpcSessionClosedState
-	| {
-			readonly status: RpcStateStatusEnum.closed;
-			readonly outcome: RpcCloseOutcomeEnum.failed;
-			readonly reason: RpcCloseReasonEnum.cleanupFailed;
-			readonly error: Error;
-	  };
 
 export type RpcConnectorState =
 	| { readonly status: RpcStateStatusEnum.active }
@@ -99,30 +49,6 @@ export type RpcAcceptorListenerState =
 	| {
 			readonly status: RpcStateStatusEnum.stopped;
 			readonly outcome: RpcCloseOutcomeEnum.failed;
-			readonly error: Error;
-	  };
-
-type RpcAcceptorClosedState =
-	| {
-			readonly status: RpcStateStatusEnum.closed;
-			readonly outcome: RpcCloseOutcomeEnum.normal;
-			readonly reason:
-				| RpcCloseReasonEnum.gracefulShutdown
-				| RpcCloseReasonEnum.forcedClose
-				| RpcCloseReasonEnum.shutdownDeadline;
-	  }
-	| {
-			readonly status: RpcStateStatusEnum.closed;
-			readonly outcome: RpcCloseOutcomeEnum.failed;
-			readonly reason: RpcProtocolFaultReason;
-			readonly error: RpcException & {
-				readonly code: RpcExceptionCodeEnum.protocol;
-			};
-	  }
-	| {
-			readonly status: RpcStateStatusEnum.closed;
-			readonly outcome: RpcCloseOutcomeEnum.failed;
-			readonly reason: RpcCloseReasonEnum.cleanupFailed;
 			readonly error: Error;
 	  };
 
@@ -166,3 +92,77 @@ export type RpcAcceptorOptions = {
 	readonly protocol?: IRpcProtocol;
 	readonly runtimePolicy?: RpcAcceptorRuntimePolicyOptions;
 };
+
+type RpcNormalSessionCloseReason = Extract<
+	RpcSessionCloseReason,
+	| RpcCloseReasonEnum.gracefulShutdown
+	| RpcCloseReasonEnum.forcedClose
+	| RpcCloseReasonEnum.shutdownDeadline
+	| RpcCloseReasonEnum.remoteTerminated
+>;
+
+type RpcUnavailableSessionFailureReason = Extract<
+	RpcSessionCloseReason,
+	RpcCloseReasonEnum.recoveryExpired | RpcCloseReasonEnum.counterExhaustion
+>;
+
+type RpcProtocolSessionFailureReason = Extract<
+	RpcSessionCloseReason,
+	RpcCloseReasonEnum.continuityFailure | RpcProtocolFaultReason
+>;
+
+type RpcSessionClosedState =
+	| {
+			readonly status: RpcStateStatusEnum.closed;
+			readonly outcome: RpcCloseOutcomeEnum.normal;
+			readonly reason: RpcNormalSessionCloseReason;
+	  }
+	| {
+			readonly status: RpcStateStatusEnum.closed;
+			readonly outcome: RpcCloseOutcomeEnum.failed;
+			readonly reason: RpcUnavailableSessionFailureReason;
+			readonly error: RpcException & {
+				readonly code: RpcExceptionCodeEnum.unavailable;
+			};
+	  }
+	| {
+			readonly status: RpcStateStatusEnum.closed;
+			readonly outcome: RpcCloseOutcomeEnum.failed;
+			readonly reason: RpcProtocolSessionFailureReason;
+			readonly error: RpcException & {
+				readonly code: RpcExceptionCodeEnum.protocol;
+			};
+	  };
+
+type RpcConnectorClosedState =
+	| RpcSessionClosedState
+	| {
+			readonly status: RpcStateStatusEnum.closed;
+			readonly outcome: RpcCloseOutcomeEnum.failed;
+			readonly reason: RpcCloseReasonEnum.cleanupFailed;
+			readonly error: Error;
+	  };
+
+type RpcAcceptorClosedState =
+	| {
+			readonly status: RpcStateStatusEnum.closed;
+			readonly outcome: RpcCloseOutcomeEnum.normal;
+			readonly reason:
+				| RpcCloseReasonEnum.gracefulShutdown
+				| RpcCloseReasonEnum.forcedClose
+				| RpcCloseReasonEnum.shutdownDeadline;
+	  }
+	| {
+			readonly status: RpcStateStatusEnum.closed;
+			readonly outcome: RpcCloseOutcomeEnum.failed;
+			readonly reason: RpcProtocolFaultReason;
+			readonly error: RpcException & {
+				readonly code: RpcExceptionCodeEnum.protocol;
+			};
+	  }
+	| {
+			readonly status: RpcStateStatusEnum.closed;
+			readonly outcome: RpcCloseOutcomeEnum.failed;
+			readonly reason: RpcCloseReasonEnum.cleanupFailed;
+			readonly error: Error;
+	  };

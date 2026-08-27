@@ -7,17 +7,6 @@
 import { RpcExceptionCodeEnum } from "@/enums/rpc-exception-code.enum";
 import { createRpcException } from "@/factories/rpc-exception.factory";
 
-const abortedGetter = Object.getOwnPropertyDescriptor(
-	AbortSignal.prototype,
-	"aborted",
-)?.get;
-const addEventListener = EventTarget.prototype.addEventListener;
-const removeEventListener = EventTarget.prototype.removeEventListener;
-
-if (abortedGetter === undefined) {
-	throw new Error("The platform AbortSignal aborted getter is unavailable.");
-}
-
 export interface RpcInvocationArguments {
 	readonly applicationArguments: readonly unknown[];
 	readonly signal: AbortSignal | undefined;
@@ -79,4 +68,15 @@ export function installRpcAbortListener(
 	return () => {
 		Reflect.apply(removeEventListener, signal, ["abort", listener]);
 	};
+}
+
+const abortedGetter = Object.getOwnPropertyDescriptor(
+	AbortSignal.prototype,
+	"aborted",
+)?.get;
+const addEventListener = EventTarget.prototype.addEventListener;
+const removeEventListener = EventTarget.prototype.removeEventListener;
+
+if (abortedGetter === undefined) {
+	throw new Error("The platform AbortSignal aborted getter is unavailable.");
 }

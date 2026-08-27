@@ -10,6 +10,13 @@ import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
+type RequirementRow = {
+	readonly id: string;
+	readonly kinds: readonly string[];
+	readonly references: readonly string[];
+	readonly status: string;
+};
+
 const repositoryRoot = resolve(
 	fileURLToPath(new URL("../../../", import.meta.url)),
 );
@@ -48,13 +55,6 @@ const allowedEvidenceKinds = new Set([
 	"BR",
 	"IR",
 ]);
-
-type RequirementRow = {
-	readonly id: string;
-	readonly kinds: readonly string[];
-	readonly references: readonly string[];
-	readonly status: string;
-};
 
 function getSpecificationIds(source: string): readonly string[] {
 	return [...source.matchAll(/^\*\*(RPC-[A-Z]+-[0-9]{3})\s+—/gmu)].map(

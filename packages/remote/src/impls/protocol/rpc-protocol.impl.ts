@@ -40,38 +40,6 @@ import type {
 	RpcResumeRequest,
 } from "@/types/protocol/rpc-wire-record.type";
 
-type RpcConnectorAttemptState = {
-	readonly mode: "fresh" | "resume";
-	readonly session?: IRpcSession;
-	request?: RpcFreshRequest | RpcResumeRequest;
-	requestAdmission?: Promise<void>;
-	resume?: RpcInitiatorResume;
-};
-
-type RpcAcceptorAttemptState = {
-	protectedSessionReservation?: IRpcRetainedBytesReservation;
-	provisionalSessionId?: string;
-	transferProtectedSessionReservation?: () => void;
-};
-
-type RpcResponderContinuityCandidate = Extract<
-	RpcResponderResumeReview,
-	{ readonly kind: "continuity-reject" }
->;
-
-type RpcResponderBindingCandidate = Extract<
-	RpcResponderResumeReview,
-	{ readonly kind: "accept" }
->;
-
-function closeUnboundConnection(connection: IRpcConnection): void {
-	queueMicrotask(() => {
-		void Promise.try(() => connection.close()).catch(() => {
-			// A pre-bootstrap Connection has no Session authority to report against.
-		});
-	});
-}
-
 /** Active one-to-one Default Protocol runtime. */
 export class RpcProtocolConnectorRuntimeImpl
 	implements IRpcProtocolConnectorRuntime
@@ -948,4 +916,36 @@ export class RpcProtocolAcceptorRuntimeImpl
 		this._sessions.set(sessionId, session);
 		await attempt.transferBinding(commit.binding, reply);
 	}
+}
+
+type RpcConnectorAttemptState = {
+	readonly mode: "fresh" | "resume";
+	readonly session?: IRpcSession;
+	request?: RpcFreshRequest | RpcResumeRequest;
+	requestAdmission?: Promise<void>;
+	resume?: RpcInitiatorResume;
+};
+
+type RpcAcceptorAttemptState = {
+	protectedSessionReservation?: IRpcRetainedBytesReservation;
+	provisionalSessionId?: string;
+	transferProtectedSessionReservation?: () => void;
+};
+
+type RpcResponderContinuityCandidate = Extract<
+	RpcResponderResumeReview,
+	{ readonly kind: "continuity-reject" }
+>;
+
+type RpcResponderBindingCandidate = Extract<
+	RpcResponderResumeReview,
+	{ readonly kind: "accept" }
+>;
+
+function closeUnboundConnection(connection: IRpcConnection): void {
+	queueMicrotask(() => {
+		void Promise.try(() => connection.close()).catch(() => {
+			// A pre-bootstrap Connection has no Session authority to report against.
+		});
+	});
 }

@@ -27,6 +27,27 @@ import {
 	isPositiveSafeInteger,
 } from "@/utils/type-guard.util";
 
+export {
+	rpcAckRecordSchema,
+	rpcActiveRecordSchema,
+	rpcBootstrapRequestSchema,
+	rpcCallMessageSchema,
+	rpcCancelMessageSchema,
+	rpcControlRecordSchema,
+	rpcErrorMessageSchema,
+	rpcFreshAcceptSchema,
+	rpcFreshRequestSchema,
+	rpcJsonRecordSchema,
+	rpcMessageEnvelopeSchema,
+	rpcResultMessageSchema,
+	rpcResumeAcceptSchema,
+	rpcResumeOutcomeSchema,
+	rpcResumeRejectSchema,
+	rpcResumeRequestSchema,
+	rpcSemanticMessageSchema,
+	rpcWireErrorCodeSchema,
+};
+
 const callOrdinalPattern = /^(?:[1-9][0-9]{0,15})$/;
 const closeForbiddenMembers = new Set([
 	"seq",
@@ -89,11 +110,11 @@ const rpcProfileOfferSchema = z
 	.min(1)
 	.refine((profiles) => new Set(profiles).size === profiles.length);
 
-export const rpcJsonRecordSchema = z.custom<IRpcApplicationRecord>(
+const rpcJsonRecordSchema = z.custom<IRpcApplicationRecord>(
 	(value) => isNonNullObject(value) && !isArray(value),
 );
 
-export const rpcWireErrorCodeSchema = z.enum([
+const rpcWireErrorCodeSchema = z.enum([
 	RpcExceptionCodeEnum.canceled,
 	RpcExceptionCodeEnum.unavailable,
 	RpcExceptionCodeEnum.handlerFailed,
@@ -140,14 +161,14 @@ const rpcWireErrorSchema = z
 		}
 	});
 
-export const rpcFreshRequestSchema = z
+const rpcFreshRequestSchema = z
 	.object({
 		kind: z.literal(RpcWireRecordKindEnum.fresh),
 		profiles: rpcProfileOfferSchema,
 	})
 	.catchall(rpcJsonValueSchema);
 
-export const rpcFreshAcceptSchema = z
+const rpcFreshAcceptSchema = z
 	.object({
 		kind: z.literal(RpcWireRecordKindEnum.accept),
 		profile: z.literal(RPC_PROFILE),
@@ -158,7 +179,7 @@ export const rpcFreshAcceptSchema = z
 	.catchall(rpcJsonValueSchema)
 	.refine((record) => !Object.hasOwn(record, "receivedThrough"));
 
-export const rpcResumeRequestSchema = z
+const rpcResumeRequestSchema = z
 	.object({
 		kind: z.literal(RpcWireRecordKindEnum.resume),
 		profile: rpcWireIdentifierSchema,
@@ -169,7 +190,7 @@ export const rpcResumeRequestSchema = z
 	})
 	.catchall(rpcJsonValueSchema);
 
-export const rpcResumeAcceptSchema = z
+const rpcResumeAcceptSchema = z
 	.object({
 		kind: z.literal(RpcWireRecordKindEnum.accept),
 		profile: rpcWireIdentifierSchema,
@@ -180,7 +201,7 @@ export const rpcResumeAcceptSchema = z
 	.catchall(rpcJsonValueSchema)
 	.refine((record) => !Object.hasOwn(record, "resumeToken"));
 
-export const rpcResumeRejectSchema = z
+const rpcResumeRejectSchema = z
 	.object({
 		kind: z.literal(RpcWireRecordKindEnum.reject),
 		code: z.enum([
@@ -192,7 +213,7 @@ export const rpcResumeRejectSchema = z
 	.catchall(rpcJsonValueSchema)
 	.refine((record) => !Object.hasOwn(record, "message"));
 
-export const rpcCallMessageSchema = z
+const rpcCallMessageSchema = z
 	.object({
 		kind: z.literal(RpcWireRecordKindEnum.call),
 		callId: rpcCallOrdinalSchema,
@@ -202,14 +223,14 @@ export const rpcCallMessageSchema = z
 	})
 	.catchall(rpcJsonValueSchema);
 
-export const rpcCancelMessageSchema = z
+const rpcCancelMessageSchema = z
 	.object({
 		kind: z.literal(RpcWireRecordKindEnum.cancel),
 		callId: rpcCallOrdinalSchema,
 	})
 	.catchall(rpcJsonValueSchema);
 
-export const rpcResultMessageSchema = z
+const rpcResultMessageSchema = z
 	.object({
 		kind: z.literal(RpcWireRecordKindEnum.result),
 		callId: rpcCallOrdinalSchema,
@@ -217,7 +238,7 @@ export const rpcResultMessageSchema = z
 	})
 	.catchall(rpcJsonValueSchema);
 
-export const rpcErrorMessageSchema = z
+const rpcErrorMessageSchema = z
 	.object({
 		kind: z.literal(RpcWireRecordKindEnum.error),
 		callId: rpcCallOrdinalSchema,
@@ -225,14 +246,14 @@ export const rpcErrorMessageSchema = z
 	})
 	.catchall(rpcJsonValueSchema);
 
-export const rpcSemanticMessageSchema = z.discriminatedUnion("kind", [
+const rpcSemanticMessageSchema = z.discriminatedUnion("kind", [
 	rpcCallMessageSchema,
 	rpcCancelMessageSchema,
 	rpcResultMessageSchema,
 	rpcErrorMessageSchema,
 ]);
 
-export const rpcMessageEnvelopeSchema = z
+const rpcMessageEnvelopeSchema = z
 	.object({
 		kind: z.literal(RpcWireRecordKindEnum.message),
 		seq: positiveSafeIntegerSchema,
@@ -241,7 +262,7 @@ export const rpcMessageEnvelopeSchema = z
 	})
 	.catchall(rpcJsonValueSchema);
 
-export const rpcAckRecordSchema = z
+const rpcAckRecordSchema = z
 	.object({
 		kind: z.literal(RpcWireRecordKindEnum.ack),
 		ackThrough: nonNegativeSafeIntegerSchema,
@@ -266,23 +287,23 @@ const rpcCloseRecordSchema = z
 		}
 	});
 
-export const rpcControlRecordSchema = z.discriminatedUnion("kind", [
+const rpcControlRecordSchema = z.discriminatedUnion("kind", [
 	rpcPingRecordSchema,
 	rpcPongRecordSchema,
 	rpcCloseRecordSchema,
 ]);
 
-export const rpcBootstrapRequestSchema = z.discriminatedUnion("kind", [
+const rpcBootstrapRequestSchema = z.discriminatedUnion("kind", [
 	rpcFreshRequestSchema,
 	rpcResumeRequestSchema,
 ]);
 
-export const rpcResumeOutcomeSchema = z.discriminatedUnion("kind", [
+const rpcResumeOutcomeSchema = z.discriminatedUnion("kind", [
 	rpcResumeAcceptSchema,
 	rpcResumeRejectSchema,
 ]);
 
-export const rpcActiveRecordSchema = z.discriminatedUnion("kind", [
+const rpcActiveRecordSchema = z.discriminatedUnion("kind", [
 	rpcMessageEnvelopeSchema,
 	rpcAckRecordSchema,
 	rpcPingRecordSchema,

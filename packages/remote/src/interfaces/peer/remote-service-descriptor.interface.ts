@@ -9,6 +9,88 @@ import type { Observable } from "rxjs";
 // biome-ignore lint/suspicious/noExplicitAny: method extraction must preserve arbitrary parameter variance.
 export type AnyMethod = (...args: any[]) => unknown;
 
+export type RemoteMethodKey<T> = {
+	[K in keyof T]-?: K extends string
+		? K extends "then"
+			? never
+			: T[K] extends AnyMethod
+				? K
+				: never
+		: never;
+}[keyof T];
+
+export type RpcMethodDefinitions<T> = Partial<{
+	readonly [K in RemoteMethodKey<T>]: RpcUnaryMethodDefinition<
+		Extract<T[K], AnyMethod>
+	>;
+}>;
+
+export type ValidateMethodDefinitions<T, Definitions extends object> = {
+	readonly [K in keyof Definitions]: K extends RemoteMethodKey<T>
+		? ValidateMethodDefinition<Extract<T[K], AnyMethod>, Definitions[K]>
+		: never;
+};
+
+export type SelectedMethodKey<Definitions> = Extract<
+	RequiredKey<Definitions>,
+	string
+>;
+
+export type NonEmptyMethodDefinitions<Definitions extends object> = [
+	SelectedMethodKey<Definitions>,
+] extends [never]
+	? never
+	: unknown;
+
+export type IsCancelableMethod<Definition> = Definition extends {
+	readonly cancelable: true;
+}
+	? true
+	: false;
+
+export type RemoteMethod<F, Definition> = F extends (
+	...args: infer Args
+) => infer Result
+	? IsCancelableMethod<Definition> extends true
+		? Args extends [...infer Parameters, AbortSignal]
+			? (
+					...args: [...Parameters, signal: AbortSignal | undefined]
+				) => Promise<Awaited<Result>>
+			: never
+		: (...args: Args) => Promise<Awaited<Result>>
+	: never;
+
+export type RemoteService<T, Definitions extends RpcMethodDefinitions<T>> = {
+	readonly [K in Extract<
+		SelectedMethodKey<Definitions>,
+		RemoteMethodKey<T>
+	>]: RemoteMethod<Extract<T[K], AnyMethod>, Definitions[K]>;
+} & { readonly then?: never };
+
+export type RemoteServiceImplementation<
+	T,
+	Definitions extends RpcMethodDefinitions<T>,
+> = {
+	[K in Extract<SelectedMethodKey<Definitions>, RemoteMethodKey<T>>]-?: Extract<
+		T[K],
+		AnyMethod
+	>;
+};
+
+/**
+ * Describes one explicitly allowlisted remote service without exposing its
+ * local identifier or wire metadata.
+ */
+export interface IRemoteServiceDescriptor<
+	T,
+	Definitions extends RpcMethodDefinitions<T>,
+> {
+	readonly [REMOTE_SERVICE_DESCRIPTOR_TYPE]: (
+		service: T,
+		definitions: Definitions,
+	) => readonly [T, Definitions];
+}
+
 type IsAny<T> = 0 extends 1 & T ? true : false;
 
 type ContainsAbortSignal<T> =
@@ -58,16 +140,6 @@ type HasValidCancellationSlot<F extends AnyMethod> =
 					: false
 		: false;
 
-export type RemoteMethodKey<T> = {
-	[K in keyof T]-?: K extends string
-		? K extends "then"
-			? never
-			: T[K] extends AnyMethod
-				? K
-				: never
-		: never;
-}[keyof T];
-
 type RpcUnaryMethodDefinition<F extends AnyMethod = AnyMethod> =
 	HasAnyParameter<F> extends true
 		? never
@@ -80,12 +152,6 @@ type RpcUnaryMethodDefinition<F extends AnyMethod = AnyMethod> =
 					: HasValidCancellationSlot<F> extends true
 						? { readonly cancelable: true }
 						: never;
-
-export type RpcMethodDefinitions<T> = Partial<{
-	readonly [K in RemoteMethodKey<T>]: RpcUnaryMethodDefinition<
-		Extract<T[K], AnyMethod>
-	>;
-}>;
 
 type ValidateMethodDefinition<F extends AnyMethod, Definition> =
 	Definition extends RpcUnaryMethodDefinition<F>
@@ -100,74 +166,8 @@ type ValidateMethodDefinition<F extends AnyMethod, Definition> =
 				: never
 		: never;
 
-export type ValidateMethodDefinitions<T, Definitions extends object> = {
-	readonly [K in keyof Definitions]: K extends RemoteMethodKey<T>
-		? ValidateMethodDefinition<Extract<T[K], AnyMethod>, Definitions[K]>
-		: never;
-};
-
 type RequiredKey<T> = {
 	[K in keyof T]-?: Pick<T, K> extends Required<Pick<T, K>> ? K : never;
 }[keyof T];
 
-export type SelectedMethodKey<Definitions> = Extract<
-	RequiredKey<Definitions>,
-	string
->;
-
-export type NonEmptyMethodDefinitions<Definitions extends object> = [
-	SelectedMethodKey<Definitions>,
-] extends [never]
-	? never
-	: unknown;
-
-export type IsCancelableMethod<Definition> = Definition extends {
-	readonly cancelable: true;
-}
-	? true
-	: false;
-
-export type RemoteMethod<F, Definition> = F extends (
-	...args: infer Args
-) => infer Result
-	? IsCancelableMethod<Definition> extends true
-		? Args extends [...infer Parameters, AbortSignal]
-			? (
-					...args: [...Parameters, signal: AbortSignal | undefined]
-				) => Promise<Awaited<Result>>
-			: never
-		: (...args: Args) => Promise<Awaited<Result>>
-	: never;
-
-export type RemoteService<T, Definitions extends RpcMethodDefinitions<T>> = {
-	readonly [K in Extract<
-		SelectedMethodKey<Definitions>,
-		RemoteMethodKey<T>
-	>]: RemoteMethod<Extract<T[K], AnyMethod>, Definitions[K]>;
-} & { readonly then?: never };
-
-export type RemoteServiceImplementation<
-	T,
-	Definitions extends RpcMethodDefinitions<T>,
-> = {
-	[K in Extract<SelectedMethodKey<Definitions>, RemoteMethodKey<T>>]-?: Extract<
-		T[K],
-		AnyMethod
-	>;
-};
-
 declare const REMOTE_SERVICE_DESCRIPTOR_TYPE: unique symbol;
-
-/**
- * Describes one explicitly allowlisted remote service without exposing its
- * local identifier or wire metadata.
- */
-export interface IRemoteServiceDescriptor<
-	T,
-	Definitions extends RpcMethodDefinitions<T>,
-> {
-	readonly [REMOTE_SERVICE_DESCRIPTOR_TYPE]: (
-		service: T,
-		definitions: Definitions,
-	) => readonly [T, Definitions];
-}

@@ -31,25 +31,20 @@ interface IDatabaseConfig {
 	username: string;
 	password: string;
 }
-const IDatabaseConfig =
-	createServiceIdentifier<IDatabaseConfig>("IDatabaseConfig");
 
 interface IUser {
 	readonly name: string;
 	getUser(): { id: number; name: string };
 }
-const IUser = createServiceIdentifier<IUser>("IUser");
 
 interface IDatabase {
 	readonly config: IDatabaseConfig;
 	connect(): string;
 }
-const IDatabase = createServiceIdentifier<IDatabase>("IDatabase");
 
 interface IAuthService {
 	authenticate(): { authenticated: boolean; token: string };
 }
-const IAuthService = createServiceIdentifier<IAuthService>("IAuthService");
 
 interface IApp {
 	readonly userService: IUser;
@@ -57,6 +52,11 @@ interface IApp {
 	readonly authService: IAuthService;
 	bootstrap(): string;
 }
+const IDatabaseConfig =
+	createServiceIdentifier<IDatabaseConfig>("IDatabaseConfig");
+const IUser = createServiceIdentifier<IUser>("IUser");
+const IDatabase = createServiceIdentifier<IDatabase>("IDatabase");
+const IAuthService = createServiceIdentifier<IAuthService>("IAuthService");
 const IApp = createServiceIdentifier<IApp>("IApp");
 
 class UserService implements IUser {

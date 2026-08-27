@@ -6,10 +6,11 @@
 
 import { z } from "zod";
 
+export { rpcWireIdentifierSchema };
+
 const maximumIdentifierBytes = 256;
 const textEncoder = new TextEncoder();
-
-export const rpcWireIdentifierSchema = z
+const rpcWireIdentifierSchema = z
 	.string()
 	.min(1)
 	.refine(

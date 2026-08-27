@@ -60,13 +60,6 @@ import {
 import { getServiceIdentifierName } from "@/utils/service-identifier.util";
 import { createContainerId } from "@/utils/uuid.util";
 
-const assertNotDisposed = createAssertNotDisposed("Container");
-type StagedLifecycleInstance = {
-	readonly commit: () => void;
-	readonly rollback: () => void;
-	readonly value: unknown;
-};
-
 /**
  * Dependency Injection Container Implementation
  *
@@ -876,3 +869,10 @@ export class ContainerImpl implements IContainer {
 	 */
 	static rootContainer: IContainer = new ContainerImpl("Root");
 }
+type StagedLifecycleInstance = {
+	readonly commit: () => void;
+	readonly rollback: () => void;
+	readonly value: unknown;
+};
+
+const assertNotDisposed = createAssertNotDisposed("Container");

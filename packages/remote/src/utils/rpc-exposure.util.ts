@@ -14,6 +14,28 @@ import type {
 } from "@/types/rpc-exposure.type";
 import { isCallable, isObjectOrFunction } from "@/utils/type-guard.util";
 
+/** Validates a full exposure and commits one registry entry. */
+export function installRpcExposure(
+	descriptor: unknown,
+	implementation: unknown,
+	registry: RpcExposureRegistry,
+	conflictingRegistries: readonly RpcExposureRegistry[] = [],
+): Cleanup {
+	const data = getRemoteServiceDescriptorData(descriptor);
+	assertNameAvailable(data.wireName, registry, conflictingRegistries);
+	const exposure = prepareExposure(descriptor, implementation);
+	assertNameAvailable(exposure.wireName, registry, conflictingRegistries);
+	registry.set(exposure.wireName, exposure);
+
+	let active = true;
+	return () => {
+		if (active && registry.get(exposure.wireName) === exposure) {
+			registry.delete(exposure.wireName);
+		}
+		active = false;
+	};
+}
+
 function findHandler(
 	implementation: object,
 	method: string,
@@ -89,26 +111,4 @@ function assertNameAvailable(
 	if (wireNameIsTaken) {
 		throw new TypeError(`RPC wire service ${wireName} is already exposed.`);
 	}
-}
-
-/** Validates a full exposure and commits one registry entry. */
-export function installRpcExposure(
-	descriptor: unknown,
-	implementation: unknown,
-	registry: RpcExposureRegistry,
-	conflictingRegistries: readonly RpcExposureRegistry[] = [],
-): Cleanup {
-	const data = getRemoteServiceDescriptorData(descriptor);
-	assertNameAvailable(data.wireName, registry, conflictingRegistries);
-	const exposure = prepareExposure(descriptor, implementation);
-	assertNameAvailable(exposure.wireName, registry, conflictingRegistries);
-	registry.set(exposure.wireName, exposure);
-
-	let active = true;
-	return () => {
-		if (active && registry.get(exposure.wireName) === exposure) {
-			registry.delete(exposure.wireName);
-		}
-		active = false;
-	};
 }

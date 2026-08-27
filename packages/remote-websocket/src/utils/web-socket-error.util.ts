@@ -6,13 +6,6 @@
 
 import { errorSchema } from "@/utils/web-socket-schema.util";
 
-const abortSignalAbortedGetter = Object.getOwnPropertyDescriptor(
-	AbortSignal.prototype,
-	"aborted",
-)?.get;
-const addEventListener = EventTarget.prototype.addEventListener;
-const removeEventListener = EventTarget.prototype.removeEventListener;
-
 export function createAbortError(): DOMException {
 	return new DOMException(
 		"The WebSocket Adapter startup was aborted.",
@@ -54,3 +47,10 @@ export function getWebSocketCloseError(event: Event): Error {
 		`WebSocket closed abnormally${typeof code === "number" ? ` (code ${code})` : ""}.`,
 	);
 }
+
+const abortSignalAbortedGetter = Object.getOwnPropertyDescriptor(
+	AbortSignal.prototype,
+	"aborted",
+)?.get;
+const addEventListener = EventTarget.prototype.addEventListener;
+const removeEventListener = EventTarget.prototype.removeEventListener;

@@ -21,6 +21,89 @@ import {
 	isString,
 } from "@/utils/type-guard.util";
 
+export function readRpcClosedOptionsRecord(
+	value: unknown,
+	allowedKeys: ReadonlySet<string>,
+	label: string,
+): Readonly<Record<string, unknown>> {
+	if (!isPlainRecord(value)) {
+		throw new TypeError(`${label} must be a plain record.`);
+	}
+
+	const snapshot = Object.create(null) as Record<string, unknown>;
+	for (const key of Reflect.ownKeys(value)) {
+		if (!isString(key) || !allowedKeys.has(key)) {
+			throw new TypeError(`${label} contains an unknown option.`);
+		}
+		const optionKey = key;
+
+		const descriptor = Object.getOwnPropertyDescriptor(value, optionKey);
+		// Policy options must be enumerable data properties to avoid accessor effects.
+		const optionDescriptorIsInvalid =
+			descriptor === undefined ||
+			!descriptor.enumerable ||
+			!("value" in descriptor);
+		if (optionDescriptorIsInvalid) {
+			throw new TypeError(
+				`${label} options must be enumerable data properties.`,
+			);
+		}
+
+		snapshot[optionKey] = descriptor.value;
+	}
+
+	return Object.freeze(snapshot);
+}
+
+export function validateRpcPositiveSafeInteger(
+	value: unknown,
+	key: string,
+): number {
+	if (!isPositiveSafeInteger(value)) {
+		throw new TypeError(`${key} must be a positive safe integer.`);
+	}
+	return value;
+}
+
+export function snapshotRpcFactoryOptions<
+	TOptions extends RpcConnectorOptions | RpcAcceptorOptions,
+>(options: TOptions | undefined): RpcFactoryOptionsSnapshot<TOptions> {
+	if (options === undefined) {
+		return Object.freeze({ protocol: undefined, runtimePolicy: undefined });
+	}
+
+	const record = readRpcClosedOptionsRecord(
+		options,
+		new Set(["protocol", "runtimePolicy"]),
+		"options",
+	);
+	return Object.freeze({
+		protocol: record.protocol as IRpcProtocol | undefined,
+		runtimePolicy: record.runtimePolicy as
+			| TOptions["runtimePolicy"]
+			| undefined,
+	});
+}
+
+export function createRpcConnectorRuntimePolicy(
+	overrides: RpcConnectorRuntimePolicyOptions | undefined,
+): IRpcProtocolRuntimePolicy {
+	return snapshotPolicy(overrides, connectorPolicyKeys, true);
+}
+
+export function createRpcAcceptorRuntimePolicy(
+	overrides: RpcAcceptorRuntimePolicyOptions | undefined,
+): IRpcProtocolRuntimePolicy {
+	return snapshotPolicy(overrides, new Set(policyKeys), false);
+}
+
+type RpcFactoryOptionsSnapshot<
+	TOptions extends RpcConnectorOptions | RpcAcceptorOptions,
+> = {
+	readonly protocol: IRpcProtocol | undefined;
+	readonly runtimePolicy: TOptions["runtimePolicy"] | undefined;
+};
+
 const maximumPlatformTimerDelayMs = 2_147_483_647;
 
 const mebibyte = 1024 * 1024;
@@ -74,40 +157,6 @@ function isPlatformTimerDelay(value: unknown): value is number {
 	return isPositiveSafeInteger(value) && value <= maximumPlatformTimerDelayMs;
 }
 
-export function readRpcClosedOptionsRecord(
-	value: unknown,
-	allowedKeys: ReadonlySet<string>,
-	label: string,
-): Readonly<Record<string, unknown>> {
-	if (!isPlainRecord(value)) {
-		throw new TypeError(`${label} must be a plain record.`);
-	}
-
-	const snapshot = Object.create(null) as Record<string, unknown>;
-	for (const key of Reflect.ownKeys(value)) {
-		if (!isString(key) || !allowedKeys.has(key)) {
-			throw new TypeError(`${label} contains an unknown option.`);
-		}
-		const optionKey = key;
-
-		const descriptor = Object.getOwnPropertyDescriptor(value, optionKey);
-		// Policy options must be enumerable data properties to avoid accessor effects.
-		const optionDescriptorIsInvalid =
-			descriptor === undefined ||
-			!descriptor.enumerable ||
-			!("value" in descriptor);
-		if (optionDescriptorIsInvalid) {
-			throw new TypeError(
-				`${label} options must be enumerable data properties.`,
-			);
-		}
-
-		snapshot[optionKey] = descriptor.value;
-	}
-
-	return Object.freeze(snapshot);
-}
-
 function multiplySafe(left: number, right: number, label: string): number {
 	const result = left * right;
 	if (!Number.isSafeInteger(result)) {
@@ -122,16 +171,6 @@ function addSafe(left: number, right: number, label: string): number {
 		throw new TypeError(`${label} exceeds safe-integer arithmetic.`);
 	}
 	return result;
-}
-
-export function validateRpcPositiveSafeInteger(
-	value: unknown,
-	key: string,
-): number {
-	if (!isPositiveSafeInteger(value)) {
-		throw new TypeError(`${key} must be a positive safe integer.`);
-	}
-	return value;
 }
 
 function validatePolicy(policy: IRpcProtocolRuntimePolicy): void {
@@ -230,43 +269,4 @@ function snapshotPolicy(
 
 	validatePolicy(mutable);
 	return Object.freeze(mutable);
-}
-
-type RpcFactoryOptionsSnapshot<
-	TOptions extends RpcConnectorOptions | RpcAcceptorOptions,
-> = {
-	readonly protocol: IRpcProtocol | undefined;
-	readonly runtimePolicy: TOptions["runtimePolicy"] | undefined;
-};
-
-export function snapshotRpcFactoryOptions<
-	TOptions extends RpcConnectorOptions | RpcAcceptorOptions,
->(options: TOptions | undefined): RpcFactoryOptionsSnapshot<TOptions> {
-	if (options === undefined) {
-		return Object.freeze({ protocol: undefined, runtimePolicy: undefined });
-	}
-
-	const record = readRpcClosedOptionsRecord(
-		options,
-		new Set(["protocol", "runtimePolicy"]),
-		"options",
-	);
-	return Object.freeze({
-		protocol: record.protocol as IRpcProtocol | undefined,
-		runtimePolicy: record.runtimePolicy as
-			| TOptions["runtimePolicy"]
-			| undefined,
-	});
-}
-
-export function createRpcConnectorRuntimePolicy(
-	overrides: RpcConnectorRuntimePolicyOptions | undefined,
-): IRpcProtocolRuntimePolicy {
-	return snapshotPolicy(overrides, connectorPolicyKeys, true);
-}
-
-export function createRpcAcceptorRuntimePolicy(
-	overrides: RpcAcceptorRuntimePolicyOptions | undefined,
-): IRpcProtocolRuntimePolicy {
-	return snapshotPolicy(overrides, new Set(policyKeys), false);
 }

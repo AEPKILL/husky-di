@@ -10,6 +10,10 @@ import type { ScrollyTutorialStep } from "@/types/scrolly-tutorial-step.type";
 import { createScrollyTutorialSteps } from "@/utils/scrolly-tutorial.util";
 import { Homepage } from "./components/homepage";
 
+export type HomePageProps = Readonly<{
+	tutorialSteps: readonly ScrollyTutorialStep[];
+}>;
+
 export async function loadHomepageRouteData() {
 	return {
 		tutorialSteps: await createScrollyTutorialSteps({
@@ -24,16 +28,12 @@ export const Route = createFileRoute("/home/")({
 	component: HomeRoutePage,
 });
 
-export type HomePageProps = Readonly<{
-	tutorialSteps: readonly ScrollyTutorialStep[];
-}>;
+export function HomePage({ tutorialSteps }: HomePageProps) {
+	return <Homepage tutorialSteps={tutorialSteps} />;
+}
 
 function HomeRoutePage() {
 	const routeData = Route.useLoaderData();
 
 	return <Homepage tutorialSteps={routeData.tutorialSteps} />;
-}
-
-export function HomePage({ tutorialSteps }: HomePageProps) {
-	return <Homepage tutorialSteps={tutorialSteps} />;
 }

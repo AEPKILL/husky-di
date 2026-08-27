@@ -12,10 +12,6 @@ import type {
 } from "@/interfaces/owner/rpc-owner-custody.interface";
 import type { IRpcConnection } from "@/interfaces/transport/rpc-connection.interface";
 
-const cleanupDeadline = Symbol("RPC Owner cleanup deadline");
-
-type RpcOwnerCleanupSettlement = Error | undefined | typeof cleanupDeadline;
-
 /** Owns a Topology Owner's Connections and cleanup barrier. */
 export class RpcOwnerCustodyImpl implements IRpcOwnerCustody {
 	readonly #cleanupDeadlineMs: number;
@@ -188,3 +184,7 @@ export class RpcOwnerCustodyImpl implements IRpcOwnerCustody {
 		this.#cleanups.splice(0);
 	}
 }
+
+type RpcOwnerCleanupSettlement = Error | undefined | typeof cleanupDeadline;
+
+const cleanupDeadline = Symbol("RPC Owner cleanup deadline");

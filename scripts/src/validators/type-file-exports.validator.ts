@@ -15,24 +15,6 @@ import type { CodeStandardDiagnostic } from "@/types/code-standard-diagnostic.ty
 import { createDiagnostic } from "@/utils/create-diagnostic.util";
 import { extractFileName } from "@/utils/path.util";
 
-const ALLOWED_STATEMENTS = new Set([
-	ts.SyntaxKind.TypeAliasDeclaration,
-	ts.SyntaxKind.InterfaceDeclaration,
-	ts.SyntaxKind.ImportDeclaration,
-	ts.SyntaxKind.ExportDeclaration,
-]);
-
-const STATEMENT_ERROR_MESSAGES: Record<number, string> = {
-	[ts.SyntaxKind.EnumDeclaration]:
-		".type.ts files may only contain type aliases, interfaces, and type-only exports. Enum declarations are not allowed.",
-	[ts.SyntaxKind.VariableStatement]:
-		".type.ts files may only contain type aliases, interfaces, and type-only exports. Runtime values are not allowed.",
-	[ts.SyntaxKind.FunctionDeclaration]:
-		".type.ts files may only contain type aliases, interfaces, and type-only exports. Function declarations are not allowed.",
-	[ts.SyntaxKind.ClassDeclaration]:
-		".type.ts files may only contain type aliases, interfaces, and type-only exports. Class declarations are not allowed.",
-};
-
 export function validateTypeFileExports(
 	relativeFilePath: string,
 	sourceFile: ts.SourceFile,
@@ -66,3 +48,21 @@ export function validateTypeFileExports(
 
 	return diagnostics;
 }
+
+const ALLOWED_STATEMENTS = new Set([
+	ts.SyntaxKind.TypeAliasDeclaration,
+	ts.SyntaxKind.InterfaceDeclaration,
+	ts.SyntaxKind.ImportDeclaration,
+	ts.SyntaxKind.ExportDeclaration,
+]);
+
+const STATEMENT_ERROR_MESSAGES: Record<number, string> = {
+	[ts.SyntaxKind.EnumDeclaration]:
+		".type.ts files may only contain type aliases, interfaces, and type-only exports. Enum declarations are not allowed.",
+	[ts.SyntaxKind.VariableStatement]:
+		".type.ts files may only contain type aliases, interfaces, and type-only exports. Runtime values are not allowed.",
+	[ts.SyntaxKind.FunctionDeclaration]:
+		".type.ts files may only contain type aliases, interfaces, and type-only exports. Function declarations are not allowed.",
+	[ts.SyntaxKind.ClassDeclaration]:
+		".type.ts files may only contain type aliases, interfaces, and type-only exports. Class declarations are not allowed.",
+};

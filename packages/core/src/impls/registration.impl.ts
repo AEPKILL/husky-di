@@ -142,19 +142,19 @@ export class RegistrationImpl<T>
 	}
 }
 
-const REGISTRATION_PROVIDER_KEYS = [
-	"useClass",
-	"useFactory",
-	"useValue",
-	"useAlias",
-] as const;
-
 type RegistrationProviderDefinition<T> = {
 	getContainer?: (() => IContainer) | undefined;
 	lifecycle: LifecycleEnum;
 	provider: IRegistration<T>["provider"];
 	type: RegistrationTypeEnum;
 };
+
+const REGISTRATION_PROVIDER_KEYS = [
+	"useClass",
+	"useFactory",
+	"useValue",
+	"useAlias",
+] as const;
 
 function resolveProviderDefinition<T>(
 	options: CreateRegistrationOptions<T>,

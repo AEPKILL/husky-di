@@ -17,152 +17,6 @@ import {
 	RpcException,
 } from "../../src/index";
 
-const base64Url32Pattern = /^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$/u;
-
-interface IBrowserRpcService {
-	add(left: number, right: number): number;
-	wait(signal: AbortSignal): Promise<string>;
-}
-
-interface IBrowserMemoryLink {
-	readonly acceptorIngress: Subject<Uint8Array>;
-	readonly connectorIngress: Subject<Uint8Array>;
-}
-
-interface IBrowserWireRecord {
-	readonly connectionIndex: number;
-	readonly origin: "acceptor" | "connector";
-	readonly record: Readonly<Record<string, unknown>>;
-}
-
-interface IBrowserRoundtripResult {
-	readonly acceptorStatus: string;
-	readonly assimilated: boolean;
-	readonly browserCsprng: boolean;
-	readonly canceledCode: string;
-	readonly connectorStatus: string;
-	readonly initialResult: number;
-	readonly profileV1: boolean;
-	readonly recoveredResult: number;
-	readonly resumeAcceptOmitsToken: boolean;
-	readonly resumeTokenCanonical: boolean;
-	readonly resumeTokenStable: boolean;
-	readonly sameAcceptorPeer: boolean;
-	readonly sameConnectorPeer: boolean;
-	readonly shadowListenerCalls: number;
-}
-
-const IBrowserRpcService =
-	createServiceIdentifier<IBrowserRpcService>("IBrowserRpcService");
-
-function createBrowserMemoryNetwork(): {
-	readonly acceptorAdapter: IRpcAcceptorAdapter;
-	readonly records: readonly IBrowserWireRecord[];
-	createConnectorAdapter(): IRpcConnectorAdapter;
-	disconnect(connectionIndex: number): void;
-} {
-	const acceptorConnections = new Subject<IRpcConnection>();
-	const decoder = new TextDecoder();
-	const links: IBrowserMemoryLink[] = [];
-	const records: IBrowserWireRecord[] = [];
-
-	return {
-		acceptorAdapter: {
-			connection$: acceptorConnections.asObservable(),
-			async listen(signal) {
-				signal.throwIfAborted();
-			},
-		},
-		createConnectorAdapter() {
-			const connectorConnections = new Subject<IRpcConnection>();
-			return {
-				connection$: connectorConnections.asObservable(),
-				async connect(signal) {
-					signal.throwIfAborted();
-					const connectionIndex = links.length;
-					const connectorIngress = new Subject<Uint8Array>();
-					const acceptorIngress = new Subject<Uint8Array>();
-					const link = { connectorIngress, acceptorIngress };
-					links.push(link);
-					let closed = false;
-					const close = async (): Promise<void> => {
-						if (!closed) {
-							closed = true;
-							connectorIngress.complete();
-							acceptorIngress.complete();
-						}
-					};
-					const createConnection = (
-						messageSource: Subject<Uint8Array>,
-						peerSource: Subject<Uint8Array>,
-						origin: IBrowserWireRecord["origin"],
-					): IRpcConnection => ({
-						message$: messageSource.asObservable(),
-						async send(message) {
-							if (closed) {
-								throw new Error("Browser test Connection is closed.");
-							}
-							const snapshot = message.slice();
-							records.push({
-								connectionIndex,
-								origin,
-								record: JSON.parse(decoder.decode(snapshot)) as Readonly<
-									Record<string, unknown>
-								>,
-							});
-							await Promise.resolve();
-							if (!closed) {
-								peerSource.next(snapshot);
-							}
-						},
-						close,
-					});
-					connectorConnections.next(
-						createConnection(connectorIngress, acceptorIngress, "connector"),
-					);
-					acceptorConnections.next(
-						createConnection(acceptorIngress, connectorIngress, "acceptor"),
-					);
-					connectorConnections.complete();
-				},
-			};
-		},
-		records,
-		disconnect(connectionIndex) {
-			const link = links[connectionIndex];
-			link?.connectorIngress.complete();
-			link?.acceptorIngress.complete();
-		},
-	};
-}
-
-async function waitFor(
-	predicate: () => boolean,
-	message: string,
-): Promise<void> {
-	const deadline = performance.now() + 5_000;
-	while (!predicate()) {
-		if (performance.now() >= deadline) {
-			throw new Error(message);
-		}
-		await new Promise((resolve) => setTimeout(resolve, 5));
-	}
-}
-
-function findBrowserWireRecord(
-	records: readonly IBrowserWireRecord[],
-	connectionIndex: number,
-	origin: IBrowserWireRecord["origin"],
-	kind: string,
-): Readonly<Record<string, unknown>> | undefined {
-	return records.find(
-		(entry) =>
-			entry.connectionIndex === connectionIndex &&
-			entry.origin === origin &&
-			entry.record.kind === kind,
-	)?.record;
-}
-
 export async function runRpcBrowserRoundtrip(): Promise<IBrowserRoundtripResult> {
 	const descriptor = createRemoteServiceDescriptor(IBrowserRpcService, {
 		wireName: "browser.release.v1",
@@ -321,4 +175,150 @@ export async function runRpcBrowserRoundtrip(): Promise<IBrowserRoundtripResult>
 		sameConnectorPeer,
 		shadowListenerCalls,
 	};
+}
+
+interface IBrowserRpcService {
+	add(left: number, right: number): number;
+	wait(signal: AbortSignal): Promise<string>;
+}
+
+interface IBrowserMemoryLink {
+	readonly acceptorIngress: Subject<Uint8Array>;
+	readonly connectorIngress: Subject<Uint8Array>;
+}
+
+interface IBrowserWireRecord {
+	readonly connectionIndex: number;
+	readonly origin: "acceptor" | "connector";
+	readonly record: Readonly<Record<string, unknown>>;
+}
+
+interface IBrowserRoundtripResult {
+	readonly acceptorStatus: string;
+	readonly assimilated: boolean;
+	readonly browserCsprng: boolean;
+	readonly canceledCode: string;
+	readonly connectorStatus: string;
+	readonly initialResult: number;
+	readonly profileV1: boolean;
+	readonly recoveredResult: number;
+	readonly resumeAcceptOmitsToken: boolean;
+	readonly resumeTokenCanonical: boolean;
+	readonly resumeTokenStable: boolean;
+	readonly sameAcceptorPeer: boolean;
+	readonly sameConnectorPeer: boolean;
+	readonly shadowListenerCalls: number;
+}
+
+const base64Url32Pattern = /^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$/u;
+
+const IBrowserRpcService =
+	createServiceIdentifier<IBrowserRpcService>("IBrowserRpcService");
+
+function createBrowserMemoryNetwork(): {
+	readonly acceptorAdapter: IRpcAcceptorAdapter;
+	readonly records: readonly IBrowserWireRecord[];
+	createConnectorAdapter(): IRpcConnectorAdapter;
+	disconnect(connectionIndex: number): void;
+} {
+	const acceptorConnections = new Subject<IRpcConnection>();
+	const decoder = new TextDecoder();
+	const links: IBrowserMemoryLink[] = [];
+	const records: IBrowserWireRecord[] = [];
+
+	return {
+		acceptorAdapter: {
+			connection$: acceptorConnections.asObservable(),
+			async listen(signal) {
+				signal.throwIfAborted();
+			},
+		},
+		createConnectorAdapter() {
+			const connectorConnections = new Subject<IRpcConnection>();
+			return {
+				connection$: connectorConnections.asObservable(),
+				async connect(signal) {
+					signal.throwIfAborted();
+					const connectionIndex = links.length;
+					const connectorIngress = new Subject<Uint8Array>();
+					const acceptorIngress = new Subject<Uint8Array>();
+					const link = { connectorIngress, acceptorIngress };
+					links.push(link);
+					let closed = false;
+					const close = async (): Promise<void> => {
+						if (!closed) {
+							closed = true;
+							connectorIngress.complete();
+							acceptorIngress.complete();
+						}
+					};
+					const createConnection = (
+						messageSource: Subject<Uint8Array>,
+						peerSource: Subject<Uint8Array>,
+						origin: IBrowserWireRecord["origin"],
+					): IRpcConnection => ({
+						message$: messageSource.asObservable(),
+						async send(message) {
+							if (closed) {
+								throw new Error("Browser test Connection is closed.");
+							}
+							const snapshot = message.slice();
+							records.push({
+								connectionIndex,
+								origin,
+								record: JSON.parse(decoder.decode(snapshot)) as Readonly<
+									Record<string, unknown>
+								>,
+							});
+							await Promise.resolve();
+							if (!closed) {
+								peerSource.next(snapshot);
+							}
+						},
+						close,
+					});
+					connectorConnections.next(
+						createConnection(connectorIngress, acceptorIngress, "connector"),
+					);
+					acceptorConnections.next(
+						createConnection(acceptorIngress, connectorIngress, "acceptor"),
+					);
+					connectorConnections.complete();
+				},
+			};
+		},
+		records,
+		disconnect(connectionIndex) {
+			const link = links[connectionIndex];
+			link?.connectorIngress.complete();
+			link?.acceptorIngress.complete();
+		},
+	};
+}
+
+async function waitFor(
+	predicate: () => boolean,
+	message: string,
+): Promise<void> {
+	const deadline = performance.now() + 5_000;
+	while (!predicate()) {
+		if (performance.now() >= deadline) {
+			throw new Error(message);
+		}
+		await new Promise((resolve) => setTimeout(resolve, 5));
+	}
+}
+
+function findBrowserWireRecord(
+	records: readonly IBrowserWireRecord[],
+	connectionIndex: number,
+	origin: IBrowserWireRecord["origin"],
+	kind: string,
+): Readonly<Record<string, unknown>> | undefined {
+	return records.find(
+		(entry) =>
+			entry.connectionIndex === connectionIndex &&
+			entry.origin === origin &&
+			entry.record.kind === kind,
+	)?.record;
 }

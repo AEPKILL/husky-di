@@ -33,10 +33,6 @@ import {
 	rpcApplicationValuesEqual,
 } from "../../src/utils/rpc-application-value.util";
 
-const codec = new RpcCodecImpl();
-const canonicalSessionId = "A".repeat(43);
-const canonicalResumeToken = `${"B".repeat(42)}E`;
-
 interface IBootstrapConnectionHarness {
 	readonly connection: IRpcConnection;
 	readonly responses: Readonly<Record<string, unknown>>[];
@@ -45,6 +41,10 @@ interface IBootstrapConnectionHarness {
 	emit(record: RpcJsonRecord): void;
 	complete(): void;
 }
+
+const codec = new RpcCodecImpl();
+const canonicalSessionId = "A".repeat(43);
+const canonicalResumeToken = `${"B".repeat(42)}E`;
 
 function createPolicy(
 	overrides: Partial<IRpcProtocolRuntimePolicy> = {},

@@ -4,6 +4,21 @@
  * @created 2026-08-19 00:00:00
  */
 
+/** biome-ignore-all assist/source/organizeImports: Type-only exports precede runtime exports per repository top-level declaration order. */
+
+export type {
+	IRpcAcceptorAdapterConformanceFixture,
+	IRpcAdapterConformanceRemote,
+	IRpcConnectorAdapterConformanceFixture,
+	IRpcProtocolConformanceFixture,
+} from "@/conformance/rpc-conformance.interface";
+export type {
+	RpcConformanceCaseResult,
+	RpcConformanceFailure,
+	RpcConformanceOptions,
+	RpcConformanceReport,
+} from "@/conformance/rpc-conformance.type";
+
 /**
  * Stable Protocol case IDs:
  *
@@ -57,17 +72,5 @@ export {
 	runRpcAcceptorAdapterConformance,
 	runRpcConnectorAdapterConformance,
 } from "@/conformance/rpc-adapter-conformance.util";
-export type {
-	IRpcAcceptorAdapterConformanceFixture,
-	IRpcAdapterConformanceRemote,
-	IRpcConnectorAdapterConformanceFixture,
-	IRpcProtocolConformanceFixture,
-} from "@/conformance/rpc-conformance.interface";
-export type {
-	RpcConformanceCaseResult,
-	RpcConformanceFailure,
-	RpcConformanceOptions,
-	RpcConformanceReport,
-} from "@/conformance/rpc-conformance.type";
 export { runRpcProtocolConformance } from "@/conformance/rpc-protocol-conformance.util";
 export { RpcConformanceStatusEnum } from "@/enums/conformance/rpc-conformance-status.enum";

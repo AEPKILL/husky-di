@@ -18,6 +18,11 @@ import {
 	resolve,
 } from "../../src/index";
 
+type BenchResolver = () => number;
+type BenchValue = {
+	readonly value: number;
+};
+
 const RESOLVE_BATCH_SIZE = 1_000_00;
 
 const BENCH_OPTIONS = {
@@ -28,11 +33,6 @@ const BENCH_OPTIONS = {
 };
 
 let _sink = 0;
-
-type BenchResolver = () => number;
-type BenchValue = {
-	readonly value: number;
-};
 
 const IUseValueService = createServiceIdentifier<BenchValue>(
 	"IUseValueBenchService",

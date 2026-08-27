@@ -10,40 +10,6 @@ import type { Group, Material, Mesh, Object3D } from "three";
 import { MeshPhysicalMaterial, MeshStandardMaterial } from "three";
 import type { GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
 
-const HOMEPAGE_HERO_COIN_DISPLAY_ROTATION_SPEED_X = 0.22;
-const HOMEPAGE_HERO_COIN_DISPLAY_ROTATION_SPEED_Y = 0.5;
-const HOMEPAGE_HERO_COIN_DISPLAY_ROTATION_SPEED_Z = 0.08;
-const HOMEPAGE_HERO_COIN_DISPLAY_BASE_TILT_X = 0.24;
-const HOMEPAGE_HERO_COIN_DISPLAY_BASE_TILT_Z = -0.08;
-const HOMEPAGE_HERO_COIN_DISPLAY_SCALE = 1.8;
-const HOMEPAGE_HERO_COIN_INTRO_DURATION_SECONDS = 1.05;
-const HOMEPAGE_HERO_COIN_INTRO_START_SCALE = 1.38;
-const HOMEPAGE_HERO_COIN_INTRO_START_POSITION_Y = 0.24;
-const HOMEPAGE_HERO_COIN_INTRO_START_POSITION_Z = -0.38;
-const HOMEPAGE_HERO_COIN_MATERIAL_METALNESS = 1;
-const HOMEPAGE_HERO_COIN_MATERIAL_ROUGHNESS = 0.18;
-const HOMEPAGE_HERO_COIN_MATERIAL_ENVIRONMENT_INTENSITY = 2.9;
-const HOMEPAGE_HERO_COIN_MATERIAL_CLEARCOAT = 0.55;
-const HOMEPAGE_HERO_COIN_MATERIAL_CLEARCOAT_ROUGHNESS = 0.18;
-
-function isHomepageHeroCoinMesh(node: Object3D): node is Mesh {
-	return "isMesh" in node && node.isMesh === true;
-}
-
-function isHomepageHeroCoinMetalMaterial(
-	material: Material,
-): material is MeshStandardMaterial {
-	return material instanceof MeshStandardMaterial;
-}
-
-function clampHomepageHeroCoinProgress(value: number) {
-	return Math.min(Math.max(value, 0), 1);
-}
-
-function easeOutHomepageHeroCoinCubic(progress: number) {
-	return 1 - (1 - progress) ** 3;
-}
-
 export interface IUseHomepageHeroCoinDisplayAnimationOptions {
 	readonly coinModel: GLTF;
 	readonly onReady?: () => void;
@@ -144,4 +110,38 @@ export function useHomepageHeroCoinDisplayAnimation(
 		] as const,
 		initialScale: HOMEPAGE_HERO_COIN_INTRO_START_SCALE,
 	};
+}
+
+const HOMEPAGE_HERO_COIN_DISPLAY_ROTATION_SPEED_X = 0.22;
+const HOMEPAGE_HERO_COIN_DISPLAY_ROTATION_SPEED_Y = 0.5;
+const HOMEPAGE_HERO_COIN_DISPLAY_ROTATION_SPEED_Z = 0.08;
+const HOMEPAGE_HERO_COIN_DISPLAY_BASE_TILT_X = 0.24;
+const HOMEPAGE_HERO_COIN_DISPLAY_BASE_TILT_Z = -0.08;
+const HOMEPAGE_HERO_COIN_DISPLAY_SCALE = 1.8;
+const HOMEPAGE_HERO_COIN_INTRO_DURATION_SECONDS = 1.05;
+const HOMEPAGE_HERO_COIN_INTRO_START_SCALE = 1.38;
+const HOMEPAGE_HERO_COIN_INTRO_START_POSITION_Y = 0.24;
+const HOMEPAGE_HERO_COIN_INTRO_START_POSITION_Z = -0.38;
+const HOMEPAGE_HERO_COIN_MATERIAL_METALNESS = 1;
+const HOMEPAGE_HERO_COIN_MATERIAL_ROUGHNESS = 0.18;
+const HOMEPAGE_HERO_COIN_MATERIAL_ENVIRONMENT_INTENSITY = 2.9;
+const HOMEPAGE_HERO_COIN_MATERIAL_CLEARCOAT = 0.55;
+const HOMEPAGE_HERO_COIN_MATERIAL_CLEARCOAT_ROUGHNESS = 0.18;
+
+function isHomepageHeroCoinMesh(node: Object3D): node is Mesh {
+	return "isMesh" in node && node.isMesh === true;
+}
+
+function isHomepageHeroCoinMetalMaterial(
+	material: Material,
+): material is MeshStandardMaterial {
+	return material instanceof MeshStandardMaterial;
+}
+
+function clampHomepageHeroCoinProgress(value: number) {
+	return Math.min(Math.max(value, 0), 1);
+}
+
+function easeOutHomepageHeroCoinCubic(progress: number) {
+	return 1 - (1 - progress) ** 3;
 }

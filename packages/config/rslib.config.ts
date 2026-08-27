@@ -6,7 +6,7 @@
 
 import { defineConfig } from "@rslib/core";
 
-const rslibConfiguration = defineConfig({
+export default defineConfig({
 	resolve: {
 		alias: {
 			"@": "./src",
@@ -29,5 +29,3 @@ const rslibConfiguration = defineConfig({
 		},
 	],
 });
-
-export default rslibConfiguration;

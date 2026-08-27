@@ -36,6 +36,13 @@ export const resolveRecordRef: MutableRef<IInternalResolveRecord> = {};
  * Middleware registered here applies to service resolutions across containers
  * created by this package module instance.
  */
+export const middlewareManager: ResolveMiddlewareManagerImpl =
+	new MiddlewareManagerImpl();
+
+export const middleware: ResolveMiddlewareManager = {
+	use: (...middlewares) => middlewareManager.use(...middlewares),
+};
+
 type ResolveMiddlewareManager = IMiddlewareManager<
 	ResolveMiddlewareParams<unknown, ResolveOptions<unknown>>,
 	// biome-ignore lint/suspicious/noExplicitAny: here is a generic type
@@ -47,10 +54,3 @@ type ResolveMiddlewareManagerImpl = MiddlewareManagerImpl<
 	// biome-ignore lint/suspicious/noExplicitAny: here is a generic type
 	any
 >;
-
-export const middlewareManager: ResolveMiddlewareManagerImpl =
-	new MiddlewareManagerImpl();
-
-export const middleware: ResolveMiddlewareManager = {
-	use: (...middlewares) => middlewareManager.use(...middlewares),
-};

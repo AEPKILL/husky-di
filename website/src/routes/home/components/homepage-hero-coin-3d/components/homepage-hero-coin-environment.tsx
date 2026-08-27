@@ -9,8 +9,6 @@ import { useEffect } from "react";
 import { PMREMGenerator } from "three";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 
-const HOMEPAGE_HERO_COIN_ENVIRONMENT_BLUR = 0.06;
-
 export function HomepageHeroCoinEnvironment() {
 	const { gl, scene } = useThree();
 
@@ -36,3 +34,5 @@ export function HomepageHeroCoinEnvironment() {
 
 	return null;
 }
+
+const HOMEPAGE_HERO_COIN_ENVIRONMENT_BLUR = 0.06;

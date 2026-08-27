@@ -11,8 +11,6 @@ import {
 	createSafeIntegerAtMostSchema,
 } from "@/utils/web-socket-schema.util";
 
-const MINIMUM_RPC_MESSAGE_BYTES = 1_048_576;
-
 export function normalizeWebSocketTransportLimits(
 	options: IWebSocketTransportLimitOptions,
 ): IWebSocketTransportLimits {
@@ -63,3 +61,5 @@ export function assertSafeIntegerAtMost(
 		throw new RangeError(`${name} must not exceed ${maximum}.`);
 	}
 }
+
+const MINIMUM_RPC_MESSAGE_BYTES = 1_048_576;

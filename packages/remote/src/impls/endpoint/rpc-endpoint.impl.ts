@@ -20,11 +20,6 @@ import type { IRpcRetainedBytesReservation } from "@/interfaces/protocol/rpc-pro
 import type { IRpcConnection } from "@/interfaces/transport/rpc-connection.interface";
 import { isPositiveSafeInteger, isUint8Array } from "@/utils/type-guard.util";
 
-interface IRpcIngressEntry {
-	readonly message: Uint8Array;
-	reservation?: IRpcRetainedBytesReservation;
-}
-
 /** Owns one exact Physical Connection endpoint and its bounded local work. */
 export class RpcEndpointImpl implements IRpcEndpoint {
 	readonly _connection: IRpcConnection;
@@ -288,4 +283,9 @@ export class RpcEndpointImpl implements IRpcEndpoint {
 		}
 		this._sendProgressExpectedFireAt = 0;
 	}
+}
+
+interface IRpcIngressEntry {
+	readonly message: Uint8Array;
+	reservation?: IRpcRetainedBytesReservation;
 }

@@ -26,6 +26,18 @@ import {
 	createNodeWebSocketConnectorAdapter,
 } from "../src/node";
 
+type ControlledListener = (event: Event) => void;
+
+type ControlledServerListener = (...arguments_: unknown[]) => void;
+
+interface INodePairHarness {
+	readonly server: ReturnType<typeof createServer>;
+	readonly acceptor: ReturnType<typeof createNodeWebSocketAcceptorAdapter>;
+	readonly listenerController: AbortController;
+	readonly accepted: IRpcConnection;
+	readonly connected: IRpcConnection;
+}
+
 afterEach(() => vi.unstubAllGlobals());
 
 describe("Shared Adapter conformance", () => {
@@ -1150,8 +1162,6 @@ describe("Node ws Adapters", () => {
 	});
 });
 
-type ControlledListener = (event: Event) => void;
-
 class ControlledNetworkStatus implements IWebSocketNetworkStatus {
 	private readonly _listeners = new Map<string, Set<ControlledListener>>();
 	online: boolean;
@@ -1293,8 +1303,6 @@ class ConformanceWebSocket extends ControlledWebSocket {
 		this.close();
 	}
 }
-
-type ControlledServerListener = (...arguments_: unknown[]) => void;
 
 class ControlledWebSocketServer {
 	private readonly _listeners = new Map<
@@ -1608,14 +1616,6 @@ async function waitForRawOpen(socket: RawNodeWebSocket): Promise<void> {
 		socket.addEventListener("open", handleOpen);
 		socket.addEventListener("error", handleError);
 	});
-}
-
-interface INodePairHarness {
-	readonly server: ReturnType<typeof createServer>;
-	readonly acceptor: ReturnType<typeof createNodeWebSocketAcceptorAdapter>;
-	readonly listenerController: AbortController;
-	readonly accepted: IRpcConnection;
-	readonly connected: IRpcConnection;
 }
 
 async function openNodePair(): Promise<INodePairHarness> {

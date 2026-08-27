@@ -15,6 +15,8 @@ import { tanstackStart } from "@tanstack/react-start/plugin/vite";
 import viteReact from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 
+export { websiteConfig as default };
+
 const mdxPlugin = {
 	...mdx(),
 	enforce: "pre" as const,
@@ -36,7 +38,7 @@ function getWebsiteBasePath(): string {
 		: `${normalizedBasePath}/`;
 }
 
-export default defineConfig({
+const websiteConfig = defineConfig({
 	base: getWebsiteBasePath(),
 	server: {
 		port: 3000,

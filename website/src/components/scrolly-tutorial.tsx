@@ -23,15 +23,25 @@ import {
 	useScrollyTutorialCodeStepsMap,
 } from "./scrolly-tutorial-code-steps.context";
 
-const CODE_LINE_HEIGHT_PX = 24;
-const CODE_FOCUS_TOP_OFFSET_RATIO = 0.24;
-const PREVIEW_LAYER_TRAVEL_PERCENT = 104;
-const STEP_TITLE_SELECTION_TOP_PX = 48;
-
 export type ScrollyTutorialProps = Readonly<{
 	children: ReactNode;
 	id?: string;
 }>;
+
+export function ScrollyTutorial({ children, id }: ScrollyTutorialProps) {
+	const tutorialSteps = createTutorialSteps(children);
+
+	return (
+		<section className="border-y border-border bg-page-bg text-page-fg" id={id}>
+			<div className="mx-auto max-w-6xl px-6 py-14 md:px-10 md:py-18 xl:py-24">
+				<SelectionProvider className="grid gap-10 xl:grid-cols-[minmax(0,1.08fr)_minmax(23rem,28rem)] xl:gap-16">
+					<ScrollyTutorialPreviewRail steps={tutorialSteps} />
+					<ScrollyTutorialNarrativeRail steps={tutorialSteps} />
+				</SelectionProvider>
+			</div>
+		</section>
+	);
+}
 
 type TutorialPreviewDescriptor =
 	| Readonly<{
@@ -54,26 +64,30 @@ type WithChildrenProps = Readonly<{
 	children?: ReactNode;
 }>;
 
-const PROSE_TAG_NAMES = new Set(["p", "ul", "ol", "blockquote"]);
-
-export function ScrollyTutorial({ children, id }: ScrollyTutorialProps) {
-	const tutorialSteps = createTutorialSteps(children);
-
-	return (
-		<section className="border-y border-border bg-page-bg text-page-fg" id={id}>
-			<div className="mx-auto max-w-6xl px-6 py-14 md:px-10 md:py-18 xl:py-24">
-				<SelectionProvider className="grid gap-10 xl:grid-cols-[minmax(0,1.08fr)_minmax(23rem,28rem)] xl:gap-16">
-					<ScrollyTutorialPreviewRail steps={tutorialSteps} />
-					<ScrollyTutorialNarrativeRail steps={tutorialSteps} />
-				</SelectionProvider>
-			</div>
-		</section>
-	);
-}
-
 type ScrollyTutorialNarrativeRailProps = Readonly<{
 	steps: readonly TutorialStepData[];
 }>;
+
+type ScrollyTutorialPreviewRailProps = Readonly<{
+	steps: readonly TutorialStepData[];
+}>;
+
+type RenderPreviewOptions = Readonly<{
+	descriptor: TutorialPreviewDescriptor;
+	scrollContainerRef: RefObject<HTMLDivElement | null>;
+}>;
+
+type ScrollyTutorialCodePreviewProps = Readonly<{
+	scrollContainerRef: RefObject<HTMLDivElement | null>;
+	stepId: string;
+}>;
+
+const CODE_LINE_HEIGHT_PX = 24;
+const CODE_FOCUS_TOP_OFFSET_RATIO = 0.24;
+const PREVIEW_LAYER_TRAVEL_PERCENT = 104;
+const STEP_TITLE_SELECTION_TOP_PX = 48;
+
+const PROSE_TAG_NAMES = new Set(["p", "ul", "ol", "blockquote"]);
 
 function ScrollyTutorialNarrativeRail({
 	steps,
@@ -140,10 +154,6 @@ function ScrollyTutorialNarrativeRail({
 		</div>
 	);
 }
-
-type ScrollyTutorialPreviewRailProps = Readonly<{
-	steps: readonly TutorialStepData[];
-}>;
 
 function ScrollyTutorialPreviewRail({
 	steps,
@@ -295,11 +305,6 @@ function getVisibleTutorialPreview(
 	return null;
 }
 
-type RenderPreviewOptions = Readonly<{
-	descriptor: TutorialPreviewDescriptor;
-	scrollContainerRef: RefObject<HTMLDivElement | null>;
-}>;
-
 function renderPreview({
 	descriptor,
 	scrollContainerRef,
@@ -315,11 +320,6 @@ function renderPreview({
 		/>
 	);
 }
-
-type ScrollyTutorialCodePreviewProps = Readonly<{
-	scrollContainerRef: RefObject<HTMLDivElement | null>;
-	stepId: string;
-}>;
 
 function ScrollyTutorialCodePreview({
 	scrollContainerRef,

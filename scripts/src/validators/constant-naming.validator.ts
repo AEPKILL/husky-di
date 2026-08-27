@@ -14,8 +14,6 @@ import { CodeStandardRuleIdEnum } from "@/enums/code-standard-rule-id.enum";
 import type { CodeStandardDiagnostic } from "@/types/code-standard-diagnostic.type";
 import { createDiagnostic } from "@/utils/create-diagnostic.util";
 
-const SCREAMING_SNAKE_CASE_REGEX = /^[A-Z][A-Z0-9]*(_[A-Z0-9]+)*$/;
-
 export function validateConstantNaming(
 	relativeFilePath: string,
 	sourceFile: ts.SourceFile,
@@ -62,3 +60,5 @@ export function validateConstantNaming(
 
 	return diagnostics;
 }
+
+const SCREAMING_SNAKE_CASE_REGEX = /^[A-Z][A-Z0-9]*(_[A-Z0-9]+)*$/;

@@ -11,15 +11,65 @@ import type {
 	RpcApplicationValue,
 } from "@/interfaces/protocol/rpc-protocol.interface";
 
-const maximumDepth = 64;
-const maximumStringBytes = 512 * 1024;
-const maximumMemberNameBytes = 256;
-const maximumRecordMembers = 1024;
-const maximumArrayElements = 8192;
-const maximumNodes = 65_536;
-const maximumWeight = 1_000_000;
-const textEncoder = new TextEncoder();
-const applicationSnapshots = new WeakSet<object>();
+/** Produces the Framework-owned immutable Application Value snapshot. */
+export function normalizeRpcApplicationValue(
+	input: unknown,
+): IRpcApplicationSnapshot {
+	return wrapMetaOperationFailure(() => {
+		const normalized = normalizeValue(
+			input,
+			{ ancestors: new Set(), nodes: 0 },
+			1,
+		);
+		const snapshot = Object.freeze({
+			value: normalized.value,
+			weight: normalized.weight,
+		}) as IRpcApplicationSnapshot;
+		applicationSnapshots.add(snapshot);
+		return snapshot;
+	});
+}
+
+/** Produces an arguments snapshot and rejects non-array roots. */
+export function normalizeRpcApplicationArguments(
+	input: unknown,
+): IRpcApplicationArgumentsSnapshot {
+	if (!Array.isArray(input)) {
+		throw new TypeError("RPC arguments must be an Application Value array.");
+	}
+	return normalizeRpcApplicationValue(
+		input,
+	) as IRpcApplicationArgumentsSnapshot;
+}
+
+/** Identifies an opaque snapshot created by this Framework instance. */
+export function isRpcApplicationSnapshot(
+	value: unknown,
+): value is IRpcApplicationSnapshot {
+	return (
+		typeof value === "object" &&
+		value !== null &&
+		applicationSnapshots.has(value)
+	);
+}
+
+/** Identifies a Framework snapshot whose root is an arguments array. */
+export function isRpcApplicationArgumentsSnapshot(
+	value: unknown,
+): value is IRpcApplicationArgumentsSnapshot {
+	return isRpcApplicationSnapshot(value) && Array.isArray(value.value);
+}
+
+/** Compares normalized trees by decoded semantic value. */
+export function rpcApplicationValuesEqual(
+	left: IRpcApplicationSnapshot,
+	right: IRpcApplicationSnapshot,
+): boolean {
+	if (!isRpcApplicationSnapshot(left) || !isRpcApplicationSnapshot(right)) {
+		throw new TypeError("Protocol supplied a forged Application snapshot.");
+	}
+	return valuesEqual(left.value, right.value);
+}
 
 interface NormalizationState {
 	readonly ancestors: Set<object>;
@@ -30,6 +80,16 @@ interface NormalizedValue {
 	readonly value: RpcApplicationValue;
 	readonly weight: number;
 }
+
+const maximumDepth = 64;
+const maximumStringBytes = 512 * 1024;
+const maximumMemberNameBytes = 256;
+const maximumRecordMembers = 1024;
+const maximumArrayElements = 8192;
+const maximumNodes = 65_536;
+const maximumWeight = 1_000_000;
+const textEncoder = new TextEncoder();
+const applicationSnapshots = new WeakSet<object>();
 
 function invalidValue(message: string): never {
 	throw new TypeError(message);
@@ -272,55 +332,6 @@ function wrapMetaOperationFailure<T>(operation: () => T): T {
 	}
 }
 
-/** Produces the Framework-owned immutable Application Value snapshot. */
-export function normalizeRpcApplicationValue(
-	input: unknown,
-): IRpcApplicationSnapshot {
-	return wrapMetaOperationFailure(() => {
-		const normalized = normalizeValue(
-			input,
-			{ ancestors: new Set(), nodes: 0 },
-			1,
-		);
-		const snapshot = Object.freeze({
-			value: normalized.value,
-			weight: normalized.weight,
-		}) as IRpcApplicationSnapshot;
-		applicationSnapshots.add(snapshot);
-		return snapshot;
-	});
-}
-
-/** Produces an arguments snapshot and rejects non-array roots. */
-export function normalizeRpcApplicationArguments(
-	input: unknown,
-): IRpcApplicationArgumentsSnapshot {
-	if (!Array.isArray(input)) {
-		throw new TypeError("RPC arguments must be an Application Value array.");
-	}
-	return normalizeRpcApplicationValue(
-		input,
-	) as IRpcApplicationArgumentsSnapshot;
-}
-
-/** Identifies an opaque snapshot created by this Framework instance. */
-export function isRpcApplicationSnapshot(
-	value: unknown,
-): value is IRpcApplicationSnapshot {
-	return (
-		typeof value === "object" &&
-		value !== null &&
-		applicationSnapshots.has(value)
-	);
-}
-
-/** Identifies a Framework snapshot whose root is an arguments array. */
-export function isRpcApplicationArgumentsSnapshot(
-	value: unknown,
-): value is IRpcApplicationArgumentsSnapshot {
-	return isRpcApplicationSnapshot(value) && Array.isArray(value.value);
-}
-
 function valuesEqual(
 	left: RpcApplicationValue,
 	right: RpcApplicationValue,
@@ -356,15 +367,4 @@ function valuesEqual(
 			Object.hasOwn(rightRecord, key) &&
 			valuesEqual(leftRecord[key], rightRecord[key]),
 	);
-}
-
-/** Compares normalized trees by decoded semantic value. */
-export function rpcApplicationValuesEqual(
-	left: IRpcApplicationSnapshot,
-	right: IRpcApplicationSnapshot,
-): boolean {
-	if (!isRpcApplicationSnapshot(left) || !isRpcApplicationSnapshot(right)) {
-		throw new TypeError("Protocol supplied a forged Application snapshot.");
-	}
-	return valuesEqual(left.value, right.value);
 }

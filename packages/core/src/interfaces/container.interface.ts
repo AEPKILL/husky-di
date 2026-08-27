@@ -99,127 +99,6 @@ export type ResolveOptions<T> = {
 	);
 
 /**
- * Resolve reference mode options.
- *
- * @remarks
- * `dynamic` and `ref` are mutually exclusive. Use `dynamic` to re-resolve on
- * each access, or use `ref` to lazily resolve once and cache the result.
- *
- * @internal
- */
-type ResolveReferenceOptions =
-	| {
-			/**
-			 * Whether to return a dynamic reference that re-resolves on each access.
-			 *
-			 * @remarks
-			 * **Warning**: Avoid using this option unless absolutely necessary.
-			 * Setting this option creates an `InstanceDynamicRefImpl` instance that maintains
-			 * a closure over the resolve record and context, which may lead to memory leaks
-			 * as these references are never released.
-			 *
-			 * This option is mutually exclusive with `ref`.
-			 *
-			 * @default false
-			 */
-			dynamic: true;
-
-			/**
-			 * Whether to return a reference wrapper instead of the instance itself.
-			 *
-			 * @remarks
-			 * This option is mutually exclusive with `dynamic`.
-			 *
-			 * @default false
-			 */
-			ref?: false;
-	  }
-	| {
-			/**
-			 * Whether to return a dynamic reference that re-resolves on each access.
-			 *
-			 * @remarks
-			 * **Warning**: Avoid using this option unless absolutely necessary.
-			 * Setting this option creates an `InstanceDynamicRefImpl` instance that maintains
-			 * a closure over the resolve record and context, which may lead to memory leaks
-			 * as these references are never released.
-			 *
-			 * This option is mutually exclusive with `ref`.
-			 *
-			 * @default false
-			 */
-			dynamic?: false;
-
-			/**
-			 * Whether to return a reference wrapper instead of the instance itself.
-			 *
-			 * @remarks
-			 * When true, returns a `Ref<T>` that allows lazy access to the service instance.
-			 * Useful for breaking circular dependencies or deferring resolution.
-			 *
-			 * This option is mutually exclusive with `dynamic`.
-			 *
-			 * @default false
-			 */
-			ref?: boolean;
-	  };
-
-/**
- * Determines whether the resolved type should be optional (possibly undefined).
- *
- * @remarks
- * Returns `T | undefined` when options specify `optional: true` without a default value,
- * otherwise returns `T` directly.
- *
- * @typeParam T - The service instance type (may be an array if multiple: true)
- * @typeParam O - The resolve options type
- *
- * @internal
- */
-type ResolveOptionalType<T, O extends ResolveOptions<T>> = O extends {
-	multiple: true;
-}
-	? T[]
-	: O extends {
-				optional: true;
-			}
-		? O extends { defaultValue: infer D }
-			? undefined extends D
-				? T | undefined
-				: T
-			: T | undefined
-		: T;
-
-/**
- * Infers the single-registration result seen by resolve middleware.
- *
- * @internal
- */
-type ResolveMiddlewareInstance<T, O extends ResolveOptions<T>> = O extends {
-	multiple: true;
-}
-	? T
-	: ResolveOptionalType<T, O>;
-
-/**
- * Determines whether the resolved type should be wrapped in a Ref.
- *
- * @remarks
- * Returns `Ref<T>` when options specify `ref: true` or `dynamic: true`,
- * otherwise returns `T` directly.
- *
- * @typeParam T - The service instance type
- * @typeParam O - The resolve options type
- *
- * @internal
- */
-type ResolveRefType<T, O extends ResolveOptions<any>> = O extends
-	| { ref: true }
-	| { dynamic: true }
-	? Ref<T>
-	: T;
-
-/**
  * Infers the final resolved type based on the provided resolve options.
  *
  * @remarks
@@ -641,3 +520,124 @@ export interface IContainer
 		IContainerHierarchy {}
 
 export const IContainer = createServiceIdentifier<IContainer>("IContainer");
+
+/**
+ * Resolve reference mode options.
+ *
+ * @remarks
+ * `dynamic` and `ref` are mutually exclusive. Use `dynamic` to re-resolve on
+ * each access, or use `ref` to lazily resolve once and cache the result.
+ *
+ * @internal
+ */
+type ResolveReferenceOptions =
+	| {
+			/**
+			 * Whether to return a dynamic reference that re-resolves on each access.
+			 *
+			 * @remarks
+			 * **Warning**: Avoid using this option unless absolutely necessary.
+			 * Setting this option creates an `InstanceDynamicRefImpl` instance that maintains
+			 * a closure over the resolve record and context, which may lead to memory leaks
+			 * as these references are never released.
+			 *
+			 * This option is mutually exclusive with `ref`.
+			 *
+			 * @default false
+			 */
+			dynamic: true;
+
+			/**
+			 * Whether to return a reference wrapper instead of the instance itself.
+			 *
+			 * @remarks
+			 * This option is mutually exclusive with `dynamic`.
+			 *
+			 * @default false
+			 */
+			ref?: false;
+	  }
+	| {
+			/**
+			 * Whether to return a dynamic reference that re-resolves on each access.
+			 *
+			 * @remarks
+			 * **Warning**: Avoid using this option unless absolutely necessary.
+			 * Setting this option creates an `InstanceDynamicRefImpl` instance that maintains
+			 * a closure over the resolve record and context, which may lead to memory leaks
+			 * as these references are never released.
+			 *
+			 * This option is mutually exclusive with `ref`.
+			 *
+			 * @default false
+			 */
+			dynamic?: false;
+
+			/**
+			 * Whether to return a reference wrapper instead of the instance itself.
+			 *
+			 * @remarks
+			 * When true, returns a `Ref<T>` that allows lazy access to the service instance.
+			 * Useful for breaking circular dependencies or deferring resolution.
+			 *
+			 * This option is mutually exclusive with `dynamic`.
+			 *
+			 * @default false
+			 */
+			ref?: boolean;
+	  };
+
+/**
+ * Determines whether the resolved type should be optional (possibly undefined).
+ *
+ * @remarks
+ * Returns `T | undefined` when options specify `optional: true` without a default value,
+ * otherwise returns `T` directly.
+ *
+ * @typeParam T - The service instance type (may be an array if multiple: true)
+ * @typeParam O - The resolve options type
+ *
+ * @internal
+ */
+type ResolveOptionalType<T, O extends ResolveOptions<T>> = O extends {
+	multiple: true;
+}
+	? T[]
+	: O extends {
+				optional: true;
+			}
+		? O extends { defaultValue: infer D }
+			? undefined extends D
+				? T | undefined
+				: T
+			: T | undefined
+		: T;
+
+/**
+ * Infers the single-registration result seen by resolve middleware.
+ *
+ * @internal
+ */
+type ResolveMiddlewareInstance<T, O extends ResolveOptions<T>> = O extends {
+	multiple: true;
+}
+	? T
+	: ResolveOptionalType<T, O>;
+
+/**
+ * Determines whether the resolved type should be wrapped in a Ref.
+ *
+ * @remarks
+ * Returns `Ref<T>` when options specify `ref: true` or `dynamic: true`,
+ * otherwise returns `T` directly.
+ *
+ * @typeParam T - The service instance type
+ * @typeParam O - The resolve options type
+ *
+ * @internal
+ */
+type ResolveRefType<T, O extends ResolveOptions<any>> = O extends
+	| { ref: true }
+	| { dynamic: true }
+	? Ref<T>
+	: T;

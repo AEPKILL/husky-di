@@ -10,8 +10,6 @@ import type {
 } from "@/conformance/rpc-conformance.type";
 import { RpcConformanceStatusEnum } from "@/enums/conformance/rpc-conformance-status.enum";
 
-const CASE_TIMEOUT_MS = 2_000;
-
 export interface IRpcConformanceCase {
 	readonly caseId: string;
 	run(): void | Promise<void>;
@@ -93,6 +91,8 @@ export function assertRpcConformance(
 		throw new Error(message);
 	}
 }
+
+const CASE_TIMEOUT_MS = 2_000;
 
 function createRpcConformanceFailure(
 	caseId: string,

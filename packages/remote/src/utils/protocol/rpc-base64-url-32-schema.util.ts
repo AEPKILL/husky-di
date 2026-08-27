@@ -6,10 +6,7 @@
 
 import { z } from "zod";
 
-const base64Url32Pattern = /^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$/;
-const base64Url32Length = 43;
-
-export const rpcBase64Url32Schema = z.string().regex(base64Url32Pattern);
+export { rpcBase64Url32Schema };
 
 /** Returns one canonical Base64Url32 value from platform CSPRNG bytes. */
 export function createRpcSecurityCarrier(): string {
@@ -40,3 +37,7 @@ export function rpcSecurityCarriersEqual(left: string, right: string): boolean {
 	}
 	return difference === 0;
 }
+
+const base64Url32Pattern = /^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$/;
+const base64Url32Length = 43;
+const rpcBase64Url32Schema = z.string().regex(base64Url32Pattern);

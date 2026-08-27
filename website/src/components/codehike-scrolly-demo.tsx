@@ -17,6 +17,10 @@ export type CodehikeScrollyDemoProps = Readonly<{
 	steps: readonly ScrollyTutorialStep[];
 }>;
 
+export type CodePanelProps = Readonly<{
+	steps: readonly ScrollyTutorialStep[];
+}>;
+
 export function CodehikeScrollyDemo({ steps }: CodehikeScrollyDemoProps) {
 	return (
 		<section className="min-h-svh bg-page-bg text-page-fg">
@@ -78,10 +82,6 @@ export function CodehikeScrollyDemo({ steps }: CodehikeScrollyDemoProps) {
 		</section>
 	);
 }
-
-export type CodePanelProps = Readonly<{
-	steps: readonly ScrollyTutorialStep[];
-}>;
 
 function CodePanel({ steps }: CodePanelProps) {
 	const [selectedIndex] = useSelectedIndex();

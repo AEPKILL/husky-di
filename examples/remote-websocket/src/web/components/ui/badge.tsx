@@ -9,6 +9,16 @@ import type { ComponentProps } from "react";
 
 import { cn } from "@/web/utils/class-name.util";
 
+export function Badge({
+	className,
+	variant,
+	...props
+}: ComponentProps<"span"> & VariantProps<typeof badgeVariants>) {
+	return (
+		<span className={cn(badgeVariants({ variant }), className)} {...props} />
+	);
+}
+
 const badgeVariants = cva(
 	"inline-flex items-center rounded-full border px-2.5 py-0.5 font-mono text-[0.68rem] font-semibold uppercase tracking-[0.12em]",
 	{
@@ -23,13 +33,3 @@ const badgeVariants = cva(
 		defaultVariants: { variant: "default" },
 	},
 );
-
-export function Badge({
-	className,
-	variant,
-	...props
-}: ComponentProps<"span"> & VariantProps<typeof badgeVariants>) {
-	return (
-		<span className={cn(badgeVariants({ variant }), className)} {...props} />
-	);
-}

@@ -19,20 +19,6 @@ import {
 } from "@/conformance/rpc-conformance.util";
 import type { IRpcConnection } from "@/interfaces/transport/rpc-connection.interface";
 
-const COMPATIBILITY_MESSAGE_BYTES = 1_048_576;
-
-type ConnectorFixture = Awaited<
-	ReturnType<IRpcConnectorAdapterConformanceFixture["create"]>
->;
-type AcceptorFixture = Awaited<
-	ReturnType<IRpcAcceptorAdapterConformanceFixture["create"]>
->;
-type OpenedConnection = {
-	readonly connection: IRpcConnection;
-	readonly remote: IRpcAdapterConformanceRemote;
-	finish(): Promise<void>;
-};
-
 /** Runs the stable Connector Adapter conformance cases documented by `/conformance`. */
 export function runRpcConnectorAdapterConformance(
 	fixture: IRpcConnectorAdapterConformanceFixture,
@@ -116,6 +102,20 @@ export function runRpcAcceptorAdapterConformance(
 		options,
 	);
 }
+
+type ConnectorFixture = Awaited<
+	ReturnType<IRpcConnectorAdapterConformanceFixture["create"]>
+>;
+type AcceptorFixture = Awaited<
+	ReturnType<IRpcAcceptorAdapterConformanceFixture["create"]>
+>;
+type OpenedConnection = {
+	readonly connection: IRpcConnection;
+	readonly remote: IRpcAdapterConformanceRemote;
+	finish(): Promise<void>;
+};
+
+const COMPATIBILITY_MESSAGE_BYTES = 1_048_576;
 
 function createConnectionCases<T>(
 	role: "connector" | "acceptor",

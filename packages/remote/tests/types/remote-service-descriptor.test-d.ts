@@ -34,6 +34,10 @@ interface InvalidService {
 	then(): void;
 }
 
+interface OtherService {
+	add(left: number, right: number): number;
+}
+
 const IValidService = createServiceIdentifier<ValidService>("IValidService");
 const IInvalidService =
 	createServiceIdentifier<InvalidService>("IInvalidService");
@@ -150,10 +154,6 @@ test("RPC-DESC-002 rejects invalid method definitions", () => {
 		},
 	});
 });
-
-interface OtherService {
-	add(left: number, right: number): number;
-}
 
 const IOtherService = createServiceIdentifier<OtherService>("IOtherService");
 const otherDescriptor = createRemoteServiceDescriptor(IOtherService, {

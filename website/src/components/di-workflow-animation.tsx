@@ -9,8 +9,6 @@ import { useAnimationTick } from "@/hooks/use-animation-tick";
 import { cn } from "@/utils/class-name.util";
 import { getDiWorkflowAnimationFrame } from "@/utils/di-workflow-animation.utils";
 
-const FRAME_INTERVAL_MS = 95;
-
 export type DiWorkflowAnimationProps = Readonly<{
 	className?: string;
 }>;
@@ -52,3 +50,5 @@ export function DiWorkflowAnimation({ className }: DiWorkflowAnimationProps) {
 		</section>
 	);
 }
+
+const FRAME_INTERVAL_MS = 95;

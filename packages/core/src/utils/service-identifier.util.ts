@@ -18,11 +18,6 @@ import type {
 } from "@/types/service-identifier.type";
 import { assertValidServiceIdentifier } from "@/utils/registration.util";
 
-const serviceIdentifierMetadataRegistry = new Map<
-	ServiceIdentifier<unknown>,
-	unknown
->();
-
 /**
  * Options for creating a service identifier.
  *
@@ -150,3 +145,8 @@ export function getServiceIdentifierName(
 
 	return serviceIdentifier;
 }
+
+const serviceIdentifierMetadataRegistry = new Map<
+	ServiceIdentifier<unknown>,
+	unknown
+>();

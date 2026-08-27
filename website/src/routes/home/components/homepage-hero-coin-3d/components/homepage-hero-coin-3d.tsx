@@ -13,8 +13,6 @@ import styles from "../../../styles/homepage.module.css";
 import { useHomepageHeroCoinSceneVisibility } from "../hooks/use-homepage-hero-coin-scene-visibility";
 import { HomepageHeroCoinScene } from "./homepage-hero-coin-scene";
 
-const HOMEPAGE_HERO_COIN_TONE_MAPPING_EXPOSURE = 1.15;
-
 export function HomepageHeroCoin3d() {
 	const { handleSceneReady, isSceneVisible } =
 		useHomepageHeroCoinSceneVisibility();
@@ -44,3 +42,5 @@ export function HomepageHeroCoin3d() {
 		</div>
 	);
 }
+
+const HOMEPAGE_HERO_COIN_TONE_MAPPING_EXPOSURE = 1.15;

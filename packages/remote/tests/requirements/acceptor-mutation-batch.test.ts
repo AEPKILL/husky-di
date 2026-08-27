@@ -31,16 +31,16 @@ interface BatchService {
 	wait(): Promise<string>;
 }
 
+interface AcceptorHarness {
+	readonly acceptor: IRpcAcceptor;
+	readonly host: IRpcProtocolAcceptorHost;
+}
+
 const IBatchService = createServiceIdentifier<BatchService>("IBatchService");
 const batchDescriptor = createRemoteServiceDescriptor(IBatchService, {
 	wireName: "example.acceptor-batch.v1",
 	methods: { wait: true },
 });
-
-interface AcceptorHarness {
-	readonly acceptor: IRpcAcceptor;
-	readonly host: IRpcProtocolAcceptorHost;
-}
 
 function createAcceptorHarness(
 	options: {

@@ -14,15 +14,6 @@ import { DecoratorException } from "@/exceptions/decorator.exception";
 import { injectionMetadataMap } from "@/shared/instances";
 import type { InjectionMetadata } from "@/types/injection-metadata.type";
 
-const NON_CLASS_PARAMETER_TYPES = new Set<unknown>([
-	String,
-	Number,
-	Boolean,
-	BigInt,
-	Symbol,
-	Object,
-]);
-
 /**
  * @description
  * Mark a class as an injectable class
@@ -78,3 +69,12 @@ export const injectable: () => ClassDecorator = () =>
 
 		injectionMetadataMap.set(target, metadata);
 	}) as ClassDecorator;
+
+const NON_CLASS_PARAMETER_TYPES = new Set<unknown>([
+	String,
+	Number,
+	Boolean,
+	BigInt,
+	Symbol,
+	Object,
+]);

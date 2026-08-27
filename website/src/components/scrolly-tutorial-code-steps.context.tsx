@@ -8,11 +8,6 @@
 import { createContext, type ReactNode, useContext } from "react";
 import type { ScrollyTutorialStep } from "@/types/scrolly-tutorial-step.type";
 
-type ScrollyTutorialCodeStepsMap = ReadonlyMap<string, ScrollyTutorialStep>;
-
-const ScrollyTutorialCodeStepsContext =
-	createContext<ScrollyTutorialCodeStepsMap | null>(null);
-
 export type ScrollyTutorialCodeStepsProviderProps = Readonly<{
 	children: ReactNode;
 	steps: readonly ScrollyTutorialStep[];
@@ -55,6 +50,11 @@ export function useScrollyTutorialCodeStepsMap(): ScrollyTutorialCodeStepsMap {
 
 	return codeSteps;
 }
+
+type ScrollyTutorialCodeStepsMap = ReadonlyMap<string, ScrollyTutorialStep>;
+
+const ScrollyTutorialCodeStepsContext =
+	createContext<ScrollyTutorialCodeStepsMap | null>(null);
 
 function createCodeStepsMap(
 	steps: readonly ScrollyTutorialStep[],

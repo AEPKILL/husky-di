@@ -11,15 +11,15 @@ import { RPC_PROFILE } from "../../src/constants/protocol/rpc-profile.const";
 import { RpcDecodePhaseEnum } from "../../src/enums/protocol/rpc-decode-phase.enum";
 import { RpcCodecImpl } from "../../src/impls/protocol/rpc-codec.impl";
 
-const codec = new RpcCodecImpl();
-const encoder = new TextEncoder();
-const base64Url32 = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
-
 type RecordCase = readonly [
 	label: string,
 	phase: RpcDecodePhaseEnum,
 	record: Readonly<Record<string, unknown>>,
 ];
+
+const codec = new RpcCodecImpl();
+const encoder = new TextEncoder();
+const base64Url32 = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
 
 function encodeRecord(record: Readonly<Record<string, unknown>>): Uint8Array {
 	return encoder.encode(JSON.stringify(record));

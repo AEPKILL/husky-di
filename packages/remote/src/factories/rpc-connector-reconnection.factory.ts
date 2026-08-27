@@ -30,6 +30,42 @@ import {
 	isObjectType,
 } from "@/utils/type-guard.util";
 
+/** Creates a cold, single-use Connector Reconnection supervisor. */
+export function createRpcConnectorReconnection(
+	options: CreateRpcConnectorReconnectionOptions,
+): IRpcConnectorReconnection {
+	const record = readRpcClosedOptionsRecord(options, optionKeys, "options");
+	const connector = record.connector;
+	validateConnector(connector);
+	const adapterFactory = record.adapterFactory;
+	if (!isCallable(adapterFactory)) {
+		throw new TypeError("adapterFactory must be a function.");
+	}
+	const policyRecord =
+		record.policy === undefined
+			? Object.freeze(Object.create(null) as Record<string, unknown>)
+			: readRpcClosedOptionsRecord(record.policy, policyKeys, "policy");
+	const retryDelaysMs = snapshotRetryDelays(
+		policyRecord.retryDelaysMs ??
+			DEFAULT_RPC_CONNECTOR_RECONNECTION_RETRY_DELAYS_MS,
+	);
+	const policy = Object.freeze<RpcConnectorReconnectionPolicy>({
+		retryDelaysMs,
+		attemptTimeoutMs:
+			policyRecord.attemptTimeoutMs === undefined
+				? DEFAULT_RPC_CONNECTOR_RECONNECTION_ATTEMPT_TIMEOUT_MS
+				: validateRpcPositiveSafeInteger(
+						policyRecord.attemptTimeoutMs,
+						"attemptTimeoutMs",
+					),
+	});
+	return new RpcConnectorReconnectionImpl(
+		connector,
+		adapterFactory as RpcConnectorAdapterFactory,
+		policy,
+	);
+}
+
 const optionKeys = new Set(["connector", "adapterFactory", "policy"]);
 const policyKeys = new Set(["retryDelaysMs", "attemptTimeoutMs"]);
 
@@ -90,40 +126,4 @@ function snapshotRetryDelays(value: unknown): readonly number[] {
 		snapshot.push(descriptor.value as number);
 	}
 	return Object.freeze(snapshot);
-}
-
-/** Creates a cold, single-use Connector Reconnection supervisor. */
-export function createRpcConnectorReconnection(
-	options: CreateRpcConnectorReconnectionOptions,
-): IRpcConnectorReconnection {
-	const record = readRpcClosedOptionsRecord(options, optionKeys, "options");
-	const connector = record.connector;
-	validateConnector(connector);
-	const adapterFactory = record.adapterFactory;
-	if (!isCallable(adapterFactory)) {
-		throw new TypeError("adapterFactory must be a function.");
-	}
-	const policyRecord =
-		record.policy === undefined
-			? Object.freeze(Object.create(null) as Record<string, unknown>)
-			: readRpcClosedOptionsRecord(record.policy, policyKeys, "policy");
-	const retryDelaysMs = snapshotRetryDelays(
-		policyRecord.retryDelaysMs ??
-			DEFAULT_RPC_CONNECTOR_RECONNECTION_RETRY_DELAYS_MS,
-	);
-	const policy = Object.freeze<RpcConnectorReconnectionPolicy>({
-		retryDelaysMs,
-		attemptTimeoutMs:
-			policyRecord.attemptTimeoutMs === undefined
-				? DEFAULT_RPC_CONNECTOR_RECONNECTION_ATTEMPT_TIMEOUT_MS
-				: validateRpcPositiveSafeInteger(
-						policyRecord.attemptTimeoutMs,
-						"attemptTimeoutMs",
-					),
-	});
-	return new RpcConnectorReconnectionImpl(
-		connector,
-		adapterFactory as RpcConnectorAdapterFactory,
-		policy,
-	);
 }

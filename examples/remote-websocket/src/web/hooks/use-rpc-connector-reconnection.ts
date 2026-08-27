@@ -14,10 +14,6 @@ import {
 import { createWebSocketConnectorAdapter } from "@husky-di/remote-websocket";
 import { useEffect, useState } from "react";
 
-type RpcConnectorReconnectionFactory = (
-	options: CreateRpcConnectorReconnectionOptions,
-) => IRpcConnectorReconnection;
-
 export function useRpcConnectorReconnection(
 	initialConnector: IRpcConnector,
 ): string | undefined {
@@ -64,6 +60,10 @@ export function startRpcConnectorReconnection(
 		await connector.close();
 	};
 }
+
+type RpcConnectorReconnectionFactory = (
+	options: CreateRpcConnectorReconnectionOptions,
+) => IRpcConnectorReconnection;
 
 function createBrowserRpcConnectorAdapter() {
 	const url = new URL("/rpc", window.location.href);

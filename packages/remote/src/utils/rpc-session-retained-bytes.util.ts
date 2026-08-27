@@ -9,15 +9,6 @@ import type {
 	IRpcRetainedBytesReservation,
 } from "@/interfaces/protocol/rpc-protocol.interface";
 
-type RpcSessionRetainedBytesReserve = (
-	bytes: number,
-) => IRpcRetainedBytesReservation | undefined;
-
-const sessionRetainedBytesReserves = new WeakMap<
-	IRpcProtocolSession,
-	RpcSessionRetainedBytesReserve
->();
-
 /** Registers the built-in Session's private aggregate reservation port. */
 export function registerRpcSessionRetainedBytes(
 	session: IRpcProtocolSession,
@@ -50,3 +41,12 @@ export function reserveRpcSessionRetainedBytes(
 	}
 	return reserveOwnerRetainedBytes(bytes);
 }
+
+type RpcSessionRetainedBytesReserve = (
+	bytes: number,
+) => IRpcRetainedBytesReservation | undefined;
+
+const sessionRetainedBytesReserves = new WeakMap<
+	IRpcProtocolSession,
+	RpcSessionRetainedBytesReserve
+>();

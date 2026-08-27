@@ -28,16 +28,6 @@ import type {
 	rpcWireErrorCodeSchema,
 } from "@/utils/protocol/rpc-wire-grammar.util";
 
-type RpcReadonly<TValue> = RpcApplicationValue extends TValue
-	? TValue
-	: TValue extends readonly unknown[]
-		? { readonly [TIndex in keyof TValue]: RpcReadonly<TValue[TIndex]> }
-		: TValue extends object
-			? { readonly [TKey in keyof TValue]: RpcReadonly<TValue[TKey]> }
-			: TValue;
-
-type RpcSchemaOutput<TSchema extends ZodType> = RpcReadonly<output<TSchema>>;
-
 export type RpcJsonRecord = RpcSchemaOutput<typeof rpcJsonRecordSchema>;
 
 export type RpcJsonValue = RpcApplicationValue;
@@ -81,3 +71,13 @@ export type RpcAckRecord = RpcSchemaOutput<typeof rpcAckRecordSchema>;
 export type RpcControlRecord = RpcSchemaOutput<typeof rpcControlRecordSchema>;
 
 export type RpcActiveRecord = RpcSchemaOutput<typeof rpcActiveRecordSchema>;
+
+type RpcReadonly<TValue> = RpcApplicationValue extends TValue
+	? TValue
+	: TValue extends readonly unknown[]
+		? { readonly [TIndex in keyof TValue]: RpcReadonly<TValue[TIndex]> }
+		: TValue extends object
+			? { readonly [TKey in keyof TValue]: RpcReadonly<TValue[TKey]> }
+			: TValue;
+
+type RpcSchemaOutput<TSchema extends ZodType> = RpcReadonly<output<TSchema>>;

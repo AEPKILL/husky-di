@@ -64,115 +64,6 @@ import {
 	unregisterRpcSessionRetainedBytes,
 } from "@/utils/rpc-session-retained-bytes.util";
 
-type RpcSessionImplDependencies = Readonly<{
-	readonly codec: IRpcCodec;
-	readonly counterExhausted?: boolean;
-	readonly retainedBytesLedger: IRpcRetainedBytesLedger;
-}>;
-
-const RPC_SEQUENCE_RESERVE = 512;
-const RPC_LAST_ORDINARY_SEQUENCE =
-	Number.MAX_SAFE_INTEGER - RPC_SEQUENCE_RESERVE;
-
-type RpcSessionCandidateFacts = Readonly<{
-	readonly binding: RpcBindingEpochImpl | undefined;
-	readonly bindingEpoch: number;
-	readonly highestSentSequence: number;
-	readonly peerReceivedThrough: number;
-	readonly receivedThrough: number;
-	readonly recovering: boolean;
-	readonly recoveryDeadline: number | undefined;
-}>;
-
-type RpcBindingCandidateFacts = Readonly<{
-	readonly facts: RpcSessionCandidateFacts;
-	readonly host?: IRpcProtocolSessionHost;
-	readonly kind: "fresh" | "initiator-resume" | "responder-resume";
-	readonly nextBindingEpoch: number;
-	readonly peerReceivedThrough: number;
-	readonly resumeAttempt?: number;
-}>;
-
-type RpcContinuityCandidateFacts = Readonly<{
-	readonly facts: RpcSessionCandidateFacts;
-	readonly peerReceivedThrough?: number;
-	readonly resumeAttempt?: number;
-	readonly source: "initiator" | "responder";
-}>;
-
-type RpcInitiatorResumeFacts = Readonly<{
-	readonly facts: RpcSessionCandidateFacts;
-	readonly resumeAttempt: number;
-}>;
-
-/** Exact authority for one installed Physical Connection Binding Epoch. */
-class RpcBindingEpochImpl {
-	readonly _session: RpcSessionImpl;
-	readonly _endpoint: IRpcEndpoint;
-	_active = false;
-	_activationAttempted = false;
-
-	constructor(session: RpcSessionImpl, endpoint: IRpcEndpoint) {
-		this._session = session;
-		this._endpoint = endpoint;
-	}
-
-	reserveRetainedBytes(
-		bytes: number,
-	): IRpcRetainedBytesReservation | undefined {
-		return this._session._reserveBindingRetainedBytes(this, bytes);
-	}
-
-	receive(bytes: Uint8Array): void {
-		this._session._receiveBinding(this, bytes);
-	}
-
-	failed(reason: RpcEndpointFailureEnum, error?: Error): void {
-		this._session._bindingFailed(this, reason, error);
-	}
-
-	activate(): boolean {
-		if (this._activationAttempted) {
-			return false;
-		}
-		this._activationAttempted = true;
-		return this._session._activateBinding(this);
-	}
-}
-
-interface IRpcInvocationEntry {
-	request?: IRpcProtocolInvocationRequest;
-	readonly sink: IRpcProtocolInvocationSink;
-	readonly pendingCharge: number;
-	retainedBytesReservation?: IRpcRetainedBytesReservation;
-	pendingCharged: boolean;
-	started: boolean;
-	admitted: boolean;
-	publicFinished: boolean;
-	retired: boolean;
-	callId?: string;
-}
-
-interface IRpcIncomingEntry {
-	readonly callId: string;
-	call?: IRpcProtocolIncomingCall;
-	terminalSequence?: number;
-	terminalSelected: boolean;
-}
-
-interface IRpcReplayEntry {
-	readonly message: RpcSemanticMessage;
-	readonly charge: number;
-	readonly retainedBytesReservation?: IRpcRetainedBytesReservation;
-	readonly resourceClass: "ordinary" | "terminal" | "cancel";
-	released: boolean;
-}
-
-interface IRpcQueuedSemantic {
-	readonly message: RpcSemanticMessage;
-	readonly replay: IRpcReplayEntry;
-}
-
 /** Retains one Session Incarnation independently from its current Connection. */
 export class RpcSessionImpl implements IRpcSession {
 	readonly _host: IRpcProtocolHost;
@@ -2155,5 +2046,114 @@ export class RpcSessionImpl implements IRpcSession {
 				}
 			},
 		);
+	}
+}
+
+type RpcSessionImplDependencies = Readonly<{
+	readonly codec: IRpcCodec;
+	readonly counterExhausted?: boolean;
+	readonly retainedBytesLedger: IRpcRetainedBytesLedger;
+}>;
+
+type RpcSessionCandidateFacts = Readonly<{
+	readonly binding: RpcBindingEpochImpl | undefined;
+	readonly bindingEpoch: number;
+	readonly highestSentSequence: number;
+	readonly peerReceivedThrough: number;
+	readonly receivedThrough: number;
+	readonly recovering: boolean;
+	readonly recoveryDeadline: number | undefined;
+}>;
+
+type RpcBindingCandidateFacts = Readonly<{
+	readonly facts: RpcSessionCandidateFacts;
+	readonly host?: IRpcProtocolSessionHost;
+	readonly kind: "fresh" | "initiator-resume" | "responder-resume";
+	readonly nextBindingEpoch: number;
+	readonly peerReceivedThrough: number;
+	readonly resumeAttempt?: number;
+}>;
+
+type RpcContinuityCandidateFacts = Readonly<{
+	readonly facts: RpcSessionCandidateFacts;
+	readonly peerReceivedThrough?: number;
+	readonly resumeAttempt?: number;
+	readonly source: "initiator" | "responder";
+}>;
+
+type RpcInitiatorResumeFacts = Readonly<{
+	readonly facts: RpcSessionCandidateFacts;
+	readonly resumeAttempt: number;
+}>;
+
+interface IRpcInvocationEntry {
+	request?: IRpcProtocolInvocationRequest;
+	readonly sink: IRpcProtocolInvocationSink;
+	readonly pendingCharge: number;
+	retainedBytesReservation?: IRpcRetainedBytesReservation;
+	pendingCharged: boolean;
+	started: boolean;
+	admitted: boolean;
+	publicFinished: boolean;
+	retired: boolean;
+	callId?: string;
+}
+
+interface IRpcIncomingEntry {
+	readonly callId: string;
+	call?: IRpcProtocolIncomingCall;
+	terminalSequence?: number;
+	terminalSelected: boolean;
+}
+
+interface IRpcReplayEntry {
+	readonly message: RpcSemanticMessage;
+	readonly charge: number;
+	readonly retainedBytesReservation?: IRpcRetainedBytesReservation;
+	readonly resourceClass: "ordinary" | "terminal" | "cancel";
+	released: boolean;
+}
+
+interface IRpcQueuedSemantic {
+	readonly message: RpcSemanticMessage;
+	readonly replay: IRpcReplayEntry;
+}
+
+const RPC_SEQUENCE_RESERVE = 512;
+const RPC_LAST_ORDINARY_SEQUENCE =
+	Number.MAX_SAFE_INTEGER - RPC_SEQUENCE_RESERVE;
+
+/** Exact authority for one installed Physical Connection Binding Epoch. */
+class RpcBindingEpochImpl {
+	readonly _session: RpcSessionImpl;
+	readonly _endpoint: IRpcEndpoint;
+	_active = false;
+	_activationAttempted = false;
+
+	constructor(session: RpcSessionImpl, endpoint: IRpcEndpoint) {
+		this._session = session;
+		this._endpoint = endpoint;
+	}
+
+	reserveRetainedBytes(
+		bytes: number,
+	): IRpcRetainedBytesReservation | undefined {
+		return this._session._reserveBindingRetainedBytes(this, bytes);
+	}
+
+	receive(bytes: Uint8Array): void {
+		this._session._receiveBinding(this, bytes);
+	}
+
+	failed(reason: RpcEndpointFailureEnum, error?: Error): void {
+		this._session._bindingFailed(this, reason, error);
+	}
+
+	activate(): boolean {
+		if (this._activationAttempted) {
+			return false;
+		}
+		this._activationAttempted = true;
+		return this._session._activateBinding(this);
 	}
 }

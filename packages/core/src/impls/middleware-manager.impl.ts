@@ -12,11 +12,6 @@ import type {
 	MiddlewareExecutor,
 } from "@/interfaces/middleware.interface";
 
-type MiddlewarePipelineExecutor<Params, Result> = (
-	params: Params,
-	terminal: MiddlewareExecutor<Params, Result>,
-) => Result;
-
 /** Manages and executes the single application-wide middleware pipeline. */
 export class MiddlewareManagerImpl<Params, Result>
 	implements IMiddlewareManager<Params, Result>
@@ -96,3 +91,8 @@ export class MiddlewareManagerImpl<Params, Result>
 		);
 	}
 }
+
+type MiddlewarePipelineExecutor<Params, Result> = (
+	params: Params,
+	terminal: MiddlewareExecutor<Params, Result>,
+) => Result;

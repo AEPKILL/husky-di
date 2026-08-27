@@ -5,46 +5,11 @@
  * @created 2026-06-30 10:57:00
  */
 
-const GRID_COLUMNS = 49;
-const GRID_ROWS = 18;
-const INJECTOR_CENTER_COLUMN = 24;
-const SOURCE_COLUMNS = [8, 24, 40] as const;
-const SOURCE_LEFT_COLUMNS = [4, 20, 36] as const;
-const SLOT_COLUMNS = [20, 24, 28] as const;
-const DEPENDENCY_NAMES = ["A", "B", "C"] as const;
-const TOKEN_TRAIL = ["O", "o", ":", "."] as const;
-const TOKEN_TRAVEL_TICKS = 18;
-const READY_HOLD_TICKS = TOKEN_TRAVEL_TICKS * 4;
-const READY_LABEL = "all satisfied -> run()";
-const READY_BLINK_PHASE_TICKS = 2;
-const READY_BLINK_VISIBILITY = [
-	true,
-	false,
-	true,
-	false,
-	true,
-	false,
-	true,
-	false,
-	true,
-	false,
-	true,
-] as const;
-const TOTAL_CYCLE_TICKS =
-	TOKEN_TRAVEL_TICKS * DEPENDENCY_NAMES.length + READY_HOLD_TICKS;
-
-type Point = readonly [row: number, column: number];
-type Grid = string[][];
-
 export type DiWorkflowAnimationFrame = {
 	ascii: string;
 	isLabelVisible: boolean;
 	label: string;
 };
-
-const INJECTION_PATHS = SOURCE_COLUMNS.map((sourceColumn, index) =>
-	buildInjectionPath(sourceColumn, SLOT_COLUMNS[index]),
-);
 
 export function getDiWorkflowAnimationFrame(
 	tick: number,
@@ -78,6 +43,41 @@ export function getDiWorkflowAnimationFrame(
 		label,
 	};
 }
+
+type Point = readonly [row: number, column: number];
+type Grid = string[][];
+
+const GRID_COLUMNS = 49;
+const GRID_ROWS = 18;
+const INJECTOR_CENTER_COLUMN = 24;
+const SOURCE_COLUMNS = [8, 24, 40] as const;
+const SOURCE_LEFT_COLUMNS = [4, 20, 36] as const;
+const SLOT_COLUMNS = [20, 24, 28] as const;
+const DEPENDENCY_NAMES = ["A", "B", "C"] as const;
+const TOKEN_TRAIL = ["O", "o", ":", "."] as const;
+const TOKEN_TRAVEL_TICKS = 18;
+const READY_HOLD_TICKS = TOKEN_TRAVEL_TICKS * 4;
+const READY_LABEL = "all satisfied -> run()";
+const READY_BLINK_PHASE_TICKS = 2;
+const READY_BLINK_VISIBILITY = [
+	true,
+	false,
+	true,
+	false,
+	true,
+	false,
+	true,
+	false,
+	true,
+	false,
+	true,
+] as const;
+const TOTAL_CYCLE_TICKS =
+	TOKEN_TRAVEL_TICKS * DEPENDENCY_NAMES.length + READY_HOLD_TICKS;
+
+const INJECTION_PATHS = SOURCE_COLUMNS.map((sourceColumn, index) =>
+	buildInjectionPath(sourceColumn, SLOT_COLUMNS[index]),
+);
 
 function createBlankGrid(): Grid {
 	return Array.from({ length: GRID_ROWS }, () =>

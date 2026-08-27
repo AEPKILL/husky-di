@@ -28,8 +28,6 @@ import {
 	rpcApplicationValuesEqual,
 } from "../../src/utils/rpc-application-value.util";
 
-const codec = new RpcCodecImpl();
-
 export interface IRpcCapturedRecord {
 	readonly connectionId: number;
 	readonly direction: "connector" | "acceptor";
@@ -40,11 +38,6 @@ export interface IRpcSendDirective {
 	readonly drop?: boolean;
 	readonly message?: Uint8Array;
 	readonly settlement?: Promise<void>;
-}
-
-interface IRpcTestLink {
-	readonly connectorIngress: Subject<Uint8Array>;
-	readonly acceptorIngress: Subject<Uint8Array>;
 }
 
 export interface IRpcTestNetwork {
@@ -308,3 +301,10 @@ export function createRpcTestNetwork(): IRpcTestNetwork {
 		},
 	};
 }
+
+interface IRpcTestLink {
+	readonly connectorIngress: Subject<Uint8Array>;
+	readonly acceptorIngress: Subject<Uint8Array>;
+}
+
+const codec = new RpcCodecImpl();

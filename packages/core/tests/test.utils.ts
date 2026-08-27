@@ -10,8 +10,6 @@ import {
 	type ResolveMiddleware,
 } from "../src/index";
 
-const middlewareCleanups = new Set<() => void>();
-
 /**
  * Cleans up a container by unregistering all services
  * @param container The container to clean up
@@ -44,3 +42,5 @@ export function clearMiddleware(): void {
 	}
 	middlewareCleanups.clear();
 }
+
+const middlewareCleanups = new Set<() => void>();

@@ -13,10 +13,6 @@ import type { Cleanup } from "@/interfaces/disposable.interface";
 import type { ITypedEvent } from "@/interfaces/typed-event.interface";
 import { createAssertNotDisposed } from "@/utils/disposable.util";
 
-const assertNotDisposed = createAssertNotDisposed("TypedEvent");
-
-type Listener = (...args: unknown[]) => void;
-
 /** Type-safe event emitter with idempotent listener cleanup. */
 export class TypedEventImpl<
 		// biome-ignore lint/suspicious/noExplicitAny: Event signatures may accept any argument types.
@@ -93,3 +89,7 @@ export class TypedEventImpl<
 		this._listeners.get(eventName)?.get(listener)?.();
 	}
 }
+
+type Listener = (...args: unknown[]) => void;
+
+const assertNotDisposed = createAssertNotDisposed("TypedEvent");

@@ -63,239 +63,6 @@ import { installRpcExposure } from "@/utils/rpc-exposure.util";
 import { createRpcFacade } from "@/utils/rpc-facade.util";
 import { isCallable, isNonNullObject } from "@/utils/type-guard.util";
 
-const rpcApplicationSnapshotSchema = z.custom<IRpcApplicationSnapshot>(
-	isRpcApplicationSnapshot,
-);
-const rpcApplicationArgumentsSnapshotSchema =
-	z.custom<IRpcApplicationArgumentsSnapshot>(isRpcApplicationArgumentsSnapshot);
-const rpcOutgoingFailureCodeSchema = z.enum([
-	RpcExceptionCodeEnum.canceled,
-	RpcExceptionCodeEnum.unavailable,
-	RpcExceptionCodeEnum.outcomeUnknown,
-	RpcExceptionCodeEnum.handlerFailed,
-	RpcExceptionCodeEnum.unknownService,
-	RpcExceptionCodeEnum.unknownMethod,
-]);
-const rpcTypeOnlyFieldNamesSchema = z.array(z.literal("type")).length(1);
-const rpcTypeValueFieldNamesSchema = z
-	.array(z.enum(["type", "value"]))
-	.length(2);
-const rpcTypeCodeFieldNamesSchema = z.array(z.enum(["type", "code"])).length(2);
-const rpcIncomingCallFieldNamesSchema = z
-	.array(z.enum(["service", "method", "args"]))
-	.length(3);
-const rpcCallOutcomeSchema = z.union([
-	z.object({
-		fieldNames: rpcTypeOnlyFieldNamesSchema,
-		fields: z.object({
-			type: z.literal(RpcCallTerminalTypeEnum.returnedVoid),
-		}),
-	}),
-	z.object({
-		fieldNames: rpcTypeValueFieldNamesSchema,
-		fields: z.object({
-			type: z.literal(RpcCallTerminalTypeEnum.returned),
-			value: rpcApplicationSnapshotSchema,
-		}),
-	}),
-	z.object({
-		fieldNames: rpcTypeCodeFieldNamesSchema,
-		fields: z.object({
-			type: z.literal(RpcCallTerminalTypeEnum.failed),
-			code: rpcOutgoingFailureCodeSchema,
-		}),
-	}),
-]);
-const rpcHandlerTerminalSchema = z.union([
-	z.object({
-		fieldNames: rpcTypeOnlyFieldNamesSchema,
-		fields: z.object({
-			type: z.enum([
-				RpcCallTerminalTypeEnum.sessionTerminated,
-				RpcCallTerminalTypeEnum.returnedVoid,
-			]),
-		}),
-	}),
-	z.object({
-		fieldNames: rpcTypeValueFieldNamesSchema,
-		fields: z.object({
-			type: z.literal(RpcCallTerminalTypeEnum.returned),
-			value: rpcApplicationSnapshotSchema,
-		}),
-	}),
-	z.object({
-		fieldNames: rpcTypeCodeFieldNamesSchema,
-		fields: z.object({
-			type: z.literal(RpcCallTerminalTypeEnum.failed),
-			code: z.enum([
-				RpcExceptionCodeEnum.canceled,
-				RpcExceptionCodeEnum.handlerFailed,
-			]),
-		}),
-	}),
-]);
-const rpcIncomingCallRequestSchema = z.object({
-	fieldNames: rpcIncomingCallFieldNamesSchema,
-	fields: z.object({
-		service: z.string().min(1),
-		method: z
-			.string()
-			.min(1)
-			.refine((method) => method !== "then"),
-		args: rpcApplicationArgumentsSnapshotSchema,
-	}),
-});
-
-function createRpcProtocolObjectSchema(methodNames: readonly string[]) {
-	return z.unknown().superRefine((value, context) => {
-		if (!isNonNullObject(value)) {
-			context.addIssue({ code: "custom", message: "Expected an object." });
-			return;
-		}
-		const protocolObject = value as object;
-		for (const methodName of methodNames) {
-			if (!isCallable(Reflect.get(protocolObject, methodName))) {
-				context.addIssue({
-					code: "custom",
-					message: `Expected ${methodName} to be callable.`,
-				});
-				return;
-			}
-		}
-	});
-}
-
-const rpcInvocationReservationSchema = createRpcProtocolObjectSchema([
-	"commit",
-	"release",
-]);
-const rpcCommittedInvocationSchema = createRpcProtocolObjectSchema([
-	"start",
-	"cancel",
-]);
-
-function createRpcExpectedUnknownTerminalSchema(code: RpcUnknownCallFailure) {
-	return z.object({
-		fieldNames: rpcTypeCodeFieldNamesSchema,
-		fields: z.object({
-			type: z.literal(RpcCallTerminalTypeEnum.failed),
-			code: z.literal(code),
-		}),
-	});
-}
-
-let nextObservationOrdinal = 0;
-
-function createObservationId(): string {
-	nextObservationOrdinal += 1;
-	return `rpc-observation-${nextObservationOrdinal}`;
-}
-
-function observationDuration(startedAt: number): number {
-	return Math.min(
-		Number.MAX_SAFE_INTEGER,
-		Math.max(0, Math.floor(Date.now() - startedAt)),
-	);
-}
-
-function invokeRpcHandler(
-	route: RpcHandlerRoute,
-	argumentsSnapshot: IRpcApplicationArgumentsSnapshot,
-	abortSignal: AbortSignal,
-): unknown {
-	const invocationArguments: unknown[] = [...argumentsSnapshot.value];
-	if (route.cancelable) {
-		invocationArguments.push(abortSignal);
-	}
-	return Reflect.apply(
-		route.handler,
-		route.implementation,
-		invocationArguments,
-	);
-}
-
-interface IProtocolFieldsSnapshot {
-	readonly fieldNames: readonly string[];
-	readonly fields: Readonly<Record<string, unknown>>;
-}
-
-function readProtocolFields(
-	value: unknown,
-): IProtocolFieldsSnapshot | undefined {
-	try {
-		if (typeof value !== "object" || value === null) {
-			return undefined;
-		}
-		const prototype = Reflect.getPrototypeOf(value);
-		if (prototype !== Object.prototype && prototype !== null) {
-			return undefined;
-		}
-		const fieldNames: string[] = [];
-		const fields = Object.create(null) as Record<string, unknown>;
-		for (const key of Reflect.ownKeys(value)) {
-			if (typeof key !== "string") {
-				return undefined;
-			}
-			const descriptor = Reflect.getOwnPropertyDescriptor(value, key);
-			if (descriptor === undefined || !("value" in descriptor)) {
-				return undefined;
-			}
-			fieldNames.push(key);
-			fields[key] = descriptor.value;
-		}
-		return { fieldNames, fields };
-	} catch {
-		return undefined;
-	}
-}
-
-function isRpcCallOutcome(value: unknown): value is RpcCallOutcome {
-	const fields = readProtocolFields(value);
-	return fields !== undefined && rpcCallOutcomeSchema.safeParse(fields).success;
-}
-
-function isExpectedUnknownTerminal(
-	value: unknown,
-	code: RpcUnknownCallFailure,
-): value is RpcIncomingTerminal {
-	const fields = readProtocolFields(value);
-	return (
-		fields !== undefined &&
-		createRpcExpectedUnknownTerminalSchema(code).safeParse(fields).success
-	);
-}
-
-type RpcHandlerTerminal =
-	| { readonly type: RpcCallTerminalTypeEnum.returnedVoid }
-	| {
-			readonly type: RpcCallTerminalTypeEnum.returned;
-			readonly value: IRpcApplicationSnapshot;
-	  }
-	| {
-			readonly type: RpcCallTerminalTypeEnum.failed;
-			readonly code:
-				| RpcExceptionCodeEnum.canceled
-				| RpcExceptionCodeEnum.handlerFailed;
-	  }
-	| { readonly type: RpcCallTerminalTypeEnum.sessionTerminated };
-
-function isHandlerTerminal(value: unknown): value is RpcHandlerTerminal {
-	const fields = readProtocolFields(value);
-	return (
-		fields !== undefined && rpcHandlerTerminalSchema.safeParse(fields).success
-	);
-}
-
-function isIncomingCallRequest(
-	value: unknown,
-): value is IRpcProtocolIncomingCallRequest {
-	const fields = readProtocolFields(value);
-	return (
-		fields !== undefined &&
-		rpcIncomingCallRequestSchema.safeParse(fields).success
-	);
-}
-
 /** Retains one stable Peer identity and its replay-latest state snapshot. */
 export class RpcPeerImpl implements IRpcPeerRuntime {
 	readonly #stateSubject = new Subject<RpcPeerState>();
@@ -1029,4 +796,237 @@ export class RpcPeerImpl implements IRpcPeerRuntime {
 	get localExposureRegistry(): RpcExposureRegistry {
 		return this.#localExposureRegistry;
 	}
+}
+
+interface IProtocolFieldsSnapshot {
+	readonly fieldNames: readonly string[];
+	readonly fields: Readonly<Record<string, unknown>>;
+}
+
+type RpcHandlerTerminal =
+	| { readonly type: RpcCallTerminalTypeEnum.returnedVoid }
+	| {
+			readonly type: RpcCallTerminalTypeEnum.returned;
+			readonly value: IRpcApplicationSnapshot;
+	  }
+	| {
+			readonly type: RpcCallTerminalTypeEnum.failed;
+			readonly code:
+				| RpcExceptionCodeEnum.canceled
+				| RpcExceptionCodeEnum.handlerFailed;
+	  }
+	| { readonly type: RpcCallTerminalTypeEnum.sessionTerminated };
+
+const rpcApplicationSnapshotSchema = z.custom<IRpcApplicationSnapshot>(
+	isRpcApplicationSnapshot,
+);
+const rpcApplicationArgumentsSnapshotSchema =
+	z.custom<IRpcApplicationArgumentsSnapshot>(isRpcApplicationArgumentsSnapshot);
+const rpcOutgoingFailureCodeSchema = z.enum([
+	RpcExceptionCodeEnum.canceled,
+	RpcExceptionCodeEnum.unavailable,
+	RpcExceptionCodeEnum.outcomeUnknown,
+	RpcExceptionCodeEnum.handlerFailed,
+	RpcExceptionCodeEnum.unknownService,
+	RpcExceptionCodeEnum.unknownMethod,
+]);
+const rpcTypeOnlyFieldNamesSchema = z.array(z.literal("type")).length(1);
+const rpcTypeValueFieldNamesSchema = z
+	.array(z.enum(["type", "value"]))
+	.length(2);
+const rpcTypeCodeFieldNamesSchema = z.array(z.enum(["type", "code"])).length(2);
+const rpcIncomingCallFieldNamesSchema = z
+	.array(z.enum(["service", "method", "args"]))
+	.length(3);
+const rpcCallOutcomeSchema = z.union([
+	z.object({
+		fieldNames: rpcTypeOnlyFieldNamesSchema,
+		fields: z.object({
+			type: z.literal(RpcCallTerminalTypeEnum.returnedVoid),
+		}),
+	}),
+	z.object({
+		fieldNames: rpcTypeValueFieldNamesSchema,
+		fields: z.object({
+			type: z.literal(RpcCallTerminalTypeEnum.returned),
+			value: rpcApplicationSnapshotSchema,
+		}),
+	}),
+	z.object({
+		fieldNames: rpcTypeCodeFieldNamesSchema,
+		fields: z.object({
+			type: z.literal(RpcCallTerminalTypeEnum.failed),
+			code: rpcOutgoingFailureCodeSchema,
+		}),
+	}),
+]);
+const rpcHandlerTerminalSchema = z.union([
+	z.object({
+		fieldNames: rpcTypeOnlyFieldNamesSchema,
+		fields: z.object({
+			type: z.enum([
+				RpcCallTerminalTypeEnum.sessionTerminated,
+				RpcCallTerminalTypeEnum.returnedVoid,
+			]),
+		}),
+	}),
+	z.object({
+		fieldNames: rpcTypeValueFieldNamesSchema,
+		fields: z.object({
+			type: z.literal(RpcCallTerminalTypeEnum.returned),
+			value: rpcApplicationSnapshotSchema,
+		}),
+	}),
+	z.object({
+		fieldNames: rpcTypeCodeFieldNamesSchema,
+		fields: z.object({
+			type: z.literal(RpcCallTerminalTypeEnum.failed),
+			code: z.enum([
+				RpcExceptionCodeEnum.canceled,
+				RpcExceptionCodeEnum.handlerFailed,
+			]),
+		}),
+	}),
+]);
+const rpcIncomingCallRequestSchema = z.object({
+	fieldNames: rpcIncomingCallFieldNamesSchema,
+	fields: z.object({
+		service: z.string().min(1),
+		method: z
+			.string()
+			.min(1)
+			.refine((method) => method !== "then"),
+		args: rpcApplicationArgumentsSnapshotSchema,
+	}),
+});
+
+function createRpcProtocolObjectSchema(methodNames: readonly string[]) {
+	return z.unknown().superRefine((value, context) => {
+		if (!isNonNullObject(value)) {
+			context.addIssue({ code: "custom", message: "Expected an object." });
+			return;
+		}
+		const protocolObject = value as object;
+		for (const methodName of methodNames) {
+			if (!isCallable(Reflect.get(protocolObject, methodName))) {
+				context.addIssue({
+					code: "custom",
+					message: `Expected ${methodName} to be callable.`,
+				});
+				return;
+			}
+		}
+	});
+}
+
+const rpcInvocationReservationSchema = createRpcProtocolObjectSchema([
+	"commit",
+	"release",
+]);
+const rpcCommittedInvocationSchema = createRpcProtocolObjectSchema([
+	"start",
+	"cancel",
+]);
+
+function createRpcExpectedUnknownTerminalSchema(code: RpcUnknownCallFailure) {
+	return z.object({
+		fieldNames: rpcTypeCodeFieldNamesSchema,
+		fields: z.object({
+			type: z.literal(RpcCallTerminalTypeEnum.failed),
+			code: z.literal(code),
+		}),
+	});
+}
+
+let nextObservationOrdinal = 0;
+
+function createObservationId(): string {
+	nextObservationOrdinal += 1;
+	return `rpc-observation-${nextObservationOrdinal}`;
+}
+
+function observationDuration(startedAt: number): number {
+	return Math.min(
+		Number.MAX_SAFE_INTEGER,
+		Math.max(0, Math.floor(Date.now() - startedAt)),
+	);
+}
+
+function invokeRpcHandler(
+	route: RpcHandlerRoute,
+	argumentsSnapshot: IRpcApplicationArgumentsSnapshot,
+	abortSignal: AbortSignal,
+): unknown {
+	const invocationArguments: unknown[] = [...argumentsSnapshot.value];
+	if (route.cancelable) {
+		invocationArguments.push(abortSignal);
+	}
+	return Reflect.apply(
+		route.handler,
+		route.implementation,
+		invocationArguments,
+	);
+}
+
+function readProtocolFields(
+	value: unknown,
+): IProtocolFieldsSnapshot | undefined {
+	try {
+		if (typeof value !== "object" || value === null) {
+			return undefined;
+		}
+		const prototype = Reflect.getPrototypeOf(value);
+		if (prototype !== Object.prototype && prototype !== null) {
+			return undefined;
+		}
+		const fieldNames: string[] = [];
+		const fields = Object.create(null) as Record<string, unknown>;
+		for (const key of Reflect.ownKeys(value)) {
+			if (typeof key !== "string") {
+				return undefined;
+			}
+			const descriptor = Reflect.getOwnPropertyDescriptor(value, key);
+			if (descriptor === undefined || !("value" in descriptor)) {
+				return undefined;
+			}
+			fieldNames.push(key);
+			fields[key] = descriptor.value;
+		}
+		return { fieldNames, fields };
+	} catch {
+		return undefined;
+	}
+}
+
+function isRpcCallOutcome(value: unknown): value is RpcCallOutcome {
+	const fields = readProtocolFields(value);
+	return fields !== undefined && rpcCallOutcomeSchema.safeParse(fields).success;
+}
+
+function isExpectedUnknownTerminal(
+	value: unknown,
+	code: RpcUnknownCallFailure,
+): value is RpcIncomingTerminal {
+	const fields = readProtocolFields(value);
+	return (
+		fields !== undefined &&
+		createRpcExpectedUnknownTerminalSchema(code).safeParse(fields).success
+	);
+}
+
+function isHandlerTerminal(value: unknown): value is RpcHandlerTerminal {
+	const fields = readProtocolFields(value);
+	return (
+		fields !== undefined && rpcHandlerTerminalSchema.safeParse(fields).success
+	);
+}
+
+function isIncomingCallRequest(
+	value: unknown,
+): value is IRpcProtocolIncomingCallRequest {
+	const fields = readProtocolFields(value);
+	return (
+		fields !== undefined &&
+		rpcIncomingCallRequestSchema.safeParse(fields).success
+	);
 }

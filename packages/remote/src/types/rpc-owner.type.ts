@@ -14,14 +14,6 @@ import type {
 	IRpcProtocolRuntimePolicy,
 } from "@/interfaces/protocol/rpc-protocol.interface";
 
-type CreateRpcOwnerImplOptions = Readonly<{
-	readonly policy: IRpcProtocolRuntimePolicy;
-	readonly retainedBytesLedger: IRpcRetainedBytesLedger;
-	readonly custody: IRpcOwnerCustody;
-	readonly handlerScheduler: IRpcHandlerScheduler;
-	readonly createPeer: RpcPeerFactory;
-}>;
-
 export type CreateRpcConnectorImplOptions = CreateRpcOwnerImplOptions &
 	Readonly<{
 		readonly runtime: IRpcProtocolConnectorRuntime;
@@ -31,3 +23,11 @@ export type CreateRpcAcceptorImplOptions = CreateRpcOwnerImplOptions &
 	Readonly<{
 		readonly runtime: IRpcProtocolAcceptorRuntime;
 	}>;
+
+type CreateRpcOwnerImplOptions = Readonly<{
+	readonly policy: IRpcProtocolRuntimePolicy;
+	readonly retainedBytesLedger: IRpcRetainedBytesLedger;
+	readonly custody: IRpcOwnerCustody;
+	readonly handlerScheduler: IRpcHandlerScheduler;
+	readonly createPeer: RpcPeerFactory;
+}>;

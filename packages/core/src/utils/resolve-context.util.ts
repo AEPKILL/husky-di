@@ -12,8 +12,6 @@
 import type { IInternalResolveRecord } from "@/interfaces/resolve-record.interface";
 import type { ResolveContext } from "@/types/resolve-context.type";
 
-const resolveContexts = new WeakMap<IInternalResolveRecord, ResolveContext>();
-
 /**
  * Gets the resolution context associated with a resolve record.
  *
@@ -66,3 +64,5 @@ export function resetResolveContext(
 ): void {
 	resolveContexts.delete(resolveRecord);
 }
+
+const resolveContexts = new WeakMap<IInternalResolveRecord, ResolveContext>();

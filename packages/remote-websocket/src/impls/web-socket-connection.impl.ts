@@ -25,18 +25,6 @@ import {
 	textMessageSchema,
 } from "@/utils/web-socket-schema.util";
 
-interface IWebSocketInboundEntry {
-	readonly size: number;
-	readonly convert: () => Promise<Uint8Array>;
-}
-
-interface IWebSocketPendingSend {
-	readonly message: Uint8Array;
-	readonly promise: Promise<void>;
-	readonly resolve: () => void;
-	readonly reject: (error: Error) => void;
-}
-
 /** Adapts one native WebSocket to the remote Physical Connection seam. */
 export class WebSocketConnectionImpl implements IRpcConnection {
 	private readonly _socket: IWebSocketLike;
@@ -421,4 +409,16 @@ export class WebSocketConnectionImpl implements IRpcConnection {
 		this._pendingSend = undefined;
 		pending?.reject(error);
 	}
+}
+
+interface IWebSocketInboundEntry {
+	readonly size: number;
+	readonly convert: () => Promise<Uint8Array>;
+}
+
+interface IWebSocketPendingSend {
+	readonly message: Uint8Array;
+	readonly promise: Promise<void>;
+	readonly resolve: () => void;
+	readonly reject: (error: Error) => void;
 }

@@ -10,6 +10,11 @@ import type { RpcEventTypeEnum } from "@/enums/rpc-event-type.enum";
 import type { IRpcPeer } from "@/interfaces/peer/rpc-peer.interface";
 import type { RpcPeerCallEvent } from "@/types/peer/rpc-peer-call-event.type";
 
+export type RpcEvent =
+	| RpcTopologyLifecycleEvent
+	| RpcPeerLifecycleEvent
+	| RpcPeerCallEvent;
+
 type RpcPeerLifecycleEvent =
 	| {
 			readonly type:
@@ -76,8 +81,3 @@ type RpcTopologyLifecycleEvent =
 				| RpcCloseReasonEnum.remoteTerminated
 			>;
 	  };
-
-export type RpcEvent =
-	| RpcTopologyLifecycleEvent
-	| RpcPeerLifecycleEvent
-	| RpcPeerCallEvent;

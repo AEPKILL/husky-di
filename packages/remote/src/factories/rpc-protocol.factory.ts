@@ -22,6 +22,16 @@ import type { IRpcProtocol } from "@/interfaces/protocol/rpc-protocol.interface"
 import type { RpcSessionFactory } from "@/interfaces/session/rpc-session.interface";
 import { createRpcSecurityCarrier } from "@/utils/protocol/rpc-base64-url-32-schema.util";
 
+/** Returns the immutable built-in Protocol for independent providers. */
+export function createRpcProtocol(): IRpcProtocol {
+	return protocol;
+}
+
+/** Returns a package-private real-ledger counter exhaustion fixture. */
+export function createRpcCounterExhaustionProtocolForTest(): IRpcProtocol {
+	return createBuiltInRpcProtocol(true);
+}
+
 const codec = Object.freeze(new RpcCodecImpl());
 
 const createEndpoint = (options: CreateRpcEndpointOptions): IRpcEndpoint =>
@@ -63,13 +73,3 @@ function createBuiltInRpcProtocol(counterExhausted: boolean): IRpcProtocol {
 }
 
 const protocol = createBuiltInRpcProtocol(false);
-
-/** Returns the immutable built-in Protocol for independent providers. */
-export function createRpcProtocol(): IRpcProtocol {
-	return protocol;
-}
-
-/** Returns a package-private real-ledger counter exhaustion fixture. */
-export function createRpcCounterExhaustionProtocolForTest(): IRpcProtocol {
-	return createBuiltInRpcProtocol(true);
-}

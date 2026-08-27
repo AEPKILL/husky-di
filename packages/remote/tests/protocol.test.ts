@@ -22,8 +22,6 @@ interface CalculatorService {
 	add(left: number, right: number): number;
 }
 
-afterEach(() => vi.useRealTimers());
-
 interface DeferredCalculatorService {
 	add(left: number, right: number): Promise<number>;
 }
@@ -55,6 +53,8 @@ interface RawRecoveryConnection {
 	readonly responses: Readonly<Record<string, unknown>>[];
 	send(record: Readonly<Record<string, unknown>>): void;
 }
+
+afterEach(() => vi.useRealTimers());
 
 const ICalculatorService =
 	createServiceIdentifier<CalculatorService>("ICalculatorService");

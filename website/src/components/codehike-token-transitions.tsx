@@ -19,6 +19,8 @@ import {
 } from "codehike/utils/token-transitions";
 import { Component } from "react";
 
+export { CODEHIKE_TOKEN_TRANSITIONS };
+
 const MAX_TRANSITION_DURATION_MS = 900;
 
 class CodehikeTokenTransitionsPreWithRef extends Component<CustomPreProps> {
@@ -68,7 +70,7 @@ class CodehikeTokenTransitionsPreWithRef extends Component<CustomPreProps> {
 	}
 }
 
-export const CODEHIKE_TOKEN_TRANSITIONS: AnnotationHandler = {
+const CODEHIKE_TOKEN_TRANSITIONS: AnnotationHandler = {
 	name: "token-transitions",
 	PreWithRef: CodehikeTokenTransitionsPreWithRef,
 	Token: (props) => (

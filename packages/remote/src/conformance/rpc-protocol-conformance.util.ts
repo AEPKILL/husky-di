@@ -53,23 +53,6 @@ import {
 	isNonNullObject,
 } from "@/utils/type-guard.util";
 
-const CONFORMANCE_POLICY: IRpcProtocolRuntimePolicy = Object.freeze({
-	maxSessions: 4,
-	maxHandshakes: 2,
-	maxPendingInvocationsPerSession: 4,
-	maxRetainedBytesPerSession: 4_194_304,
-	maxRetainedBytesTotal: 5_767_168,
-	maxHandlersPerSession: 2,
-	maxHandlersTotal: 4,
-	ackDelayMs: 1,
-	activityProbeIntervalMs: 1_000,
-	silenceTimeoutMs: 2_000,
-	sendProgressTimeoutMs: 1_000,
-	bindingAttemptTimeoutMs: 1_000,
-	recoveryGraceMs: 2_000,
-	shutdownDeadlineMs: 1_000,
-});
-
 /** Runs the stable Protocol conformance cases documented by `/conformance`. */
 export function runRpcProtocolConformance(
 	fixture: IRpcProtocolConformanceFixture,
@@ -353,6 +336,86 @@ export function runRpcProtocolConformance(
 	);
 }
 
+type IncomingDisposition =
+	| { readonly kind: "resource" }
+	| {
+			readonly kind: RpcIncomingCallKindEnum.unknown;
+			readonly code: RpcUnknownCallFailure;
+	  }
+	| {
+			readonly kind: RpcIncomingCallKindEnum.handler;
+			readonly outcome: RpcHandlerOutcome;
+	  };
+
+interface ProtocolHostProbe<
+	THost extends IRpcProtocolConnectorHost | IRpcProtocolAcceptorHost,
+> {
+	readonly host: THost;
+	session: IRpcProtocolSession | undefined;
+	disposition: IncomingDisposition;
+	attachCount: number;
+	reservationCount: number;
+	commitCount: number;
+	releaseCount: number;
+	handlerOutcomeReadCount: number;
+	lastRequest:
+		| {
+				readonly service: string;
+				readonly method: string;
+				readonly args: IRpcApplicationArgumentsSnapshot;
+		  }
+		| undefined;
+	readonly incomingFinishes: RpcIncomingTerminal[];
+	readonly transitions: RpcProtocolSessionTransition[];
+	readonly ownerFaults: Array<{
+		readonly reason: RpcProtocolFaultReason;
+		readonly error: Error;
+	}>;
+	readonly sessionFaults: Array<{
+		readonly reason: RpcProtocolFaultReason;
+		readonly error: Error;
+	}>;
+}
+
+interface TrackedProtocolTransport {
+	connectorConnection: IRpcConnection;
+	acceptorConnection: IRpcConnection;
+	connectorSubscriptions: number;
+	acceptorSubscriptions: number;
+	connectorSends: number;
+	acceptorSends: number;
+	closeCount: number;
+	handoffViolation: boolean;
+	connectorHandoff: boolean;
+	acceptorHandoff: boolean;
+}
+
+interface ProtocolPair {
+	readonly connectorRuntime: IRpcProtocolConnectorRuntime;
+	readonly acceptorRuntime: IRpcProtocolAcceptorRuntime;
+	readonly connectorProbe: ProtocolHostProbe<IRpcProtocolConnectorHost>;
+	readonly acceptorProbe: ProtocolHostProbe<IRpcProtocolAcceptorHost>;
+	readonly connectorSession: IRpcProtocolSession;
+	readonly transport: TrackedProtocolTransport;
+}
+
+const CONFORMANCE_POLICY: IRpcProtocolRuntimePolicy = Object.freeze({
+	maxSessions: 4,
+	maxHandshakes: 2,
+	maxPendingInvocationsPerSession: 4,
+	maxRetainedBytesPerSession: 4_194_304,
+	maxRetainedBytesTotal: 5_767_168,
+	maxHandlersPerSession: 2,
+	maxHandlersTotal: 4,
+	ackDelayMs: 1,
+	activityProbeIntervalMs: 1_000,
+	silenceTimeoutMs: 2_000,
+	sendProgressTimeoutMs: 1_000,
+	bindingAttemptTimeoutMs: 1_000,
+	recoveryGraceMs: 2_000,
+	shutdownDeadlineMs: 1_000,
+});
+
 function createConnectorHostProbe(): {
 	readonly host: IRpcProtocolConnectorHost;
 	readonly calls: number;
@@ -431,69 +494,6 @@ function assertRoleRuntime(value: unknown): void {
 			`Protocol runtime is missing ${member}().`,
 		);
 	}
-}
-
-type IncomingDisposition =
-	| { readonly kind: "resource" }
-	| {
-			readonly kind: RpcIncomingCallKindEnum.unknown;
-			readonly code: RpcUnknownCallFailure;
-	  }
-	| {
-			readonly kind: RpcIncomingCallKindEnum.handler;
-			readonly outcome: RpcHandlerOutcome;
-	  };
-
-interface ProtocolHostProbe<
-	THost extends IRpcProtocolConnectorHost | IRpcProtocolAcceptorHost,
-> {
-	readonly host: THost;
-	session: IRpcProtocolSession | undefined;
-	disposition: IncomingDisposition;
-	attachCount: number;
-	reservationCount: number;
-	commitCount: number;
-	releaseCount: number;
-	handlerOutcomeReadCount: number;
-	lastRequest:
-		| {
-				readonly service: string;
-				readonly method: string;
-				readonly args: IRpcApplicationArgumentsSnapshot;
-		  }
-		| undefined;
-	readonly incomingFinishes: RpcIncomingTerminal[];
-	readonly transitions: RpcProtocolSessionTransition[];
-	readonly ownerFaults: Array<{
-		readonly reason: RpcProtocolFaultReason;
-		readonly error: Error;
-	}>;
-	readonly sessionFaults: Array<{
-		readonly reason: RpcProtocolFaultReason;
-		readonly error: Error;
-	}>;
-}
-
-interface TrackedProtocolTransport {
-	connectorConnection: IRpcConnection;
-	acceptorConnection: IRpcConnection;
-	connectorSubscriptions: number;
-	acceptorSubscriptions: number;
-	connectorSends: number;
-	acceptorSends: number;
-	closeCount: number;
-	handoffViolation: boolean;
-	connectorHandoff: boolean;
-	acceptorHandoff: boolean;
-}
-
-interface ProtocolPair {
-	readonly connectorRuntime: IRpcProtocolConnectorRuntime;
-	readonly acceptorRuntime: IRpcProtocolAcceptorRuntime;
-	readonly connectorProbe: ProtocolHostProbe<IRpcProtocolConnectorHost>;
-	readonly acceptorProbe: ProtocolHostProbe<IRpcProtocolAcceptorHost>;
-	readonly connectorSession: IRpcProtocolSession;
-	readonly transport: TrackedProtocolTransport;
 }
 
 function createIncomingDispositionCases(

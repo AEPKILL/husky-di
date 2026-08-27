@@ -21,8 +21,6 @@ import type {
 	RpcConnectorReconnectionState,
 } from "@/interfaces/reconnection/rpc-connector-reconnection.interface";
 
-const maximumPlatformTimerDelayMs = 2_147_483_647;
-
 /** Supervises the connection-attempt authority of one Connector. */
 export class RpcConnectorReconnectionImpl implements IRpcConnectorReconnection {
 	readonly connector: IRpcConnector;
@@ -416,3 +414,5 @@ export class RpcConnectorReconnectionImpl implements IRpcConnectorReconnection {
 		}
 	}
 }
+
+const maximumPlatformTimerDelayMs = 2_147_483_647;

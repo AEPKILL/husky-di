@@ -56,45 +56,6 @@ import {
 	isUndefined,
 } from "@/utils/type-guard.util";
 
-const connectorConnectOptionKeys = new Set(["adapter", "signal"]);
-
-function isProtocolSession(value: unknown): value is IRpcProtocolSession {
-	if (!isNonNullObject(value)) {
-		return false;
-	}
-	const session = value as object;
-	return (
-		isCallable(Reflect.get(session, "reserveInvocation")) &&
-		isCallable(Reflect.get(session, "forceClose"))
-	);
-}
-
-type RpcConnectorClosedState = Extract<
-	RpcConnectorState,
-	{ readonly status: RpcStateStatusEnum.closed }
->;
-
-type RpcPeerClosedEvent = Extract<
-	RpcEvent,
-	{ readonly type: RpcEventTypeEnum.peerClosed }
->;
-
-interface RpcConnectorAttempt {
-	readonly abortController: AbortController;
-	readonly ownerAbort: Promise<never>;
-	readonly rejectOwnerAbort: (error: Error) => void;
-	readonly startupCleanup: RpcOwnedCleanup;
-	removeExternalAbortListener?: () => void;
-	subscription?: Subscription;
-	connection?: RpcOwnedConnection;
-	provisionalSession?: IRpcProtocolSession;
-	insideHandoff: boolean;
-	attached: boolean;
-	cleanupRequested: boolean;
-	fenced: boolean;
-	ownerAbortError?: Error;
-}
-
 /** Owns one stable Connector peer and one owner-scoped Protocol runtime. */
 export class RpcConnectorImpl implements IRpcConnector {
 	readonly #runtime: IRpcProtocolConnectorRuntime;
@@ -927,4 +888,43 @@ export class RpcConnectorImpl implements IRpcConnector {
 		this.#eventSubject.complete();
 		this.#rejectTermination?.(error);
 	}
+}
+
+type RpcConnectorClosedState = Extract<
+	RpcConnectorState,
+	{ readonly status: RpcStateStatusEnum.closed }
+>;
+
+type RpcPeerClosedEvent = Extract<
+	RpcEvent,
+	{ readonly type: RpcEventTypeEnum.peerClosed }
+>;
+
+interface RpcConnectorAttempt {
+	readonly abortController: AbortController;
+	readonly ownerAbort: Promise<never>;
+	readonly rejectOwnerAbort: (error: Error) => void;
+	readonly startupCleanup: RpcOwnedCleanup;
+	removeExternalAbortListener?: () => void;
+	subscription?: Subscription;
+	connection?: RpcOwnedConnection;
+	provisionalSession?: IRpcProtocolSession;
+	insideHandoff: boolean;
+	attached: boolean;
+	cleanupRequested: boolean;
+	fenced: boolean;
+	ownerAbortError?: Error;
+}
+
+const connectorConnectOptionKeys = new Set(["adapter", "signal"]);
+
+function isProtocolSession(value: unknown): value is IRpcProtocolSession {
+	if (!isNonNullObject(value)) {
+		return false;
+	}
+	const session = value as object;
+	return (
+		isCallable(Reflect.get(session, "reserveInvocation")) &&
+		isCallable(Reflect.get(session, "forceClose"))
+	);
 }

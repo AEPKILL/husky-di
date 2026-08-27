@@ -4,8 +4,6 @@
  * @created 2026-03-29 23:08:00
  */
 
-const commitlintConfiguration = {
+export default {
 	extends: ["@commitlint/config-conventional"],
 };
-
-export default commitlintConfiguration;

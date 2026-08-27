@@ -19,18 +19,6 @@ import type {
 	RpcBindingEpoch,
 } from "@/interfaces/session/rpc-session.interface";
 
-type CreateRpcBindingAttemptImplOptions = CreateRpcBindingAttemptOptions &
-	Readonly<{
-		readonly createEndpoint: (
-			options: CreateRpcEndpointOptions,
-		) => IRpcEndpoint;
-	}>;
-
-type RpcProvisionalSession = Readonly<{
-	readonly session: IRpcSession;
-	readonly discard: () => void;
-}>;
-
 /** Owns one bootstrap attempt until it transfers an exact Binding Epoch. */
 export class RpcBindingAttemptImpl implements IRpcBindingAttempt {
 	readonly task: Promise<void>;
@@ -338,3 +326,15 @@ export class RpcBindingAttemptImpl implements IRpcBindingAttempt {
 		}
 	}
 }
+
+type CreateRpcBindingAttemptImplOptions = CreateRpcBindingAttemptOptions &
+	Readonly<{
+		readonly createEndpoint: (
+			options: CreateRpcEndpointOptions,
+		) => IRpcEndpoint;
+	}>;
+
+type RpcProvisionalSession = Readonly<{
+	readonly session: IRpcSession;
+	readonly discard: () => void;
+}>;

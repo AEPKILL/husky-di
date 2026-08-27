@@ -29,11 +29,6 @@ import {
 } from "@/utils/rpc-application-value.util";
 import { isCallable, isNonNullObject } from "@/utils/type-guard.util";
 
-interface ConstructionGuard {
-	active: boolean;
-	violated: boolean;
-}
-
 export interface RpcProtocolConnectorHostPorts {
 	reserveRetainedBytes(bytes: number): IRpcRetainedBytesReservation | undefined;
 	attachSession(
@@ -48,6 +43,73 @@ export interface RpcProtocolAcceptorHostPorts {
 		session: IRpcProtocolSession,
 	): IRpcProtocolSessionHost | undefined;
 	fault(reason: RpcProtocolFaultReason, error: Error): void;
+}
+
+export function createRpcProtocolConnectorRuntime(
+	protocol: unknown,
+	policy: IRpcProtocolRuntimePolicy,
+	ports: RpcProtocolConnectorHostPorts,
+): IRpcProtocolConnectorRuntime {
+	return wrapProtocolConstruction(() => {
+		validateProtocol(protocol, "createConnector");
+		validateProtocol(protocol, "createAcceptor");
+		const guard: ConstructionGuard = { active: true, violated: false };
+		const host = Object.freeze<IRpcProtocolConnectorHost>({
+			...createHostBase(policy, guard, ports.reserveRetainedBytes, ports.fault),
+			attachSession(
+				session: IRpcProtocolSession,
+			): IRpcProtocolSessionHost | undefined {
+				if (guard.active) {
+					guard.violated = true;
+					return undefined;
+				}
+				return ports.attachSession(session);
+			},
+		});
+		const runtime = protocol.createConnector(host);
+		guard.active = false;
+		if (guard.violated) {
+			throw new TypeError("Protocol mutated its host during construction.");
+		}
+		validateRoleRuntime(runtime, "bind");
+		return runtime;
+	});
+}
+
+export function createRpcProtocolAcceptorRuntime(
+	protocol: unknown,
+	policy: IRpcProtocolRuntimePolicy,
+	ports: RpcProtocolAcceptorHostPorts,
+): IRpcProtocolAcceptorRuntime {
+	return wrapProtocolConstruction(() => {
+		validateProtocol(protocol, "createConnector");
+		validateProtocol(protocol, "createAcceptor");
+		const guard: ConstructionGuard = { active: true, violated: false };
+		const host = Object.freeze<IRpcProtocolAcceptorHost>({
+			...createHostBase(policy, guard, ports.reserveRetainedBytes, ports.fault),
+			admitSession(
+				session: IRpcProtocolSession,
+			): IRpcProtocolSessionHost | undefined {
+				if (guard.active) {
+					guard.violated = true;
+					return undefined;
+				}
+				return ports.admitSession(session);
+			},
+		});
+		const runtime = protocol.createAcceptor(host);
+		guard.active = false;
+		if (guard.violated) {
+			throw new TypeError("Protocol mutated its host during construction.");
+		}
+		validateRoleRuntime(runtime, "accept");
+		return runtime;
+	});
+}
+
+interface ConstructionGuard {
+	active: boolean;
+	violated: boolean;
 }
 
 function constructionViolation(guard: ConstructionGuard): never {
@@ -155,66 +217,4 @@ function wrapProtocolConstruction<T>(operation: () => T): T {
 				: new Error("Protocol construction failed."),
 		);
 	}
-}
-
-export function createRpcProtocolConnectorRuntime(
-	protocol: unknown,
-	policy: IRpcProtocolRuntimePolicy,
-	ports: RpcProtocolConnectorHostPorts,
-): IRpcProtocolConnectorRuntime {
-	return wrapProtocolConstruction(() => {
-		validateProtocol(protocol, "createConnector");
-		validateProtocol(protocol, "createAcceptor");
-		const guard: ConstructionGuard = { active: true, violated: false };
-		const host = Object.freeze<IRpcProtocolConnectorHost>({
-			...createHostBase(policy, guard, ports.reserveRetainedBytes, ports.fault),
-			attachSession(
-				session: IRpcProtocolSession,
-			): IRpcProtocolSessionHost | undefined {
-				if (guard.active) {
-					guard.violated = true;
-					return undefined;
-				}
-				return ports.attachSession(session);
-			},
-		});
-		const runtime = protocol.createConnector(host);
-		guard.active = false;
-		if (guard.violated) {
-			throw new TypeError("Protocol mutated its host during construction.");
-		}
-		validateRoleRuntime(runtime, "bind");
-		return runtime;
-	});
-}
-
-export function createRpcProtocolAcceptorRuntime(
-	protocol: unknown,
-	policy: IRpcProtocolRuntimePolicy,
-	ports: RpcProtocolAcceptorHostPorts,
-): IRpcProtocolAcceptorRuntime {
-	return wrapProtocolConstruction(() => {
-		validateProtocol(protocol, "createConnector");
-		validateProtocol(protocol, "createAcceptor");
-		const guard: ConstructionGuard = { active: true, violated: false };
-		const host = Object.freeze<IRpcProtocolAcceptorHost>({
-			...createHostBase(policy, guard, ports.reserveRetainedBytes, ports.fault),
-			admitSession(
-				session: IRpcProtocolSession,
-			): IRpcProtocolSessionHost | undefined {
-				if (guard.active) {
-					guard.violated = true;
-					return undefined;
-				}
-				return ports.admitSession(session);
-			},
-		});
-		const runtime = protocol.createAcceptor(host);
-		guard.active = false;
-		if (guard.violated) {
-			throw new TypeError("Protocol mutated its host during construction.");
-		}
-		validateRoleRuntime(runtime, "accept");
-		return runtime;
-	});
 }

@@ -13,8 +13,6 @@ import {
 import type { ReactNode } from "react";
 import "@/styles/globals.css";
 
-const faviconHref = `${import.meta.env.BASE_URL}favicon.svg`;
-
 export const Route = createRootRoute({
 	head: () => ({
 		meta: [
@@ -54,6 +52,8 @@ export const Route = createRootRoute({
 	}),
 	component: RootComponent,
 });
+
+const faviconHref = `${import.meta.env.BASE_URL}favicon.svg`;
 
 function RootComponent() {
 	return (

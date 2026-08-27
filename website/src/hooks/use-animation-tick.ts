@@ -6,11 +6,6 @@
 
 import { useEffect, useState } from "react";
 
-type UseAnimationTickOptions = {
-	intervalMs: number;
-	respectReducedMotion?: boolean;
-};
-
 export function useAnimationTick(
 	options: Readonly<UseAnimationTickOptions>,
 ): number {
@@ -34,3 +29,8 @@ export function useAnimationTick(
 
 	return tick;
 }
+
+type UseAnimationTickOptions = {
+	intervalMs: number;
+	respectReducedMotion?: boolean;
+};

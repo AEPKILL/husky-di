@@ -11,6 +11,8 @@ import type { RpcExceptionCodeEnum } from "@/enums/rpc-exception-code.enum";
 import type { IRpcPeer } from "@/interfaces/peer/rpc-peer.interface";
 import type { RpcCallFailure } from "@/interfaces/protocol/rpc-protocol.interface";
 
+export type RpcPeerCallEvent = RpcCallStartedEvent | RpcCallFinishedEvent;
+
 type RpcCallObservationBase = {
 	readonly observationId: string;
 	readonly peer: IRpcPeer;
@@ -83,5 +85,3 @@ type RpcCallFinishedEvent = RpcCallFinishedBase &
 				readonly code: RpcExceptionCodeEnum.unknownMethod;
 		  })
 	);
-
-export type RpcPeerCallEvent = RpcCallStartedEvent | RpcCallFinishedEvent;

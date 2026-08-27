@@ -67,6 +67,7 @@ export class RpcCodecImpl implements IRpcCodec {
 		}
 	}
 }
+type MutableJsonRecord = Record<string, RpcJsonValue>;
 
 const textDecoder = new TextDecoder("utf-8", {
 	fatal: true,
@@ -74,7 +75,6 @@ const textDecoder = new TextDecoder("utf-8", {
 });
 const textEncoder = new TextEncoder();
 const numberPattern = /-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?/y;
-type MutableJsonRecord = Record<string, RpcJsonValue>;
 
 class BoundedJsonParser {
 	readonly _text: string;

@@ -38,6 +38,172 @@ import {
 	RpcProtocolSessionTransitionTypeEnum,
 } from "../../src/protocol";
 
+export function createMemoryProtocolFixture(): IRpcProtocolConformanceFixture {
+	return {
+		protocol: createMemoryProtocol(false),
+		counterExhaustionProtocol: createMemoryProtocol(true),
+		createActiveProtocolFaultMessage: () =>
+			encodeMemoryRecord({ kind: "fault" }),
+	};
+}
+
+export function createMemoryConnectorFixture(): IRpcConnectorAdapterConformanceFixture {
+	return {
+		async create() {
+			const connectionSource = new Subject<IRpcConnection>();
+			const started = Promise.withResolvers<void>();
+			const startup = Promise.withResolvers<void>();
+			let used = false;
+			let handedOff = false;
+			let terminal = false;
+			let signal: AbortSignal | undefined;
+			let abortListener: (() => void) | undefined;
+
+			const adapter: IRpcConnectorAdapter = {
+				connection$: connectionSource.asObservable(),
+				connect(nextSignal) {
+					if (used) {
+						return Promise.reject(
+							new Error("Connector Adapter is single-use."),
+						);
+					}
+					used = true;
+					signal = nextSignal;
+					abortListener = () => {
+						if (handedOff || terminal) {
+							return;
+						}
+						terminal = true;
+						connectionSource.complete();
+						startup.reject(
+							new DOMException("Connection aborted.", "AbortError"),
+						);
+					};
+					nextSignal.addEventListener("abort", abortListener, { once: true });
+					started.resolve(undefined);
+					if (nextSignal.aborted) {
+						abortListener();
+					}
+					return startup.promise;
+				},
+			};
+
+			return {
+				adapter,
+				async handoff(firstMessage) {
+					await started.promise;
+					if (terminal) {
+						throw new Error("Connector startup is terminal.");
+					}
+					const pair = createConnectionPair();
+					connectionSource.next(pair.connection);
+					handedOff = true;
+					if (firstMessage !== undefined) {
+						await pair.remote.sendToAdapter(firstMessage);
+					}
+					terminal = true;
+					connectionSource.complete();
+					startup.resolve(undefined);
+					return pair.remote;
+				},
+				async failStartup(error) {
+					await started.promise;
+					terminal = true;
+					connectionSource.error(error);
+					startup.reject(error);
+				},
+				async cleanup() {
+					if (signal !== undefined && abortListener !== undefined) {
+						signal.removeEventListener("abort", abortListener);
+					}
+				},
+			};
+		},
+	};
+}
+
+export function createMemoryAcceptorFixture(): IRpcAcceptorAdapterConformanceFixture {
+	return {
+		async create() {
+			const connectionSource = new Subject<IRpcConnection>();
+			const started = Promise.withResolvers<void>();
+			const startup = Promise.withResolvers<void>();
+			let used = false;
+			let ready = false;
+			let terminal = false;
+			let signal: AbortSignal | undefined;
+			let abortListener: (() => void) | undefined;
+
+			const adapter: IRpcAcceptorAdapter = {
+				connection$: connectionSource.asObservable(),
+				listen(nextSignal) {
+					if (used) {
+						return Promise.reject(new Error("Acceptor Adapter is single-use."));
+					}
+					used = true;
+					signal = nextSignal;
+					abortListener = () => {
+						if (terminal) {
+							return;
+						}
+						terminal = true;
+						connectionSource.complete();
+						if (!ready) {
+							startup.reject(
+								new DOMException("Listener aborted.", "AbortError"),
+							);
+						}
+					};
+					nextSignal.addEventListener("abort", abortListener, { once: true });
+					started.resolve(undefined);
+					if (nextSignal.aborted) {
+						abortListener();
+					}
+					return startup.promise;
+				},
+			};
+
+			return {
+				adapter,
+				async accept(firstMessage) {
+					await started.promise;
+					const pair = createConnectionPair();
+					connectionSource.next(pair.connection);
+					if (firstMessage !== undefined) {
+						await pair.remote.sendToAdapter(firstMessage);
+					}
+					return pair.remote;
+				},
+				async markReady() {
+					await started.promise;
+					ready = true;
+					startup.resolve(undefined);
+				},
+				async completeListener() {
+					terminal = true;
+					connectionSource.complete();
+					if (!ready) {
+						startup.reject(new Error("Listener completed before ready."));
+					}
+				},
+				async failListener(error) {
+					await started.promise;
+					terminal = true;
+					connectionSource.error(error);
+					if (!ready) {
+						startup.reject(error);
+					}
+				},
+				async cleanup() {
+					if (signal !== undefined && abortListener !== undefined) {
+						signal.removeEventListener("abort", abortListener);
+					}
+				},
+			};
+		},
+	};
+}
+
 interface PendingSend {
 	readonly message: Uint8Array;
 	readonly deferred: PromiseWithResolvers<void>;
@@ -71,15 +237,6 @@ type MemoryProtocolRecord =
 
 const memoryProtocolEncoder = new TextEncoder();
 const memoryProtocolDecoder = new TextDecoder();
-
-export function createMemoryProtocolFixture(): IRpcProtocolConformanceFixture {
-	return {
-		protocol: createMemoryProtocol(false),
-		counterExhaustionProtocol: createMemoryProtocol(true),
-		createActiveProtocolFaultMessage: () =>
-			encodeMemoryRecord({ kind: "fault" }),
-	};
-}
 
 function createMemoryProtocol(counterExhaustion: boolean): IRpcProtocol {
 	return Object.freeze({
@@ -419,163 +576,6 @@ function decodeMemoryRecord(message: Uint8Array): MemoryProtocolRecord {
 	return JSON.parse(
 		memoryProtocolDecoder.decode(message),
 	) as MemoryProtocolRecord;
-}
-
-export function createMemoryConnectorFixture(): IRpcConnectorAdapterConformanceFixture {
-	return {
-		async create() {
-			const connectionSource = new Subject<IRpcConnection>();
-			const started = Promise.withResolvers<void>();
-			const startup = Promise.withResolvers<void>();
-			let used = false;
-			let handedOff = false;
-			let terminal = false;
-			let signal: AbortSignal | undefined;
-			let abortListener: (() => void) | undefined;
-
-			const adapter: IRpcConnectorAdapter = {
-				connection$: connectionSource.asObservable(),
-				connect(nextSignal) {
-					if (used) {
-						return Promise.reject(
-							new Error("Connector Adapter is single-use."),
-						);
-					}
-					used = true;
-					signal = nextSignal;
-					abortListener = () => {
-						if (handedOff || terminal) {
-							return;
-						}
-						terminal = true;
-						connectionSource.complete();
-						startup.reject(
-							new DOMException("Connection aborted.", "AbortError"),
-						);
-					};
-					nextSignal.addEventListener("abort", abortListener, { once: true });
-					started.resolve(undefined);
-					if (nextSignal.aborted) {
-						abortListener();
-					}
-					return startup.promise;
-				},
-			};
-
-			return {
-				adapter,
-				async handoff(firstMessage) {
-					await started.promise;
-					if (terminal) {
-						throw new Error("Connector startup is terminal.");
-					}
-					const pair = createConnectionPair();
-					connectionSource.next(pair.connection);
-					handedOff = true;
-					if (firstMessage !== undefined) {
-						await pair.remote.sendToAdapter(firstMessage);
-					}
-					terminal = true;
-					connectionSource.complete();
-					startup.resolve(undefined);
-					return pair.remote;
-				},
-				async failStartup(error) {
-					await started.promise;
-					terminal = true;
-					connectionSource.error(error);
-					startup.reject(error);
-				},
-				async cleanup() {
-					if (signal !== undefined && abortListener !== undefined) {
-						signal.removeEventListener("abort", abortListener);
-					}
-				},
-			};
-		},
-	};
-}
-
-export function createMemoryAcceptorFixture(): IRpcAcceptorAdapterConformanceFixture {
-	return {
-		async create() {
-			const connectionSource = new Subject<IRpcConnection>();
-			const started = Promise.withResolvers<void>();
-			const startup = Promise.withResolvers<void>();
-			let used = false;
-			let ready = false;
-			let terminal = false;
-			let signal: AbortSignal | undefined;
-			let abortListener: (() => void) | undefined;
-
-			const adapter: IRpcAcceptorAdapter = {
-				connection$: connectionSource.asObservable(),
-				listen(nextSignal) {
-					if (used) {
-						return Promise.reject(new Error("Acceptor Adapter is single-use."));
-					}
-					used = true;
-					signal = nextSignal;
-					abortListener = () => {
-						if (terminal) {
-							return;
-						}
-						terminal = true;
-						connectionSource.complete();
-						if (!ready) {
-							startup.reject(
-								new DOMException("Listener aborted.", "AbortError"),
-							);
-						}
-					};
-					nextSignal.addEventListener("abort", abortListener, { once: true });
-					started.resolve(undefined);
-					if (nextSignal.aborted) {
-						abortListener();
-					}
-					return startup.promise;
-				},
-			};
-
-			return {
-				adapter,
-				async accept(firstMessage) {
-					await started.promise;
-					const pair = createConnectionPair();
-					connectionSource.next(pair.connection);
-					if (firstMessage !== undefined) {
-						await pair.remote.sendToAdapter(firstMessage);
-					}
-					return pair.remote;
-				},
-				async markReady() {
-					await started.promise;
-					ready = true;
-					startup.resolve(undefined);
-				},
-				async completeListener() {
-					terminal = true;
-					connectionSource.complete();
-					if (!ready) {
-						startup.reject(new Error("Listener completed before ready."));
-					}
-				},
-				async failListener(error) {
-					await started.promise;
-					terminal = true;
-					connectionSource.error(error);
-					if (!ready) {
-						startup.reject(error);
-					}
-				},
-				async cleanup() {
-					if (signal !== undefined && abortListener !== undefined) {
-						signal.removeEventListener("abort", abortListener);
-					}
-				},
-			};
-		},
-	};
 }
 
 function createConnectionPair(): ConnectionPair {
