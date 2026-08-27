@@ -85,12 +85,20 @@ provider package can delegate to the same immutable implementation. The package 
 Protocol implementation class, or public default Codec, Handshake, resume-credential, ledger, or scheduler type.
 
 **RPC-PKG-004 — Private validation grammar.** Every package-owned materialized record, tuple, and tagged-union
-grammar **MUST** use package-private Zod schemas, and corresponding internal decoded-record types **MUST** derive
-from schema output. Primitive JavaScript brand checks, such as whether a value is callable, **MAY** use
-package-private native type guards. The package **MUST NOT** publish a built-in Protocol schema, validator,
+grammar **MUST** have one package-private Zod schema as its sole executable data-shape source; the package
+**MUST NOT** maintain a second hand-written field grammar. Each private type that mirrors such a schema **MUST**
+derive from Zod's `output` type (`z.output<typeof schema>` or its imported alias). A type-only facade or readonly
+or semantic-brand wrapper **MAY** layer on that output but **MUST NOT** redeclare its record fields. Focused
+package-private native type guards **MAY** be shared for primitive built-in-brand, safe-integer, and plain-record
+predicates that own no record, tuple, or tagged-union field grammar. Schema failures **MUST** project to the error
+or fault specified for the owning seam; `ZodError` and schema diagnostics **MUST NOT** cross the Codec seam or
+enter a public error or cause. The package **MUST NOT** publish a built-in Protocol schema, validator,
 decoded-record type, data corpus, or any `./wire/*` subpath. Raw-byte parsing, safe Application Value
 normalization, and retained state/security/resource decisions **MUST** remain with their owning modules and
-**MUST NOT** be replaced by ordinary Zod parsing.
+**MUST NOT** be replaced by
+ordinary Zod parsing. `RpcApplicationValue`, Protocol SPI types, and caller-facing domain types that do not
+mirror the built-in decoded tree **MUST** remain owned by their defining interfaces. These validation-ownership
+requirements do not constrain an independent custom Protocol's grammar.
 
 **RPC-PKG-005 — Manifest.** The published manifest **MUST** declare `type: "module"`, public access,
 `engines.node: ">=23.6"`, source maps, and `sideEffects: false`. Runtime dependencies **MUST** be limited to
@@ -2343,22 +2351,21 @@ and secure deployment conditions. Core **MUST NOT** add Adapter-specific special
 
 ## Appendix A. Requirement-to-evidence matrix
 
-The exhaustive one-row-per-ID matrix is [REQUIREMENTS.md](REQUIREMENTS.md). `Status` is `planned` until the
-named evidence exists; publication requires every row to become `verified`. This summary groups the same rows
-only for navigation.
+The exhaustive one-row-per-ID matrix is [REQUIREMENTS.md](REQUIREMENTS.md). `Status` records the current evidence
+audit; publication requires every row to be `verified`. This summary groups the same rows only for navigation.
 
-| Requirement families | Applies to | Minimum evidence | Planned repository location | Status |
+| Requirement families | Applies to | Minimum evidence | Repository evidence location | Status |
 | --- | --- | --- | --- | --- |
-| `RPC-BASE`, `RPC-API`, `RPC-STATE`, `RPC-LIFE` | Framework | RT, TY | `tests/specification.test.ts`, `tests/types/` | planned |
-| `RPC-PKG`, `RPC-RELEASE` | Distribution | PK, BR, TY | `tests/package/`, `tests/browser/` | planned |
-| `RPC-VALUE`, `RPC-DESC`, `RPC-CALL`, `RPC-EVENT` | Framework + all Protocols | RT, TY, PC | `tests/specification.test.ts`, `tests/conformance/` | planned |
-| `RPC-START`, `RPC-TRANSPORT` | Framework + Adapters | AC, RT, IR | `tests/conformance/`, Adapter package tests | planned |
-| `RPC-SPI` | Custom/default Protocol | PC, TY, RT | `tests/conformance/`, `tests/types/` | planned |
-| `RPC-WIRE`, `RPC-ACK`, `RPC-LEDGER` | Default Protocol | RT, RP, BR | `tests/protocol.test.ts`, `tests/protocol/`, `tests/resources/` | planned |
-| `RPC-SESSION`, `RPC-RECOVERY`, `RPC-SEC`, `RPC-VALID` | Default Protocol / secure deployment | RT, RP, BR | `tests/protocol.test.ts`, `tests/recovery/`, `tests/browser/` | planned |
-| `RPC-RESOURCE`, `RPC-POLICY`, `RPC-SCHEDULE`, `RPC-TIME`, `RPC-COUNTER` | Framework + Protocol | RP, RT, PC | `tests/resources/`, `tests/specification.test.ts` | planned |
-| `RPC-SHUTDOWN`, `RPC-CLOSE`, `RPC-CLEANUP` | Framework + Protocol + Adapter | RT, RP | `tests/specification.test.ts`, `tests/recovery/` | planned |
-| `RPC-EVIDENCE`, `RPC-CONFORMANCE`, `RPC-CORPUS` | Distribution | matrix lint, PC, AC, RT, RP, BR | `tests/conformance/`, `tests/protocol/`, `tests/resources/`, `tests/browser/` | planned |
+| `RPC-BASE`, `RPC-API`, `RPC-STATE`, `RPC-LIFE` | Framework | RT, TY | `tests/specification.test.ts`, `tests/types/` | verified |
+| `RPC-PKG`, `RPC-RELEASE` | Distribution | PK, BR, TY | `tests/package/`, `tests/browser/` | verified |
+| `RPC-VALUE`, `RPC-DESC`, `RPC-CALL`, `RPC-EVENT` | Framework + all Protocols | RT, TY, PC | `tests/specification.test.ts`, `tests/conformance/` | verified |
+| `RPC-START`, `RPC-TRANSPORT` | Framework + Adapters | AC, RT, IR | `tests/conformance/`, Adapter package tests | verified |
+| `RPC-SPI` | Custom/default Protocol | PC, TY, RT | `tests/conformance/`, `tests/types/` | verified |
+| `RPC-WIRE`, `RPC-ACK`, `RPC-LEDGER` | Default Protocol | RT, RP, BR | `tests/protocol.test.ts`, `tests/protocol/`, `tests/resources/` | verified |
+| `RPC-SESSION`, `RPC-RECOVERY`, `RPC-SEC`, `RPC-VALID` | Default Protocol / secure deployment | RT, RP, BR | `tests/protocol.test.ts`, `tests/recovery/`, `tests/browser/` | verified |
+| `RPC-RESOURCE`, `RPC-POLICY`, `RPC-SCHEDULE`, `RPC-TIME`, `RPC-COUNTER` | Framework + Protocol | RP, RT, PC | `tests/resources/`, `tests/specification.test.ts` | verified |
+| `RPC-SHUTDOWN`, `RPC-CLOSE`, `RPC-CLEANUP` | Framework + Protocol + Adapter | RT, RP | `tests/specification.test.ts`, `tests/recovery/` | verified |
+| `RPC-EVIDENCE`, `RPC-CONFORMANCE`, `RPC-CORPUS` | Distribution | matrix lint, PC, AC, RT, RP, BR | `tests/conformance/`, `tests/protocol/`, `tests/resources/`, `tests/browser/` | verified |
 
 ## Appendix B. Non-normative implementation boundary
 
@@ -2370,3 +2377,116 @@ three different operations and must not be implemented as aliases.
 Concrete WebSocket factory names, native frame/queue defaults, HTTP-server borrowing, origin/TLS options, and
 Node WebSocket dependency choice belong to the separate `@husky-di/remote-websocket` package specification.
 That package remains subject to this Adapter seam and conformance contract but is not defined here.
+
+The built-in validation implementation should preserve four ownership seams: bounded raw-byte parsing, decoded
+record grammar, Application Value normalization, and retained state/security/resource decisions. The
+package-private Record Grammar is the sole executable owner of decoded record shapes. The Codec selects its
+`bootstrapRequest`, `freshAccept`, `resumeOutcome`, or `active` phase entry; the active entry owns the tagged
+`SemanticMessage` union; downstream modules consume schema-derived records instead of recomposing the grammar.
+Readonly or semantic wrappers may refine those private outputs without copying their fields.
+
+Runtime schemas should live beside the module that owns their invariant. A focused package-private primitive
+may be shared only when multiple owners enforce the same domain rule; unrelated schemas should not accumulate
+in a catch-all catalog, and the implementation should not introduce a Validator interface, class, adapter, or
+registry. The Codec should replace Zod diagnostics with its stable seam-level error or fault. Its encoder accepts
+only internally constructed records and performs serialization plus complete-message-size enforcement without
+rerunning the full inbound validation pipeline.
+
+## Appendix C. Non-normative decision lineage and research rationale
+
+This appendix consolidates the durable context that preceded this specification. Sections 1–14 are the sole
+normative authority; the identifiers below are provenance keys, not live issue-tracker entries. Prototype shapes,
+implementation routes, status fields, discussion logs, and alternatives superseded by the current specification
+have no independent authority. The `Design lineage` column in [REQUIREMENTS.md](REQUIREMENTS.md) uses these keys.
+
+### C.1 Decision lineage
+
+| Lineage | Consolidated subject | Normative home |
+| --- | --- | --- |
+| 01, 04, 19 | Caller surface, Descriptor identity and mapping, final role-specific API | Sections 5–6 and 13 |
+| 02 | Default Protocol candidate evaluation | Sections 2 and 9; rationale in C.2 |
+| 03 | Honest resumable-delivery guarantees | `RPC-BASE`, `RPC-ACK`, `RPC-LEDGER`, and Section 10 |
+| 05, 17 | Deep public Protocol seam and exact implementor SPI | Sections 8 and 14.2 |
+| 06 | Built-in JSON profile, grammar, sequencing, ACK, and evolution | Section 9 and 14.3 |
+| 07 | Physical Connection and role-specific Adapter contract | Sections 6.5, 7, and 14.2 |
+| 08 | Owner lifecycle, state, observation, and resource ownership | Section 6 and Section 13 |
+| 09 | Session incarnation, binding, fencing, and Recovery | Sections 6.2, 10, and 11 |
+| 10, 11 | Application values, Logical Call ledger, cancellation, errors, and terminal races | Sections 4, 6.3–6.4, and 9.3–9.4 |
+| 13 | Ordering, fairness, concurrency, retained budgets, and deadlines | Sections 4, 10, 12, and 13 |
+| 14 | Trust-boundary validation and Recovery security | Sections 11 and 14.3 |
+| 15 | Package surface, verification, conformance, and release contract | Sections 3 and 14 and Appendix A |
+| 16 | Completion audit and handoff into this specification | This appendix; no independent requirement |
+| 18 | Graceful shutdown, forced close, and bounded cleanup convergence | `RPC-WIRE-015` and Section 13 |
+| Zod validation | Private executable grammar and removal of published wire data assets | `RPC-PKG-004`–`006`, `RPC-CORPUS-001`, and Appendix B |
+
+Early caller prototypes informed the final API but did not remain authoritative. In particular, the final
+surface has six-state peers, separate `shutdown()` and `close()` semantics, payload-free observations, and no
+Framework-owned aggregate Acceptor facade. The final Protocol SPI likewise exposes one role-specific deep seam;
+its Codec, Handshake, ACK, credential, ledger, and scheduler decomposition remains private.
+
+### C.2 Why the built-in Protocol is purpose-built
+
+No evaluated open protocol directly combined bidirectional unary calls, cooperative cancellation, Logical
+Session replacement, call-level duplicate suppression, terminal replay, and the small message-oriented Adapter
+seam required here. The closest alternatives each supplied useful precedent but required a new Husky call-state
+profile or a substantially larger stack:
+
+| Candidate | Reused insight | Decisive gap for this profile |
+| --- | --- | --- |
+| [RSocket 1.0](https://github.com/rsocket/rsocket/blob/0f6e5554a5f9abbb1c6c7ec2138d2f3e0ab280e8/Protocol.md) | Bidirectional request-response, resume gates, directional positions, replay, cancellation | Frame continuity does not prove request admission, handler dispatch, or terminal-ledger continuity |
+| [AMQP 1.0 and Link Pairing](https://docs.oasis-open.org/amqp/linkpair/v1.0/linkpair-v1.0.html) | Recoverable deliveries, unsettled state, paired request/response links | Request and response remain separate deliveries; the full Connection/Session/Link stack still needs a Husky call ledger |
+| [JSON-RPC 2.0](https://www.jsonrpc.org/specification), [LSP 3.17](https://github.com/microsoft/language-server-protocol/tree/8b9fab8f0912b694c795d05c1d5e9d357bee0193), and [DAP](https://github.com/microsoft/debug-adapter-protocol/tree/bf8a5d27e8040044b84b863f90916e08925ee811) | Discriminated call grammar, structured errors, initialization phases, unknown-input policy, cooperative cancel | No retained Session, delivery ACK, replay, duplicate suppression, or terminal retention |
+| gRPC, WAMP, Ice, Cap'n Proto, Avro, and Thrift | Mature local RPC, IDL, status, retry, callback, or capability mechanisms | None defines this profile's symmetric in-memory Session incarnation and recoverable in-flight call ledger |
+
+The resulting `husky-di-rpc/1` profile therefore fixes one strict UTF-8 JSON representation rather than exposing
+a Codec matrix. The research also evaluated CBOR/CDDL and machine-readable public grammars; v1 instead keeps the
+executable Zod grammar private because there is no cross-language interoperability commitment. Framing remains
+an Adapter concern, sequence remains distinct from Call Identity, and unknown fields are distinct from unknown
+required message kinds.
+
+The layered wire design draws on the fixed
+[VS Code revision `b6d86f7d`](https://github.com/microsoft/vscode/tree/b6d86f7dea54686892c2efb61118492e199d4e8c):
+`PersistentProtocol` demonstrates cumulative receipt, replay, activity probes, and socket replacement; the
+Remote Agent handshake demonstrates a commit gate before retained-state reuse; Extension Host RPC demonstrates
+bidirectional request/cancel/result/error behavior and the need to reserve `then`. Husky keeps those layers
+separate and adds bounded resource admission, call-level durable disposition, stable fault scopes, and honest
+evidence-loss outcomes.
+
+### C.3 Delivery guarantee rationale
+
+Classic RPC already establishes that communication failure can leave a caller unable to distinguish zero from
+one executions; see Birrell and Nelson,
+[*Implementing Remote Procedure Calls*](https://birrell.org/andrew/papers/ImplementingRPC.pdf). NFSv4.1 shows that
+stronger exactly-once-style replay requires Session-scoped identity, bounded reply slots, retained results, and
+atomic execution/cache placement; see [RFC 8881 §2.10.6](https://www.rfc-editor.org/rfc/rfc8881.html#section-2.10.6).
+RSocket resume positions and TCP ACKs prove lower-layer receipt facts, not application admission or side-effect
+commit; see [RSocket Resuming Operation](https://github.com/rsocket/rsocket/blob/0f6e5554a5f9abbb1c6c7ec2138d2f3e0ab280e8/Protocol.md#resuming-operation)
+and [RFC 9293 §3.4](https://www.rfc-editor.org/rfc/rfc9293.html#section-3.4).
+
+Those distinctions lead directly to `RPC-BASE-001`: the Framework continues one Logical Call only while the
+same retained Session Incarnation, ledger, replay range, and binding authority remain provable. A durable
+receipt can release replay data only when the retained high-watermarks still reject identity reuse. If evidence
+may have been lost after admission, `outcome-unknown` is the honest boundary; a timeout, cancellation, lost
+response, or closed socket cannot be reclassified as Definite Non-Execution. Application-level exactly-once
+effects require a separate durable transaction or idempotency contract.
+
+### C.4 Security and validation rationale
+
+The protected Transport is the fresh trust root.
+[TLS 1.3](https://www.rfc-editor.org/info/rfc8446.html) provides the relevant confidentiality,
+integrity/anti-replay, and responder-authentication model, while Adapter deployment owns certificate or PSK
+policy. [RFC 4648](https://www.rfc-editor.org/info/rfc4648.html) motivates one canonical unpadded base64url
+spelling for the 32-byte Session ID and bearer token. Browser and Node implementations use their shared
+[Web Crypto API](https://www.w3.org/TR/WebCryptoAPI/) CSPRNG surface.
+
+Earlier design notes explored an HMAC/HKDF/JCS transcript proof. That construction is superseded: Sections 9.2,
+10, and 11 define the current stable `resumeToken` bearer model, exact protected-Connection authority, generic
+reject policy, and credential lifetime. The superseded proof fields, signed rejects, JCS preservation rules, and
+published security vectors are not part of `husky-di-rpc/1`.
+
+Zod begins only after bounded raw parsing has preserved the lexical facts ordinary object materialization would
+lose, including duplicate names, malformed UTF-8, trailing data, number spelling, and allocation boundaries.
+Application Value normalization separately inspects untrusted caller objects without invoking getters or
+coercion. Session phase, token authority, sequence/ACK continuity, retained evidence, and capacity remain
+stateful decisions. This separation is why private Zod schemas can be the single executable decoded-shape
+grammar without becoming a general validation framework or a published wire artifact.

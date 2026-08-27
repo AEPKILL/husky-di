@@ -7,9 +7,10 @@ Each normative requirement appears exactly once. Evidence codes are defined in
 `RPC-EVIDENCE-002`. Every `verified` row names a concrete runtime test, type
 probe, package/browser case, or instrumentation selector. A `planned` row is an explicit release
 blocker: an abbreviated test label, partial behavior check, or directory-level
-pointer is not accepted as evidence.
+pointer is not accepted as evidence. Numeric design-lineage keys are non-normative provenance entries defined
+in `SPECIFICATION.md` Appendix C; they are not references to a live issue tracker.
 
-| Requirement | Authority issues | Evidence kind | Evidence reference | Status |
+| Requirement | Design lineage | Evidence kind | Evidence reference | Status |
 | --- | --- | --- | --- | --- |
 | `RPC-BASE-001` | 03, 05 | RT | `RT::packages/remote/tests/specification.test.ts::RPC-BASE-001 RPC-CALL-007 does not retry an admitted identity after its evidence is lost` | verified |
 | `RPC-BASE-002` | 03, 05 | RT | `RT::packages/remote/tests/requirements/framework-requirements.test.ts::RPC-BASE-002 keeps public Observable subscriptions resource-neutral` | verified |
