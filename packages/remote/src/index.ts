@@ -21,10 +21,7 @@ export { createRpcAcceptor } from "@/factories/rpc-acceptor.factory";
 export { createRpcConnector } from "@/factories/rpc-connector.factory";
 export { createRpcConnectorReconnection } from "@/factories/rpc-connector-reconnection.factory";
 export { createRpcProtocol } from "@/factories/rpc-protocol.factory";
-export type {
-	IRpcAcceptor,
-	RpcPeerResult,
-} from "@/interfaces/owner/rpc-acceptor.interface";
+export type { IRpcAcceptor } from "@/interfaces/owner/rpc-acceptor.interface";
 export type { IRpcConnector } from "@/interfaces/owner/rpc-connector.interface";
 export type { IRemoteServiceDescriptor } from "@/interfaces/peer/remote-service-descriptor.interface";
 export type { IRpcPeer } from "@/interfaces/peer/rpc-peer.interface";

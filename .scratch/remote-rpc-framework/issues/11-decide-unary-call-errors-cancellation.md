@@ -195,5 +195,5 @@ Protocol fault。两者都不伪装成 remote call outcome。
   value、Error/cause 或任何 wire/session/call identity；不增加 redactor callback。订阅仍不能修改
   call flow，需要 payload diagnostics 的 application 在自己的 caller/handler 边界记录。
 
-本票不决定 decoded input security、Session-close choreography、Remote Service Group fan-out 或 public
-Protocol Implementor Interface；它们分别留给既有 security、shutdown、group 与 SPI tickets。
+本票不决定 decoded input security、Session-close choreography 或 public Protocol Implementor
+Interface；它们分别留给既有 security、shutdown 与 SPI tickets。

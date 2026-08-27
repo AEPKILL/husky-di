@@ -97,11 +97,10 @@ Outgoing采用 `reserve -> commit(sink) -> start`：
 - `reserveInvocation`只预留 Protocol/Session ordinary capacity，不分配 Call Ordinal、`seq`或调用
   `send()`；`undefined`保持 Definite Non-Execution并由 Framework生成 `unavailable`。
 - Reservation的同步 `commit(sink)`创建 Framework-observable Pending Invocation，但不 send、notify或
-  settle。Group先为全部 children reserve，任一失败则release；全部成功才commit全部 children、提交
-  started observations，最后逐个 `start()`，所以 reentrant subscriber或capacity race不能形成部分
-  fan-out。
-- `IRpcProtocolInvocation`只有 `start()` / `cancel()`；Framework拥有唯一 external AbortSignal listener
-  并向group children fan out cancel，Protocol request不携带 signal。`start()`之后 Protocol才可竞争
+  settle。Framework提交 started observation 后调用 `start()`，所以 reentrant subscriber不能抢在
+  observation之前触发Protocol work。
+- `IRpcProtocolInvocation`只有 `start()` / `cancel()`；Framework拥有 external AbortSignal listener，
+  Protocol request不携带 signal。`start()`之后 Protocol才可竞争
   Outgoing Admission；此前 cancellation仍不制造 wire identity。
 - Outcome不是 Protocol-owned Promise。Framework提供同步 `IRpcProtocolInvocationSink.finish(outcome)`；
   Protocol在任何 Session closed projection前先finish全部相关 sinks，Framework随后按统一 batch发

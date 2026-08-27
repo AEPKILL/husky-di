@@ -30,7 +30,7 @@ WebSocket Adapters.
 - asynchronous proxies inferred from ordinary TypeScript service interfaces
 - Connector and Acceptor Topology Owners
 - bidirectional calls through every connected peer
-- Acceptor fan-out with one result per peer
+- application-owned multi-peer composition from Acceptor snapshots
 - cooperative cancellation with `AbortSignal`
 - explicit recovery over a replacement physical connection
 - replay-latest state and membership Observables
@@ -179,7 +179,7 @@ network I/O. Call `connector.connect({ adapter })`,
 `reconnection.connect()`, or `acceptor.listen(adapter)` when the application is
 ready to transfer ownership of network resources to it.
 
-## Bidirectional Calls And Fan-Out
+## Bidirectional Calls And Explicit Multi-Peer Composition
 
 Every peer can both expose and resolve services. For a reverse call, define a
 second shared Descriptor and expose it through the Connector's stable peer:
@@ -199,23 +199,26 @@ const clientEvents = peer.resolve(remoteClientEvents);
 await clientEvents.changed("session-opened");
 ```
 
-Or it can create a stable group facade and invoke the current eligible peer
-snapshot:
+For multiple peers, take an Acceptor membership snapshot and compose one
+single-peer facade per member:
 
 ```typescript
-const allClientEvents = acceptor.resolveAll(remoteClientEvents);
-const deliveries = await allClientEvents.changed("maintenance-scheduled");
+const peers = acceptor.peers;
+const calls = peers.map((peer) =>
+  peer.resolve(remoteClientEvents).changed("maintenance-scheduled"),
+);
+const deliveries = await Promise.allSettled(calls);
 
-for (const delivery of deliveries) {
+for (const [index, delivery] of deliveries.entries()) {
   if (delivery.status === "rejected") {
-    console.warn(delivery.peer, delivery.reason.code);
+    console.warn(peers[index], delivery.reason);
   }
 }
 ```
 
-The group Promise waits for every child and always fulfills with one
-`fulfilled` or `rejected` result per selected peer. One peer's failure does not
-fail-fast the whole group. If no peer is eligible, the result is an empty array.
+Each call remains an independent single-peer invocation. The application owns
+peer eligibility, concurrency, cancellation, result association, ordering, and
+fail-fast versus wait-all behavior.
 
 ## Cancellation
 

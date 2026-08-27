@@ -7,7 +7,7 @@ Parent: [协议可替换的双向 RPC 框架](../map.md)
 
 ## Question
 
-Remote Service Descriptor 应如何复用 `@husky-di/core` 的 `ServiceIdentifier<T>`、携带显式 method allowlist 与稳定 wire name、保持 identifier equality 和 ADR-0003 的 metadata 非行为性，同时让 `expose()`、`resolve()` 与 `resolveAll()` 精确推导远程 Promise 方法、取消参数和结果类型？产出可编译的类型 prototype 与正反例，并保持 v1 不自动接入 Container。
+Remote Service Descriptor 应如何复用 `@husky-di/core` 的 `ServiceIdentifier<T>`、携带显式 method allowlist 与稳定 wire name、保持 identifier equality 和 ADR-0003 的 metadata 非行为性，同时让 `expose()` 与 `resolve()` 精确推导远程 Promise 方法、取消参数和结果类型？产出可编译的类型 prototype 与正反例，并保持 v1 不自动接入 Container。
 
 ## Answer
 
@@ -25,7 +25,7 @@ contract builder、binding builder、公开 getter 或 Container glue。
 - Factory 原样接收 `ServiceIdentifier<T>`，并要求 `{ wireName, methods }`。`methods` 必须有
   至少一个确定选中的 string method key；每项只能是 `true` 或
   `{ readonly cancelable: true }`。Method key 同时是 v1 wire method name，不提供 alias。
-  `then` 是保留 property，不能成为 method key：所有 remote service/group proxy 的 `then`
+  `then` 是保留 property，不能成为 method key：所有 remote service proxy 的 `then`
   必须为 `undefined`，从而不会被 `Promise.resolve()`、async return 或 `await` 当成 thenable。
 - Descriptor 对 service type `T` 与精确 method selection 都 invariant，且使用 private brand；
   caller 不能伪造 Descriptor，也不能借 TypeScript 的结构兼容把它替换成另一项 service 或
@@ -34,8 +34,7 @@ contract builder、binding builder、公开 getter 或 Container glue。
   未选 methods 不再被无意义地要求；第二个参数使用 `NoInfer`，不能反向改变 Descriptor
   已确定的 service type。
 - `resolve()` 只产生选中 methods。每个同步或异步 local result 都映射为
-  `Promise<Awaited<Result>>`；`resolveAll()` 复用相同参数映射，并返回保留稳定 `RpcPeer`
-  关联的 `Promise<readonly RpcPeerResult<Awaited<Result>>[]>`。
+  `Promise<Awaited<Result>>`。
 - Cancelable handler 必须有一个精确、required、trailing `AbortSignal`，此前不能再出现
   `AbortSignal`，也不能使用可变长前缀。远端 proxy 去掉这个 wire argument，并在 caller 侧
   追加一个**必传**的 `AbortSignal | undefined` control slot；caller不需要取消时显式传
@@ -109,7 +108,7 @@ contract builder、binding builder、公开 getter 或 Container glue。
 2026-08-18 consistency amendment：VS Code 同类 proxy 明确保留 `then`，并以 async return / await
 测试防止 Promise assimilation；本地图的固定提交证据见
 [`vscode-rpc-ipc-precedents.md`](../research/vscode-rpc-ipc-precedents.md)。最终 caller Interface
-prototype 必须补充 `then` 的负面类型用例、single/group proxy 的运行时 assimilation 用例，以及
+prototype 必须补充 `then` 的负面类型用例、single-peer proxy 的运行时 assimilation 用例，以及
 exposure 后改写 implementation property 仍调用已安装 function 的用例。原 prototype commit
 只证明此前的类型映射，不能证明这些新增约束。
 

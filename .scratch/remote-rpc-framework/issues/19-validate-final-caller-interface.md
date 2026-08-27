@@ -2,7 +2,7 @@
 
 Type: prototype
 Status: resolved
-Blocked by: 04, 08, 09, 11, 12, 13, 14, 17, 18
+Blocked by: 04, 08, 09, 11, 13, 14, 17, 18
 Parent: [协议可替换的双向 RPC 框架](../map.md)
 
 ## Question
@@ -10,7 +10,7 @@ Parent: [协议可替换的双向 RPC 框架](../map.md)
 在全部行为与 Protocol SPI 决议完成后，`@husky-di/remote` 的 caller-facing TypeScript
 Interface 应具有怎样的精确 exported members、generic 关系、sync/async、ownership、state/event、
 error、cancellation 与 terminal contract？产出新的可编译 throwaway prototype，覆盖 Descriptor、
-Connector、Acceptor、Peer、Remote Service Group（若保留）、Protocol 注入和 Transport Adapter
+Connector、Acceptor、Peer、Protocol 注入和 Transport Adapter
 usage；包含 common-path examples、正负类型用例、`then` assimilation runtime 用例、Node/browser
 consumer fixtures，以及 state/Recovery/shutdown 的小型可交互 trace。最终 prototype 必须直接表达
 08–18 的最终决议，不得把 issue 01 的历史 prototype 或当前 package example 当成生产答案，也不
@@ -19,9 +19,13 @@ consumer fixtures，以及 state/Recovery/shutdown 的小型可交互 trace。�
 ## Answer
 
 最终caller-facing Interface采用两个role-specific Topology Owners、一个稳定 `IRpcPeer`、opaque
-Descriptor、service-shaped single/group facades及issues 07/17已经确定的Transport/Protocol seams。
+Descriptor、service-shaped single-peer facades及issues 07/17已经确定的Transport/Protocol seams。
 可编译原型固化于 `codex/prototype-final-rpc-interface@39fdbbd`；它是整合全部决议后的primary design
 evidence，不是当前production export，也不替issue 15决定package subpath或build format。
+
+2026-08-27 consistency amendment：Acceptor的aggregate facade路线已移除，不保留alias、shim或替代
+helper；application从membership snapshot与每个stable peer的single-peer facade显式组合多Peer工作。
+固定prototype只继续证明下文保留的single-peer、state、event、Recovery与termination surface。
 
 ### Public vocabulary
 
@@ -29,8 +33,7 @@ evidence，不是当前production export，也不替issue 15决定package subpat
 
 - runtime values：`createRemoteServiceDescriptor`、`createRpcConnector`、`createRpcAcceptor`、
   `RpcError`；
-- caller modules：`IRemoteServiceDescriptor`、`IRpcPeer`、`IRpcConnector`、`IRpcAcceptor`、
-  `RpcPeerResult`；
+- caller modules：`IRemoteServiceDescriptor`、`IRpcPeer`、`IRpcConnector`、`IRpcAcceptor`；
 - state/observation：`RpcPeerState`、`RpcConnectorState`、`RpcAcceptorListenerState`、
   `RpcAcceptorState`、`RpcTopologyCloseReason`、`RpcCallDirection`、`RpcEvent`、`RpcErrorCode`；
 - Transport：`IRpcConnection`、`IRpcConnectorAdapter`、`IRpcAcceptorAdapter`；
@@ -39,8 +42,8 @@ evidence，不是当前production export，也不替issue 15决定package subpat
 - shared SPI vocabulary直接复用issue 17的 `IRpcProtocol`、required runtime policy、Application
   Value、call/fault/Session reason types，不定义第二套caller interpretation。
 
-Descriptor conditional helpers、single/group mapped facade types与implementation types保持不可导入，
-由 `resolve()` / `resolveAll()` inference得到。没有generic `IRpcTopologyOwner<TState>`：它没有独立caller
+Descriptor conditional helpers、single-peer mapped facade types与implementation types保持不可导入，
+由 `resolve()` inference得到。没有generic `IRpcTopologyOwner<TState>`：它没有独立caller
 workflow，只为少量重复增加浅抽象。也不公开 `defaultRpcProtocol` constant；factory省略 `protocol`即选
 package-private default，custom injection使用完整structural `IRpcProtocol`。
 
@@ -51,31 +54,32 @@ package-private default，custom injection使用完整structural `IRpcProtocol`�
   invalid cancellation和reserved `then`按issue 04拒绝。Domain service signatures不被虚假约束为
   `extends RpcApplicationValue`；finite number、plain record、depth/weight等仍由runtime normalization
   证明。
-- Single与Group facade都是frozen null-prototype allowlist closures；method可解构且不依赖facade
+- Single-peer facade是frozen null-prototype allowlist closures；method可解构且不依赖facade
   `this`，`then === undefined`，`await` / async return / `Promise.resolve`不触发remote call。重复resolve
   不保证同一object，但已返回facade跨Recovery稳定；closed后仍可同步取得facade，调用才异步
   `unavailable`。
 - Prototype发现optional trailing signal不可实施：runtime没有TypeScript business arity，无法区分
-  “省略control”与最后一个business argument。Cancelable remote single/group method因此固定为
+  “省略control”与最后一个business argument。Cancelable remote method因此固定为
   `(...Params, signal: AbortSignal | undefined)`，control slot必传；不取消时显式传 `undefined`。Local
   handler仍接收required trailing call-private `AbortSignal`。
 - Runtime先要求至少一个actual argument并剥离control；`undefined`通过，其他值用捕获的
   `AbortSignal.prototype.aborted` getter intrinsic验证，不能用 `instanceof`或duck typing。Initial
-  snapshot处理already-aborted precedence；state/value/capacity与Pending/children commit后，用捕获的
+  snapshot处理already-aborted precedence；state/value/capacity与Pending commit后，用捕获的
   `EventTarget.prototype.addEventListener/removeEventListener` intrinsics注册，再以aborted intrinsic
-  复查，封闭check→register race且不读取可shadow的instance members。Group只注册一个external
-  listener再fan out。v1不反射business arity；逃逸type后的final `undefined`/real signal固定按control。
+  复查，封闭check→register race且不读取可shadow的instance members。v1不反射business arity；
+  逃逸type后的final `undefined`/real signal固定按control。
 
 ### Exact owners、peer、state 与 errors
 
 `IRpcPeer`公开 `state/state$`、session-scoped `expose/resolve`；Connector公开stable `peer`、
 `state/state$`、`event$`、`connect`、`shutdown`、`close`；Acceptor公开 `peers/peers$`、owner-scoped
-`expose`、`resolveAll`、listener/start/termination members。所有state/membership snapshot按issues
+`expose`、listener/start/termination members。多Peer工作由application从membership snapshot和各
+peer的single-peer facade显式组合；所有state/membership snapshot按issues
 08/09 frozen、replay-latest、identity-stable-until-next-mutation；events保持hot/no-replay。
 
 - Peer六态精确为 `unbound | connecting | connected | draining | recovering | closed`；draining reason
   只有 `graceful-shutdown | counter-exhaustion`。Acceptor active membership可保留counter-draining peer，
-  group snapshot只filter `connected | recovering`。
+  但该peer不接纳新的outgoing call。
 - Connector state只有owner `active | draining | closing | closed`，但其唯一Session terminal可成为
   topology reason。Acceptor active state内嵌listener `idle | starting | listening | stopped`；individual
   peer或listener terminal不关闭Owner，所以其closed union不包含remote/Recovery/continuity/counter
@@ -104,8 +108,8 @@ package-private default，custom injection使用完整structural `IRpcProtocol`�
   structural Adapter shape validation（`TypeError`）、subscribe-before-start及Protocol binding。
   Owner中断startup为 `AbortError`；ordinary timeout/profile/admission/Adapter failure为
   `RpcError(unavailable, cause)`；Protocol invariant为 `RpcError(protocol, cause)`。
-- Single/group invocation严格执行control shape → initially aborted → admission state → value snapshot →
-  capacity。Common group failure创建零child；active空snapshot fulfill frozen `[]`。
+- Single-peer invocation严格执行control shape → initially aborted → admission state → value snapshot →
+  capacity。
 
 ### Closed event union 与 termination identity
 
@@ -140,7 +144,7 @@ counter-draining peers保持reason加入barrier；explicit close与grace deadlin
 
 Prototype已通过scoped Biome、main/browser/Node三套TypeScript consumers、Node runtime probes、真实浏览器
 cross-realm AbortSignal/EventTarget intrinsic probe、可交互Recovery/counter-drain/shutdown trace、
-`git diff --check`及独立audit（0 blocker）。Runtime probes还覆盖single/group Promise assimilation、
+`git diff --check`及独立audit（0 blocker）。Runtime probes还覆盖single-peer Promise assimilation、
 installed-handler snapshot、signal preflight/race、exact termination Promise identity及unknown/terminated
 event ordering。
 

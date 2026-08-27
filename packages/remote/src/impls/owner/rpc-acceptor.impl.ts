@@ -8,20 +8,14 @@ import type { Cleanup } from "@husky-di/core";
 import { Observable, Subject, type Subscription } from "rxjs";
 import { RpcProtocolSessionTransitionTypeEnum } from "@/enums/protocol/rpc-protocol-session-transition-type.enum";
 import { RpcAcceptorListenerStopReasonEnum } from "@/enums/rpc-acceptor-listener-stop-reason.enum";
-import { RpcCallStatusEnum } from "@/enums/rpc-call-status.enum";
 import { RpcCloseOutcomeEnum } from "@/enums/rpc-close-outcome.enum";
 import { RpcCloseReasonEnum } from "@/enums/rpc-close-reason.enum";
 import { RpcEventTypeEnum } from "@/enums/rpc-event-type.enum";
 import { RpcExceptionCodeEnum } from "@/enums/rpc-exception-code.enum";
 import { RpcStateStatusEnum } from "@/enums/rpc-state-status.enum";
-import { getRemoteServiceDescriptorData } from "@/factories/remote-service-descriptor.factory";
 import { createRpcException } from "@/factories/rpc-exception.factory";
 import type { IRpcRetainedBytesLedger } from "@/interfaces/common/rpc-retained-bytes-ledger.interface";
-import type {
-	IRpcAcceptor,
-	RemoteServiceGroup,
-	RpcPeerResult,
-} from "@/interfaces/owner/rpc-acceptor.interface";
+import type { IRpcAcceptor } from "@/interfaces/owner/rpc-acceptor.interface";
 import type { IRpcHandlerScheduler } from "@/interfaces/owner/rpc-handler-scheduler.interface";
 import type {
 	IRpcOwnerCustody,
@@ -35,8 +29,6 @@ import type {
 } from "@/interfaces/peer/remote-service-descriptor.interface";
 import type { IRpcPeer } from "@/interfaces/peer/rpc-peer.interface";
 import type {
-	IRpcPeerCommittedInvocation,
-	IRpcPeerInvocationReservation,
 	IRpcPeerRuntime,
 	RpcPeerFactory,
 } from "@/interfaces/peer/rpc-peer-runtime.interface";
@@ -59,13 +51,7 @@ import type {
 } from "@/types/rpc-caller.type";
 import type { RpcExposureRegistry } from "@/types/rpc-exposure.type";
 import type { CreateRpcAcceptorImplOptions } from "@/types/rpc-owner.type";
-import { normalizeRpcApplicationArguments } from "@/utils/rpc-application-value.util";
-import {
-	installRpcAbortListener,
-	prepareRpcInvocationArguments,
-} from "@/utils/rpc-cancellation.util";
 import { installRpcExposure } from "@/utils/rpc-exposure.util";
-import { createRpcFacade } from "@/utils/rpc-facade.util";
 import { reserveRpcSessionRetainedBytes } from "@/utils/rpc-session-retained-bytes.util";
 import { isRpcSessionTransitionAllowed } from "@/utils/rpc-session-transition.util";
 import {
@@ -479,123 +465,6 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 		if (this.#overflowConnection === connection) {
 			this.#overflowConnection = undefined;
 		}
-	}
-
-	resolveAll<T, Definitions extends RpcMethodDefinitions<T>>(
-		descriptor: IRemoteServiceDescriptor<T, Definitions>,
-	): RemoteServiceGroup<T, Definitions> {
-		const service = getRemoteServiceDescriptorData(descriptor).wireName;
-		return createRpcFacade(descriptor, (method, cancelable, actualArguments) =>
-			this.#invokeGroup(service, method, cancelable, actualArguments),
-		) as RemoteServiceGroup<T, Definitions>;
-	}
-
-	#invokeGroup(
-		service: string,
-		method: string,
-		cancelable: boolean,
-		actualArguments: readonly unknown[],
-	): Promise<readonly RpcPeerResult<unknown>[]> {
-		const prepared = prepareRpcInvocationArguments(cancelable, actualArguments);
-		if (this.state.status !== RpcStateStatusEnum.active) {
-			return Promise.reject(
-				createRpcException(RpcExceptionCodeEnum.unavailable),
-			);
-		}
-		const args = normalizeRpcApplicationArguments(
-			prepared.applicationArguments,
-		);
-		const peers = this.#peers.filter(
-			(peer) =>
-				peer.state.status === RpcStateStatusEnum.connected ||
-				peer.state.status === RpcStateStatusEnum.recovering,
-		);
-		if (peers.length === 0) {
-			return Promise.resolve(Object.freeze([]));
-		}
-
-		const reservations: IRpcPeerInvocationReservation[] = [];
-		try {
-			for (const peer of peers) {
-				const reservation = peer.reserveOutgoingProtocolInvocation(
-					service,
-					method,
-					args,
-				);
-				if (reservation === undefined) {
-					for (const retained of reservations) {
-						retained.release();
-					}
-					return Promise.reject(
-						createRpcException(RpcExceptionCodeEnum.unavailable),
-					);
-				}
-				reservations.push(reservation);
-			}
-		} catch (error) {
-			for (const retained of reservations) {
-				try {
-					retained.release();
-				} catch {
-					// The first Protocol fault remains authoritative.
-				}
-			}
-			return Promise.reject(error);
-		}
-
-		const invocations: IRpcPeerCommittedInvocation[] = [];
-		try {
-			for (const reservation of reservations) {
-				invocations.push(reservation.commit());
-			}
-		} catch (error) {
-			for (
-				let index = invocations.length;
-				index < reservations.length;
-				index += 1
-			) {
-				try {
-					reservations[index]?.release();
-				} catch {
-					// The commit fault remains authoritative.
-				}
-			}
-			return Promise.reject(error);
-		}
-
-		let removeAbortListener: (() => void) | undefined;
-		if (prepared.signal !== undefined) {
-			removeAbortListener = installRpcAbortListener(prepared.signal, () => {
-				for (const invocation of invocations) {
-					invocation.cancel();
-				}
-			});
-		}
-		for (const invocation of invocations) {
-			invocation.start();
-		}
-		return Promise.allSettled(
-			invocations.map((invocation) => invocation.result),
-		).then((results) => {
-			removeAbortListener?.();
-			return Object.freeze(
-				results.map((result, index) =>
-					Object.freeze<RpcPeerResult<unknown>>(
-						result.status === "fulfilled"
-							? {
-									peer: peers[index] as IRpcPeerRuntime,
-									status: RpcCallStatusEnum.fulfilled,
-									value: result.value,
-								}
-							: {
-									peer: peers[index] as IRpcPeerRuntime,
-									status: RpcCallStatusEnum.rejected,
-									reason: result.reason,
-								},
-					),
-				),
-			);
-		});
 	}
 
 	shutdown(): Promise<void> {

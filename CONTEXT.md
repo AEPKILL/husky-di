@@ -112,7 +112,7 @@ The module system is inspired by ESM semantics: imports must be explicit, export
 - **Request Replay**: Retransmission of the original sequenced call message with the same `seq`, `callId`, and semantic content after receipt is uncertain. It continues the existing Logical Call rather than creating a new one.
 - **Application Idempotency**: An application-owned guarantee that repeating a business operation does not repeat its external effect. The RPC framework does not create or interpret its keys and does not equate it with Session-scoped at-most-once handler dispatch.
 - **RPC Peer / `RpcPeer`**: The remote counterpart participating in a bidirectional RPC relationship. It is the subject of exposure and remote resolution, distinct from the topology owner and the transport connection.
-- **RPC Topology Owner**: The owner of an active or passive connection topology and its lifecycle. `RpcConnector` owns an active one-to-one topology; `RpcAcceptor` owns a passive one-to-many topology.
+- **RPC Topology Owner**: The owner of an active or passive connection topology and its lifecycle. `RpcConnector` owns an active one-to-one topology; `RpcAcceptor` owns a passive one-to-many topology. Applications compose multi-peer work explicitly from Acceptor membership snapshots and each peer's single-peer facade.
 - **Logical Session**: The stable RPC relationship represented by an `RpcPeer`. It can span a sequence of transient Physical Connections while preserving the peer seen by callers.
 - **Session Incarnation**: One retained lifetime of a Logical Session, identified for routing by a responder-created opaque `sessionId`. The identifier is never recovery authority by itself. The incarnation ends when its retained state is terminated or lost; a process restart without that state cannot continue it.
 - **Protected Transport**: The deployment property required for secure Default-Protocol Recovery: the fresh and replacement Physical Connections provide confidentiality, ordered integrity, anti-replay, and initiator-verified responder endpoint identity. The structural Adapter seam cannot prove this property at runtime.
@@ -140,8 +140,6 @@ The module system is inspired by ESM semantics: imports must be explicit, export
 - **Payload-Free RPC Telemetry**: The common owner event surface contains peer/correlation identity, direction, service/method metadata, phase, safe outcome code, and bounded timing/counts, but never application payloads, raw errors, wire/session/call identities, proofs, nonces, or secrets. Payload diagnostics remain application-owned instrumentation at caller/handler boundaries.
 - **Remote Service Descriptor**: An opaque description of a remotely callable service that relates one local `ServiceIdentifier` to an explicit Wire Service Name and a non-empty unary method allowlist. The property name `then` is reserved so a remote service facade cannot become a JavaScript thenable.
 - **Wire Service Name**: The explicit stable identity by which RPC Peers refer to a remote service. It is independent of local `ServiceIdentifier` equality and metadata.
-- **Remote Service Group**: A stable, non-thenable remote-service facade over the Logical Peers currently owned by an `RpcAcceptor`. Each invocation normalizes its arguments once, targets one fresh snapshot of connected and recovering peers, composes ordinary unary child calls, and returns immutable per-peer results in snapshot order.
-
 ## Behavioral constraints
 
 - The same `ServiceIdentifier` can be registered multiple times in the same container.

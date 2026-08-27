@@ -72,7 +72,7 @@ reject/timeout才使 task reject。
 
 1. Owner提交 `draining`，启动 owner-wide absolute grace deadline
    `G + shutdownDeadlineMs`；
-2. 在接触 Adapter前禁止新的 `connect()`、`listen()`、`expose()`、single/group proxy invocation和
+2. 在接触 Adapter前禁止新的 `connect()`、`listen()`、`expose()`、single-peer proxy invocation和
    fresh/resume binding，abort listener与尚未 active的 bootstrap attempts；
 3. `G` 时 connected的 Session进入 draining snapshot；已经处于 Protocol
    `draining(counter-exhaustion)`且仍有 current binding的 Session也纳入 Owner grace barrier，但不重复
@@ -93,11 +93,6 @@ Call Ordinal validation，但在读取 exposure/dispatch前走 issue 13的 prote
 Rejection：原子 `absent -> terminal(unavailable)`、推进 receipt并给 remote Definite Non-Execution；
 不产生 incoming `call-started`。Malformed、reserved `then`、gap等仍按原 fault scope处理。持续新 calls
 只能消耗 finite reserve/ledger并拖到 non-sliding deadline，不能重开 admission或无限增长。
-
-Group invocation在 `G` 前已经完成 common reservation并创建的 children中，所属 Session在 `G`时
-connected或已经 counter-draining并进入 Owner grace barrier的 Pending/Logical Call继续；recovering
-child按上述 force outcome收敛。Outer Promise等待全部 child caller-side terminal并返回稳定数组；
-`G` 先于 common preflight则 outer `unavailable`且创建零 child。
 
 ### Graceful drain criterion
 

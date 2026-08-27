@@ -2,7 +2,7 @@
 
 Type: grilling
 Status: resolved
-Blocked by: 07, 09, 10, 11, 12
+Blocked by: 07, 09, 10, 11
 Parent: [协议可替换的双向 RPC 框架](../map.md)
 
 ## Question
@@ -17,8 +17,7 @@ dedupe evidence、proof state 与 observation snapshot 的 finite limits、默�
 retained bytes，而不只限制单条 Connection。决定 activity probe/silence timeout、send progress、
 Recovery grace、retention/eviction、shutdown deadline、sequence/ordinal/epoch exhaustion、overload与慢
 handler 到既有 unary outcomes 的映射。Framework event 应复用已有 budgeted normalized snapshot，
-notification 后不额外保留 payload；subscriber 自行保留不计入 Framework budget。group work 只调度
-[验证稳定 Remote Service Group](12-validate-stable-remote-service-group.md)定义的语义。
+notification 后不额外保留 payload；subscriber 自行保留不计入 Framework budget。
 
 ## Answer
 
@@ -251,11 +250,6 @@ caller cancel 或 Force Cutoff 已选择 terminal，也必须等其真实 Promis
 否则不合作的 handler 可通过“启动后立即 cancel”制造无界并发。Framework 不抢占任意 JavaScript、
 不为普通 handler 设置执行 timeout；永不 settle 的 handler 永久占一个有限 permit，但不阻塞
 receipt/cancel/duplicate/fencing ingress。
-
-Remote Service Group 不增加 group queue 或 semaphore。Common preflight 后必须一次性预留 snapshot
-中全部 `N` 个 child 的 Pending Invocation count、value weight 与 owner aggregate budget；失败时
-outer Promise reject `unavailable` 且创建零 child。成功后每个 child 进入对应 Session 的普通 FIFO；
-同一 peer 保持既有 ordering，跨 peers 不承诺实际 send 顺序。
 
 ### Activity、half-open 与 Recovery retention
 

@@ -108,7 +108,7 @@ Every public subpath **MUST** resolve from the installed tarball without workspa
 `RpcConnectorReconnectionAttemptFailureStageEnum`, `RpcConnectorReconnectionEventTypeEnum`,
 `RpcConnectorReconnectionStopReasonEnum`, `RpcEventTypeEnum`, `RpcExceptionCodeEnum`, and `RpcStateStatusEnum`;
 caller types
-`IRemoteServiceDescriptor`, `IRpcPeer`, `IRpcConnector`, `IRpcAcceptor`, `RpcPeerResult`, `RpcPeerState`,
+`IRemoteServiceDescriptor`, `IRpcPeer`, `IRpcConnector`, `IRpcAcceptor`, `RpcPeerState`,
 `RpcConnectorState`, `RpcAcceptorListenerState`, `RpcAcceptorState`, `RpcCloseReasonEnum`,
 `RpcCallDirectionEnum`, `RpcEvent`, `RpcExceptionCodeEnum`, `RpcConnectorOptions`, `RpcAcceptorOptions`,
 `RpcConnectorConnectOptions`, `RpcConnectorRuntimePolicyOptions`, `RpcAcceptorRuntimePolicyOptions`,
@@ -324,21 +324,6 @@ type RemoteServiceImplementation<
     Extract<T[K], AnyMethod>;
 };
 
-type RemoteGroupMethod<F, Definition> =
-  F extends (...args: infer Args) => infer Result
-    ? IsCancelableMethod<Definition> extends true
-      ? Args extends [...infer Params, AbortSignal]
-        ? (...args: [...Params, signal: AbortSignal | undefined]) =>
-            Promise<readonly RpcPeerResult<Awaited<Result>>[]>
-        : never
-      : (...args: Args) => Promise<readonly RpcPeerResult<Awaited<Result>>[]>
-    : never;
-
-type RemoteServiceGroup<T, Definitions extends RpcMethodDefinitions<T>> = {
-  readonly [K in Extract<SelectedMethodKey<Definitions>, RemoteMethodKey<T>>]:
-    RemoteGroupMethod<Extract<T[K], AnyMethod>, Definitions[K]>;
-} & { readonly then?: never };
-
 declare const remoteServiceDescriptorBrand: unique symbol;
 
 export interface IRemoteServiceDescriptor<
@@ -428,10 +413,6 @@ export class RpcException extends CodedException<RpcExceptionCodeEnum> {
   readonly cause?: unknown;
 }
 
-export type RpcPeerResult<T> =
-  | { readonly peer: IRpcPeer; readonly status: RpcCallStatusEnum.fulfilled; readonly value: T }
-  | { readonly peer: IRpcPeer; readonly status: RpcCallStatusEnum.rejected; readonly reason: RpcException };
-
 export interface IRpcPeer {
   readonly state: RpcPeerState;
   readonly state$: Observable<RpcPeerState>;
@@ -465,9 +446,6 @@ export interface IRpcAcceptor {
     implementation: NoInfer<RemoteServiceImplementation<T, Definitions>>,
   ): Cleanup;
   listen(adapter: IRpcAcceptorAdapter): Promise<void>;
-  resolveAll<T, Definitions extends RpcMethodDefinitions<T>>(
-    descriptor: IRemoteServiceDescriptor<T, Definitions>,
-  ): RemoteServiceGroup<T, Definitions>;
   shutdown(): Promise<void>;
   close(): Promise<void>;
 }
@@ -537,6 +515,11 @@ terminal observation, and settle public Promises last.
 draining/closed or its Owner is draining/closing/closed. A peer in `unbound`, `connecting`, `connected`, or
 `recovering` **MAY** accept Session-scoped exposure. Owner-scoped Acceptor exposure applies to future and current
 peers.
+
+**RPC-API-007 — Explicit peer composition.** The public Acceptor API **MUST NOT** provide a Framework-owned
+aggregate remote-service facade. Applications **MUST** compose multi-peer work explicitly from `peers`, `peers$`,
+each peer's `resolve()`, and application-selected JavaScript, Promise, or RxJS operators. These primitives
+**MUST NOT** imply a Framework-defined eligibility, ordering, concurrency, cancellation, error, or wait policy.
 
 ### 6.2 State unions
 
@@ -644,7 +627,7 @@ export type RpcAcceptorState =
 `unbound -> connecting -> connected <-> recovering -> draining? -> closed` subject to the transitions below.
 Fresh bootstrap failure **MUST** permit `connecting -> unbound` without replacing the stable Connector peer;
 `closed` **MUST** be sticky and terminal. A counter-draining Acceptor peer **MUST** remain in `peers` while active
-but **MUST NOT** be eligible for a new group call.
+but **MUST NOT** admit a new outgoing call.
 
 **RPC-STATE-002 — Error identity.** `recovery-expired` and `counter-exhaustion` **MUST** use
 `RpcException(unavailable)`; `continuity-failure`, `protocol-fault`, and `resource-fault` **MUST** use
@@ -655,9 +638,9 @@ failure **MUST NOT** fail healthy siblings or the Owner.
 reason to `cleanup-failed` with the same trusted Error or admission-ordered `AggregateError`. It **MUST NOT**
 rewrite already terminal peer reasons.
 
-### 6.3 Facades, calls, cancellation, and groups
+### 6.3 Facades, calls, and cancellation
 
-**RPC-CALL-001 — Facade shape.** `resolve()` and `resolveAll()` **MUST** synchronously return a frozen,
+**RPC-CALL-001 — Facade shape.** `resolve()` **MUST** synchronously return a frozen,
 null-prototype facade containing only selected method closures. A closure **MUST NOT** depend on facade `this`.
 The facade **MUST** expose `then === undefined`, and `await`, async return, and `Promise.resolve` **MUST NOT**
 start an RPC. Repeated resolution need not return the same object, but every returned facade **MUST** remain
@@ -672,8 +655,7 @@ typing. v1 **MUST NOT** reflectively validate business arity.
 **RPC-CALL-003 — Signal race.** Runtime **MUST** read the initial aborted state with a captured platform getter,
 then perform state/value/capacity preflight and commit Pending work, install one listener with captured
 `EventTarget.prototype.addEventListener`, and re-read the getter to close the check-to-register race. It **MUST**
-remove with the captured intrinsic and **MUST NOT** call shadowable instance methods. A group **MUST** install one
-external listener and fan cancellation out to its children.
+remove with the captured intrinsic and **MUST NOT** call shadowable instance methods.
 
 **RPC-CALL-004 — Preflight order.** Invocation preflight **MUST** be: control shape, initially aborted, owner/peer
 availability, Application Value snapshot, then capacity. Failure before capacity **MUST** create no Pending
@@ -706,21 +688,7 @@ late result consumed but unable to change the selected terminal.
 **MUST** expose a constructor accepting a code and optional cause. The package **MUST NOT** export its internal
 construction factory. `code` **MUST** be its only stable branch field; inherited `detail` **MUST NOT** contain
 remote data, and message text **MUST NOT** be normative. A trusted local Adapter/Protocol Error **MAY** be
-retained as standard `cause`. A rejected group entry **MUST** preserve the same child `RpcException` identity
-selected by that invocation; call events **MUST** copy only the safe code, never the Error object.
-
-**RPC-GROUP-001 — Snapshot.** Each group method invocation **MUST** run common preflight and normalization once,
-then take one immutable, membership-order snapshot of peers whose state is `connected` or `recovering`. An empty
-active snapshot **MUST** fulfill with a frozen empty array.
-
-**RPC-GROUP-002 — Atomic fan-out.** The Framework **MUST** reserve Pending count/value/aggregate capacity for all
-snapshot children before committing any. If any reservation fails, the outer Promise **MUST** reject
-`unavailable` with zero children and zero call events. After all commits and started observations are staged,
-children **MUST** start in snapshot order.
-
-**RPC-GROUP-003 — Results.** The group Promise **MUST** fulfill only after every child settles, with a frozen
-snapshot-order array of `{ peer, status: "fulfilled", value }` or
-`{ peer, status: "rejected", reason: RpcException }`. A child failure **MUST NOT** fail-fast the outer Promise.
+retained as standard `cause`. Call events **MUST** copy only the safe code, never the Error object.
 
 ### 6.4 Events and telemetry
 
@@ -1900,8 +1868,7 @@ Endpoint record queued before bootstrap classification **MUST** transfer its exi
 resolved Session child ledger in one non-awaiting step before active processing.
 
 **RPC-RESOURCE-005 — Entry charge.** Each pending, ledger, handler-job, and replay entry **MUST** charge at least
-`256 B` in addition to payload weight. Within one entry shared immutable payload need not be double charged;
-every group child **MUST** reserve its own entry and full value weight.
+`256 B` in addition to payload weight. Within one entry shared immutable payload need not be double charged.
 
 **RPC-RESOURCE-002 — Protected reserve.** Protected reserve **MUST** be deducted at Session creation and
 **MUST NOT** be borrowed by ordinary work. Maximum charges **MUST** be `768 B` per terminal disposition including
@@ -2092,8 +2059,8 @@ Close, or restart cleanup.
 
 ### 13.1 Graceful cutoff and drain
 
-**RPC-SHUTDOWN-001 — G gate.** At `G`, Framework **MUST** atomically reject new connect/listen/expose, single/
-group invocation, fresh/resume binding, and listener acceptance; abort any listener and non-active bootstrap;
+**RPC-SHUTDOWN-001 — G gate.** At `G`, Framework **MUST** atomically reject new connect/listen/expose,
+single-peer invocation, fresh/resume binding, and listener acceptance; abort any listener and non-active bootstrap;
 and freeze the drain snapshot before emitting `owner-draining`.
 
 **RPC-SHUTDOWN-002 — Snapshot membership.** The grace barrier **MUST** include Sessions connected at `G` and
@@ -2351,7 +2318,7 @@ continuity/expiry/outcome-unknown boundary and **MUST NOT** redispatch a Logical
 ### 14.4 Type, runtime, and package compatibility
 
 **RPC-RELEASE-001 — Type fixtures.** Strict main, Node, and DOM/browser consumers **MUST** include positive
-inference and negative `@ts-expect-error` cases for Descriptor, signal slot, facade/group, state discriminants,
+inference and negative `@ts-expect-error` cases for Descriptor, signal slot, facade, state discriminants,
 role policy, and custom Protocol/Adapter shape. Node consumer **MUST NOT** require DOM-only Adapter types; browser
 root import **MUST NOT** introduce `Buffer`, Node server, or `ws`.
 
@@ -2384,7 +2351,7 @@ only for navigation.
 | --- | --- | --- | --- | --- |
 | `RPC-BASE`, `RPC-API`, `RPC-STATE`, `RPC-LIFE` | Framework | RT, TY | `tests/specification.test.ts`, `tests/types/` | planned |
 | `RPC-PKG`, `RPC-RELEASE` | Distribution | PK, BR, TY | `tests/package/`, `tests/browser/` | planned |
-| `RPC-VALUE`, `RPC-DESC`, `RPC-CALL`, `RPC-GROUP`, `RPC-EVENT` | Framework + all Protocols | RT, TY, PC | `tests/specification.test.ts`, `tests/conformance/` | planned |
+| `RPC-VALUE`, `RPC-DESC`, `RPC-CALL`, `RPC-EVENT` | Framework + all Protocols | RT, TY, PC | `tests/specification.test.ts`, `tests/conformance/` | planned |
 | `RPC-START`, `RPC-TRANSPORT` | Framework + Adapters | AC, RT, IR | `tests/conformance/`, Adapter package tests | planned |
 | `RPC-SPI` | Custom/default Protocol | PC, TY, RT | `tests/conformance/`, `tests/types/` | planned |
 | `RPC-WIRE`, `RPC-ACK`, `RPC-LEDGER` | Default Protocol | RT, RP, BR | `tests/protocol.test.ts`, `tests/protocol/`, `tests/resources/` | planned |

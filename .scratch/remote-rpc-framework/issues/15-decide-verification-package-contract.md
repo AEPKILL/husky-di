@@ -2,7 +2,7 @@
 
 Type: grilling
 Status: resolved
-Blocked by: 04, 06, 07, 08, 09, 10, 11, 12, 13, 14, 17, 19
+Blocked by: 04, 06, 07, 08, 09, 10, 11, 13, 14, 17, 19
 Parent: [协议可替换的双向 RPC 框架](../map.md)
 
 ## Question
@@ -31,17 +31,15 @@ instrumented in-memory Adapter和raw peer，而不是放宽deadline或断言slee
 Runtime matrix至少覆盖：
 
 - Descriptor的opaque identity、allowlist、installed function snapshot、invalid member、reserved `then`，以及
-  single/group facade的frozen null prototype、safe destructuring和Promise non-assimilation；
+  single-peer facade的frozen null prototype、safe destructuring和Promise non-assimilation；
 - Connector/Acceptor cold startup、subscribe-before-start/handoff barrier、single-flight/retry、stable peer、
   exposure scope、replay-latest immutable state/membership与hot/no-replay event ordering；
 - required trailing `AbortSignal | undefined` control slot、零实参拒绝、cross-realm platform brand、forged
   duck rejection、hostile shadowed instance methods、already-aborted precedence和register-window复查；
 - Application Value normalization的plain detached tree、finite numbers、depth/node/string/message weight边界，
-  以及失败时零admission、零wire identity和零partial group child；
+  以及失败时零admission和零wire identity；
 - Pending→Outgoing Admission、Remote Request Admission、handler snapshot/permits、at-most-once dispatch、
   returned/void/error、unknown route、resource rejection、cancel和所有first-terminal-wins races；
-- group每次调用的一次common preflight、`connected | recovering` eligible snapshot、all-or-none reservation、
-  snapshot-order frozen `RpcPeerResult`，以及per-peer failure不使outer Promise fail-fast；
 - payload-free lifecycle/call event的封闭union与批次顺序，包括unknown-service/unknown-method metadata约束、
   Resource Rejection零event及known incoming Session loss的event-only `terminated` finished pair；
 - 六态Peer及role-specific Owner/listener states、counter-exhaustion单Session drain、Acceptor sibling isolation、
@@ -61,7 +59,7 @@ Sessions、replay/control/data/Ping洪泛，证明ready work在声明的bounded 
 独立main、Node和DOM/browser TypeScript consumer fixtures必须在strict模式编译；negative fixtures使用
 `@ts-expect-error`并由CI确认确实产生错误。至少覆盖Descriptor inference/invariance、selected implementation、
 property/generic/overload/`any`/stream rejection、cancelable local与remote signature的不同signal slot、遗漏
-remote control slot、single/group result与peer关联、role-specific states/policies、closed discriminants、
+remote control slot、single-peer result、role-specific states/policies、closed discriminants、
 custom Protocol/Adapter structural implementation，以及不能导入private/default Protocol symbols。
 
 Type tests不得声称证明runtime wire validity：plain prototype、finite number、dense array、cross-realm signal、

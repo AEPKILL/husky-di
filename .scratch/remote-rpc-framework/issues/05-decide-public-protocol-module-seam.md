@@ -13,7 +13,7 @@ Parent: [协议可替换的双向 RPC 框架](../map.md)
 
 采用一个完整、结构化且可替换的 `IRpcProtocol` 作为唯一公开 Protocol seam。Framework
 继续拥有 caller-facing Topology Owner、稳定 `RpcPeer`、Remote Service Descriptor、
-exposure、proxy、Remote Service Group 与 observation semantics；Protocol 只负责把统一的
+exposure、proxy 与 observation semantics；Protocol 只负责把统一的
 v1 RPC 语义落实到 Physical Connection，包括 wire、Handshake、Logical Session、Recovery
 和 call state。Protocol 通过 framework-owned semantic host ports 与这些公开对象协作，既不
 实现另一套公开 `RpcPeer`，也不退化为仅替换 Codec 的浅 seam。

@@ -19,7 +19,8 @@ Status: resolved
 - RxJS 是公开依赖。公开事件流是 hot、multicast、无 replay 的只读 Observable；state 与 membership streams 则 multicast、replay latest，并发出完整 immutable snapshot。所有订阅只用于观察，不拥有资源，也不以 ref-count 控制底层生命周期。
 - 对外提供一个深的 Protocol seam；Handshake、Session、ACK、Codec 等可在 Implementation 内部分层。包内提供恰好一个默认 Protocol；它的 executable decoded-tree grammar 由 package-private Zod schemas 单点定义，wire types 从这些 schemas 派生，v1 只交付 TypeScript Implementation。
 - `@husky-di/remote` 只定义 Transport Adapter seam。WebSocket 等正式 Adapter 放入独立包，例如 `@husky-di/remote-websocket`；当前地图不实施这些包。
-- `resolveAll()` 返回稳定的 Remote Service Group；每次方法调用重新截取一个 `RpcPeer` 快照，并保持结果与稳定 `RpcPeer` 的关联。
+- Acceptor 不提供 Framework-owned aggregate facade；application 从 frozen membership snapshot 与各
+  peer 的 single-peer facade 显式组合多 Peer 工作，并自行决定 eligibility、并发、取消、错误与等待策略。
 - 复用 `@husky-di/core` 的基础类型，但 v1 不自动接入 Container。业务认证、授权和限流留给 application/Transport Adapter；Transport framing validation 与 admission limits 属于 Adapter，decoded wire input validation、Protocol state resource limits 和 Session Recovery 安全属于 RPC Protocol。
 - 正式运行时目标是 Node.js 与浏览器互通；公开 Interface 不泄漏 Node 或 WebSocket 类型。Deno、Bun 和 Worker 保持设计兼容，但不进入 v1 验证矩阵。
 - v1 只提供只读生命周期与调用事件用于日志、Tracing 和 Metrics，不提供可改写调用流程的 middleware/interceptor。
@@ -29,7 +30,7 @@ Status: resolved
 
 - [验证生产级 RPC 使用者 Interface](issues/01-validate-production-rpc-interface.md)：历史 caller
   prototype建立 cold Connector/Acceptor owner、稳定 peer、显式 `connect(adapter)` /
-  `listen(adapter)`、统一 `event$`、session/owner-scoped exposure、稳定 `resolveAll()` group以及
+  `listen(adapter)`、统一 `event$`、session/owner-scoped exposure以及
   默认/自定义 Protocol注入；公开 Observable均可多订阅，resource ownership由角色契约而非订阅数量
   决定。其早期单一 close、无 current state与 payload event结论已被 08/11/14/18取代；精确最终
   Interface由 issue 19重新验证。Prototype context：
@@ -118,13 +119,6 @@ Status: resolved
   不改写 caller outcome。优雅 cutoff不是 connected Session既有 call的 terminal，显式 `close()`、
   deadline或 draining binding loss才应用 force outcomes。通用 event不复制 args/result/raw throw或
   Error identity，payload diagnostics留给 application自己拥有的 caller/handler boundary。
-- [验证稳定 Remote Service Group 的批量语义](issues/12-validate-stable-remote-service-group.md)：
-  `resolveAll()` 保持为 frozen、non-thenable 的稳定 service facade；每次 method invocation 只做一次
-  common preflight/normalization 与对 membership的 `connected | recovering` eligible snapshot，再以普通 unary
-  child calls 产生 snapshot-order immutable `RpcPeerResult`。Per-peer failure 和 aggregate abort 不
-  fail-fast outer Promise，也不增加 batch wire/state/event；Owner draining后调用在 snapshot前即
-  `unavailable`。Prototype context：
-  `codex/prototype-remote-service-group@124ec9a`。
 - [决定顺序、并发、缓冲与恢复资源上限](issues/13-decide-ordering-concurrency-resource-bounds.md)：
   固定 Protocol/Adapter `1 MiB` message compatibility 与 bounded JSON/value profile；默认每 Session
   `32 MiB`、每 owner `64 MiB`、256 calls、16/64 handler permits，以 replay barrier、control/data
@@ -158,7 +152,8 @@ Status: resolved
   modules。Prototype context：`codex/prototype-protocol-implementor@672ec3f`。
 - [验证最终 caller-facing RPC Interface](issues/19-validate-final-caller-interface.md)：最终surface由
   role-specific Connector/Acceptor、stable six-state Peer、opaque Descriptor、frozen non-thenable
-  single/group facades、closed state/event/error unions及issues 07/17的structural seams组成；不导出
+  single-peer facades、closed state/event/error unions及issues 07/17的structural seams组成；多Peer工作
+  由application从membership snapshot显式组合，不提供aggregate facade；不导出
   generic Owner base或default Protocol constant。Cancelable proxy使用required trailing
   `AbortSignal | undefined`及platform intrinsics封闭runtime slot/race；incoming Session terminal以
   event-only `terminated`闭合observation而不污染caller error taxonomy。`shutdown()`/`close()`所有路径
@@ -169,7 +164,7 @@ Status: resolved
   门禁。`@husky-di/remote@1.0.0`发布root、`/protocol`、`/transport`、`/conformance`四个ESM/CJS/types
   entry及normative wire corpora；Node >=23.6、三套Playwright engines和真实packed-tarball consumers为
   compatibility gate，独立Adapter包必须运行共享conformance与自身bounded-allocation/security probes。
-- [审计 Wayfinder 完成状态并交接 specification](issues/16-determine-specification-handoff.md)：19/19
+- [审计 Wayfinder 完成状态并交接 specification](issues/16-determine-specification-handoff.md)：18/18
   children可达且恰好索引一次，dependency graph无环、所有blocker resolved、local sources与固定prototype
   commits存在；signal、六态Peer、event、Recovery、双关闭/deadline和package contracts交叉审计为0
   blocker。`/to-spec`只有规范化表达与requirement/evidence编目工作，不再需要产品或架构裁决。

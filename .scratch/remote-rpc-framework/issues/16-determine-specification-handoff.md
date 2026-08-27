@@ -16,7 +16,7 @@ Parent: [协议可替换的双向 RPC 框架](../map.md)
 - 领域词汇与跨票不变量：[`CONTEXT.md`](../../../CONTEXT.md)。
 - 唯一决策索引与scope：[`map.md`](../map.md)；caller Interface以issues
   [04](04-decide-remote-service-descriptor.md)、[11](11-decide-unary-call-errors-cancellation.md)、
-  [12](12-validate-stable-remote-service-group.md)、[19](19-validate-final-caller-interface.md)为准；
+  [19](19-validate-final-caller-interface.md)为准；
   Protocol/Transport seams以issues [05](05-decide-public-protocol-module-seam.md)、
   [07](07-decide-physical-connection-adapter-contract.md)、
   [17](17-validate-protocol-implementor-interface.md)为准。
@@ -33,15 +33,16 @@ Parent: [协议可替换的双向 RPC 框架](../map.md)
   [wire precedents](../research/wire-protocol-industry-precedents.md)、
   [VS Code RPC/IPC precedents](../research/vscode-rpc-ipc-precedents.md)与
   [security primitives](../research/rpc-security-primitives.md)。最终shape的可编译primary design evidence
-  是 `20a9e83`、`fe94e02`、`124ec9a`、`672ec3f`、`39fdbbd` 五个prototype commits；历史issue 01
-  prototype仅作上下文，issues 08/11/14/18/19的consistency amendments优先。
+  是 `20a9e83`、`fe94e02`、`672ec3f`、`39fdbbd` 四个prototype commits；这些prototype只为当前
+  仍保留的surface提供历史输入，issue 19的aggregate-facade removal amendment与issues
+  08/11/14/18/19的其他consistency amendments优先。
 
 ### Completion audit
 
-- 19个child全部可从map直接到达并恰好索引一次；除本票审计时外没有open/claimed child。
-- `Blocked by` graph覆盖19/19节点、无缺失dependency、无环；所有blocker均已resolved且每个resolved
+- 18个child全部可从map直接到达并恰好索引一次；除本票审计时外没有open/claimed child。
+- `Blocked by` graph覆盖18/18节点、无缺失dependency、无环；所有blocker均已resolved且每个resolved
   ticket都含Answer。
-- 所有relative Markdown targets、五个固定prototype commit与VS Code固定revision均存在；research
+- 所有relative Markdown targets、四个固定prototype commit与VS Code固定revision均存在；research
   documents保留固定revision或正式标准的一手来源链接。
 - `Not yet specified`在本票完成后为空；out-of-scope与Destination没有被child偷偷扩大。
 - 对required `AbortSignal | undefined` slot、六态Peer、unknown/terminated events、role-specific

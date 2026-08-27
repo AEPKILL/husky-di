@@ -7,7 +7,7 @@ Parent: [协议可替换的双向 RPC 框架](../map.md)
 
 ## Question
 
-现有 `packages/remote/examples/user-facing-rpc-interface` 应如何演化为最小而完整的生产 Interface，才能以使用者工作流证明每个公开 member 的必要性，并准确表达已确认的双向 unary、稳定 `RpcPeer`、Topology Owner、透明 Session Recovery、multicast Observable、Protocol 注入、独立 Transport Adapter 包和稳定 Remote Service Group？产出可编译的 throwaway prototype、常见路径 usage 与负面类型用例；不得把现有示例的声明当成答案。
+现有 `packages/remote/examples/user-facing-rpc-interface` 应如何演化为最小而完整的生产 Interface，才能以使用者工作流证明每个公开 member 的必要性，并准确表达已确认的双向 unary、稳定 `RpcPeer`、Topology Owner、透明 Session Recovery、multicast Observable、Protocol 注入和独立 Transport Adapter 包？产出可编译的 throwaway prototype、常见路径 usage 与负面类型用例；不得把现有示例的声明当成答案。
 
 ## Answer
 
@@ -24,8 +24,8 @@ observation stream，形成最小而完整的 caller Interface。可编译 throw
   Connection；caller 决定何时以及用哪个 Adapter 重连，Connector 只接管成功兑现的
   Connection，Protocol 负责把它恢复到原 Logical Session。常见路径证明 pending call、peer、
   proxy 和 exposure 跨 replacement 保持稳定。Acceptor 以 `listen(adapter)` 接管持续 listener。
-- `IRpcPeer` 保留 session-scoped `expose()` / `resolve()`；Acceptor 保留集合级 `expose()` /
-  `resolveAll()`。Exposure 返回 core `Cleanup`；重复 Wire Service Name 原子失败，Cleanup 只影响
+- `IRpcPeer` 保留 session-scoped `expose()` / `resolve()`；Acceptor 保留 owner-scoped `expose()`。
+  Exposure 返回 core `Cleanup`；重复 Wire Service Name 原子失败，Cleanup 只影响
   后续 dispatch，已经捕获 implementation 的在途调用继续完成。v1 不提供原子热替换。
 - Prototype 证明 Topology Owner 需要 `close(): Promise<void>` teardown command 和一个统一
   `event$`，并排除 `closed` Promise、`closed$`、`peer$`、同步 `dispose()`、状态布尔值和
@@ -46,14 +46,11 @@ observation stream，形成最小而完整的 caller Interface。可编译 throw
 - Remote Service Descriptor 要求显式稳定 `wireName` 和逐方法 allowlist。v1 method definition
   只需 `true` 或 `{ cancelable: true }`；远端 unary 总是返回 Promise，properties、notification、
   streaming、未知 options 和错误 cancellation slot 均在类型层拒绝。
-- `resolveAll()` 返回稳定 Remote Service Group；每次调用截取新的 peer snapshot，并让每个
-  fulfilled/rejected result 保留对应稳定 peer。
-
 本票只确认 caller-facing member、注入位置、工作流和必要的行为轮廓。Prototype 中 opaque
 `IRpcProtocol` 的可实施 SPI 仍由 [决定公开 Protocol Module seam](05-decide-public-protocol-module-seam.md)
 决定；descriptor identity/type mapping、Physical Connection Adapter 的精确机制、Topology
-Owner lifecycle/error race、Session Recovery、call delivery state 和 Remote Service Group 的
-完整契约，分别留给地图中对应的后续票。尤其不能把 private brand、当前 Adapter 声明或具体
+Owner lifecycle/error race、Session Recovery 和 call delivery state 的完整契约，分别留给地图中
+对应的后续票。尤其不能把 private brand、当前 Adapter 声明或具体
 event discriminant 当成这些票的既定答案。
 
 验证通过：`pnpm exec biome check packages/remote/examples/user-facing-rpc-interface`、

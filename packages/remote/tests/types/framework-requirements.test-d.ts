@@ -6,6 +6,18 @@
 
 import { test } from "vitest";
 
+import type { IRpcAcceptor } from "../../src/index";
+
+test("RPC-API-007 omits the aggregate Acceptor facade", () => {
+	// @ts-expect-error RPC-API-007 removes the aggregate result type.
+	type MissingRpcPeerResult = import("../../src/index").RpcPeerResult;
+	void (null as unknown as MissingRpcPeerResult);
+
+	const acceptor = null as unknown as IRpcAcceptor;
+	// @ts-expect-error RPC-API-007 keeps multi-peer composition application-owned.
+	void acceptor.resolveAll;
+});
+
 test("RPC-BASE-003 keeps the Codec interface private", () => {
 	// @ts-expect-error RPC-BASE-003 keeps the Codec interface private.
 	type MissingRpcCodec = import("../../src/protocol").IRpcCodec;

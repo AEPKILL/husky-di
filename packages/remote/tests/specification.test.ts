@@ -1465,30 +1465,35 @@ describe("exposure registries and remote facades", () => {
 		).not.toThrow();
 	});
 
-	it("RPC-CALL-001 creates frozen non-thenable single and group facades", async () => {
+	it("RPC-CALL-001 creates a frozen non-thenable single-peer facade", async () => {
 		const connectorHarness = createProtocolHarness();
 		const connector = createRpcConnector({
 			protocol: connectorHarness.protocol,
 		});
-		const acceptorHarness = createProtocolHarness();
-		const acceptor = createRpcAcceptor({ protocol: acceptorHarness.protocol });
 		const descriptor = createRemoteServiceDescriptor(ICalculatorService, {
 			wireName: "example.calculator.v1",
 			methods: { add: true },
 		});
 
 		const remote = connector.peer.resolve(descriptor);
-		const group = acceptor.resolveAll(descriptor);
-		for (const facade of [remote, group]) {
-			expect(Object.getPrototypeOf(facade)).toBeNull();
-			expect(Object.isFrozen(facade)).toBe(true);
-			expect(Object.keys(facade)).toEqual(["add"]);
-			expect(facade.then).toBeUndefined();
-			expect(await Promise.resolve(facade)).toBe(facade);
-		}
+		expect(Object.getPrototypeOf(remote)).toBeNull();
+		expect(Object.isFrozen(remote)).toBe(true);
+		expect(Object.keys(remote)).toEqual(["add"]);
+		expect(remote.then).toBeUndefined();
+		expect(await Promise.resolve(remote)).toBe(remote);
 
 		const { add } = remote;
 		await expect(add(1, 2)).rejects.toMatchObject({ code: "unavailable" });
+	});
+
+	it("RPC-API-007 omits the aggregate Acceptor facade", () => {
+		const { protocol } = createProtocolHarness();
+		const acceptor = createRpcAcceptor({ protocol });
+
+		expect("resolveAll" in acceptor).toBe(false);
+		expect(
+			Object.getOwnPropertyNames(Object.getPrototypeOf(acceptor)),
+		).not.toContain("resolveAll");
 	});
 
 	it("RPC-DESC-004 RPC-DESC-005 applies the same duplicate and cleanup rules to Acceptor owner exposure", () => {
@@ -2530,145 +2535,6 @@ describe("custom Protocol outgoing invocations", () => {
 					event.type === "call-started" || event.type === "call-finished",
 			),
 		).toEqual([]);
-	});
-});
-
-describe("stable remote service groups", () => {
-	it("RPC-GROUP-001 RPC-GROUP-002 RPC-GROUP-003 reserves and commits every child before ordered start", async () => {
-		const harness = createProtocolHarness();
-		const acceptor = createRpcAcceptor({ protocol: harness.protocol });
-		const host = harness.acceptorHosts[0];
-		if (host === undefined) {
-			throw new Error("Expected an Acceptor Protocol host.");
-		}
-		const operations: string[] = [];
-		const createSession = (
-			name: string,
-			outcome:
-				| {
-						readonly type: RpcCallTerminalTypeEnum.returned;
-						readonly value: number;
-				  }
-				| {
-						readonly type: RpcCallTerminalTypeEnum.failed;
-						readonly code: RpcExceptionCodeEnum.handlerFailed;
-				  },
-		): IRpcProtocolSession => ({
-			reserveInvocation(request) {
-				operations.push(`reserve-${name}`);
-				expect(request.args.value).toEqual([1, 2]);
-				return {
-					commit(sink) {
-						operations.push(`commit-${name}`);
-						return {
-							start() {
-								operations.push(`start-${name}`);
-								if (outcome.type === RpcCallTerminalTypeEnum.returned) {
-									sink.finish({
-										type: RpcCallTerminalTypeEnum.returned,
-										value: host.normalizeApplicationValue(outcome.value),
-									});
-								} else {
-									sink.finish(outcome);
-								}
-							},
-							cancel() {},
-						};
-					},
-					release() {
-						operations.push(`release-${name}`);
-					},
-				};
-			},
-			forceClose() {},
-		});
-		expect(
-			host.admitSession(
-				createSession("first", {
-					type: RpcCallTerminalTypeEnum.returned,
-					value: 3,
-				}),
-			),
-		).toBeDefined();
-		expect(
-			host.admitSession(
-				createSession("second", {
-					type: RpcCallTerminalTypeEnum.failed,
-					code: RpcExceptionCodeEnum.handlerFailed,
-				}),
-			),
-		).toBeDefined();
-		const descriptor = createRemoteServiceDescriptor(ICalculatorService, {
-			wireName: "example.calculator.v1",
-			methods: { add: true },
-		});
-
-		const results = await acceptor.resolveAll(descriptor).add(1, 2);
-		expect(operations).toEqual([
-			"reserve-first",
-			"reserve-second",
-			"commit-first",
-			"commit-second",
-			"start-first",
-			"start-second",
-		]);
-		expect(Object.isFrozen(results)).toBe(true);
-		expect(results).toHaveLength(2);
-		expect(results[0]).toMatchObject({
-			peer: acceptor.peers[0],
-			status: "fulfilled",
-			value: 3,
-		});
-		expect(results[1]).toMatchObject({
-			peer: acceptor.peers[1],
-			status: "rejected",
-			reason: { code: "handler-failed" },
-		});
-		if (results[1]?.status !== "rejected") {
-			throw new Error("Expected the second group child to reject.");
-		}
-		expect(results[1].reason).toBeInstanceOf(RpcException);
-	});
-
-	it("RPC-GROUP-002 rolls back every reservation when one child lacks capacity", async () => {
-		const harness = createProtocolHarness();
-		const acceptor = createRpcAcceptor({ protocol: harness.protocol });
-		const host = harness.acceptorHosts[0];
-		if (host === undefined) {
-			throw new Error("Expected an Acceptor Protocol host.");
-		}
-		let releaseCalls = 0;
-		let commitCalls = 0;
-		host.admitSession({
-			reserveInvocation() {
-				return {
-					commit() {
-						commitCalls += 1;
-						return { start() {}, cancel() {} };
-					},
-					release() {
-						releaseCalls += 1;
-					},
-				};
-			},
-			forceClose() {},
-		});
-		host.admitSession({
-			reserveInvocation: () => undefined,
-			forceClose() {},
-		});
-		const descriptor = createRemoteServiceDescriptor(ICalculatorService, {
-			wireName: "example.calculator.v1",
-			methods: { add: true },
-		});
-
-		await expect(
-			acceptor.resolveAll(descriptor).add(1, 2),
-		).rejects.toMatchObject({
-			code: "unavailable",
-		});
-		expect(releaseCalls).toBe(1);
-		expect(commitCalls).toBe(0);
 	});
 });
 

@@ -282,7 +282,7 @@ assert.throws(
 import { RpcCallTerminalTypeEnum, RpcIncomingCallKindEnum, RpcProtocolSessionTransitionTypeEnum } from "@husky-di/remote/protocol";
 import type {
   IRemoteServiceDescriptor, IRpcPeer, IRpcConnector, IRpcConnectorReconnection,
-  IRpcAcceptor, RpcPeerResult,
+  IRpcAcceptor,
   RpcPeerState, RpcConnectorState, RpcAcceptorListenerState, RpcAcceptorState,
   RpcEvent,
   RpcConnectorOptions, RpcConnectorConnectOptions, RpcAcceptorOptions,
@@ -390,7 +390,7 @@ void [
 type Inventory = [
 	IRemoteServiceDescriptor<unknown, never>, IRpcPeer, IRpcConnector,
 	IRpcConnectorReconnection, IRpcAcceptor,
-	RpcPeerResult<unknown>, RpcPeerState, RpcConnectorState, RpcAcceptorListenerState,
+	RpcPeerState, RpcConnectorState, RpcAcceptorListenerState,
 	RpcAcceptorState, RpcCloseReasonEnum, RpcCallDirectionEnum, RpcEvent, RpcExceptionCodeEnum,
 	RpcConnectorOptions, RpcConnectorConnectOptions, RpcAcceptorOptions,
 	RpcConnectorRuntimePolicyOptions,
@@ -427,6 +427,11 @@ import type { RemoteService, RpcMethodDefinitions } from "@husky-di/remote";
 import type { RpcConnectorImpl as RootRpcConnectorImpl } from "@husky-di/remote";
 // @ts-expect-error Implementation deep imports are private.
 import type { RpcConnectorImpl as DeepRpcConnectorImpl } from "@husky-di/remote/dist/impls/owner/rpc-connector.impl.js";
+// @ts-expect-error RPC-API-007 removes the aggregate result type.
+import type { RpcPeerResult } from "@husky-di/remote";
+declare const acceptor: IRpcAcceptor;
+// @ts-expect-error RPC-API-007 keeps multi-peer composition application-owned.
+acceptor.resolveAll;
 `,
 		);
 		run(process.execPath, [tscPath, "-p", consumerRoot], consumerRoot);

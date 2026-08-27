@@ -199,7 +199,7 @@ retained deadline。
 Protocol counter exhaustion只对受影响 Session执行
 `connected -> draining(counter-exhaustion)`，Acceptor Owner与 healthy siblings保持 active；它复用
 同一 drain predicate、unsequenced Close与每阶段 configured deadline。该 peer在 terminal前仍保留于
-membership，但 single invocation固定 `unavailable`，group eligibility由 issue 12过滤。Owner-level
+membership，但新的 outgoing invocation固定 `unavailable`。Owner-level
 shutdown的 `G`仍由 Framework一次性批量投影所有当时 connected peers，Protocol runtime不得逐项重复
 发该 transition；已经 counter-draining的 peer只加入 Owner grace barrier而不重发 transition或改写
 reason。Drain intent不是 terminal，后续 explicit close、Owner deadline与Session counter deadline仍按
