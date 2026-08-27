@@ -5,9 +5,8 @@
  */
 
 import type { Subscription } from "rxjs";
-
-import type { IRpcConnection } from "@/interfaces/rpc-connection.interface";
-import type { IRpcOwnerCustody } from "@/interfaces/rpc-owner-custody.interface";
+import type { IRpcOwnerCustody } from "@/interfaces/owner/rpc-owner-custody.interface";
+import type { IRpcConnection } from "@/interfaces/transport/rpc-connection.interface";
 import type {
 	RpcOwnedCleanup,
 	RpcOwnedConnection,

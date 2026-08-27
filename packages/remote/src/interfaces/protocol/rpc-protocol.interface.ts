@@ -9,7 +9,7 @@ import type { RpcIncomingCallKindEnum } from "@/enums/protocol/rpc-incoming-call
 import type { RpcProtocolSessionTransitionTypeEnum } from "@/enums/protocol/rpc-protocol-session-transition-type.enum";
 import type { RpcCloseReasonEnum } from "@/enums/rpc-close-reason.enum";
 import type { RpcExceptionCodeEnum } from "@/enums/rpc-exception-code.enum";
-import type { IRpcConnection } from "@/interfaces/rpc-connection.interface";
+import type { IRpcConnection } from "@/interfaces/transport/rpc-connection.interface";
 
 export type RpcApplicationValue =
 	| null

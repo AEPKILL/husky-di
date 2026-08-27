@@ -1,5 +1,5 @@
 /**
- * @overview Internal Physical Connection Endpoint seam for the built-in Protocol.
+ * @overview Internal current Physical Connection Endpoint seam for the built-in Protocol.
  * @author AEPKILL
  * @created 2026-08-19 00:00:00
  */

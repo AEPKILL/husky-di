@@ -14,7 +14,7 @@ import {
 } from "@/impls/protocol/rpc-protocol.impl";
 import { RpcRetainedBytesLedgerImpl } from "@/impls/protocol/rpc-retained-bytes-ledger.impl";
 import { RpcSessionImpl } from "@/impls/protocol/rpc-session.impl";
-import type { IRpcEndpoint } from "@/interfaces/protocol/rpc-endpoint.interface";
+import type { IRpcEndpoint } from "@/interfaces/endpoint/rpc-endpoint.interface";
 import type { IRpcProtocol } from "@/interfaces/protocol/rpc-protocol.interface";
 import type { CreateRpcEndpointOptions } from "@/types/protocol/rpc-endpoint.type";
 import type {

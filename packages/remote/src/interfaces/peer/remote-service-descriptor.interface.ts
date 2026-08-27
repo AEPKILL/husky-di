@@ -1,5 +1,5 @@
 /**
- * @overview Public opaque Remote Service Descriptor contract.
+ * @overview Public opaque Remote Service Descriptor contract used by RPC Peers.
  * @author AEPKILL
  * @created 2026-08-19 00:00:00
  */

@@ -4,7 +4,7 @@
  * @created 2026-08-19 00:00:00
  */
 
-import type { IRpcHandlerScheduler } from "@/interfaces/rpc-handler-scheduler.interface";
+import type { IRpcHandlerScheduler } from "@/interfaces/owner/rpc-handler-scheduler.interface";
 import type { RpcHandlerJob } from "@/types/rpc-handler-scheduler.type";
 
 interface RpcHandlerSessionQueue {

@@ -1,10 +1,10 @@
 /**
- * @overview Private Topology Owner resource-custody contract.
+ * @overview Private Topology Owner resource-custody and cleanup contract.
  * @author AEPKILL
  * @created 2026-08-22 17:54:40
  */
 
-import type { IRpcConnection } from "@/interfaces/rpc-connection.interface";
+import type { IRpcConnection } from "@/interfaces/transport/rpc-connection.interface";
 import type {
 	RpcOwnedCleanup,
 	RpcOwnedConnection,

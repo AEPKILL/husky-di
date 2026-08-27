@@ -1,10 +1,10 @@
 /**
- * @overview Private retained Session contract used by the built-in Protocol runtimes.
+ * @overview Private retained Logical Session contract used by the built-in Protocol runtimes.
  * @author AEPKILL
  * @created 2026-08-22 17:54:40
  */
 
-import type { IRpcEndpoint } from "@/interfaces/protocol/rpc-endpoint.interface";
+import type { IRpcEndpoint } from "@/interfaces/endpoint/rpc-endpoint.interface";
 import type {
 	IRpcProtocolSession,
 	IRpcProtocolSessionHost,

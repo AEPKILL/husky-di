@@ -1,29 +1,19 @@
 /**
- * @overview Private RPC Peer contract used by Topology Owner implementations.
+ * @overview Private RPC Peer runtime contract used by Topology Owner implementations.
  * @author AEPKILL
  * @created 2026-08-22 17:54:40
  */
 
+import type { IRpcPeer } from "@/interfaces/peer/rpc-peer.interface";
+import type { IRpcPeerInvocationReservation } from "@/interfaces/peer/rpc-peer-invocation-reservation.interface";
 import type {
 	IRpcApplicationArgumentsSnapshot,
 	IRpcProtocolIncomingCallRequest,
 	IRpcProtocolSession,
 	RpcProtocolIncomingCallReservation,
 } from "@/interfaces/protocol/rpc-protocol.interface";
-import type { IRpcPeer } from "@/interfaces/rpc-caller.interface";
 import type { RpcPeerState } from "@/types/rpc-caller.type";
 import type { RpcExposureRegistry } from "@/types/rpc-exposure.type";
-
-export interface IRpcPeerCommittedInvocation {
-	readonly result: Promise<unknown>;
-	start(): void;
-	cancel(): void;
-}
-
-export interface IRpcPeerInvocationReservation {
-	commit(): IRpcPeerCommittedInvocation;
-	release(): void;
-}
 
 export interface IRpcPeerRuntime extends IRpcPeer {
 	commitState(state: RpcPeerState): void;

@@ -7,5 +7,5 @@
 export type {
 	IRpcAcceptorAdapter,
 	IRpcConnectorAdapter,
-} from "@/interfaces/rpc-adapter.interface";
-export type { IRpcConnection } from "@/interfaces/rpc-connection.interface";
+} from "@/interfaces/transport/rpc-adapter.interface";
+export type { IRpcConnection } from "@/interfaces/transport/rpc-connection.interface";

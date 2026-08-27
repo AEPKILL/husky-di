@@ -22,6 +22,13 @@ export { createRpcConnector } from "@/factories/rpc-connector.factory";
 export { createRpcConnectorReconnection } from "@/factories/rpc-connector-reconnection.factory";
 export { createRpcProtocol } from "@/factories/rpc-protocol.factory";
 export type {
+	IRpcAcceptor,
+	RpcPeerResult,
+} from "@/interfaces/owner/rpc-acceptor.interface";
+export type { IRpcConnector } from "@/interfaces/owner/rpc-connector.interface";
+export type { IRemoteServiceDescriptor } from "@/interfaces/peer/remote-service-descriptor.interface";
+export type { IRpcPeer } from "@/interfaces/peer/rpc-peer.interface";
+export type {
 	IRpcApplicationRecord,
 	IRpcProtocol,
 	IRpcProtocolRuntimePolicy,
@@ -30,20 +37,13 @@ export type {
 	RpcProtocolFaultReason,
 	RpcSessionCloseReason,
 } from "@/interfaces/protocol/rpc-protocol.interface";
-export type { IRemoteServiceDescriptor } from "@/interfaces/remote-service-descriptor.interface";
+export type { IRpcConnectorReconnection } from "@/interfaces/reconnection/rpc-connector-reconnection.interface";
 export type {
 	IRpcAcceptorAdapter,
 	IRpcConnectorAdapter,
-} from "@/interfaces/rpc-adapter.interface";
-export type {
-	IRpcAcceptor,
-	IRpcConnector,
-	IRpcPeer,
-	RpcEvent,
-	RpcPeerResult,
-} from "@/interfaces/rpc-caller.interface";
-export type { IRpcConnection } from "@/interfaces/rpc-connection.interface";
-export type { IRpcConnectorReconnection } from "@/interfaces/rpc-connector-reconnection.interface";
+} from "@/interfaces/transport/rpc-adapter.interface";
+export type { IRpcConnection } from "@/interfaces/transport/rpc-connection.interface";
+export type { RpcEvent } from "@/types/owner/rpc-event.type";
 export type {
 	RpcAcceptorListenerState,
 	RpcAcceptorOptions,

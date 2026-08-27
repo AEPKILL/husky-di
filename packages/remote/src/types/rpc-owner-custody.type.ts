@@ -4,7 +4,7 @@
  * @created 2026-08-22 15:32:32
  */
 
-import type { IRpcConnection } from "@/interfaces/rpc-connection.interface";
+import type { IRpcConnection } from "@/interfaces/transport/rpc-connection.interface";
 
 export type RpcOwnedConnection = {
 	readonly connection: IRpcConnection;

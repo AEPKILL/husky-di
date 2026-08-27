@@ -22,7 +22,7 @@ import type {
 	IRpcProtocolHost,
 	IRpcProtocolRuntimePolicy,
 } from "../../src/interfaces/protocol/rpc-protocol.interface";
-import type { IRpcConnection } from "../../src/interfaces/rpc-connection.interface";
+import type { IRpcConnection } from "../../src/interfaces/transport/rpc-connection.interface";
 import type {
 	RpcJsonRecord,
 	RpcJsonValue,

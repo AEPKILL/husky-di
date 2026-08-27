@@ -47,4 +47,4 @@ export type {
 	RpcSessionCloseReason,
 	RpcUnknownCallFailure,
 } from "@/interfaces/protocol/rpc-protocol.interface";
-export type { IRpcConnection } from "@/interfaces/rpc-connection.interface";
+export type { IRpcConnection } from "@/interfaces/transport/rpc-connection.interface";

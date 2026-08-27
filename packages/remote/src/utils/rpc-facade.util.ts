@@ -5,7 +5,7 @@
  */
 
 import { getRemoteServiceDescriptorData } from "@/factories/remote-service-descriptor.factory";
-import type { IRemoteServiceDescriptor } from "@/interfaces/remote-service-descriptor.interface";
+import type { IRemoteServiceDescriptor } from "@/interfaces/peer/remote-service-descriptor.interface";
 import type {
 	RemoteService,
 	RpcMethodDefinitions,

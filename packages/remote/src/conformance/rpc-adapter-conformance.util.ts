@@ -17,7 +17,7 @@ import {
 	waitFor,
 	within,
 } from "@/conformance/rpc-conformance.util";
-import type { IRpcConnection } from "@/interfaces/rpc-connection.interface";
+import type { IRpcConnection } from "@/interfaces/transport/rpc-connection.interface";
 
 const COMPATIBILITY_MESSAGE_BYTES = 1_048_576;
 

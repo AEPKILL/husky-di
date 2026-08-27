@@ -9,8 +9,8 @@ import {
 	DEFAULT_RPC_CONNECTOR_RECONNECTION_RETRY_DELAYS_MS,
 } from "@/constants/rpc-connector-reconnection.const";
 import { RpcConnectorReconnectionImpl } from "@/impls/rpc-connector-reconnection.impl";
-import type { IRpcConnector } from "@/interfaces/rpc-caller.interface";
-import type { IRpcConnectorReconnection } from "@/interfaces/rpc-connector-reconnection.interface";
+import type { IRpcConnector } from "@/interfaces/owner/rpc-connector.interface";
+import type { IRpcConnectorReconnection } from "@/interfaces/reconnection/rpc-connector-reconnection.interface";
 import type {
 	CreateRpcConnectorReconnectionOptions,
 	RpcConnectorAdapterFactory,

@@ -16,6 +16,11 @@ import { RpcExceptionCodeEnum } from "@/enums/rpc-exception-code.enum";
 import { RpcStateStatusEnum } from "@/enums/rpc-state-status.enum";
 import { getRemoteServiceDescriptorData } from "@/factories/remote-service-descriptor.factory";
 import { createRpcException } from "@/factories/rpc-exception.factory";
+import type { IRpcHandlerScheduler } from "@/interfaces/owner/rpc-handler-scheduler.interface";
+import type { IRemoteServiceDescriptor } from "@/interfaces/peer/remote-service-descriptor.interface";
+import type { IRpcPeerCommittedInvocation } from "@/interfaces/peer/rpc-peer-committed-invocation.interface";
+import type { IRpcPeerInvocationReservation } from "@/interfaces/peer/rpc-peer-invocation-reservation.interface";
+import type { IRpcPeerRuntime } from "@/interfaces/peer/rpc-peer-runtime.interface";
 import type {
 	IRpcApplicationArgumentsSnapshot,
 	IRpcApplicationSnapshot,
@@ -30,14 +35,7 @@ import type {
 	RpcProtocolIncomingCallReservation,
 	RpcUnknownCallFailure,
 } from "@/interfaces/protocol/rpc-protocol.interface";
-import type { IRemoteServiceDescriptor } from "@/interfaces/remote-service-descriptor.interface";
-import type { RpcEvent } from "@/interfaces/rpc-caller.interface";
-import type { IRpcHandlerScheduler } from "@/interfaces/rpc-handler-scheduler.interface";
-import type {
-	IRpcPeerCommittedInvocation,
-	IRpcPeerInvocationReservation,
-	IRpcPeerRuntime,
-} from "@/interfaces/rpc-peer.interface";
+import type { RpcPeerCallEvent } from "@/types/peer/rpc-peer-call-event.type";
 import type {
 	RemoteService,
 	RemoteServiceImplementation,
@@ -302,7 +300,7 @@ export class RpcPeerImpl implements IRpcPeerRuntime {
 	readonly #localExposureRegistry: RpcExposureRegistry = new Map();
 	readonly #ownerExposureRegistry: RpcExposureRegistry;
 	readonly #isOwnerActive: () => boolean;
-	readonly #emitEvent: (event: RpcEvent) => void;
+	readonly #emitEvent: (event: RpcPeerCallEvent) => void;
 	readonly #onProtocolFault: (error: Error) => void;
 	readonly #handlerScheduler: IRpcHandlerScheduler;
 	readonly #maximumIncomingBytes: number;
@@ -865,13 +863,19 @@ export class RpcPeerImpl implements IRpcPeerRuntime {
 					outcome.type === RpcCallTerminalTypeEnum.returned ||
 					outcome.type === RpcCallTerminalTypeEnum.returnedVoid;
 				if (outcome.type === RpcCallTerminalTypeEnum.sessionTerminated) {
-					this.#emitEvent({ ...base, outcome: RpcCallStatusEnum.terminated });
+					this.#emitEvent({
+						...base,
+						outcome: RpcCallStatusEnum.terminated as const,
+					});
 				} else if (handlerReturned) {
-					this.#emitEvent({ ...base, outcome: RpcCallStatusEnum.fulfilled });
+					this.#emitEvent({
+						...base,
+						outcome: RpcCallStatusEnum.fulfilled as const,
+					});
 				} else {
 					this.#emitEvent({
 						...base,
-						outcome: RpcCallStatusEnum.rejected,
+						outcome: RpcCallStatusEnum.rejected as const,
 						code: outcome.code,
 					});
 				}

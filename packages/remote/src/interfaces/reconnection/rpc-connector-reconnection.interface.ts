@@ -1,12 +1,12 @@
 /**
- * @overview Connector Reconnection supervisor contract.
+ * @overview Public Connector Reconnection supervisor contract.
  * @author AEPKILL
  * @created 2026-08-21 02:14:00
  */
 
 import type { Observable } from "rxjs";
 
-import type { IRpcConnector } from "@/interfaces/rpc-caller.interface";
+import type { IRpcConnector } from "@/interfaces/owner/rpc-connector.interface";
 import type {
 	RpcConnectorReconnectionEvent,
 	RpcConnectorReconnectionState,

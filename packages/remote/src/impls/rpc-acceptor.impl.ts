@@ -16,6 +16,19 @@ import { RpcExceptionCodeEnum } from "@/enums/rpc-exception-code.enum";
 import { RpcStateStatusEnum } from "@/enums/rpc-state-status.enum";
 import { getRemoteServiceDescriptorData } from "@/factories/remote-service-descriptor.factory";
 import { createRpcException } from "@/factories/rpc-exception.factory";
+import type { IRpcRetainedBytesLedger } from "@/interfaces/common/rpc-retained-bytes-ledger.interface";
+import type {
+	IRpcAcceptor,
+	RemoteServiceGroup,
+	RpcPeerResult,
+} from "@/interfaces/owner/rpc-acceptor.interface";
+import type { IRpcHandlerScheduler } from "@/interfaces/owner/rpc-handler-scheduler.interface";
+import type { IRpcOwnerCustody } from "@/interfaces/owner/rpc-owner-custody.interface";
+import type { IRemoteServiceDescriptor } from "@/interfaces/peer/remote-service-descriptor.interface";
+import type { IRpcPeer } from "@/interfaces/peer/rpc-peer.interface";
+import type { IRpcPeerCommittedInvocation } from "@/interfaces/peer/rpc-peer-committed-invocation.interface";
+import type { IRpcPeerInvocationReservation } from "@/interfaces/peer/rpc-peer-invocation-reservation.interface";
+import type { IRpcPeerRuntime } from "@/interfaces/peer/rpc-peer-runtime.interface";
 import type {
 	IRpcProtocolAcceptorRuntime,
 	IRpcProtocolRuntimePolicy,
@@ -26,24 +39,9 @@ import type {
 	RpcProtocolSessionTransition,
 	RpcSessionCloseReason,
 } from "@/interfaces/protocol/rpc-protocol.interface";
-import type { IRpcRetainedBytesLedger } from "@/interfaces/protocol/rpc-retained-bytes-ledger.interface";
-import type { IRemoteServiceDescriptor } from "@/interfaces/remote-service-descriptor.interface";
-import type { IRpcAcceptorAdapter } from "@/interfaces/rpc-adapter.interface";
-import type {
-	IRpcAcceptor,
-	IRpcPeer,
-	RemoteServiceGroup,
-	RpcEvent,
-	RpcPeerResult,
-} from "@/interfaces/rpc-caller.interface";
-import type { IRpcConnection } from "@/interfaces/rpc-connection.interface";
-import type { IRpcHandlerScheduler } from "@/interfaces/rpc-handler-scheduler.interface";
-import type { IRpcOwnerCustody } from "@/interfaces/rpc-owner-custody.interface";
-import type {
-	IRpcPeerCommittedInvocation,
-	IRpcPeerInvocationReservation,
-	IRpcPeerRuntime,
-} from "@/interfaces/rpc-peer.interface";
+import type { IRpcAcceptorAdapter } from "@/interfaces/transport/rpc-adapter.interface";
+import type { IRpcConnection } from "@/interfaces/transport/rpc-connection.interface";
+import type { RpcEvent } from "@/types/owner/rpc-event.type";
 import type {
 	RemoteServiceImplementation,
 	RpcMethodDefinitions,

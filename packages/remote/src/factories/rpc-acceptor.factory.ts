@@ -10,7 +10,7 @@ import { RpcAcceptorImpl } from "@/impls/rpc-acceptor.impl";
 import { RpcHandlerSchedulerImpl } from "@/impls/rpc-handler-scheduler.impl";
 import { RpcOwnerCustodyImpl } from "@/impls/rpc-owner-custody.impl";
 import { RpcPeerImpl } from "@/impls/rpc-peer.impl";
-import type { IRpcAcceptor } from "@/interfaces/rpc-caller.interface";
+import type { IRpcAcceptor } from "@/interfaces/owner/rpc-acceptor.interface";
 import type { RpcAcceptorOptions } from "@/types/rpc-caller.type";
 import { createRpcProtocolAcceptorRuntime } from "@/utils/rpc-protocol-runtime.util";
 import {

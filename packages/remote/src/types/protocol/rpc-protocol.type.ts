@@ -4,8 +4,8 @@
  * @created 2026-08-19 00:00:00
  */
 
-import type { IRpcBindingAttempt } from "@/interfaces/protocol/rpc-binding-attempt.interface";
-import type { IRpcSession } from "@/interfaces/protocol/rpc-session.interface";
+import type { IRpcBindingAttempt } from "@/interfaces/endpoint/rpc-binding-attempt.interface";
+import type { IRpcSession } from "@/interfaces/session/rpc-session.interface";
 import type { CreateRpcBindingAttemptOptions } from "@/types/protocol/rpc-binding-attempt.type";
 import type { CreateRpcSessionOptions } from "@/types/protocol/rpc-session.type";
 

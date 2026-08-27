@@ -8,7 +8,7 @@ import type { IRpcProtocol } from "@/interfaces/protocol/rpc-protocol.interface"
 import type {
 	IRpcAcceptorAdapter,
 	IRpcConnectorAdapter,
-} from "@/interfaces/rpc-adapter.interface";
+} from "@/interfaces/transport/rpc-adapter.interface";
 
 export interface IRpcProtocolConformanceFixture {
 	readonly protocol: IRpcProtocol;

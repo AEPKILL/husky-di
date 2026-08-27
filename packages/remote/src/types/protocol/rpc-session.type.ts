@@ -5,12 +5,12 @@
  */
 
 import type { RpcEndpointFailureEnum } from "@/enums/protocol/rpc-endpoint-failure.enum";
+import type { IRpcRetainedBytesLedger } from "@/interfaces/common/rpc-retained-bytes-ledger.interface";
 import type { IRpcCodec } from "@/interfaces/protocol/rpc-codec.interface";
 import type {
 	IRpcProtocolHost,
 	IRpcRetainedBytesReservation,
 } from "@/interfaces/protocol/rpc-protocol.interface";
-import type { IRpcRetainedBytesLedger } from "@/interfaces/protocol/rpc-retained-bytes-ledger.interface";
 
 export type CreateRpcSessionOptions<TKey> = {
 	readonly host: IRpcProtocolHost;

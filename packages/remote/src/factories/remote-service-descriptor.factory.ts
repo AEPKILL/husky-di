@@ -7,7 +7,7 @@
 import type { ServiceIdentifier } from "@husky-di/core";
 import { z } from "zod";
 
-import type { IRemoteServiceDescriptor } from "@/interfaces/remote-service-descriptor.interface";
+import type { IRemoteServiceDescriptor } from "@/interfaces/peer/remote-service-descriptor.interface";
 import type {
 	NonEmptyMethodDefinitions,
 	RpcMethodDefinitions,

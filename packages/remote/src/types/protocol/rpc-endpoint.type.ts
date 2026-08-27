@@ -6,7 +6,7 @@
 
 import type { RpcEndpointFailureEnum } from "@/enums/protocol/rpc-endpoint-failure.enum";
 import type { IRpcRetainedBytesReservation } from "@/interfaces/protocol/rpc-protocol.interface";
-import type { IRpcConnection } from "@/interfaces/rpc-connection.interface";
+import type { IRpcConnection } from "@/interfaces/transport/rpc-connection.interface";
 
 export type CreateRpcEndpointOptions = {
 	readonly connection: IRpcConnection;

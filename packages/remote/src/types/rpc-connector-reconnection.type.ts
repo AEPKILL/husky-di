@@ -8,8 +8,8 @@ import type { RpcConnectorReconnectionAttemptFailureStageEnum } from "@/enums/rp
 import type { RpcConnectorReconnectionEventTypeEnum } from "@/enums/rpc-connector-reconnection-event-type.enum";
 import type { RpcConnectorReconnectionStopReasonEnum } from "@/enums/rpc-connector-reconnection-stop-reason.enum";
 import type { RpcStateStatusEnum } from "@/enums/rpc-state-status.enum";
-import type { IRpcConnectorAdapter } from "@/interfaces/rpc-adapter.interface";
-import type { IRpcConnector } from "@/interfaces/rpc-caller.interface";
+import type { IRpcConnector } from "@/interfaces/owner/rpc-connector.interface";
+import type { IRpcConnectorAdapter } from "@/interfaces/transport/rpc-adapter.interface";
 
 export type RpcConnectorAdapterFactory = () => IRpcConnectorAdapter;
 

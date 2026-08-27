@@ -4,14 +4,14 @@
  * @created 2026-08-22 17:54:40
  */
 
+import type { IRpcRetainedBytesLedger } from "@/interfaces/common/rpc-retained-bytes-ledger.interface";
+import type { IRpcHandlerScheduler } from "@/interfaces/owner/rpc-handler-scheduler.interface";
+import type { IRpcOwnerCustody } from "@/interfaces/owner/rpc-owner-custody.interface";
 import type {
 	IRpcProtocolAcceptorRuntime,
 	IRpcProtocolConnectorRuntime,
 	IRpcProtocolRuntimePolicy,
 } from "@/interfaces/protocol/rpc-protocol.interface";
-import type { IRpcRetainedBytesLedger } from "@/interfaces/protocol/rpc-retained-bytes-ledger.interface";
-import type { IRpcHandlerScheduler } from "@/interfaces/rpc-handler-scheduler.interface";
-import type { IRpcOwnerCustody } from "@/interfaces/rpc-owner-custody.interface";
 import type { RpcPeerFactory } from "@/types/rpc-peer.type";
 
 type CreateRpcOwnerImplOptions = Readonly<{

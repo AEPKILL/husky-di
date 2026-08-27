@@ -12,8 +12,8 @@ import { RpcConnectorReconnectionStopReasonEnum } from "@/enums/rpc-connector-re
 import { RpcExceptionCodeEnum } from "@/enums/rpc-exception-code.enum";
 import { RpcStateStatusEnum } from "@/enums/rpc-state-status.enum";
 import { createRpcException } from "@/factories/rpc-exception.factory";
-import type { IRpcConnector } from "@/interfaces/rpc-caller.interface";
-import type { IRpcConnectorReconnection } from "@/interfaces/rpc-connector-reconnection.interface";
+import type { IRpcConnector } from "@/interfaces/owner/rpc-connector.interface";
+import type { IRpcConnectorReconnection } from "@/interfaces/reconnection/rpc-connector-reconnection.interface";
 import type {
 	RpcConnectorAdapterFactory,
 	RpcConnectorReconnectionEvent,

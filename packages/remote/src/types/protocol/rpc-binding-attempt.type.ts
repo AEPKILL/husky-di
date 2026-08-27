@@ -4,9 +4,9 @@
  * @created 2026-08-22 00:00:00
  */
 
-import type { IRpcEndpoint } from "@/interfaces/protocol/rpc-endpoint.interface";
+import type { IRpcEndpoint } from "@/interfaces/endpoint/rpc-endpoint.interface";
 import type { IRpcRetainedBytesReservation } from "@/interfaces/protocol/rpc-protocol.interface";
-import type { IRpcConnection } from "@/interfaces/rpc-connection.interface";
+import type { IRpcConnection } from "@/interfaces/transport/rpc-connection.interface";
 import type { CreateRpcEndpointOptions } from "@/types/protocol/rpc-endpoint.type";
 
 export type CreateRpcBindingAttemptOptions = Readonly<{

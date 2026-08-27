@@ -5,9 +5,9 @@
  */
 
 import { RpcEndpointFailureEnum } from "@/enums/protocol/rpc-endpoint-failure.enum";
-import type { IRpcBindingAttempt } from "@/interfaces/protocol/rpc-binding-attempt.interface";
-import type { IRpcEndpoint } from "@/interfaces/protocol/rpc-endpoint.interface";
-import type { IRpcSession } from "@/interfaces/protocol/rpc-session.interface";
+import type { IRpcBindingAttempt } from "@/interfaces/endpoint/rpc-binding-attempt.interface";
+import type { IRpcEndpoint } from "@/interfaces/endpoint/rpc-endpoint.interface";
+import type { IRpcSession } from "@/interfaces/session/rpc-session.interface";
 import type {
 	CreateRpcBindingAttemptImplOptions,
 	CreateRpcBindingAttemptOptions,

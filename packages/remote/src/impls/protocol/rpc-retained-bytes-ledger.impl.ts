@@ -4,8 +4,8 @@
  * @created 2026-08-21 00:00:00
  */
 
+import type { IRpcRetainedBytesLedger } from "@/interfaces/common/rpc-retained-bytes-ledger.interface";
 import type { IRpcRetainedBytesReservation } from "@/interfaces/protocol/rpc-protocol.interface";
-import type { IRpcRetainedBytesLedger } from "@/interfaces/protocol/rpc-retained-bytes-ledger.interface";
 import {
 	isNonNegativeSafeInteger,
 	isPositiveSafeInteger,

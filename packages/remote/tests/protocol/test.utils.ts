@@ -19,8 +19,8 @@ import type {
 import type {
 	IRpcAcceptorAdapter,
 	IRpcConnectorAdapter,
-} from "../../src/interfaces/rpc-adapter.interface";
-import type { IRpcConnection } from "../../src/interfaces/rpc-connection.interface";
+} from "../../src/interfaces/transport/rpc-adapter.interface";
+import type { IRpcConnection } from "../../src/interfaces/transport/rpc-connection.interface";
 import type { RpcBindingEpoch } from "../../src/types/protocol/rpc-session.type";
 import {
 	normalizeRpcApplicationArguments,

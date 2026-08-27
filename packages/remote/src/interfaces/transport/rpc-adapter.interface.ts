@@ -1,12 +1,12 @@
 /**
- * @overview Role-specific RPC Transport Adapter contracts.
+ * @overview Public role-specific RPC Transport Adapter contracts.
  * @author AEPKILL
  * @created 2026-08-19 00:00:00
  */
 
 import type { Observable } from "rxjs";
 
-import type { IRpcConnection } from "@/interfaces/rpc-connection.interface";
+import type { IRpcConnection } from "@/interfaces/transport/rpc-connection.interface";
 
 /** Creates exactly one Connector-side Physical Connection. */
 export interface IRpcConnectorAdapter {

@@ -31,8 +31,8 @@ import type {
 import type {
 	IRpcAcceptorAdapter,
 	IRpcConnectorAdapter,
-} from "../../src/interfaces/rpc-adapter.interface";
-import type { IRpcConnection } from "../../src/interfaces/rpc-connection.interface";
+} from "../../src/interfaces/transport/rpc-adapter.interface";
+import type { IRpcConnection } from "../../src/interfaces/transport/rpc-connection.interface";
 import {
 	RpcCallTerminalTypeEnum,
 	RpcProtocolSessionTransitionTypeEnum,

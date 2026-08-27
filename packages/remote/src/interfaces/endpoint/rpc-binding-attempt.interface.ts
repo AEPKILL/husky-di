@@ -1,12 +1,12 @@
 /**
- * @overview Private one-shot Physical Connection Binding Attempt contract.
+ * @overview Private Endpoint binding-attempt contract for one Physical Connection.
  * @author AEPKILL
  * @created 2026-08-22 17:54:40
  */
 
 import type { RpcEndpointFailureEnum } from "@/enums/protocol/rpc-endpoint-failure.enum";
-import type { IRpcEndpoint } from "@/interfaces/protocol/rpc-endpoint.interface";
-import type { IRpcSession } from "@/interfaces/protocol/rpc-session.interface";
+import type { IRpcEndpoint } from "@/interfaces/endpoint/rpc-endpoint.interface";
+import type { IRpcSession } from "@/interfaces/session/rpc-session.interface";
 import type { RpcBindingAttemptLease } from "@/types/protocol/rpc-binding-attempt.type";
 import type { RpcBindingEpoch } from "@/types/protocol/rpc-session.type";
 

@@ -17,8 +17,9 @@ import { RpcProtocolSessionTransitionTypeEnum } from "@/enums/protocol/rpc-proto
 import { RpcWireRecordKindEnum } from "@/enums/protocol/rpc-wire-record-kind.enum";
 import { RpcCloseReasonEnum } from "@/enums/rpc-close-reason.enum";
 import { RpcExceptionCodeEnum } from "@/enums/rpc-exception-code.enum";
+import type { IRpcRetainedBytesLedger } from "@/interfaces/common/rpc-retained-bytes-ledger.interface";
+import type { IRpcEndpoint } from "@/interfaces/endpoint/rpc-endpoint.interface";
 import type { IRpcCodec } from "@/interfaces/protocol/rpc-codec.interface";
-import type { IRpcEndpoint } from "@/interfaces/protocol/rpc-endpoint.interface";
 import type {
 	IRpcProtocolHost,
 	IRpcProtocolIncomingCall,
@@ -32,8 +33,7 @@ import type {
 	RpcHandlerOutcome,
 	RpcIncomingTerminal,
 } from "@/interfaces/protocol/rpc-protocol.interface";
-import type { IRpcRetainedBytesLedger } from "@/interfaces/protocol/rpc-retained-bytes-ledger.interface";
-import type { IRpcSession } from "@/interfaces/protocol/rpc-session.interface";
+import type { IRpcSession } from "@/interfaces/session/rpc-session.interface";
 import type {
 	CreateRpcSessionOptions,
 	RpcBindingCandidate,

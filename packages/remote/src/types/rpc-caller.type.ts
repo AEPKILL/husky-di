@@ -16,7 +16,7 @@ import type {
 	RpcProtocolFaultReason,
 	RpcSessionCloseReason,
 } from "@/interfaces/protocol/rpc-protocol.interface";
-import type { IRpcConnectorAdapter } from "@/interfaces/rpc-adapter.interface";
+import type { IRpcConnectorAdapter } from "@/interfaces/transport/rpc-adapter.interface";
 
 type RpcNormalSessionCloseReason = Extract<
 	RpcSessionCloseReason,

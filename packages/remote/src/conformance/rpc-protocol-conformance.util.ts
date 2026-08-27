@@ -41,7 +41,7 @@ import type {
 	RpcProtocolSessionTransition,
 	RpcUnknownCallFailure,
 } from "@/interfaces/protocol/rpc-protocol.interface";
-import type { IRpcConnection } from "@/interfaces/rpc-connection.interface";
+import type { IRpcConnection } from "@/interfaces/transport/rpc-connection.interface";
 import {
 	normalizeRpcApplicationArguments,
 	normalizeRpcApplicationValue,

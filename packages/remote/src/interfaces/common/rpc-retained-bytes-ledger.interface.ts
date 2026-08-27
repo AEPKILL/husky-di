@@ -1,5 +1,5 @@
 /**
- * @overview Private retained-byte reservation ledger contract.
+ * @overview Shared retained-byte reservation ledger contract.
  * @author AEPKILL
  * @created 2026-08-22 17:54:40
  */

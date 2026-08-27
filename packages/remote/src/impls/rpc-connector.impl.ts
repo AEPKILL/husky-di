@@ -17,6 +17,10 @@ import { RpcEventTypeEnum } from "@/enums/rpc-event-type.enum";
 import { RpcExceptionCodeEnum } from "@/enums/rpc-exception-code.enum";
 import { RpcStateStatusEnum } from "@/enums/rpc-state-status.enum";
 import { createRpcException } from "@/factories/rpc-exception.factory";
+import type { IRpcRetainedBytesLedger } from "@/interfaces/common/rpc-retained-bytes-ledger.interface";
+import type { IRpcConnector } from "@/interfaces/owner/rpc-connector.interface";
+import type { IRpcOwnerCustody } from "@/interfaces/owner/rpc-owner-custody.interface";
+import type { IRpcPeerRuntime } from "@/interfaces/peer/rpc-peer-runtime.interface";
 import type {
 	IRpcProtocolConnectorRuntime,
 	IRpcProtocolRuntimePolicy,
@@ -27,15 +31,9 @@ import type {
 	RpcProtocolSessionTransition,
 	RpcSessionCloseReason,
 } from "@/interfaces/protocol/rpc-protocol.interface";
-import type { IRpcRetainedBytesLedger } from "@/interfaces/protocol/rpc-retained-bytes-ledger.interface";
-import type { IRpcConnectorAdapter } from "@/interfaces/rpc-adapter.interface";
-import type {
-	IRpcConnector,
-	RpcEvent,
-} from "@/interfaces/rpc-caller.interface";
-import type { IRpcConnection } from "@/interfaces/rpc-connection.interface";
-import type { IRpcOwnerCustody } from "@/interfaces/rpc-owner-custody.interface";
-import type { IRpcPeerRuntime } from "@/interfaces/rpc-peer.interface";
+import type { IRpcConnectorAdapter } from "@/interfaces/transport/rpc-adapter.interface";
+import type { IRpcConnection } from "@/interfaces/transport/rpc-connection.interface";
+import type { RpcEvent } from "@/types/owner/rpc-event.type";
 import type {
 	RpcConnectorConnectOptions,
 	RpcConnectorState,
