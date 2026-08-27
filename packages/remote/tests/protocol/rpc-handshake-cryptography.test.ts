@@ -1,5 +1,5 @@
 /**
- * @overview Internal cryptographic known-answer verification for husky-di-rpc/1.
+ * @overview Internal handshake-cryptography known answers for husky-di-rpc/1.
  * @author AEPKILL
  * @created 2026-08-26 11:44:17
  */
@@ -12,7 +12,7 @@ import { RPC_PROFILE } from "../../src/constants/protocol/rpc-profile.const";
 import { RpcProofOperationKindEnum } from "../../src/enums/protocol/rpc-proof-operation-kind.enum";
 import { RpcResumeRejectCodeEnum } from "../../src/enums/protocol/rpc-resume-reject-code.enum";
 import { RpcWireRecordKindEnum } from "../../src/enums/protocol/rpc-wire-record-kind.enum";
-import { RpcCryptographyImpl } from "../../src/impls/protocol/rpc-cryptography.impl";
+import { RpcHandshakeCryptographyImpl } from "../../src/impls/protocol/rpc-handshake-cryptography.impl";
 import type {
 	RpcFreshAccept,
 	RpcFreshRequest,
@@ -21,8 +21,9 @@ import type {
 	RpcResumeReject,
 	RpcResumeRequest,
 } from "../../src/types/protocol/rpc-wire-record.type";
+import { canonicalizeRpcJson } from "../../src/utils/protocol/rpc-json-canonicalization.util";
 
-const cryptography = new RpcCryptographyImpl();
+const cryptography = new RpcHandshakeCryptographyImpl();
 const sessionId = "ICEiIyQlJicoKSorLC0uLzAxMjM0NTY3ODk6Ozw9Pj8";
 const sessionSecretHex =
 	"000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f";
@@ -124,7 +125,7 @@ describe("Default RPC cryptography", () => {
 		];
 
 		for (const knownAnswer of jcsKnownAnswers) {
-			expect(cryptography.canonicalize(knownAnswer.input)).toBe(
+			expect(canonicalizeRpcJson(knownAnswer.input)).toBe(
 				knownAnswer.canonical,
 			);
 		}
@@ -166,10 +167,10 @@ describe("Default RPC cryptography", () => {
 				),
 			).toString("hex"),
 		).toBe(proofKeyHex);
-		expect(cryptography.canonicalize(freshRequest)).toBe(freshRequestCanonical);
+		expect(canonicalizeRpcJson(freshRequest)).toBe(freshRequestCanonical);
 
 		const proofKey = await cryptography.deriveProofKey(
-			fromHex(sessionSecretHex),
+			freshAccept.sessionSecret,
 			sessionId,
 		);
 		expect(proofKey.extractable).toBe(false);
@@ -212,7 +213,7 @@ describe("Default RPC cryptography", () => {
 			[authenticatedReject, authenticatedRejectCanonicalWithoutProof],
 		] as const) {
 			const { proof: _proof, ...withoutProof } = record;
-			expect(cryptography.canonicalize(withoutProof)).toBe(canonical);
+			expect(canonicalizeRpcJson(withoutProof)).toBe(canonical);
 		}
 	});
 });

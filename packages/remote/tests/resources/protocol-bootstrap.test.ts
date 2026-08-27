@@ -12,7 +12,7 @@ import { RpcWireRecordKindEnum } from "../../src/enums/protocol/rpc-wire-record-
 import { createRpcProtocol } from "../../src/factories/rpc-protocol.factory";
 import { RpcRetainedBytesLedgerImpl } from "../../src/impls/common/rpc-retained-bytes-ledger.impl";
 import { RpcCodecImpl } from "../../src/impls/protocol/rpc-codec.impl";
-import { RpcCryptographyImpl } from "../../src/impls/protocol/rpc-cryptography.impl";
+import { RpcHandshakeCryptographyImpl } from "../../src/impls/protocol/rpc-handshake-cryptography.impl";
 import type {
 	IRpcProtocolAcceptorHost,
 	IRpcProtocolAcceptorRuntime,
@@ -35,7 +35,7 @@ import {
 } from "../../src/utils/rpc-application-value.util";
 
 const codec = new RpcCodecImpl();
-const cryptography = new RpcCryptographyImpl();
+const cryptography = new RpcHandshakeCryptographyImpl();
 
 interface IBootstrapConnectionHarness {
 	readonly connection: IRpcConnection;
@@ -179,17 +179,16 @@ function createBootstrapConnection(): IBootstrapConnectionHarness {
 }
 
 function createFreshRequest(): RpcJsonRecord {
-	const nonce = cryptography.createRandomCarrier();
-	nonce.bytes.fill(0);
+	const nonce = cryptography.createSecurityCarrier();
 	return {
 		kind: "fresh",
 		profiles: ["husky-di-rpc/1"],
-		initiatorNonce: nonce.value,
+		initiatorNonce: nonce,
 	};
 }
 
 function createResumeRequest(): RpcJsonRecord {
-	const carrier = cryptography.createRandomCarrier().value;
+	const carrier = cryptography.createSecurityCarrier();
 	return {
 		kind: "resume",
 		profile: "husky-di-rpc/1",
@@ -211,20 +210,17 @@ async function createFreshAccept(
 	if (request.kind !== "fresh") {
 		throw new Error("Expected a fresh bootstrap request.");
 	}
-	const sessionId = cryptography.createRandomCarrier();
-	const secret = cryptography.createRandomCarrier();
-	const responderNonce = cryptography.createRandomCarrier();
-	const proofKey = await cryptography.deriveProofKey(
-		secret.bytes,
-		sessionId.value,
-	);
+	const sessionId = cryptography.createSecurityCarrier();
+	const sessionSecret = cryptography.createSecurityCarrier();
+	const responderNonce = cryptography.createSecurityCarrier();
+	const proofKey = await cryptography.deriveProofKey(sessionSecret, sessionId);
 	const acceptWithoutProof = {
 		kind: RpcWireRecordKindEnum.accept,
 		profile: "husky-di-rpc/1",
-		sessionId: sessionId.value,
+		sessionId,
 		bindingEpoch: 1,
-		responderNonce: responderNonce.value,
-		sessionSecret: secret.value,
+		responderNonce,
+		sessionSecret,
 	} as const;
 	return {
 		...acceptWithoutProof,
@@ -242,15 +238,14 @@ async function createSignedResumeRequest(
 	proofKey: CryptoKey,
 	resumeAttempt: number,
 ): Promise<RpcResumeRequest> {
-	const initiatorNonce = cryptography.createRandomCarrier();
-	initiatorNonce.bytes.fill(0);
+	const initiatorNonce = cryptography.createSecurityCarrier();
 	const requestWithoutProof = {
 		kind: RpcWireRecordKindEnum.resume,
 		profile: "husky-di-rpc/1",
 		sessionId,
 		receivedThrough: 0,
 		resumeAttempt,
-		initiatorNonce: initiatorNonce.value,
+		initiatorNonce,
 	} as const;
 	return {
 		...requestWithoutProof,
@@ -274,18 +269,51 @@ function accept(
 	return task;
 }
 
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => {
+	vi.restoreAllMocks();
+	vi.unstubAllGlobals();
+});
 
 describe("Default RPC Protocol bootstrap resources", () => {
 	it("RPC-SEC-008 overwrites controlled secret bytes and retains only a non-extractable key", async () => {
-		const secret = new Uint8Array(32);
-		secret.fill(7);
-		const sessionId = cryptography.createRandomCarrier().value;
+		const generatedBytes: Uint8Array[] = [];
+		vi.spyOn(globalThis.crypto, "getRandomValues").mockImplementation(((
+			bytes: Uint8Array,
+		) => {
+			bytes.fill(generatedBytes.length + 1);
+			generatedBytes.push(bytes);
+			return bytes;
+		}) as Crypto["getRandomValues"]);
+		const sessionSecret = cryptography.createSecurityCarrier();
+		const sessionId = cryptography.createSecurityCarrier();
 
-		const proofKey = await cryptography.deriveProofKey(secret, sessionId);
+		const proofKey = await cryptography.deriveProofKey(
+			sessionSecret,
+			sessionId,
+		);
 
-		expect(secret).toEqual(new Uint8Array(32));
+		expect(generatedBytes).toHaveLength(2);
+		for (const bytes of generatedBytes) {
+			expect(bytes).toEqual(new Uint8Array(32));
+		}
 		expect(proofKey.extractable).toBe(false);
+
+		let decodedSecret: Uint8Array | undefined;
+		const uint8ArrayFrom = Uint8Array.from;
+		vi.spyOn(Uint8Array, "from").mockImplementation(((...args: unknown[]) => {
+			decodedSecret = Reflect.apply(
+				uint8ArrayFrom,
+				Uint8Array,
+				args,
+			) as Uint8Array;
+			return decodedSecret;
+		}) as typeof Uint8Array.from);
+		vi.stubGlobal("crypto", undefined);
+
+		await expect(
+			cryptography.deriveProofKey(sessionSecret, sessionId),
+		).rejects.toThrow("The Default RPC Protocol requires Web Crypto.");
+		expect(decodedSecret).toEqual(new Uint8Array(32));
 	});
 
 	it("RPC-SPI-008/RPC-SPI-012/RPC-RESOURCE-004/RPC-SEC-009/RPC-VALID-003 retains a shared slot for a never-settling digest after attempt timeout", async () => {
@@ -548,7 +576,7 @@ describe("Default RPC Protocol bootstrap resources", () => {
 		await vi.waitFor(() => expect(fresh.responses.at(-1)?.kind).toBe("accept"));
 		const freshAccept = fresh.responses.at(-1) as RpcFreshAccept;
 		const proofKey = await cryptography.deriveProofKey(
-			cryptography.decodeBase64Url32(freshAccept.sessionSecret),
+			freshAccept.sessionSecret,
 			freshAccept.sessionId,
 		);
 		const firstRequest = await createSignedResumeRequest(

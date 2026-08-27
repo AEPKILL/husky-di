@@ -1,5 +1,5 @@
 /**
- * @overview Internal proof-operation inputs for the built-in Protocol.
+ * @overview Internal handshake-cryptography seam and operation inputs for the built-in Protocol.
  * @author AEPKILL
  * @created 2026-08-19 00:00:00
  */
@@ -14,10 +14,12 @@ import type {
 	RpcResumeRequest,
 } from "@/types/protocol/rpc-wire-record.type";
 
-export type RpcRandomCarrier = {
-	readonly bytes: Uint8Array;
-	readonly value: string;
-};
+export interface IRpcHandshakeCryptography<TKey> {
+	createSecurityCarrier(): string;
+	deriveProofKey(sessionSecret: string, sessionId: string): Promise<TKey>;
+	signProof(options: SignRpcProofOptions<TKey>): Promise<string>;
+	verifyProof(options: VerifyRpcProofOptions<TKey>): Promise<boolean>;
+}
 
 export type SignRpcProofOptions<TKey> =
 	| {

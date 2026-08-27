@@ -15,7 +15,7 @@ import { RpcWireRecordKindEnum } from "@/enums/protocol/rpc-wire-record-kind.enu
 import { RpcCloseReasonEnum } from "@/enums/rpc-close-reason.enum";
 import type { IRpcBindingAttempt } from "@/interfaces/endpoint/rpc-binding-attempt.interface";
 import type { IRpcCodec } from "@/interfaces/protocol/rpc-codec.interface";
-import type { IRpcCryptography } from "@/interfaces/protocol/rpc-cryptography.interface";
+import type { IRpcHandshakeCryptography } from "@/interfaces/protocol/rpc-handshake-cryptography.interface";
 import type {
 	IRpcProtocolAcceptorHost,
 	IRpcProtocolAcceptorRuntime,
@@ -81,7 +81,7 @@ export class RpcProtocolConnectorRuntimeImpl<TKey>
 {
 	readonly _host: IRpcProtocolConnectorHost;
 	readonly _codec: IRpcCodec;
-	readonly _cryptography: IRpcCryptography<TKey>;
+	readonly _handshakeCryptography: IRpcHandshakeCryptography<TKey>;
 	readonly _createBindingAttempt: RpcBindingAttemptFactory<TKey>;
 	readonly _createSession: RpcSessionFactory<TKey>;
 	readonly _attemptStates = new WeakMap<
@@ -97,13 +97,13 @@ export class RpcProtocolConnectorRuntimeImpl<TKey>
 	public constructor(
 		host: IRpcProtocolConnectorHost,
 		codec: IRpcCodec,
-		cryptography: IRpcCryptography<TKey>,
+		handshakeCryptography: IRpcHandshakeCryptography<TKey>,
 		createBindingAttempt: RpcBindingAttemptFactory<TKey>,
 		createSession: RpcSessionFactory<TKey>,
 	) {
 		this._host = host;
 		this._codec = codec;
-		this._cryptography = cryptography;
+		this._handshakeCryptography = handshakeCryptography;
 		this._createBindingAttempt = createBindingAttempt;
 		this._createSession = createSession;
 	}
@@ -194,12 +194,12 @@ export class RpcProtocolConnectorRuntimeImpl<TKey>
 		let request: RpcFreshRequest;
 		let encoded: Uint8Array;
 		try {
-			const initiatorNonce = this._cryptography.createRandomCarrier();
-			initiatorNonce.bytes.fill(0);
+			const initiatorNonce =
+				this._handshakeCryptography.createSecurityCarrier();
 			request = Object.freeze({
 				kind: RpcWireRecordKindEnum.fresh,
 				profiles: Object.freeze([RPC_PROFILE]),
-				initiatorNonce: initiatorNonce.value,
+				initiatorNonce,
 			}) as RpcFreshRequest;
 			encoded = this._codec.encode(request);
 		} catch (error) {
@@ -224,18 +224,18 @@ export class RpcProtocolConnectorRuntimeImpl<TKey>
 		try {
 			const resume = session.beginInitiatorResume();
 			state.resume = resume;
-			const initiatorNonce = this._cryptography.createRandomCarrier();
-			initiatorNonce.bytes.fill(0);
+			const initiatorNonce =
+				this._handshakeCryptography.createSecurityCarrier();
 			const requestWithoutProof = Object.freeze({
 				kind: RpcWireRecordKindEnum.resume,
 				profile: RPC_PROFILE,
 				sessionId: resume.sessionId,
 				receivedThrough: resume.receivedThrough,
 				resumeAttempt: resume.resumeAttempt,
-				initiatorNonce: initiatorNonce.value,
+				initiatorNonce,
 			}) as RpcJsonRecord;
 			const proof = await attempt.runCrypto(() =>
-				this._cryptography.signProof({
+				this._handshakeCryptography.signProof({
 					kind: RpcProofOperationKindEnum.resumeRequest,
 					proofKey: resume.proofKey,
 					record: requestWithoutProof,
@@ -303,8 +303,8 @@ export class RpcProtocolConnectorRuntimeImpl<TKey>
 			await requestAdmission;
 			const accept = this._codec.decode(bytes, RpcDecodePhaseEnum.freshAccept);
 			const proofKey = await attempt.runCrypto(() =>
-				this._cryptography.deriveProofKey(
-					this._cryptography.decodeBase64Url32(accept.sessionSecret),
+				this._handshakeCryptography.deriveProofKey(
+					accept.sessionSecret,
 					accept.sessionId,
 				),
 			);
@@ -312,7 +312,7 @@ export class RpcProtocolConnectorRuntimeImpl<TKey>
 				return;
 			}
 			const valid = await attempt.runCrypto(() =>
-				this._cryptography.verifyProof({
+				this._handshakeCryptography.verifyProof({
 					kind: RpcProofOperationKindEnum.freshAccept,
 					proofKey,
 					request,
@@ -402,7 +402,7 @@ export class RpcProtocolConnectorRuntimeImpl<TKey>
 					throw new Error("Default RPC resume was generically rejected.");
 				}
 				const valid = await attempt.runCrypto(() =>
-					this._cryptography.verifyProof({
+					this._handshakeCryptography.verifyProof({
 						kind: RpcProofOperationKindEnum.resumeReject,
 						proofKey: resume.proofKey,
 						request,
@@ -440,7 +440,7 @@ export class RpcProtocolConnectorRuntimeImpl<TKey>
 			}
 
 			const valid = await attempt.runCrypto(() =>
-				this._cryptography.verifyProof({
+				this._handshakeCryptography.verifyProof({
 					kind: RpcProofOperationKindEnum.resumeAccept,
 					proofKey: resume.proofKey,
 					request,
@@ -543,7 +543,7 @@ export class RpcProtocolAcceptorRuntimeImpl<TKey>
 {
 	readonly _host: IRpcProtocolAcceptorHost;
 	readonly _codec: IRpcCodec;
-	readonly _cryptography: IRpcCryptography<TKey>;
+	readonly _handshakeCryptography: IRpcHandshakeCryptography<TKey>;
 	readonly _createBindingAttempt: RpcBindingAttemptFactory<TKey>;
 	readonly _createSession: RpcSessionFactory<TKey>;
 	readonly _attempts = new Set<IRpcBindingAttempt<TKey>>();
@@ -561,13 +561,13 @@ export class RpcProtocolAcceptorRuntimeImpl<TKey>
 	public constructor(
 		host: IRpcProtocolAcceptorHost,
 		codec: IRpcCodec,
-		cryptography: IRpcCryptography<TKey>,
+		handshakeCryptography: IRpcHandshakeCryptography<TKey>,
 		createBindingAttempt: RpcBindingAttemptFactory<TKey>,
 		createSession: RpcSessionFactory<TKey>,
 	) {
 		this._host = host;
 		this._codec = codec;
-		this._cryptography = cryptography;
+		this._handshakeCryptography = handshakeCryptography;
 		this._createBindingAttempt = createBindingAttempt;
 		this._createSession = createSession;
 	}
@@ -683,11 +683,11 @@ export class RpcProtocolAcceptorRuntimeImpl<TKey>
 				attempt.fail(new Error("Default RPC Session ID failed."));
 				return;
 			}
-			const secret = this._cryptography.createRandomCarrier();
-			const responderNonce = this._cryptography.createRandomCarrier();
-			responderNonce.bytes.fill(0);
+			const sessionSecret = this._handshakeCryptography.createSecurityCarrier();
+			const responderNonce =
+				this._handshakeCryptography.createSecurityCarrier();
 			const proofKey = await attempt.runCrypto(() =>
-				this._cryptography.deriveProofKey(secret.bytes, sessionId),
+				this._handshakeCryptography.deriveProofKey(sessionSecret, sessionId),
 			);
 			const state = this._attemptStates.get(attempt);
 			// Derived proof authority belongs only to the live reserved fresh Session.
@@ -701,11 +701,11 @@ export class RpcProtocolAcceptorRuntimeImpl<TKey>
 				profile: RPC_PROFILE,
 				sessionId,
 				bindingEpoch: 1,
-				responderNonce: responderNonce.value,
-				sessionSecret: secret.value,
+				responderNonce,
+				sessionSecret,
 			}) as RpcJsonRecord;
 			const proof = await attempt.runCrypto(() =>
-				this._cryptography.signProof({
+				this._handshakeCryptography.signProof({
 					kind: RpcProofOperationKindEnum.freshAccept,
 					proofKey,
 					request,
@@ -792,7 +792,7 @@ export class RpcProtocolAcceptorRuntimeImpl<TKey>
 		let proofValid = false;
 		try {
 			proofValid = await attempt.runCrypto(() =>
-				this._cryptography.verifyProof({
+				this._handshakeCryptography.verifyProof({
 					kind: RpcProofOperationKindEnum.resumeRequest,
 					proofKey: proofCandidate.proofKey,
 					request,
@@ -839,18 +839,17 @@ export class RpcProtocolAcceptorRuntimeImpl<TKey>
 		if (resumeCandidateIsStale) {
 			return;
 		}
-		const responderNonce = this._cryptography.createRandomCarrier();
-		responderNonce.bytes.fill(0);
+		const responderNonce = this._handshakeCryptography.createSecurityCarrier();
 		const acceptWithoutProof = Object.freeze({
 			kind: RpcWireRecordKindEnum.accept,
 			profile: RPC_PROFILE,
 			sessionId: request.sessionId,
 			bindingEpoch: candidate.bindingEpoch,
 			receivedThrough: candidate.receivedThrough,
-			responderNonce: responderNonce.value,
+			responderNonce,
 		}) as RpcJsonRecord;
 		const proof = await attempt.runCrypto(() =>
-			this._cryptography.signProof({
+			this._handshakeCryptography.signProof({
 				kind: RpcProofOperationKindEnum.resumeAccept,
 				proofKey: candidate.proofKey,
 				request,
@@ -883,15 +882,15 @@ export class RpcProtocolAcceptorRuntimeImpl<TKey>
 		request: RpcResumeRequest,
 	): Promise<void> {
 		try {
-			const responderNonce = this._cryptography.createRandomCarrier();
-			responderNonce.bytes.fill(0);
+			const responderNonce =
+				this._handshakeCryptography.createSecurityCarrier();
 			const rejectWithoutProof = Object.freeze({
 				kind: RpcWireRecordKindEnum.reject,
 				code: RpcResumeRejectCodeEnum.resumeRejected,
-				responderNonce: responderNonce.value,
+				responderNonce,
 			}) as RpcJsonRecord;
 			const proof = await attempt.runCrypto(() =>
-				this._cryptography.signProof({
+				this._handshakeCryptography.signProof({
 					kind: RpcProofOperationKindEnum.genericReject,
 					request,
 					record: rejectWithoutProof,
@@ -919,15 +918,15 @@ export class RpcProtocolAcceptorRuntimeImpl<TKey>
 		candidate: RpcResponderContinuityCandidate<TKey>,
 	): Promise<void> {
 		try {
-			const responderNonce = this._cryptography.createRandomCarrier();
-			responderNonce.bytes.fill(0);
+			const responderNonce =
+				this._handshakeCryptography.createSecurityCarrier();
 			const rejectWithoutProof = Object.freeze({
 				kind: RpcWireRecordKindEnum.reject,
 				code: RpcResumeRejectCodeEnum.continuityFailure,
-				responderNonce: responderNonce.value,
+				responderNonce,
 			}) as RpcJsonRecord;
 			const proof = await attempt.runCrypto(() =>
-				this._cryptography.signProof({
+				this._handshakeCryptography.signProof({
 					kind: RpcProofOperationKindEnum.resumeReject,
 					proofKey: candidate.proofKey,
 					request,
@@ -1070,19 +1069,18 @@ export class RpcProtocolAcceptorRuntimeImpl<TKey>
 			return undefined;
 		}
 		for (let candidateIndex = 0; candidateIndex < 8; candidateIndex += 1) {
-			const candidate = this._cryptography.createRandomCarrier();
-			candidate.bytes.fill(0);
+			const candidate = this._handshakeCryptography.createSecurityCarrier();
 			// Session IDs must be unique across retained and provisional Sessions.
 			const candidateIsAvailable =
-				!this._sessions.has(candidate.value) &&
-				!this._provisionalSessionIds.has(candidate.value);
+				!this._sessions.has(candidate) &&
+				!this._provisionalSessionIds.has(candidate);
 			if (candidateIsAvailable) {
-				this._provisionalSessionIds.add(candidate.value);
-				state.provisionalSessionId = candidate.value;
+				this._provisionalSessionIds.add(candidate);
+				state.provisionalSessionId = candidate;
 				attempt.ownTemporary(() =>
-					this._provisionalSessionIds.delete(candidate.value),
+					this._provisionalSessionIds.delete(candidate),
 				);
-				return candidate.value;
+				return candidate;
 			}
 		}
 		return undefined;

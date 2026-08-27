@@ -8,7 +8,7 @@ import { RpcRetainedBytesLedgerImpl } from "@/impls/common/rpc-retained-bytes-le
 import { RpcBindingAttemptImpl } from "@/impls/endpoint/rpc-binding-attempt.impl";
 import { RpcEndpointImpl } from "@/impls/endpoint/rpc-endpoint.impl";
 import { RpcCodecImpl } from "@/impls/protocol/rpc-codec.impl";
-import { RpcCryptographyImpl } from "@/impls/protocol/rpc-cryptography.impl";
+import { RpcHandshakeCryptographyImpl } from "@/impls/protocol/rpc-handshake-cryptography.impl";
 import {
 	RpcProtocolAcceptorRuntimeImpl,
 	RpcProtocolConnectorRuntimeImpl,
@@ -23,7 +23,7 @@ import type {
 } from "@/types/protocol/rpc-protocol.type";
 
 const codec = Object.freeze(new RpcCodecImpl());
-const cryptography = Object.freeze(new RpcCryptographyImpl());
+const handshakeCryptography = Object.freeze(new RpcHandshakeCryptographyImpl());
 
 const createEndpoint = (options: CreateRpcEndpointOptions): IRpcEndpoint =>
 	new RpcEndpointImpl(options);
@@ -49,7 +49,7 @@ function createBuiltInRpcProtocol(counterExhausted: boolean): IRpcProtocol {
 			new RpcProtocolConnectorRuntimeImpl<CryptoKey>(
 				host,
 				codec,
-				cryptography,
+				handshakeCryptography,
 				createBindingAttempt,
 				createSession,
 			),
@@ -57,7 +57,7 @@ function createBuiltInRpcProtocol(counterExhausted: boolean): IRpcProtocol {
 			new RpcProtocolAcceptorRuntimeImpl<CryptoKey>(
 				host,
 				codec,
-				cryptography,
+				handshakeCryptography,
 				createBindingAttempt,
 				createSession,
 			),

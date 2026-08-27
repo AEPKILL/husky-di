@@ -9,7 +9,7 @@ import { Subject } from "rxjs";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { RpcProofOperationKindEnum } from "../src/enums/protocol/rpc-proof-operation-kind.enum";
 import { createRpcCounterExhaustionProtocolForTest } from "../src/factories/rpc-protocol.factory";
-import { RpcCryptographyImpl } from "../src/impls/protocol/rpc-cryptography.impl";
+import { RpcHandshakeCryptographyImpl } from "../src/impls/protocol/rpc-handshake-cryptography.impl";
 import {
 	createRemoteServiceDescriptor,
 	createRpcAcceptor,
@@ -27,7 +27,7 @@ interface CalculatorService {
 	add(left: number, right: number): number;
 }
 
-const cryptography = new RpcCryptographyImpl();
+const cryptography = new RpcHandshakeCryptographyImpl();
 
 afterEach(() => vi.useRealTimers());
 
@@ -1101,18 +1101,17 @@ describe("Default RPC Protocol", () => {
 			throw new Error("Expected a captured fresh accept.");
 		}
 		const proofKey = await cryptography.deriveProofKey(
-			cryptography.decodeBase64Url32(freshAccept.sessionSecret as string),
+			freshAccept.sessionSecret as string,
 			freshAccept.sessionId as string,
 		);
-		const nonce = cryptography.createRandomCarrier();
-		nonce.bytes.fill(0);
+		const nonce = cryptography.createSecurityCarrier();
 		const requestWithoutProof = {
 			kind: "resume",
 			profile: "husky-di-rpc/1",
 			sessionId: freshAccept.sessionId as string,
 			receivedThrough,
 			resumeAttempt: 1,
-			initiatorNonce: nonce.value,
+			initiatorNonce: nonce,
 		};
 		const proof = await cryptography.signProof({
 			kind: RpcProofOperationKindEnum.resumeRequest,
@@ -1340,7 +1339,7 @@ describe("Default RPC Protocol", () => {
 			throw new Error("Expected a captured fresh accept.");
 		}
 		const proofKey = await cryptography.deriveProofKey(
-			cryptography.decodeBase64Url32(freshAccept.sessionSecret as string),
+			freshAccept.sessionSecret as string,
 			freshAccept.sessionId as string,
 		);
 		network.disconnect(1);
@@ -1359,15 +1358,14 @@ describe("Default RPC Protocol", () => {
 						: undefined,
 			})),
 		});
-		const nonce = cryptography.createRandomCarrier();
-		nonce.bytes.fill(0);
+		const nonce = cryptography.createSecurityCarrier();
 		const higherWithoutProof = {
 			kind: "resume",
 			profile: "husky-di-rpc/1",
 			sessionId: freshAccept.sessionId as string,
 			receivedThrough: 0,
 			resumeAttempt: 2,
-			initiatorNonce: nonce.value,
+			initiatorNonce: nonce,
 		};
 		const higherProof = await cryptography.signProof({
 			kind: RpcProofOperationKindEnum.resumeRequest,
@@ -1441,18 +1439,17 @@ describe("Default RPC Protocol", () => {
 			throw new Error("Expected a captured fresh accept.");
 		}
 		const proofKey = await cryptography.deriveProofKey(
-			cryptography.decodeBase64Url32(freshAccept.sessionSecret as string),
+			freshAccept.sessionSecret as string,
 			freshAccept.sessionId as string,
 		);
-		const nonce = cryptography.createRandomCarrier();
-		nonce.bytes.fill(0);
+		const nonce = cryptography.createSecurityCarrier();
 		const rawRequestWithoutProof = {
 			kind: "resume",
 			profile: "husky-di-rpc/1",
 			sessionId: freshAccept.sessionId as string,
 			receivedThrough: 0,
 			resumeAttempt: 1,
-			initiatorNonce: nonce.value,
+			initiatorNonce: nonce,
 		};
 		const rawProof = await cryptography.signProof({
 			kind: RpcProofOperationKindEnum.resumeRequest,
@@ -1543,8 +1540,7 @@ describe("Default RPC Protocol", () => {
 			expect(connector.peer.state.status).toBe("recovering");
 			expect(acceptorPeer?.state.status).toBe("recovering");
 		});
-		const replacementSessionId = cryptography.createRandomCarrier();
-		replacementSessionId.bytes.fill(0);
+		const replacementSessionId = cryptography.createSecurityCarrier();
 		const decoder = new TextDecoder();
 		const encoder = new TextEncoder();
 
@@ -1564,7 +1560,7 @@ describe("Default RPC Protocol", () => {
 					if (mismatch === "profile") {
 						value.profile = "husky-di-rpc/2";
 					} else if (mismatch === "session") {
-						value.sessionId = replacementSessionId.value;
+						value.sessionId = replacementSessionId;
 					} else {
 						const proof = value.proof as string;
 						value.proof = `${proof[0] === "A" ? "B" : "A"}${proof.slice(1)}`;

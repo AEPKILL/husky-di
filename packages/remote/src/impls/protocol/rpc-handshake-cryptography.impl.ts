@@ -1,16 +1,16 @@
 /**
- * @overview Web Crypto transcript helpers for husky-di-rpc/1 Session proof keys.
+ * @overview Web Crypto handshake proofs for husky-di-rpc/1 Sessions.
  * @author AEPKILL
  * @created 2026-08-19 00:00:00
  */
 
 import { RPC_PROFILE } from "@/constants/protocol/rpc-profile.const";
 import { RpcProofOperationKindEnum } from "@/enums/protocol/rpc-proof-operation-kind.enum";
-import type { IRpcCryptography } from "@/interfaces/protocol/rpc-cryptography.interface";
 import type {
+	IRpcHandshakeCryptography,
 	SignRpcProofOptions,
 	VerifyRpcProofOptions,
-} from "@/types/protocol/rpc-cryptography.type";
+} from "@/interfaces/protocol/rpc-handshake-cryptography.interface";
 import type {
 	RpcFreshAccept,
 	RpcFreshRequest,
@@ -19,24 +19,20 @@ import type {
 	RpcResumeRequest,
 } from "@/types/protocol/rpc-wire-record.type";
 import { rpcBase64Url32Schema } from "@/utils/protocol/rpc-base64-url-32-schema.util";
+import { canonicalizeRpcJson } from "@/utils/protocol/rpc-json-canonicalization.util";
 
-export class RpcCryptographyImpl implements IRpcCryptography<CryptoKey> {
-	public createRandomCarrier(): {
-		readonly bytes: Uint8Array;
-		readonly value: string;
-	} {
-		return createRpcRandomCarrier();
+export class RpcHandshakeCryptographyImpl
+	implements IRpcHandshakeCryptography<CryptoKey>
+{
+	public createSecurityCarrier(): string {
+		return createRpcSecurityCarrier();
 	}
 
-	public decodeBase64Url32(value: string): Uint8Array {
-		return decodeRpcBase64Url32(value);
-	}
-
-	public deriveProofKey(
-		sessionSecret: Uint8Array,
+	public async deriveProofKey(
+		sessionSecret: string,
 		sessionId: string,
 	): Promise<CryptoKey> {
-		return deriveRpcProofKey(sessionSecret, sessionId);
+		return deriveRpcProofKey(decodeRpcBase64Url32(sessionSecret), sessionId);
 	}
 
 	public async signProof(
@@ -114,10 +110,6 @@ export class RpcCryptographyImpl implements IRpcCryptography<CryptoKey> {
 				);
 		}
 	}
-
-	public canonicalize(record: RpcJsonRecord): string {
-		return canonicalize(record);
-	}
 }
 
 const textEncoder = new TextEncoder();
@@ -158,26 +150,6 @@ function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
 	return copy.buffer;
 }
 
-function canonicalize(value: RpcJsonValue): string {
-	if (value === null || typeof value === "boolean") {
-		return JSON.stringify(value);
-	}
-	if (typeof value === "string" || typeof value === "number") {
-		return JSON.stringify(value);
-	}
-	if (Array.isArray(value)) {
-		return `[${value.map((item) => canonicalize(item)).join(",")}]`;
-	}
-	const record = value as RpcJsonRecord;
-	return `{${Object.keys(record)
-		.sort()
-		.map(
-			(key) =>
-				`${JSON.stringify(key)}:${canonicalize(record[key] as RpcJsonValue)}`,
-		)
-		.join(",")}}`;
-}
-
 function withoutTopLevelProof(record: RpcJsonRecord): RpcJsonRecord {
 	const result = Object.create(null) as Record<string, RpcJsonValue>;
 	for (const key of Object.keys(record)) {
@@ -195,7 +167,7 @@ async function digest(value: Uint8Array): Promise<Uint8Array> {
 }
 
 async function hashRecord(record: RpcJsonRecord): Promise<Uint8Array> {
-	return digest(textEncoder.encode(canonicalize(record)));
+	return digest(textEncoder.encode(canonicalizeRpcJson(record)));
 }
 
 function domain(label: string): Uint8Array {
@@ -237,16 +209,21 @@ async function createResumeOutcomeTranscript(
 }
 
 async function importHmacKey(bytes: Uint8Array): Promise<CryptoKey> {
+	let keyData: ArrayBuffer | undefined;
 	try {
+		keyData = toArrayBuffer(bytes);
 		return await getWebCrypto().subtle.importKey(
 			"raw",
-			toArrayBuffer(bytes),
+			keyData,
 			{ name: "HMAC", hash: "SHA-256", length: 256 },
 			false,
 			["sign", "verify"],
 		);
 	} finally {
 		bytes.fill(0);
+		if (keyData !== undefined) {
+			new Uint8Array(keyData).fill(0);
+		}
 	}
 }
 
@@ -275,12 +252,17 @@ async function verifyHmac(
 	);
 }
 
-function createRpcRandomCarrier(): {
-	readonly bytes: Uint8Array;
-	readonly value: string;
-} {
-	const bytes = getWebCrypto().getRandomValues(new Uint8Array(32));
-	return { bytes, value: encodeBase64Url(bytes) };
+function createRandomBytes(): Uint8Array {
+	return getWebCrypto().getRandomValues(new Uint8Array(32));
+}
+
+function createRpcSecurityCarrier(): string {
+	const bytes = createRandomBytes();
+	try {
+		return encodeBase64Url(bytes);
+	} finally {
+		bytes.fill(0);
+	}
 }
 
 function decodeRpcBase64Url32(value: string): Uint8Array {
@@ -296,6 +278,7 @@ function decodeRpcBase64Url32(value: string): Uint8Array {
 	}
 	const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
 	if (bytes.byteLength !== 32 || encodeBase64Url(bytes) !== value) {
+		bytes.fill(0);
 		throw new Error("RPC security carrier has an alternate spelling.");
 	}
 	return bytes;
@@ -305,18 +288,20 @@ async function deriveRpcProofKey(
 	sessionSecret: Uint8Array,
 	sessionId: string,
 ): Promise<CryptoKey> {
-	const crypto = getWebCrypto();
+	let keyData: ArrayBuffer | undefined;
+	let crypto: Crypto;
 	let rootKey: CryptoKey;
 	try {
-		rootKey = await crypto.subtle.importKey(
-			"raw",
-			toArrayBuffer(sessionSecret),
-			"HKDF",
-			false,
-			["deriveKey"],
-		);
+		keyData = toArrayBuffer(sessionSecret);
+		crypto = getWebCrypto();
+		rootKey = await crypto.subtle.importKey("raw", keyData, "HKDF", false, [
+			"deriveKey",
+		]);
 	} finally {
 		sessionSecret.fill(0);
+		if (keyData !== undefined) {
+			new Uint8Array(keyData).fill(0);
+		}
 	}
 	const context = await hashRecord({
 		profile: RPC_PROFILE,
@@ -340,7 +325,7 @@ async function createRpcGenericRejectProof(
 	request: RpcResumeRequest,
 	reject: RpcJsonRecord,
 ): Promise<string> {
-	const dummyKey = await importHmacKey(createRpcRandomCarrier().bytes);
+	const dummyKey = await importHmacKey(createRandomBytes());
 	return signHmac(
 		dummyKey,
 		await createResumeOutcomeTranscript(
