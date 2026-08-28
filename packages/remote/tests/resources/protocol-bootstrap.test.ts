@@ -72,6 +72,7 @@ function createAcceptorRuntime(
 	policy: IRpcProtocolRuntimePolicy,
 	onTransition: (transition: RpcProtocolSessionTransition) => void = () => {},
 	shouldAdmitSession: () => boolean = () => true,
+	onAdmitSession: () => void = () => {},
 ): {
 	readonly runtime: IRpcProtocolAcceptorRuntime;
 	readonly ownerFaults: string[];
@@ -98,6 +99,7 @@ function createAcceptorRuntime(
 			}
 			admittedSessions.push(1);
 			sessionImpls.push(session as RpcSessionImpl);
+			onAdmitSession();
 			return {
 				reserveIncomingCall: () => undefined,
 				transition: onTransition,
@@ -552,6 +554,62 @@ describe("Default RPC Protocol bootstrap resources", () => {
 		expect(
 			transitions.filter((transition) => transition.type === "recovered"),
 		).toHaveLength(1);
+		expect(ownerFaults).toEqual([]);
+
+		runtime.close();
+	});
+
+	it("RPC-WIRE-009 RPC-SESSION-011 RPC-RECOVERY-002 rejects active ingress before reply Local Admission and never activates", async () => {
+		let releaseReply!: () => void;
+		const replySettlement = new Promise<void>((resolve) => {
+			releaseReply = resolve;
+		});
+		const transitions: RpcProtocolSessionTransition[] = [];
+		const { runtime, ownerFaults } = createAcceptorRuntime(
+			createPolicy({ bindingAttemptTimeoutMs: 1_000 }),
+			(transition) => transitions.push(transition),
+		);
+		const connection = createBootstrapConnection(replySettlement);
+		const task = accept(runtime, connection);
+		connection.emit(createFreshRequest());
+		await vi.waitFor(() =>
+			expect(connection.responses.at(-1)).toMatchObject({ kind: "accept" }),
+		);
+
+		connection.emit({ kind: RpcWireRecordKindEnum.ping });
+		releaseReply();
+
+		await expect(task).rejects.toThrow(
+			"Default RPC active record arrived before Binding Activation.",
+		);
+		await vi.waitFor(() => expect(connection.closeCount).toBe(1));
+		expect(transitions.at(-1)).toMatchObject({ type: "recovering" });
+		expect(ownerFaults).toEqual([]);
+
+		runtime.close();
+	});
+
+	it("rolls back a Fresh Peer when abort reenters Topology admission", async () => {
+		const controller = new AbortController();
+		const transitions: RpcProtocolSessionTransition[] = [];
+		const { runtime, ownerFaults, admittedSessions } = createAcceptorRuntime(
+			createPolicy({ bindingAttemptTimeoutMs: 1_000 }),
+			(transition) => transitions.push(transition),
+			() => true,
+			() => controller.abort(),
+		);
+		const connection = createBootstrapConnection();
+		const task = runtime.accept(connection.connection, controller.signal);
+		void task.catch(() => {});
+
+		connection.emit(createFreshRequest());
+
+		await expect(task).rejects.toThrow(
+			"Default RPC fresh acceptance was aborted.",
+		);
+		expect(admittedSessions).toEqual([1]);
+		expect(transitions).toEqual([{ type: "closed", reason: "forced-close" }]);
+		expect(connection.responses).toEqual([]);
 		expect(ownerFaults).toEqual([]);
 
 		runtime.close();

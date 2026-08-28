@@ -22,6 +22,7 @@ export type CreateRpcEndpointOptions = {
 	readonly reserveRetainedBytes?: (
 		bytes: number,
 	) => IRpcRetainedBytesReservation | undefined;
+	readonly onIngressAdmitted?: () => void;
 	readonly onMessage: (message: Uint8Array) => Promise<void> | void;
 	readonly onFailure: (reason: RpcEndpointFailureEnum, error?: Error) => void;
 };

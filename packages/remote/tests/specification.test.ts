@@ -1111,7 +1111,7 @@ describe("Default Protocol Session capacity", () => {
 		}
 	});
 
-	it("RPC-SESSION-003 RPC-SESSION-009 RPC-RECOVERY-003 RPC-RESOURCE-006 protects a linearized replacement binding from fresh pressure", async () => {
+	it("RPC-SESSION-003 RPC-SESSION-009 RPC-SESSION-011 RPC-RECOVERY-003 RPC-RESOURCE-006 protects a linearized pre-activation replacement binding from fresh pressure", async () => {
 		vi.useFakeTimers();
 		const network = createRpcTestNetwork();
 		const acceptSettlement = Promise.withResolvers<void>();

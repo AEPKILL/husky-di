@@ -27,7 +27,8 @@ isolated runtime.
 Each role runtime implements:
 
 - `bind()` or `accept()` to synchronously observe a handed-off Connection and
-  complete the binding attempt asynchronously;
+  complete the binding attempt asynchronously only after its exact Physical
+  Connection Binding is active;
 - `shutdown()` to complete its graceful Session egress shells;
 - `close()` for synchronous force fencing and terminal sink settlement; and
 - cached `cleanup()` for Protocol-owned asynchronous cleanup only.

@@ -5,7 +5,10 @@
  */
 
 import { RpcRetainedBytesLedgerImpl } from "@/impls/common/rpc-retained-bytes-ledger.impl";
-import { RpcBindingAttemptImpl } from "@/impls/endpoint/rpc-binding-attempt.impl";
+import {
+	RpcAcceptorBindingsImpl,
+	RpcConnectorBindingsImpl,
+} from "@/impls/endpoint/rpc-bindings.impl";
 import { RpcEndpointImpl } from "@/impls/endpoint/rpc-endpoint.impl";
 import { RpcCodecImpl } from "@/impls/protocol/rpc-codec.impl";
 import {
@@ -13,7 +16,6 @@ import {
 	RpcProtocolConnectorRuntimeImpl,
 } from "@/impls/protocol/rpc-protocol.impl";
 import { RpcSessionImpl } from "@/impls/session/rpc-session.impl";
-import type { RpcBindingAttemptFactory } from "@/interfaces/endpoint/rpc-binding-attempt.interface";
 import type {
 	CreateRpcEndpointOptions,
 	IRpcEndpoint,
@@ -37,12 +39,6 @@ const codec = Object.freeze(new RpcCodecImpl());
 const createEndpoint = (options: CreateRpcEndpointOptions): IRpcEndpoint =>
 	new RpcEndpointImpl(options);
 
-const createBindingAttempt: RpcBindingAttemptFactory = (options) =>
-	new RpcBindingAttemptImpl({
-		...options,
-		createEndpoint,
-	});
-
 function createBuiltInRpcProtocol(counterExhausted: boolean): IRpcProtocol {
 	const createSession: RpcSessionFactory = (options) =>
 		new RpcSessionImpl(options, {
@@ -54,21 +50,25 @@ function createBuiltInRpcProtocol(counterExhausted: boolean): IRpcProtocol {
 		});
 
 	return Object.freeze({
-		createConnector: (host) =>
-			new RpcProtocolConnectorRuntimeImpl(
+		createConnector: (host) => {
+			const bindings = new RpcConnectorBindingsImpl({ host, createEndpoint });
+			return new RpcProtocolConnectorRuntimeImpl(
 				host,
 				codec,
-				createBindingAttempt,
+				bindings,
 				createSession,
-			),
-		createAcceptor: (host) =>
-			new RpcProtocolAcceptorRuntimeImpl(
+			);
+		},
+		createAcceptor: (host) => {
+			const bindings = new RpcAcceptorBindingsImpl({ host, createEndpoint });
+			return new RpcProtocolAcceptorRuntimeImpl(
 				host,
 				codec,
 				createRpcSecurityCarrier,
-				createBindingAttempt,
+				bindings,
 				createSession,
-			),
+			);
+		},
 	} satisfies IRpcProtocol);
 }
 

@@ -28,6 +28,15 @@ Recovery, and exactly-once external side effects are outside this specification.
 - **Transport Adapter**: a component that creates finite Physical Connections and owns framing and native
   queue limits.
 - **Physical Connection**: one finite, ordered, full-duplex message channel.
+- **Binding Epoch**: a responder-assigned, monotonically increasing generation that identifies one current
+  Physical Connection Binding. It is a fencing generation, not a time-based lease.
+- **Physical Connection Binding**: the exclusive association that makes one Physical Connection the current
+  carrier of a Logical Session under an exact Binding Epoch.
+- **Binding Linearization**: the atomic selection of a Physical Connection Binding as current, advancing the
+  Binding Epoch and fencing the former binding. It establishes current authority even when Binding Activation
+  happens later.
+- **Binding Activation**: the later transition that permits a linearized current binding to carry active RPC
+  records and resume Session work. Only the exact current binding can activate.
 - **Topology Owner**: an `IRpcConnector` or `IRpcAcceptor`.
 - **Logical Session**: retained Protocol state that can outlive a Physical Connection and backs one stable
   `IRpcPeer`.
@@ -856,7 +865,7 @@ structurally invalid Adapter after the gate **MUST** reject `TypeError` without 
 **RPC-START-002 — Connector eligibility.** Connector startup **MUST** be single-flight and accepted only while
 the Owner is active, the stable peer is `unbound` or `recovering`, and no attempt exists. Connected, connecting,
 draining, closed, or concurrent invocation **MUST** reject before touching the Adapter. The operation **MUST**
-fulfill only after Adapter handoff and Protocol fresh/resume binding both succeed.
+fulfill only after Adapter handoff and Protocol fresh/resume Binding Activation both succeed.
 
 **RPC-START-003 — Acceptor eligibility.** Acceptor startup **MUST** be single-flight and accepted only while the
 Owner is active, listener state is `idle` or `stopped`, and no overflow close remains pending. Fulfillment
@@ -889,8 +898,8 @@ gate, a non-platform signal **MUST** reject `TypeError`; an already-aborted sign
 without inspecting or starting the Adapter. A later abort **MUST** fence and cancel only the unsettled attempt,
 abort the Framework-owned signal passed to Adapter and Protocol, Direct Close any handed-off Connection, return
 a fresh peer to `unbound`, and leave a recovering peer `recovering`. Binding success, abort, ordinary failure,
-and Owner/Session terminal **MUST** select one winner. Abort after binding success **MUST** have no effect, and
-the public `AbortError` **MUST NOT** expose `signal.reason`.
+and Owner/Session terminal **MUST** select one winner. Binding success is Binding Activation; abort after
+Activation **MUST** have no effect, and the public `AbortError` **MUST NOT** expose `signal.reason`.
 
 ## 7. Physical Connection and Adapter seam
 
@@ -1265,9 +1274,9 @@ export interface IRpcProtocolAcceptorRuntime extends IRpcProtocolRoleRuntime {
 
 **RPC-SPI-008 — Synchronous subscription.** Framework **MUST** call `bind()`/`accept()` inside the Adapter
 `connection$.next` stack. Runtime **MUST** synchronously subscribe to hot `message$`, but before the handoff
-barrier it **MUST NOT** send, close, install a binding, or project state and **MAY** retain only bounded
-provisional ingress. Fulfillment **MUST** mean fresh/resume binding installed; later connection loss **MUST NOT**
-retroactively reject it.
+barrier it **MUST NOT** send, close, linearize or activate a binding, or project state and **MAY** retain only
+bounded provisional ingress. Fulfillment **MUST** mean fresh/resume Binding Activation; later connection loss
+**MUST NOT** retroactively reject it.
 
 **RPC-SPI-009 — Session attachment.** Fresh Connector Session **MUST** attach to the stable peer anchor; fresh
 Acceptor Session **MUST** atomically admit a new stable peer. Resume **MUST** reuse the retained Session host.
@@ -1404,9 +1413,10 @@ empty ProfileId **MUST** be a schema violation, not an unsupported profile.
 
 **RPC-WIRE-009 — Phases.** The first initiator record on a new Connection **MUST** be `fresh` or `resume`; the
 responder outcome **MUST** be `accept` or `reject`. Bootstrap records **MUST NOT** have sequence or ACK semantics.
-Responder enters active phase after Local Admission of `accept`; initiator enters only after validating it.
-Active phase **MUST** accept only `message`, `ack`, `ping`, `pong`, or `close`. Wrong phase or unknown kind
-**MUST** fault at the scope in Section 11.2.
+Responder enters active phase only after Local Admission of `accept` and Binding Activation; initiator enters
+only after its bootstrap request reaches Local Admission, it validates the matching `accept`, and its exact
+binding activates. Active phase **MUST** accept only `message`, `ack`, `ping`, `pong`, or `close`. Wrong phase or
+unknown kind **MUST** fault at the scope in Section 11.2.
 
 **RPC-WIRE-010 — Reject shape.** Only a fresh `unsupported-profile` or `admission-rejected` **MAY** carry the
 optional bounded `message`. Generic and token-authorized resume rejects **MUST** use exactly their two known
@@ -1568,8 +1578,9 @@ Session retained/recovering; an initiator that never verified accept **MUST** re
 
 ### 10.2 Binding, attempts, and cursors
 
-**RPC-SESSION-005 — Binding epoch.** Every accepted binding **MUST** receive a strictly increasing safe-integer
-epoch. The exact current endpoint and epoch **MUST** be the only active authority. Installing a newer valid
+**RPC-SESSION-005 — Binding epoch.** Every Physical Connection Binding selected at Binding Linearization
+**MUST** receive a strictly increasing safe-integer epoch. The exact current endpoint and epoch **MUST** be the
+only binding authority; it becomes active authority only at Binding Activation. Linearizing a newer valid
 binding **MUST** atomically fence the old endpoint before it can affect state. An initiator **MUST** require an
 epoch greater than its last verified value, not exactly plus one, because an accept may have been lost.
 
@@ -1579,9 +1590,10 @@ or lost request/accept **MUST NOT** roll it back. Responder **MUST** retain `hig
 accept only a higher token-valid attempt at binding linearization.
 
 **RPC-SESSION-007 — Last valid resume wins.** Concurrent token-valid resumes **MAY** linearize successively; the
-last installed endpoint **MUST** be current and all prior endpoints **MUST** be fenced. A valid replacement
-**MAY** supersede a binding the other side still believes healthy. Lost accept **MUST** remain recoverable by a
-higher attempt using the same stable `resumeToken`.
+last linearized endpoint **MUST** be current and all prior endpoints **MUST** be fenced. A valid replacement
+**MAY** supersede a binding the other side still believes healthy. Only the exact current linearized binding
+**MAY** activate. Lost accept **MUST** remain recoverable by a higher attempt using the same stable
+`resumeToken`.
 
 **RPC-SESSION-008 — Cursor meaning.** Resume request `receivedThrough` **MUST** describe initiator receipt of
 responder messages; accept `receivedThrough` **MUST** describe responder receipt of initiator messages. For each
@@ -1592,13 +1604,25 @@ that interval **MAY** advance knowledge after a lost ACK; a lower or higher valu
 **RPC-SESSION-009 — Resume linearization.** After token comparison and without an intervening await, responder
 **MUST** atomically recheck Owner/Session non-terminal state, exact attempt endpoint, profile/session, stable
 token, Recovery deadline, attempt high-watermark, both current cursor bounds, next epoch, and
-binding/Connection reservations. Only then may it advance attempt, epoch, fencing, and binding. Any changed fact
-**MUST** cause reclassification or discard of the stale candidate.
+binding/Connection reservations. Only then may it advance attempt and epoch, fence the old endpoint, and
+linearize the replacement Physical Connection Binding. Any changed fact **MUST** cause reclassification or
+discard of the stale candidate.
 
-**RPC-SESSION-010 — Initiator verification.** Before installing an accept or terminaling from a
+**RPC-SESSION-010 — Initiator verification.** Before Binding Linearization from an accept or terminaling from a
 token-authorized reject, initiator **MUST** recheck the exact attempt endpoint, profile/session, current
 state/deadline, last verified epoch, retained cursor bounds, and higher-attempt winner. Timeout, cutoff, fencing,
 or later winner **MUST** make a late outcome a no-op.
+
+**RPC-SESSION-011 — Binding activation.** Binding Linearization **MUST** retain the Session and exact Physical
+Connection Binding before any asynchronous reply-admission wait, but **MUST NOT** yet permit active records,
+replay, or successful `bind()` or `accept()` fulfillment. Responder Binding Activation **MUST** wait for Local
+Admission of its `accept`; initiator Binding Activation **MUST** wait for Local Admission of its bootstrap
+request and validation of the matching `accept`. Activation **MUST** apply only to the exact current linearized
+binding.
+Before Linearization, timeout, abort, or Connection terminal **MUST** remain attempt-scoped. After Linearization
+but before Activation, any such outcome or active ingress admitted against that binding **MUST** fail the exact
+binding without rolling back its Binding Epoch and **MUST NOT** later activate it. After Activation, late
+attempt-level timeout, abort, or bootstrap settlement **MUST** have no effect.
 
 ### 10.3 Recovery lifecycle
 
@@ -2312,7 +2336,7 @@ wrong token/profile/session, generic/token-authorized reject, Ping/Pong, Close, 
 **MUST** assert both endpoint states, current binding, dispatch count, caller outcome, retained evidence, and next
 permitted records.
 
-**RPC-CORPUS-003 — State disagreement.** Release tests **MUST** inject at least: responder installed binding with
+**RPC-CORPUS-003 — State disagreement.** Release tests **MUST** inject at least: responder activated binding with
 lost accept; initiator still connected after responder fenced old epoch; durable receipt with lower resume cursor;
 simultaneous token-valid replacement while old Connection continues; higher/lower attempt races; Close vs
 loss/force; late accept/reject after timeout/cutoff; and responder token-state loss while initiator recovers. Legal

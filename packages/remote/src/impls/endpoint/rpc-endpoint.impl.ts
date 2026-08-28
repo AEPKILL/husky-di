@@ -26,6 +26,7 @@ export class RpcEndpointImpl implements IRpcEndpoint {
 	readonly _reserveRetainedBytes:
 		| ((bytes: number) => IRpcRetainedBytesReservation | undefined)
 		| undefined;
+	readonly _onIngressAdmitted: (() => void) | undefined;
 	readonly _onMessage: (message: Uint8Array) => Promise<void> | void;
 	readonly _onFailure: (reason: RpcEndpointFailureEnum, error?: Error) => void;
 	readonly _ingress: IRpcIngressEntry[] = [];
@@ -44,9 +45,16 @@ export class RpcEndpointImpl implements IRpcEndpoint {
 	_failed = false;
 
 	public constructor(options: CreateRpcEndpointOptions) {
-		const { connection, onFailure, onMessage, reserveRetainedBytes } = options;
+		const {
+			connection,
+			onFailure,
+			onIngressAdmitted,
+			onMessage,
+			reserveRetainedBytes,
+		} = options;
 		this._connection = connection;
 		this._reserveRetainedBytes = reserveRetainedBytes;
+		this._onIngressAdmitted = onIngressAdmitted;
 		this._onMessage = onMessage;
 		this._onFailure = onFailure;
 		this._subscription = connection.message$.subscribe({
@@ -175,6 +183,7 @@ export class RpcEndpointImpl implements IRpcEndpoint {
 		this._receivedFirstIngressMessage = true;
 		this._ingress.push({ message: snapshot, reservation });
 		this._ingressBytes += snapshot.byteLength;
+		this._onIngressAdmitted?.();
 		if (!this._processing) {
 			this._processing = true;
 			queueMicrotask(() => void this._drain());

@@ -228,6 +228,8 @@ export class RpcSessionImpl implements IRpcSession {
 		if (cannotPrepareFreshBinding) {
 			throw new Error("Default RPC fresh binding candidate is invalid.");
 		}
+		// Preserve provisional Topology admission so failed preparation can close it.
+		this._sessionHost = host;
 		const candidate = Object.freeze({}) as RpcBindingCandidate;
 		this._bindingCandidates.set(candidate, {
 			facts: this._snapshotCandidateFacts(),
@@ -516,7 +518,8 @@ export class RpcSessionImpl implements IRpcSession {
 			return false;
 		}
 		this._startHealthTimer(binding);
-		this._pump();
+		// Exit bootstrap activation before replay can reenter the peer's reply gate.
+		queueMicrotask(() => this._pump());
 		return this._binding === binding && !this._closed;
 	}
 
@@ -669,7 +672,7 @@ export class RpcSessionImpl implements IRpcSession {
 			return "Default RPC binding candidate contradicts retained continuity.";
 		}
 		if (candidate.kind === "fresh") {
-			return this._sessionHost === undefined &&
+			return this._sessionHost === candidate.host &&
 				candidate.host !== undefined &&
 				candidate.nextBindingEpoch === 1 &&
 				candidate.peerReceivedThrough === 0 &&
