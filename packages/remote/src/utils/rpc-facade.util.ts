@@ -6,10 +6,10 @@
 
 import { getRemoteServiceDescriptorData } from "@/factories/remote-service-descriptor.factory";
 import type {
-	IRemoteServiceDescriptor,
 	RemoteService,
+	RemoteServiceDescriptor,
 	RpcMethodDefinitions,
-} from "@/interfaces/peer/remote-service-descriptor.interface";
+} from "@/types/peer/remote-service-descriptor.type";
 
 export type RpcFacadeInvocation = (
 	method: string,
@@ -19,7 +19,7 @@ export type RpcFacadeInvocation = (
 
 /** Creates one facade without retaining current Session or membership state. */
 export function createRpcFacade<T, Definitions extends RpcMethodDefinitions<T>>(
-	descriptor: IRemoteServiceDescriptor<T, Definitions>,
+	descriptor: RemoteServiceDescriptor<T, Definitions>,
 	invoke: RpcFacadeInvocation,
 ): RemoteService<T, Definitions> {
 	const data = getRemoteServiceDescriptorData(descriptor);

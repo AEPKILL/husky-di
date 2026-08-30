@@ -281,7 +281,7 @@ assert.throws(
 			`import { RpcAcceptorListenerStopReasonEnum, RpcCallDirectionEnum, RpcCallStatusEnum, RpcCloseOutcomeEnum, RpcCloseReasonEnum, RpcConnectorReconnectionAttemptFailureStageEnum, RpcConnectorReconnectionEventTypeEnum, RpcConnectorReconnectionStopReasonEnum, RpcEventTypeEnum, RpcException, RpcExceptionCodeEnum, RpcStateStatusEnum, createRemoteServiceDescriptor, createRpcAcceptor, createRpcConnector, createRpcConnectorReconnection } from "@husky-di/remote";
 import { RpcCallTerminalTypeEnum, RpcIncomingCallKindEnum, RpcProtocolSessionTransitionTypeEnum } from "@husky-di/remote/protocol";
 import type {
-  IRemoteServiceDescriptor, IRpcPeer, IRpcConnector, IRpcConnectorReconnection,
+  RemoteServiceDescriptor, IRpcPeer, IRpcConnector, IRpcConnectorReconnection,
   IRpcAcceptor,
   RpcPeerState, RpcConnectorState, RpcAcceptorListenerState, RpcAcceptorState,
   RpcEvent,
@@ -388,7 +388,7 @@ void [
 	reconnection, reconnectionState, reconnectionEvent,
 ];
 type Inventory = [
-	IRemoteServiceDescriptor<unknown, never>, IRpcPeer, IRpcConnector,
+	RemoteServiceDescriptor<unknown, never>, IRpcPeer, IRpcConnector,
 	IRpcConnectorReconnection, IRpcAcceptor,
 	RpcPeerState, RpcConnectorState, RpcAcceptorListenerState,
 	RpcAcceptorState, RpcCloseReasonEnum, RpcCallDirectionEnum, RpcEvent, RpcExceptionCodeEnum,
@@ -423,6 +423,8 @@ void inventory;
 import { defaultRpcProtocol } from "@husky-di/remote";
 // @ts-expect-error Descriptor mapped helpers are private.
 import type { RemoteService, RpcMethodDefinitions } from "@husky-di/remote";
+// @ts-expect-error The legacy interface-prefixed Descriptor name is not exported.
+import type { IRemoteServiceDescriptor } from "@husky-di/remote";
 // @ts-expect-error Concrete implementation classes are private.
 import type { RpcConnectorImpl as RootRpcConnectorImpl } from "@husky-di/remote";
 // @ts-expect-error Implementation deep imports are private.

@@ -9,7 +9,7 @@
 
 import { CodedException, createServiceIdentifier } from "@husky-di/core";
 import { Observable, Subject } from "rxjs";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, expectTypeOf, it, vi } from "vitest";
 
 import packageManifest from "../package.json";
 import { RpcConformanceStatusEnum } from "../src/conformance";
@@ -21,6 +21,7 @@ import {
 	type IRpcConnector,
 	type IRpcConnectorAdapter,
 	type IRpcProtocol,
+	type RemoteServiceDescriptor,
 	RpcAcceptorListenerStopReasonEnum,
 	RpcCallDirectionEnum,
 	RpcCallStatusEnum,
@@ -292,6 +293,15 @@ describe("Remote Service Descriptor", () => {
 			},
 		});
 
+		expectTypeOf(descriptor).toEqualTypeOf<
+			RemoteServiceDescriptor<
+				CalculatorService,
+				{
+					readonly add: true;
+					readonly cancel: { readonly cancelable: true };
+				}
+			>
+		>();
 		expect(descriptor).toBeTypeOf("object");
 		expect("serviceIdentifier" in descriptor).toBe(false);
 		expect("wireName" in descriptor).toBe(false);

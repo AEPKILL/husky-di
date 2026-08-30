@@ -22,11 +22,6 @@ import type {
 	RpcOwnedCleanup,
 	RpcOwnedConnection,
 } from "@/interfaces/owner/rpc-owner-custody.interface";
-import type {
-	IRemoteServiceDescriptor,
-	RemoteServiceImplementation,
-	RpcMethodDefinitions,
-} from "@/interfaces/peer/remote-service-descriptor.interface";
 import type { IRpcPeer } from "@/interfaces/peer/rpc-peer.interface";
 import type {
 	IRpcPeerRuntime,
@@ -44,13 +39,18 @@ import type {
 } from "@/interfaces/protocol/rpc-protocol.interface";
 import type { IRpcAcceptorAdapter } from "@/interfaces/transport/rpc-adapter.interface";
 import type { IRpcConnection } from "@/interfaces/transport/rpc-connection.interface";
-import type { RpcEvent } from "@/types/owner/rpc-event.type";
 import type {
 	RpcAcceptorListenerState,
 	RpcAcceptorState,
-} from "@/types/rpc-caller.type";
-import type { RpcExposureRegistry } from "@/types/rpc-exposure.type";
-import type { CreateRpcAcceptorImplOptions } from "@/types/rpc-owner.type";
+} from "@/types/common/rpc-caller.type";
+import type { RpcExposureRegistry } from "@/types/common/rpc-exposure.type";
+import type { RpcEvent } from "@/types/owner/rpc-event.type";
+import type { CreateRpcAcceptorImplOptions } from "@/types/owner/rpc-owner.type";
+import type {
+	RemoteServiceDescriptor,
+	RemoteServiceImplementation,
+	RpcMethodDefinitions,
+} from "@/types/peer/remote-service-descriptor.type";
 import { installRpcExposure } from "@/utils/rpc-exposure.util";
 import { reserveRpcSessionRetainedBytes } from "@/utils/rpc-session-retained-bytes.util";
 import { isRpcSessionTransitionAllowed } from "@/utils/rpc-session-transition.util";
@@ -147,7 +147,7 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 	}
 
 	expose<T, Definitions extends RpcMethodDefinitions<T>>(
-		descriptor: IRemoteServiceDescriptor<T, Definitions>,
+		descriptor: RemoteServiceDescriptor<T, Definitions>,
 		implementation: NoInfer<RemoteServiceImplementation<T, Definitions>>,
 	): Cleanup {
 		if (this.state.status !== RpcStateStatusEnum.active) {

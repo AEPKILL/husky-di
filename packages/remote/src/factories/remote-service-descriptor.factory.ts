@@ -8,11 +8,11 @@ import type { ServiceIdentifier } from "@husky-di/core";
 import { z } from "zod";
 
 import type {
-	IRemoteServiceDescriptor,
 	NonEmptyMethodDefinitions,
+	RemoteServiceDescriptor,
 	RpcMethodDefinitions,
 	ValidateMethodDefinitions,
-} from "@/interfaces/peer/remote-service-descriptor.interface";
+} from "@/types/peer/remote-service-descriptor.type";
 import { rpcWireIdentifierSchema } from "@/utils/protocol/rpc-wire-identifier-schema.util";
 import { isPlainRecord, isString } from "@/utils/type-guard.util";
 
@@ -36,12 +36,12 @@ export function createRemoteServiceDescriptor<
 			ValidateMethodDefinitions<T, Definitions> &
 			NonEmptyMethodDefinitions<Definitions>;
 	},
-): IRemoteServiceDescriptor<T, Definitions> {
+): RemoteServiceDescriptor<T, Definitions> {
 	validateWireIdentifier(options.wireName, "wireName");
 	const methods = snapshotMethods(options.methods);
 	const descriptor = Object.freeze(
 		Object.create(null),
-	) as IRemoteServiceDescriptor<T, Definitions>;
+	) as RemoteServiceDescriptor<T, Definitions>;
 
 	remoteServiceDescriptorData.set(
 		descriptor,

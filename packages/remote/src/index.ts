@@ -8,7 +8,7 @@
 
 export type { IRpcAcceptor } from "@/interfaces/owner/rpc-acceptor.interface";
 export type { IRpcConnector } from "@/interfaces/owner/rpc-connector.interface";
-export type { IRemoteServiceDescriptor } from "@/interfaces/peer/remote-service-descriptor.interface";
+export type { RemoteServiceDescriptor } from "@/types/peer/remote-service-descriptor.type";
 export type { IRpcPeer } from "@/interfaces/peer/rpc-peer.interface";
 export type {
 	IRpcApplicationRecord,
@@ -43,7 +43,7 @@ export type {
 	RpcConnectorRuntimePolicyOptions,
 	RpcConnectorState,
 	RpcPeerState,
-} from "@/types/rpc-caller.type";
+} from "@/types/common/rpc-caller.type";
 export { RpcAcceptorListenerStopReasonEnum } from "@/enums/rpc-acceptor-listener-stop-reason.enum";
 export { RpcCallDirectionEnum } from "@/enums/rpc-call-direction.enum";
 export { RpcCallStatusEnum } from "@/enums/rpc-call-status.enum";

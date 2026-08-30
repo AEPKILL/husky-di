@@ -11,7 +11,7 @@ import { RpcHandlerSchedulerImpl } from "@/impls/owner/rpc-handler-scheduler.imp
 import { RpcOwnerCustodyImpl } from "@/impls/owner/rpc-owner-custody.impl";
 import { RpcPeerImpl } from "@/impls/peer/rpc-peer.impl";
 import type { IRpcAcceptor } from "@/interfaces/owner/rpc-acceptor.interface";
-import type { RpcAcceptorOptions } from "@/types/rpc-caller.type";
+import type { RpcAcceptorOptions } from "@/types/common/rpc-caller.type";
 import { createRpcProtocolAcceptorRuntime } from "@/utils/rpc-protocol-runtime.util";
 import {
 	createRpcAcceptorRuntimePolicy,

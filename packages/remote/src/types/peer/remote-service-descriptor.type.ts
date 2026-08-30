@@ -6,6 +6,8 @@
 
 import type { Observable } from "rxjs";
 
+import type { REMOTE_SERVICE_DESCRIPTOR_TYPE } from "@/constants/peer/remote-service-descriptor.const";
+
 // biome-ignore lint/suspicious/noExplicitAny: method extraction must preserve arbitrary parameter variance.
 export type AnyMethod = (...args: any[]) => unknown;
 
@@ -81,15 +83,15 @@ export type RemoteServiceImplementation<
  * Describes one explicitly allowlisted remote service without exposing its
  * local identifier or wire metadata.
  */
-export interface IRemoteServiceDescriptor<
+export type RemoteServiceDescriptor<
 	T,
 	Definitions extends RpcMethodDefinitions<T>,
-> {
+> = {
 	readonly [REMOTE_SERVICE_DESCRIPTOR_TYPE]: (
 		service: T,
 		definitions: Definitions,
 	) => readonly [T, Definitions];
-}
+};
 
 type IsAny<T> = 0 extends 1 & T ? true : false;
 
@@ -169,5 +171,3 @@ type ValidateMethodDefinition<F extends AnyMethod, Definition> =
 type RequiredKey<T> = {
 	[K in keyof T]-?: Pick<T, K> extends Required<Pick<T, K>> ? K : never;
 }[keyof T];
-
-declare const REMOTE_SERVICE_DESCRIPTOR_TYPE: unique symbol;

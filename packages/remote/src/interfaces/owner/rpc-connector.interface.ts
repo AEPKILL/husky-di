@@ -7,11 +7,11 @@
 import type { Observable } from "rxjs";
 
 import type { IRpcPeer } from "@/interfaces/peer/rpc-peer.interface";
-import type { RpcEvent } from "@/types/owner/rpc-event.type";
 import type {
 	RpcConnectorConnectOptions,
 	RpcConnectorState,
-} from "@/types/rpc-caller.type";
+} from "@/types/common/rpc-caller.type";
+import type { RpcEvent } from "@/types/owner/rpc-event.type";
 
 export interface IRpcConnector {
 	readonly state: RpcConnectorState;

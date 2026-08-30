@@ -125,7 +125,7 @@ Every public subpath **MUST** resolve from the installed tarball without workspa
 `RpcConnectorReconnectionAttemptFailureStageEnum`, `RpcConnectorReconnectionEventTypeEnum`,
 `RpcConnectorReconnectionStopReasonEnum`, `RpcEventTypeEnum`, `RpcExceptionCodeEnum`, and `RpcStateStatusEnum`;
 caller types
-`IRemoteServiceDescriptor`, `IRpcPeer`, `IRpcConnector`, `IRpcAcceptor`, `RpcPeerState`,
+`RemoteServiceDescriptor`, `IRpcPeer`, `IRpcConnector`, `IRpcAcceptor`, `RpcPeerState`,
 `RpcConnectorState`, `RpcAcceptorListenerState`, `RpcAcceptorState`, `RpcCloseReasonEnum`,
 `RpcCallDirectionEnum`, `RpcEvent`, `RpcExceptionCodeEnum`, `RpcConnectorOptions`, `RpcAcceptorOptions`,
 `RpcConnectorConnectOptions`, `RpcConnectorRuntimePolicyOptions`, `RpcAcceptorRuntimePolicyOptions`,
@@ -343,15 +343,15 @@ type RemoteServiceImplementation<
 
 declare const remoteServiceDescriptorBrand: unique symbol;
 
-export interface IRemoteServiceDescriptor<
+export type RemoteServiceDescriptor<
   T,
   Definitions extends RpcMethodDefinitions<T>,
-> {
+> = {
   readonly [remoteServiceDescriptorBrand]: (
     service: T,
     definitions: Definitions,
   ) => readonly [T, Definitions];
-}
+};
 
 export function createRemoteServiceDescriptor<
   T,
@@ -364,7 +364,7 @@ export function createRemoteServiceDescriptor<
       ValidateMethodDefinitions<T, Definitions> &
       NonEmptyMethodDefinitions<Definitions>;
   },
-): IRemoteServiceDescriptor<T, Definitions>;
+): RemoteServiceDescriptor<T, Definitions>;
 ```
 
 `Definitions` is inferred as a non-empty allowlist whose keys select methods of `T`. Each value is `true` for an
@@ -434,11 +434,11 @@ export interface IRpcPeer {
   readonly state: RpcPeerState;
   readonly state$: Observable<RpcPeerState>;
   expose<T, Definitions extends RpcMethodDefinitions<T>>(
-    descriptor: IRemoteServiceDescriptor<T, Definitions>,
+    descriptor: RemoteServiceDescriptor<T, Definitions>,
     implementation: NoInfer<RemoteServiceImplementation<T, Definitions>>,
   ): Cleanup;
   resolve<T, Definitions extends RpcMethodDefinitions<T>>(
-    descriptor: IRemoteServiceDescriptor<T, Definitions>,
+    descriptor: RemoteServiceDescriptor<T, Definitions>,
   ): RemoteService<T, Definitions>;
 }
 
@@ -459,7 +459,7 @@ export interface IRpcAcceptor {
   readonly peers$: Observable<readonly IRpcPeer[]>;
   readonly event$: Observable<RpcEvent>;
   expose<T, Definitions extends RpcMethodDefinitions<T>>(
-    descriptor: IRemoteServiceDescriptor<T, Definitions>,
+    descriptor: RemoteServiceDescriptor<T, Definitions>,
     implementation: NoInfer<RemoteServiceImplementation<T, Definitions>>,
   ): Cleanup;
   listen(adapter: IRpcAcceptorAdapter): Promise<void>;

@@ -14,7 +14,7 @@ import type {
 	RpcAcceptorRuntimePolicyOptions,
 	RpcConnectorOptions,
 	RpcConnectorRuntimePolicyOptions,
-} from "@/types/rpc-caller.type";
+} from "@/types/common/rpc-caller.type";
 import {
 	isPlainRecord,
 	isPositiveSafeInteger,

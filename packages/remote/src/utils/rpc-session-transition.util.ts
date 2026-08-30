@@ -8,7 +8,7 @@ import { RpcProtocolSessionTransitionTypeEnum } from "@/enums/protocol/rpc-proto
 import { RpcCloseReasonEnum } from "@/enums/rpc-close-reason.enum";
 import { RpcStateStatusEnum } from "@/enums/rpc-state-status.enum";
 import type { RpcProtocolSessionTransition } from "@/interfaces/protocol/rpc-protocol.interface";
-import type { RpcPeerState } from "@/types/rpc-caller.type";
+import type { RpcPeerState } from "@/types/common/rpc-caller.type";
 
 /** Applies the common Owner and Peer transition policy. */
 export function isRpcSessionTransitionAllowed(

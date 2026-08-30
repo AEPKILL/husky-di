@@ -18,12 +18,6 @@ import { getRemoteServiceDescriptorData } from "@/factories/remote-service-descr
 import { createRpcException } from "@/factories/rpc-exception.factory";
 import type { IRpcHandlerScheduler } from "@/interfaces/owner/rpc-handler-scheduler.interface";
 import type {
-	IRemoteServiceDescriptor,
-	RemoteService,
-	RemoteServiceImplementation,
-	RpcMethodDefinitions,
-} from "@/interfaces/peer/remote-service-descriptor.interface";
-import type {
 	CreateRpcPeerOptions,
 	IRpcPeerCommittedInvocation,
 	IRpcPeerInvocationReservation,
@@ -43,12 +37,18 @@ import type {
 	RpcProtocolIncomingCallReservation,
 	RpcUnknownCallFailure,
 } from "@/interfaces/protocol/rpc-protocol.interface";
-import type { RpcPeerCallEvent } from "@/types/peer/rpc-peer-call-event.type";
-import type { RpcPeerState } from "@/types/rpc-caller.type";
+import type { RpcPeerState } from "@/types/common/rpc-caller.type";
 import type {
 	RpcExposureRegistry,
 	RpcHandlerRoute,
-} from "@/types/rpc-exposure.type";
+} from "@/types/common/rpc-exposure.type";
+import type {
+	RemoteService,
+	RemoteServiceDescriptor,
+	RemoteServiceImplementation,
+	RpcMethodDefinitions,
+} from "@/types/peer/remote-service-descriptor.type";
+import type { RpcPeerCallEvent } from "@/types/peer/rpc-peer-call-event.type";
 import {
 	isRpcApplicationArgumentsSnapshot,
 	isRpcApplicationSnapshot,
@@ -148,7 +148,7 @@ export class RpcPeerImpl implements IRpcPeerRuntime {
 	}
 
 	expose<T, Definitions extends RpcMethodDefinitions<T>>(
-		descriptor: IRemoteServiceDescriptor<T, Definitions>,
+		descriptor: RemoteServiceDescriptor<T, Definitions>,
 		implementation: NoInfer<RemoteServiceImplementation<T, Definitions>>,
 	): Cleanup {
 		// Exposure changes require an active owner and a non-terminal Peer.
@@ -168,7 +168,7 @@ export class RpcPeerImpl implements IRpcPeerRuntime {
 	}
 
 	resolve<T, Definitions extends RpcMethodDefinitions<T>>(
-		descriptor: IRemoteServiceDescriptor<T, Definitions>,
+		descriptor: RemoteServiceDescriptor<T, Definitions>,
 	): RemoteService<T, Definitions> {
 		const service = getRemoteServiceDescriptorData(descriptor).wireName;
 		return createRpcFacade(descriptor, (method, cancelable, actualArguments) =>

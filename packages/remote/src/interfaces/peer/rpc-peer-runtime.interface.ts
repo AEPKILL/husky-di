@@ -13,9 +13,9 @@ import type {
 	IRpcRetainedBytesReservation,
 	RpcProtocolIncomingCallReservation,
 } from "@/interfaces/protocol/rpc-protocol.interface";
+import type { RpcPeerState } from "@/types/common/rpc-caller.type";
+import type { RpcExposureRegistry } from "@/types/common/rpc-exposure.type";
 import type { RpcPeerCallEvent } from "@/types/peer/rpc-peer-call-event.type";
-import type { RpcPeerState } from "@/types/rpc-caller.type";
-import type { RpcExposureRegistry } from "@/types/rpc-exposure.type";
 
 export interface IRpcPeerCommittedInvocation {
 	readonly result: Promise<unknown>;

@@ -11,7 +11,7 @@ import type {
 	RpcExposure,
 	RpcExposureRegistry,
 	RpcHandlerRoute,
-} from "@/types/rpc-exposure.type";
+} from "@/types/common/rpc-exposure.type";
 import { isCallable, isObjectOrFunction } from "@/utils/type-guard.util";
 
 /** Validates a full exposure and commits one registry entry. */

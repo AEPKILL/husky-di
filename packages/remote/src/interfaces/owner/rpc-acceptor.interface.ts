@@ -6,16 +6,15 @@
 
 import type { Cleanup } from "@husky-di/core";
 import type { Observable } from "rxjs";
-
-import type {
-	IRemoteServiceDescriptor,
-	RemoteServiceImplementation,
-	RpcMethodDefinitions,
-} from "@/interfaces/peer/remote-service-descriptor.interface";
 import type { IRpcPeer } from "@/interfaces/peer/rpc-peer.interface";
 import type { IRpcAcceptorAdapter } from "@/interfaces/transport/rpc-adapter.interface";
+import type { RpcAcceptorState } from "@/types/common/rpc-caller.type";
 import type { RpcEvent } from "@/types/owner/rpc-event.type";
-import type { RpcAcceptorState } from "@/types/rpc-caller.type";
+import type {
+	RemoteServiceDescriptor,
+	RemoteServiceImplementation,
+	RpcMethodDefinitions,
+} from "@/types/peer/remote-service-descriptor.type";
 
 export interface IRpcAcceptor {
 	readonly state: RpcAcceptorState;
@@ -25,7 +24,7 @@ export interface IRpcAcceptor {
 	readonly event$: Observable<RpcEvent>;
 
 	expose<T, Definitions extends RpcMethodDefinitions<T>>(
-		descriptor: IRemoteServiceDescriptor<T, Definitions>,
+		descriptor: RemoteServiceDescriptor<T, Definitions>,
 		implementation: NoInfer<RemoteServiceImplementation<T, Definitions>>,
 	): Cleanup;
 

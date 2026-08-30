@@ -11,7 +11,7 @@ import { RpcHandlerSchedulerImpl } from "@/impls/owner/rpc-handler-scheduler.imp
 import { RpcOwnerCustodyImpl } from "@/impls/owner/rpc-owner-custody.impl";
 import { RpcPeerImpl } from "@/impls/peer/rpc-peer.impl";
 import type { IRpcConnector } from "@/interfaces/owner/rpc-connector.interface";
-import type { RpcConnectorOptions } from "@/types/rpc-caller.type";
+import type { RpcConnectorOptions } from "@/types/common/rpc-caller.type";
 import { createRpcProtocolConnectorRuntime } from "@/utils/rpc-protocol-runtime.util";
 import {
 	createRpcConnectorRuntimePolicy,

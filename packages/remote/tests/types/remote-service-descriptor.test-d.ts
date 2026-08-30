@@ -10,7 +10,7 @@ import { expectTypeOf, test } from "vitest";
 
 import {
 	createRemoteServiceDescriptor,
-	type IRemoteServiceDescriptor,
+	type RemoteServiceDescriptor,
 } from "../../src/index";
 
 interface ValidService {
@@ -54,7 +54,7 @@ const validDescriptor = createRemoteServiceDescriptor(IValidService, {
 
 test("RPC-DESC-001 infers the exact selected service definition", () => {
 	expectTypeOf(validDescriptor).toEqualTypeOf<
-		IRemoteServiceDescriptor<
+		RemoteServiceDescriptor<
 			ValidService,
 			{
 				readonly add: true;

@@ -37,12 +37,12 @@ import type {
 } from "@/interfaces/protocol/rpc-protocol.interface";
 import type { IRpcConnectorAdapter } from "@/interfaces/transport/rpc-adapter.interface";
 import type { IRpcConnection } from "@/interfaces/transport/rpc-connection.interface";
-import type { RpcEvent } from "@/types/owner/rpc-event.type";
 import type {
 	RpcConnectorConnectOptions,
 	RpcConnectorState,
-} from "@/types/rpc-caller.type";
-import type { CreateRpcConnectorImplOptions } from "@/types/rpc-owner.type";
+} from "@/types/common/rpc-caller.type";
+import type { RpcEvent } from "@/types/owner/rpc-event.type";
+import type { CreateRpcConnectorImplOptions } from "@/types/owner/rpc-owner.type";
 import {
 	installRpcAbortListener,
 	readRpcAbortSignalAborted,
