@@ -7,9 +7,13 @@
 import type { Observable } from "rxjs";
 
 import type { REMOTE_SERVICE_DESCRIPTOR_TYPE } from "@/constants/peer/remote-service-descriptor.const";
-
-// biome-ignore lint/suspicious/noExplicitAny: method extraction must preserve arbitrary parameter variance.
-export type AnyMethod = (...args: any[]) => unknown;
+import type {
+	AnyMethod,
+	HasAnyParameter,
+	HasNoParameters,
+	IsAny,
+	RequiredKey,
+} from "@/types/common/common.type";
 
 export type RemoteMethodKey<T> = {
 	[K in keyof T]-?: K extends string
@@ -93,8 +97,6 @@ export type RemoteServiceDescriptor<
 	) => readonly [T, Definitions];
 };
 
-type IsAny<T> = 0 extends 1 & T ? true : false;
-
 type ContainsAbortSignal<T> =
 	IsAny<T> extends true
 		? false
@@ -106,8 +108,6 @@ type ParametersContainAbortSignal<F extends AnyMethod> = ContainsAbortSignal<
 	Parameters<F>[number]
 >;
 
-type HasAnyParameter<F extends AnyMethod> = IsAny<Parameters<F>[number]>;
-
 type HasUnsupportedUnaryResult<F extends AnyMethod> =
 	IsAny<Awaited<ReturnType<F>>> extends true
 		? true
@@ -117,15 +117,6 @@ type HasUnsupportedUnaryResult<F extends AnyMethod> =
 				> extends never
 			? false
 			: true;
-
-type IsNever<T> = [T] extends [never] ? true : false;
-
-type HasNoParameters<F extends AnyMethod> =
-	Parameters<F> extends []
-		? true
-		: IsNever<Parameters<F>[number]> extends true
-			? true
-			: false;
 
 type HasValidCancellationSlot<F extends AnyMethod> =
 	Parameters<F> extends [...infer Head, infer Last]
@@ -167,7 +158,3 @@ type ValidateMethodDefinition<F extends AnyMethod, Definition> =
 					: never
 				: never
 		: never;
-
-type RequiredKey<T> = {
-	[K in keyof T]-?: Pick<T, K> extends Required<Pick<T, K>> ? K : never;
-}[keyof T];
