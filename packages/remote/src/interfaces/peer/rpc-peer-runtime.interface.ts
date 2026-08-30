@@ -29,7 +29,6 @@ export interface IRpcPeerInvocationReservation {
 }
 
 export interface IRpcPeerRuntime extends IRpcPeer {
-	commitState(state: RpcPeerState): void;
 	stageState(state: RpcPeerState): void;
 	flushState(): void;
 	completeState(): void;

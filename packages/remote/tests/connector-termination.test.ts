@@ -977,4 +977,96 @@ describe("Connector termination cleanup", () => {
 		});
 		await connector.close();
 	});
+
+	it("RPC-API-005 RPC-LIFE-001 RPC-SPI-010 keeps an invalid closed transition authoritative over reentrant shutdown", async () => {
+		const connectionSource = new Subject<IRpcConnection>();
+		let sessionHost: IRpcProtocolSessionHost | undefined;
+		let forceCalls = 0;
+		let runtimeShutdownCalls = 0;
+		const session: IRpcProtocolSession = {
+			reserveInvocation: () => undefined,
+			forceClose() {
+				forceCalls += 1;
+			},
+		};
+		const connector = createRpcConnector({
+			protocol: {
+				createConnector(host) {
+					return {
+						bind() {
+							return Promise.resolve().then(() => {
+								sessionHost = host.attachSession(session);
+								if (sessionHost === undefined) {
+									throw new Error("Expected a fresh Session attachment.");
+								}
+							});
+						},
+						async shutdown() {
+							runtimeShutdownCalls += 1;
+						},
+						close() {},
+						async cleanup() {},
+					};
+				},
+				createAcceptor() {
+					return {
+						async accept() {},
+						async shutdown() {},
+						close() {},
+						async cleanup() {},
+					};
+				},
+			},
+		});
+		const events: string[] = [];
+		connector.event$.subscribe((event) => events.push(event.type));
+		await connector.connect({
+			adapter: {
+				connection$: connectionSource.asObservable(),
+				async connect() {
+					connectionSource.next({
+						message$: new Subject<Uint8Array>().asObservable(),
+						async send() {},
+						async close() {},
+					});
+					connectionSource.complete();
+				},
+			},
+		});
+
+		let shutdownTask: Promise<void> | undefined;
+		connector.peer.state$.subscribe((state) => {
+			if (state.status !== "recovering") {
+				return;
+			}
+			sessionHost?.transition({
+				type: RpcProtocolSessionTransitionTypeEnum.closed,
+				reason: RpcCloseReasonEnum.gracefulShutdown,
+			});
+			shutdownTask = connector.shutdown();
+		});
+
+		sessionHost?.transition({
+			type: RpcProtocolSessionTransitionTypeEnum.recovering,
+		});
+		if (shutdownTask === undefined) {
+			throw new Error(
+				"Expected shutdown to reenter the recovering notification.",
+			);
+		}
+		expect(connector.shutdown()).toBe(shutdownTask);
+		expect(connector.close()).toBe(shutdownTask);
+		await shutdownTask;
+
+		expect(forceCalls).toBe(1);
+		expect(runtimeShutdownCalls).toBe(0);
+		expect(events).not.toContain("owner-draining");
+		expect(connector.peer.state).toMatchObject({
+			status: "closed",
+			outcome: "failed",
+			reason: "protocol-fault",
+			error: { code: "protocol" },
+		});
+		expect(connector.state).toMatchObject(connector.peer.state);
+	});
 });

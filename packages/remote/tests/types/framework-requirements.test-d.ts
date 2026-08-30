@@ -6,6 +6,7 @@
 
 import { test } from "vitest";
 
+import type * as Remote from "../../src/index";
 import type { IRpcAcceptor } from "../../src/index";
 
 test("RPC-API-007 omits the aggregate Acceptor facade", () => {
@@ -28,4 +29,10 @@ test("RPC-POLICY-004 keeps the internal scheduler private", () => {
 	// @ts-expect-error RPC-POLICY-004 keeps the internal scheduler private.
 	type MissingRpcScheduler = import("../../src/index").RpcHandlerSchedulerImpl;
 	void (null as unknown as MissingRpcScheduler);
+});
+
+test("RPC-API-005 keeps the Owner mutation batch private", () => {
+	// @ts-expect-error RPC-API-005 does not publish its internal transaction seam.
+	type MissingRpcOwnerMutationBatch = Remote.IRpcOwnerMutationBatch;
+	void (null as unknown as MissingRpcOwnerMutationBatch);
 });

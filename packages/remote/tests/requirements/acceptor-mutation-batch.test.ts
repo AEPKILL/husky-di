@@ -5,6 +5,7 @@
  */
 
 import { createServiceIdentifier } from "@husky-di/core";
+import { Subject } from "rxjs";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -17,6 +18,7 @@ import {
 	RpcExceptionCodeEnum,
 } from "../../src/index";
 import type {
+	IRpcConnection,
 	IRpcProtocolAcceptorHost,
 	IRpcProtocolInvocationSink,
 	IRpcProtocolSession,
@@ -131,14 +133,14 @@ describe("Acceptor mutation batches", () => {
 
 		expect(observations).toEqual([
 			{
-				source: "peer-state",
+				source: "peers",
 				ownerStatus: "active",
 				peerStatus: "closed",
 				memberCount: 0,
 				peerRetained: false,
 			},
 			{
-				source: "peers",
+				source: "peer-state",
 				ownerStatus: "active",
 				peerStatus: "closed",
 				memberCount: 0,
@@ -291,6 +293,113 @@ describe("Acceptor mutation batches", () => {
 
 		resolveShutdown();
 		await shutdownTask;
+	});
+
+	it("RPC-API-005 fences Acceptor graceful effects when close reenters state notification", async () => {
+		let shutdownCalls = 0;
+		let closeCalls = 0;
+		const { acceptor } = createAcceptorHarness({
+			shutdown: async () => {
+				shutdownCalls += 1;
+			},
+			close: () => {
+				closeCalls += 1;
+			},
+		});
+		const order: string[] = [];
+		let taskSettled = false;
+		const reentrantCloseTasks: Promise<void>[] = [];
+
+		acceptor.state$.subscribe({
+			next: (state) => {
+				if (state.status === "active") {
+					return;
+				}
+				expect(acceptor.state).toBe(state);
+				expect(taskSettled).toBe(false);
+				order.push(`owner-state:${state.status}`);
+				if (state.status === "draining") {
+					reentrantCloseTasks.push(acceptor.close());
+				}
+			},
+			complete: () => order.push("owner-complete"),
+		});
+		acceptor.state$.subscribe((state) => {
+			if (state.status === "draining") {
+				reentrantCloseTasks.push(acceptor.close());
+			}
+		});
+		acceptor.peers$.subscribe({
+			complete: () => order.push("peers-complete"),
+		});
+		acceptor.event$.subscribe({
+			next: (event) => {
+				expect(taskSettled).toBe(false);
+				order.push(event.type);
+			},
+			complete: () => order.push("event-complete"),
+		});
+
+		const terminationTask = acceptor.shutdown();
+		void terminationTask.then(() => {
+			taskSettled = true;
+		});
+		expect(reentrantCloseTasks).toEqual([terminationTask, terminationTask]);
+		await terminationTask;
+
+		expect(order).toEqual([
+			"owner-state:draining",
+			"owner-draining",
+			"owner-state:closing",
+			"owner-closing",
+			"owner-state:closed",
+			"owner-complete",
+			"peers-complete",
+			"topology-closed",
+			"event-complete",
+		]);
+		expect(shutdownCalls).toBe(0);
+		expect(closeCalls).toBe(1);
+		expect(taskSettled).toBe(true);
+	});
+
+	it("RPC-API-005 runs Acceptor graceful continuation when shutdown reenters listener notification", async () => {
+		let shutdownCalls = 0;
+		const { acceptor } = createAcceptorHarness({
+			shutdown: async () => {
+				shutdownCalls += 1;
+			},
+		});
+		const connectionSource = new Subject<IRpcConnection>();
+		let adapterListenCalls = 0;
+		let shutdownTask: Promise<void> | undefined;
+		acceptor.state$.subscribe((state) => {
+			if (state.status === "active" && state.listener.status === "starting") {
+				shutdownTask = acceptor.shutdown();
+			}
+		});
+
+		const listenTask = acceptor.listen({
+			connection$: connectionSource.asObservable(),
+			async listen() {
+				adapterListenCalls += 1;
+			},
+		});
+		await expect(listenTask).rejects.toMatchObject({ name: "AbortError" });
+		if (shutdownTask === undefined) {
+			throw new Error(
+				"Expected shutdown to reenter the listener notification.",
+			);
+		}
+		await shutdownTask;
+
+		expect(adapterListenCalls).toBe(0);
+		expect(shutdownCalls).toBe(1);
+		expect(acceptor.state).toMatchObject({
+			status: "closed",
+			outcome: "normal",
+			reason: "graceful-shutdown",
+		});
 	});
 
 	it("RPC-API-005 commits the full F snapshot before notifications and settles the close task last", async () => {
@@ -464,6 +573,7 @@ describe("Acceptor mutation batches", () => {
 	});
 
 	it("RPC-API-005 RPC-SPI-011 batches a shared owner fault after closing the runtime", async () => {
+		let invocationSink: IRpcProtocolInvocationSink | undefined;
 		let acceptorDuringRuntimeClose:
 			| {
 					readonly ownerStatus: string;
@@ -477,10 +587,28 @@ describe("Acceptor mutation batches", () => {
 					ownerStatus: acceptor?.state.status ?? "missing",
 					memberCount: acceptor?.peers.length ?? -1,
 				};
+				invocationSink?.finish({
+					type: RpcCallTerminalTypeEnum.failed,
+					code: RpcExceptionCodeEnum.outcomeUnknown,
+				});
 			},
 		});
 		acceptor = harness.acceptor;
-		admitEmptySession(harness.host);
+		const firstSession: IRpcProtocolSession = {
+			reserveInvocation() {
+				return {
+					commit(sink) {
+						invocationSink = sink;
+						return { start() {}, cancel() {} };
+					},
+					release() {},
+				};
+			},
+			forceClose() {},
+		};
+		if (harness.host.admitSession(firstSession) === undefined) {
+			throw new Error("Expected the first Acceptor Session to be admitted.");
+		}
 		admitEmptySession(harness.host);
 		const [firstPeer, secondPeer] = acceptor.peers;
 		if (firstPeer === undefined || secondPeer === undefined) {
@@ -492,7 +620,9 @@ describe("Acceptor mutation batches", () => {
 			readonly memberCount: number;
 			readonly firstPeerStatus: string;
 			readonly secondPeerStatus: string;
+			readonly callSettled: boolean;
 		}[] = [];
+		let callSettled = false;
 		const observe = (source: string): void => {
 			observations.push({
 				source,
@@ -500,6 +630,7 @@ describe("Acceptor mutation batches", () => {
 				memberCount: acceptor?.peers.length ?? -1,
 				firstPeerStatus: firstPeer.state.status,
 				secondPeerStatus: secondPeer.state.status,
+				callSettled,
 			});
 		};
 		acceptor.state$.subscribe((state) => {
@@ -523,7 +654,9 @@ describe("Acceptor mutation batches", () => {
 			}
 		});
 		acceptor.event$.subscribe((event) => {
-			if (event.type === "peer-closed") {
+			if (event.type === "call-finished") {
+				observe("call-finished");
+			} else if (event.type === "peer-closed") {
 				observe(
 					event.peer === firstPeer ? "first-peer-closed" : "second-peer-closed",
 				);
@@ -531,6 +664,16 @@ describe("Acceptor mutation batches", () => {
 				observe("owner-closing");
 			}
 		});
+		const callOutcome = firstPeer
+			.resolve(batchDescriptor)
+			.wait()
+			.then(
+				() => undefined,
+				(error: unknown) => {
+					callSettled = true;
+					return error;
+				},
+			);
 
 		harness.host.fault(
 			RpcCloseReasonEnum.protocolFault,
@@ -546,8 +689,10 @@ describe("Acceptor mutation batches", () => {
 			memberCount: 0,
 			firstPeerStatus: "closed",
 			secondPeerStatus: "closed",
+			callSettled: false,
 		};
 		expect(observations).toEqual([
+			{ source: "call-finished", ...expectedSnapshot },
 			{ source: "owner-state", ...expectedSnapshot },
 			{ source: "peers", ...expectedSnapshot },
 			{ source: "first-peer-state", ...expectedSnapshot },
@@ -556,6 +701,9 @@ describe("Acceptor mutation batches", () => {
 			{ source: "second-peer-closed", ...expectedSnapshot },
 			{ source: "owner-closing", ...expectedSnapshot },
 		]);
+		await expect(callOutcome).resolves.toMatchObject({
+			code: RpcExceptionCodeEnum.outcomeUnknown,
+		});
 		await acceptor.close();
 	});
 });

@@ -5,7 +5,7 @@
  */
 
 import type { Cleanup } from "@husky-di/core";
-import { Observable, Subject } from "rxjs";
+import { type Observable, ReplaySubject } from "rxjs";
 import { z } from "zod";
 import { RpcCallTerminalTypeEnum } from "@/enums/protocol/rpc-call-terminal-type.enum";
 import { RpcIncomingCallKindEnum } from "@/enums/protocol/rpc-incoming-call-kind.enum";
@@ -65,7 +65,7 @@ import { isCallable, isNonNullObject } from "@/utils/type-guard.util";
 
 /** Retains one stable Peer identity and its replay-latest state snapshot. */
 export class RpcPeerImpl implements IRpcPeerRuntime {
-	readonly #stateSubject = new Subject<RpcPeerState>();
+	readonly #stateSubject = new ReplaySubject<RpcPeerState>(1);
 	readonly #localExposureRegistry: RpcExposureRegistry = new Map();
 	readonly #ownerExposureRegistry: RpcExposureRegistry;
 	readonly #isOwnerActive: () => boolean;
@@ -102,23 +102,12 @@ export class RpcPeerImpl implements IRpcPeerRuntime {
 		this.#handlerScheduler = handlerScheduler;
 		this.#maximumIncomingBytes = maximumIncomingBytes;
 		this.#reserveRetainedBytes = reserveRetainedBytes;
-		this.state$ = new Observable((subscriber) => {
-			const subscription = this.#stateSubject.subscribe(subscriber);
-			if (!subscriber.closed) {
-				subscriber.next(this.#state);
-			}
-			return subscription;
-		});
+		this.#stateSubject.next(this.#state);
+		this.state$ = this.#stateSubject.asObservable();
 	}
 
 	get state(): RpcPeerState {
 		return this.#state;
-	}
-
-	/** Package-private atomic state projection used by its owning topology. */
-	commitState(state: RpcPeerState): void {
-		this.stageState(state);
-		this.flushState();
 	}
 
 	/** Package-private state commit that defers notifications until the Owner batch is complete. */

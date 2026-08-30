@@ -458,6 +458,52 @@ describe("cold Topology Owner factories", () => {
 		expect(Object.isFrozen(acceptor.peers)).toBe(true);
 	});
 
+	it("RPC-API-003 replays final state and membership snapshots to late subscribers", async () => {
+		const { protocol } = createProtocolHarness();
+		const connector = createRpcConnector({ protocol });
+		const acceptor = createRpcAcceptor({ protocol });
+		await Promise.all([connector.close(), acceptor.close()]);
+
+		const observations: string[] = [];
+		connector.state$.subscribe({
+			next: (state) => observations.push(`connector:${state.status}`),
+			complete: () => observations.push("connector-complete"),
+		});
+		connector.peer.state$.subscribe({
+			next: (state) => observations.push(`connector-peer:${state.status}`),
+			complete: () => observations.push("connector-peer-complete"),
+		});
+		acceptor.state$.subscribe({
+			next: (state) => observations.push(`acceptor:${state.status}`),
+			complete: () => observations.push("acceptor-complete"),
+		});
+		acceptor.peers$.subscribe({
+			next: (peers) => observations.push(`acceptor-peers:${peers.length}`),
+			complete: () => observations.push("acceptor-peers-complete"),
+		});
+		connector.event$.subscribe({
+			next: (event) => observations.push(`connector-event:${event.type}`),
+			complete: () => observations.push("connector-event-complete"),
+		});
+		acceptor.event$.subscribe({
+			next: (event) => observations.push(`acceptor-event:${event.type}`),
+			complete: () => observations.push("acceptor-event-complete"),
+		});
+
+		expect(observations).toEqual([
+			"connector:closed",
+			"connector-complete",
+			"connector-peer:closed",
+			"connector-peer-complete",
+			"acceptor:closed",
+			"acceptor-complete",
+			"acceptor-peers:0",
+			"acceptor-peers-complete",
+			"connector-event-complete",
+			"acceptor-event-complete",
+		]);
+	});
+
 	it("RPC-POLICY-001 passes exact frozen role defaults to the Protocol", () => {
 		const connectorHarness = createProtocolHarness();
 		createRpcConnector({ protocol: connectorHarness.protocol });
@@ -3162,6 +3208,185 @@ describe("Protocol Session state projection", () => {
 		expect(observations.every(({ taskSettled: settled }) => !settled)).toBe(
 			true,
 		);
+	});
+
+	it("RPC-API-005 commits related Connector graceful snapshots before draining notifications and settles last", async () => {
+		const session: IRpcProtocolSession = {
+			reserveInvocation: () => undefined,
+			forceClose() {},
+		};
+		const { connector } = await connectProtocolSession(session);
+		let taskSettled = false;
+		const observations: Array<{
+			readonly source: string;
+			readonly ownerStatus: string;
+			readonly peerStatus: string;
+			readonly taskSettled: boolean;
+		}> = [];
+		const observe = (source: string): void => {
+			observations.push({
+				source,
+				ownerStatus: connector.state.status,
+				peerStatus: connector.peer.state.status,
+				taskSettled,
+			});
+		};
+		connector.state$.subscribe((state) => {
+			if (state.status === RpcStateStatusEnum.draining) {
+				observe("owner-state");
+			}
+		});
+		connector.peer.state$.subscribe((state) => {
+			if (state.status === RpcStateStatusEnum.draining) {
+				observe("peer-state");
+			}
+		});
+		connector.event$.subscribe((event) => {
+			if (
+				event.type === RpcEventTypeEnum.ownerDraining ||
+				event.type === RpcEventTypeEnum.peerDraining
+			) {
+				observe(event.type);
+			}
+		});
+
+		const task = connector.shutdown().then(() => {
+			taskSettled = true;
+		});
+
+		const committedSnapshot = {
+			ownerStatus: RpcStateStatusEnum.draining,
+			peerStatus: RpcStateStatusEnum.draining,
+			taskSettled: false,
+		};
+		expect(observations).toEqual([
+			{ source: "owner-state", ...committedSnapshot },
+			{ source: "peer-state", ...committedSnapshot },
+			{ source: "owner-draining", ...committedSnapshot },
+			{ source: "peer-draining", ...committedSnapshot },
+		]);
+
+		await task;
+	});
+
+	it("RPC-API-003 RPC-API-005 RPC-CLEANUP-004 serializes reentrant forced close after the graceful notification wave", async () => {
+		const harness = createProtocolHarness();
+		const connector = createRpcConnector({ protocol: harness.protocol });
+		const order: string[] = [];
+		let taskSettled = false;
+		const reentrantCloseTasks: Promise<void>[] = [];
+
+		connector.state$.subscribe({
+			next: (state) => {
+				if (state.status === RpcStateStatusEnum.active) {
+					return;
+				}
+				expect(connector.state).toBe(state);
+				expect(taskSettled).toBe(false);
+				order.push(`owner-state:${state.status}`);
+				if (state.status === RpcStateStatusEnum.draining) {
+					reentrantCloseTasks.push(connector.close());
+				}
+			},
+			complete: () => {
+				expect(taskSettled).toBe(false);
+				order.push("owner-complete");
+			},
+		});
+		connector.state$.subscribe((state) => {
+			if (state.status === RpcStateStatusEnum.draining) {
+				reentrantCloseTasks.push(connector.close());
+			}
+		});
+		connector.peer.state$.subscribe({
+			next: (state) => {
+				if (state.status !== RpcStateStatusEnum.closed) {
+					return;
+				}
+				expect(connector.peer.state).toBe(state);
+				expect(taskSettled).toBe(false);
+				order.push("peer-state:closed");
+			},
+			complete: () => {
+				expect(taskSettled).toBe(false);
+				order.push("peer-complete");
+			},
+		});
+		connector.event$.subscribe({
+			next: (event) => {
+				expect(taskSettled).toBe(false);
+				order.push(event.type);
+			},
+			complete: () => {
+				expect(taskSettled).toBe(false);
+				order.push("event-complete");
+			},
+		});
+
+		const terminationTask = connector.shutdown();
+		void terminationTask.then(() => {
+			taskSettled = true;
+		});
+		expect(reentrantCloseTasks).toEqual([terminationTask, terminationTask]);
+		await terminationTask;
+
+		expect(order).toEqual([
+			"owner-state:draining",
+			"peer-state:closed",
+			"owner-draining",
+			"peer-closed",
+			"peer-complete",
+			"owner-state:closing",
+			"owner-closing",
+			"owner-state:closed",
+			"owner-complete",
+			"topology-closed",
+			"event-complete",
+		]);
+		expect(harness.calls).toMatchObject({
+			shutdown: 0,
+			close: 1,
+			cleanup: 1,
+		});
+		expect(taskSettled).toBe(true);
+	});
+
+	it("RPC-API-005 runs the graceful continuation when shutdown reenters a peer notification", async () => {
+		let forceCloseCalls = 0;
+		const session: IRpcProtocolSession = {
+			reserveInvocation: () => undefined,
+			forceClose() {
+				forceCloseCalls += 1;
+			},
+		};
+		const { connector, sessionHost } = await connectProtocolSession(session);
+		let shutdownTask: Promise<void> | undefined;
+		connector.peer.state$.subscribe((state) => {
+			if (state.status === RpcStateStatusEnum.recovering) {
+				shutdownTask = connector.shutdown();
+			}
+		});
+
+		sessionHost.transition({
+			type: RpcProtocolSessionTransitionTypeEnum.recovering,
+		});
+		if (shutdownTask === undefined) {
+			throw new Error(
+				"Expected shutdown to reenter the recovering notification.",
+			);
+		}
+		await shutdownTask;
+
+		expect(forceCloseCalls).toBe(1);
+		expect(connector.state).toMatchObject({
+			status: RpcStateStatusEnum.closed,
+			outcome: RpcCloseOutcomeEnum.normal,
+			reason: RpcCloseReasonEnum.gracefulShutdown,
+		});
+		expect(connector.peer.state).toMatchObject({
+			status: RpcStateStatusEnum.closed,
+			reason: RpcCloseReasonEnum.forcedClose,
+		});
 	});
 
 	it("RPC-STATE-001 RPC-SPI-010 projects Connector recovery and terminal ordering on stable streams", async () => {

@@ -4,14 +4,19 @@
  * @created 2026-08-19 00:00:00
  */
 
+import { RpcStateStatusEnum } from "@/enums/rpc-state-status.enum";
 import { createRpcProtocol } from "@/factories/rpc-protocol.factory";
 import { RpcRetainedBytesLedgerImpl } from "@/impls/common/rpc-retained-bytes-ledger.impl";
 import { RpcConnectorImpl } from "@/impls/owner/rpc-connector.impl";
 import { RpcHandlerSchedulerImpl } from "@/impls/owner/rpc-handler-scheduler.impl";
 import { RpcOwnerCustodyImpl } from "@/impls/owner/rpc-owner-custody.impl";
+import { RpcOwnerMutationBatchImpl } from "@/impls/owner/rpc-owner-mutation-batch.impl";
 import { RpcPeerImpl } from "@/impls/peer/rpc-peer.impl";
 import type { IRpcConnector } from "@/interfaces/owner/rpc-connector.interface";
-import type { RpcConnectorOptions } from "@/types/common/rpc-caller.type";
+import type {
+	RpcConnectorOptions,
+	RpcConnectorState,
+} from "@/types/common/rpc-caller.type";
 import { createRpcProtocolConnectorRuntime } from "@/utils/rpc-protocol-runtime.util";
 import {
 	createRpcConnectorRuntimePolicy,
@@ -37,6 +42,9 @@ export function createRpcConnector(
 	connector = new RpcConnectorImpl({
 		runtime,
 		policy,
+		mutationBatch: new RpcOwnerMutationBatchImpl<RpcConnectorState>({
+			initialState: Object.freeze({ status: RpcStateStatusEnum.active }),
+		}),
 		retainedBytesLedger: new RpcRetainedBytesLedgerImpl(
 			policy.maxRetainedBytesTotal,
 		),
