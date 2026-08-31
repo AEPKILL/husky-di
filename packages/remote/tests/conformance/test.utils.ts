@@ -11,14 +11,14 @@ import type {
 	IRpcAdapterConformanceRemote,
 	IRpcConnectorAdapterConformanceFixture,
 	IRpcProtocolConformanceFixture,
+	RpcProtocolConformanceCandidate,
 } from "../../src/conformance";
 import { RpcCloseReasonEnum, RpcExceptionCodeEnum } from "../../src/index";
 import type {
-	IRpcProtocol,
+	IRpcProtocolAcceptor,
 	IRpcProtocolAcceptorHost,
-	IRpcProtocolAcceptorRuntime,
+	IRpcProtocolConnector,
 	IRpcProtocolConnectorHost,
-	IRpcProtocolConnectorRuntime,
 	IRpcProtocolInvocationRequest,
 	IRpcProtocolInvocationReservation,
 	IRpcProtocolInvocationSink,
@@ -238,17 +238,19 @@ type MemoryProtocolRecord =
 const memoryProtocolEncoder = new TextEncoder();
 const memoryProtocolDecoder = new TextDecoder();
 
-function createMemoryProtocol(counterExhaustion: boolean): IRpcProtocol {
-	return Object.freeze({
-		createConnector: (host: IRpcProtocolConnectorHost) =>
+function createMemoryProtocol(
+	counterExhaustion: boolean,
+): RpcProtocolConformanceCandidate {
+	return {
+		connector: (host: IRpcProtocolConnectorHost) =>
 			new MemoryProtocolRuntime("connector", host, counterExhaustion),
-		createAcceptor: (host: IRpcProtocolAcceptorHost) =>
+		acceptor: (host: IRpcProtocolAcceptorHost) =>
 			new MemoryProtocolRuntime("acceptor", host, counterExhaustion),
-	});
+	};
 }
 
 class MemoryProtocolRuntime
-	implements IRpcProtocolConnectorRuntime, IRpcProtocolAcceptorRuntime
+	implements IRpcProtocolConnector, IRpcProtocolAcceptor
 {
 	readonly #role: "connector" | "acceptor";
 	readonly #host: IRpcProtocolConnectorHost | IRpcProtocolAcceptorHost;

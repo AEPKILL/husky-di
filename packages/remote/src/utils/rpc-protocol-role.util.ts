@@ -1,7 +1,7 @@
 /**
- * @overview Constructs and validates owner-scoped custom Protocol runtimes.
+ * @overview Constructs and validates owner-scoped custom Protocol roles.
  * @author AEPKILL
- * @created 2026-08-19 00:00:00
+ * @created 2026-08-31 00:00:00
  */
 
 import { RpcCloseReasonEnum } from "@/enums/rpc-close-reason.enum";
@@ -10,11 +10,10 @@ import { createRpcException } from "@/factories/rpc-exception.factory";
 import type {
 	IRpcApplicationArgumentsSnapshot,
 	IRpcApplicationSnapshot,
-	IRpcProtocol,
+	IRpcProtocolAcceptor,
 	IRpcProtocolAcceptorHost,
-	IRpcProtocolAcceptorRuntime,
+	IRpcProtocolConnector,
 	IRpcProtocolConnectorHost,
-	IRpcProtocolConnectorRuntime,
 	IRpcProtocolHost,
 	IRpcProtocolRuntimePolicy,
 	IRpcProtocolSession,
@@ -29,30 +28,13 @@ import {
 } from "@/utils/rpc-application-value.util";
 import { isCallable, isNonNullObject } from "@/utils/type-guard.util";
 
-export interface RpcProtocolConnectorHostPorts {
-	reserveRetainedBytes(bytes: number): IRpcRetainedBytesReservation | undefined;
-	attachSession(
-		session: IRpcProtocolSession,
-	): IRpcProtocolSessionHost | undefined;
-	fault(reason: RpcProtocolFaultReason, error: Error): void;
-}
-
-export interface RpcProtocolAcceptorHostPorts {
-	reserveRetainedBytes(bytes: number): IRpcRetainedBytesReservation | undefined;
-	admitSession(
-		session: IRpcProtocolSession,
-	): IRpcProtocolSessionHost | undefined;
-	fault(reason: RpcProtocolFaultReason, error: Error): void;
-}
-
-export function createRpcProtocolConnectorRuntime(
-	protocol: unknown,
+export function createRpcProtocolConnectorForOwner(
+	protocolFactory: unknown,
 	policy: IRpcProtocolRuntimePolicy,
 	ports: RpcProtocolConnectorHostPorts,
-): IRpcProtocolConnectorRuntime {
+): IRpcProtocolConnector {
 	return wrapProtocolConstruction(() => {
-		validateProtocol(protocol, "createConnector");
-		validateProtocol(protocol, "createAcceptor");
+		validateProtocolFactory(protocolFactory);
 		const guard: ConstructionGuard = { active: true, violated: false };
 		const host = Object.freeze<IRpcProtocolConnectorHost>({
 			...createHostBase(policy, guard, ports.reserveRetainedBytes, ports.fault),
@@ -66,24 +48,23 @@ export function createRpcProtocolConnectorRuntime(
 				return ports.attachSession(session);
 			},
 		});
-		const runtime = protocol.createConnector(host);
+		const protocol = protocolFactory(host);
 		guard.active = false;
 		if (guard.violated) {
 			throw new TypeError("Protocol mutated its host during construction.");
 		}
-		validateRoleRuntime(runtime, "bind");
-		return runtime;
+		validateProtocolRole(protocol, "bind");
+		return protocol as IRpcProtocolConnector;
 	});
 }
 
-export function createRpcProtocolAcceptorRuntime(
-	protocol: unknown,
+export function createRpcProtocolAcceptorForOwner(
+	protocolFactory: unknown,
 	policy: IRpcProtocolRuntimePolicy,
 	ports: RpcProtocolAcceptorHostPorts,
-): IRpcProtocolAcceptorRuntime {
+): IRpcProtocolAcceptor {
 	return wrapProtocolConstruction(() => {
-		validateProtocol(protocol, "createConnector");
-		validateProtocol(protocol, "createAcceptor");
+		validateProtocolFactory(protocolFactory);
 		const guard: ConstructionGuard = { active: true, violated: false };
 		const host = Object.freeze<IRpcProtocolAcceptorHost>({
 			...createHostBase(policy, guard, ports.reserveRetainedBytes, ports.fault),
@@ -97,15 +78,31 @@ export function createRpcProtocolAcceptorRuntime(
 				return ports.admitSession(session);
 			},
 		});
-		const runtime = protocol.createAcceptor(host);
+		const protocol = protocolFactory(host);
 		guard.active = false;
 		if (guard.violated) {
 			throw new TypeError("Protocol mutated its host during construction.");
 		}
-		validateRoleRuntime(runtime, "accept");
-		return runtime;
+		validateProtocolRole(protocol, "accept");
+		return protocol as IRpcProtocolAcceptor;
 	});
 }
+
+type RpcProtocolConnectorHostPorts = Readonly<{
+	reserveRetainedBytes(bytes: number): IRpcRetainedBytesReservation | undefined;
+	attachSession(
+		session: IRpcProtocolSession,
+	): IRpcProtocolSessionHost | undefined;
+	fault(reason: RpcProtocolFaultReason, error: Error): void;
+}>;
+
+type RpcProtocolAcceptorHostPorts = Readonly<{
+	reserveRetainedBytes(bytes: number): IRpcRetainedBytesReservation | undefined;
+	admitSession(
+		session: IRpcProtocolSession,
+	): IRpcProtocolSessionHost | undefined;
+	fault(reason: RpcProtocolFaultReason, error: Error): void;
+}>;
 
 interface ConstructionGuard {
 	active: boolean;
@@ -179,30 +176,29 @@ function createHostBase(
 	};
 }
 
-function isRuntimeMember(value: unknown, key: string): boolean {
+function isProtocolRoleMember(value: unknown, key: string): boolean {
 	if (!isNonNullObject(value)) {
 		return false;
 	}
 	return isCallable(Reflect.get(value, key));
 }
 
-function validateRoleRuntime(
+function validateProtocolRole(
 	value: unknown,
 	roleMember: "bind" | "accept",
 ): void {
 	for (const key of [roleMember, "shutdown", "close", "cleanup"]) {
-		if (!isRuntimeMember(value, key)) {
-			throw new TypeError(`Protocol runtime must provide ${key}().`);
+		if (!isProtocolRoleMember(value, key)) {
+			throw new TypeError(`Protocol role must provide ${key}().`);
 		}
 	}
 }
 
-function validateProtocol(
+function validateProtocolFactory(
 	value: unknown,
-	roleMember: string,
-): asserts value is IRpcProtocol {
-	if (!isRuntimeMember(value, roleMember)) {
-		throw new TypeError("protocol must implement both role factories.");
+): asserts value is (...arguments_: unknown[]) => unknown {
+	if (!isCallable(value)) {
+		throw new TypeError("protocolFactory must be callable.");
 	}
 }
 

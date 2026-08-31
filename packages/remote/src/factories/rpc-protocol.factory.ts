@@ -1,5 +1,5 @@
 /**
- * @overview Assembles the immutable built-in Protocol from replaceable internal implementations.
+ * @overview Assembles fresh owner-scoped built-in Protocol roles.
  * @author AEPKILL
  * @created 2026-08-19 00:00:00
  */
@@ -12,26 +12,49 @@ import {
 import { RpcEndpointImpl } from "@/impls/endpoint/rpc-endpoint.impl";
 import { RpcCodecImpl } from "@/impls/protocol/rpc-codec.impl";
 import {
-	RpcProtocolAcceptorRuntimeImpl,
-	RpcProtocolConnectorRuntimeImpl,
+	RpcProtocolAcceptorImpl,
+	RpcProtocolConnectorImpl,
 } from "@/impls/protocol/rpc-protocol.impl";
 import { RpcSessionImpl } from "@/impls/session/rpc-session.impl";
 import type {
 	CreateRpcEndpointOptions,
 	IRpcEndpoint,
 } from "@/interfaces/endpoint/rpc-endpoint.interface";
-import type { IRpcProtocol } from "@/interfaces/protocol/rpc-protocol.interface";
+import type {
+	IRpcProtocolAcceptor,
+	IRpcProtocolAcceptorHost,
+	IRpcProtocolConnector,
+	IRpcProtocolConnectorHost,
+} from "@/interfaces/protocol/rpc-protocol.interface";
 import type { RpcSessionFactory } from "@/interfaces/session/rpc-session.interface";
 import { createRpcSecurityCarrier } from "@/utils/protocol/rpc-base64-url-32-schema.util";
 
-/** Returns the immutable built-in Protocol for independent providers. */
-export function createRpcProtocol(): IRpcProtocol {
-	return protocol;
+/** Creates a fresh built-in Connector Protocol role for one owner. */
+export function createRpcProtocolConnector(
+	host: IRpcProtocolConnectorHost,
+): IRpcProtocolConnector {
+	return createBuiltInRpcProtocolConnector(host, false);
 }
 
-/** Returns a package-private real-ledger counter exhaustion fixture. */
-export function createRpcCounterExhaustionProtocolForTest(): IRpcProtocol {
-	return createBuiltInRpcProtocol(true);
+/** Creates a fresh built-in Acceptor Protocol role for one owner. */
+export function createRpcProtocolAcceptor(
+	host: IRpcProtocolAcceptorHost,
+): IRpcProtocolAcceptor {
+	return createBuiltInRpcProtocolAcceptor(host, false);
+}
+
+/** Creates a package-private Connector counter-exhaustion fixture. */
+export function createRpcCounterExhaustionProtocolConnectorForTest(
+	host: IRpcProtocolConnectorHost,
+): IRpcProtocolConnector {
+	return createBuiltInRpcProtocolConnector(host, true);
+}
+
+/** Creates a package-private Acceptor counter-exhaustion fixture. */
+export function createRpcCounterExhaustionProtocolAcceptorForTest(
+	host: IRpcProtocolAcceptorHost,
+): IRpcProtocolAcceptor {
+	return createBuiltInRpcProtocolAcceptor(host, true);
 }
 
 const codec = Object.freeze(new RpcCodecImpl());
@@ -39,8 +62,35 @@ const codec = Object.freeze(new RpcCodecImpl());
 const createEndpoint = (options: CreateRpcEndpointOptions): IRpcEndpoint =>
 	new RpcEndpointImpl(options);
 
-function createBuiltInRpcProtocol(counterExhausted: boolean): IRpcProtocol {
-	const createSession: RpcSessionFactory = (options) =>
+function createBuiltInRpcProtocolConnector(
+	host: IRpcProtocolConnectorHost,
+	counterExhausted: boolean,
+): IRpcProtocolConnector {
+	const bindings = new RpcConnectorBindingsImpl({ host, createEndpoint });
+	return new RpcProtocolConnectorImpl(
+		host,
+		codec,
+		bindings,
+		createRpcSessionFactory(counterExhausted),
+	);
+}
+
+function createBuiltInRpcProtocolAcceptor(
+	host: IRpcProtocolAcceptorHost,
+	counterExhausted: boolean,
+): IRpcProtocolAcceptor {
+	const bindings = new RpcAcceptorBindingsImpl({ host, createEndpoint });
+	return new RpcProtocolAcceptorImpl(
+		host,
+		codec,
+		createRpcSecurityCarrier,
+		bindings,
+		createRpcSessionFactory(counterExhausted),
+	);
+}
+
+function createRpcSessionFactory(counterExhausted: boolean): RpcSessionFactory {
+	return (options) =>
 		new RpcSessionImpl(options, {
 			codec,
 			counterExhausted,
@@ -48,28 +98,4 @@ function createBuiltInRpcProtocol(counterExhausted: boolean): IRpcProtocol {
 				options.host.policy.maxRetainedBytesPerSession,
 			),
 		});
-
-	return Object.freeze({
-		createConnector: (host) => {
-			const bindings = new RpcConnectorBindingsImpl({ host, createEndpoint });
-			return new RpcProtocolConnectorRuntimeImpl(
-				host,
-				codec,
-				bindings,
-				createSession,
-			);
-		},
-		createAcceptor: (host) => {
-			const bindings = new RpcAcceptorBindingsImpl({ host, createEndpoint });
-			return new RpcProtocolAcceptorRuntimeImpl(
-				host,
-				codec,
-				createRpcSecurityCarrier,
-				bindings,
-				createSession,
-			);
-		},
-	} satisfies IRpcProtocol);
 }
-
-const protocol = createBuiltInRpcProtocol(false);

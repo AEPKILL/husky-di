@@ -17,12 +17,12 @@ export type {
 	RpcConformanceFailure,
 	RpcConformanceOptions,
 	RpcConformanceReport,
+	RpcProtocolConformanceCandidate,
 } from "@/conformance/rpc-conformance.type";
 
 /**
  * Stable Protocol case IDs:
  *
- * - `protocol.construction.immutable`
  * - `protocol.construction.connector-fresh-non-reentrant`
  * - `protocol.construction.acceptor-fresh-non-reentrant`
  * - `protocol.handoff.subscribe-before-install`

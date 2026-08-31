@@ -4,15 +4,15 @@
  * @created 2026-08-19 00:00:00
  */
 
-import type { IRpcProtocol } from "@/interfaces/protocol/rpc-protocol.interface";
+import type { RpcProtocolConformanceCandidate } from "@/conformance/rpc-conformance.type";
 import type {
 	IRpcAcceptorAdapter,
 	IRpcConnectorAdapter,
 } from "@/interfaces/transport/rpc-adapter.interface";
 
 export interface IRpcProtocolConformanceFixture {
-	readonly protocol: IRpcProtocol;
-	readonly counterExhaustionProtocol: IRpcProtocol;
+	readonly protocol: RpcProtocolConformanceCandidate;
+	readonly counterExhaustionProtocol: RpcProtocolConformanceCandidate;
 	createActiveProtocolFaultMessage(): Uint8Array;
 }
 

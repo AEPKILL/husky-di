@@ -10,15 +10,17 @@ import {
 	type IRpcAcceptorAdapterConformanceFixture,
 	type IRpcConnectorAdapterConformanceFixture,
 	type RpcConformanceCaseResult,
+	type RpcProtocolConformanceCandidate,
 	runRpcAcceptorAdapterConformance,
 	runRpcConnectorAdapterConformance,
 	runRpcProtocolConformance,
 } from "../../src/conformance";
 import {
-	createRpcCounterExhaustionProtocolForTest,
-	createRpcProtocol,
+	createRpcCounterExhaustionProtocolAcceptorForTest,
+	createRpcCounterExhaustionProtocolConnectorForTest,
+	createRpcProtocolAcceptor,
+	createRpcProtocolConnector,
 } from "../../src/factories/rpc-protocol.factory";
-import type { IRpcProtocol } from "../../src/protocol";
 import {
 	createMemoryAcceptorFixture,
 	createMemoryConnectorFixture,
@@ -28,14 +30,14 @@ import {
 describe("RPC conformance runner", () => {
 	it("RPC-CONFORMANCE-001 continues, reports once, and aggregates the same failures in stable order", async () => {
 		const constructionError = new Error("construction failed");
-		const protocol = Object.freeze({
-			createConnector(): never {
+		const protocol = {
+			connector(): never {
 				throw constructionError;
 			},
-			createAcceptor(): never {
+			acceptor(): never {
 				throw constructionError;
 			},
-		}) satisfies IRpcProtocol;
+		} satisfies RpcProtocolConformanceCandidate;
 		const reports: RpcConformanceCaseResult[] = [];
 
 		const outcome = runRpcProtocolConformance(
@@ -54,7 +56,7 @@ describe("RPC conformance runner", () => {
 			(result) => result.status === "failed",
 		);
 		expect(failures.length).toBeGreaterThanOrEqual(2);
-		expect(reports).toHaveLength(15);
+		expect(reports).toHaveLength(14);
 		expect(failedReports).toHaveLength(failures.length);
 		expect(failedReports.map((result) => result.caseId)).toEqual(
 			failures.map((failure) => Reflect.get(failure, "caseId")),
@@ -107,7 +109,7 @@ describe("RPC conformance runner", () => {
 			report: (result) => reports.push(result),
 		});
 
-		expect(reports).toHaveLength(15);
+		expect(reports).toHaveLength(14);
 		expect(reports.every((result) => result.status === "passed")).toBe(true);
 	});
 
@@ -117,15 +119,21 @@ describe("RPC conformance runner", () => {
 
 		await runRpcProtocolConformance(
 			{
-				protocol: createRpcProtocol(),
-				counterExhaustionProtocol: createRpcCounterExhaustionProtocolForTest(),
+				protocol: {
+					connector: createRpcProtocolConnector,
+					acceptor: createRpcProtocolAcceptor,
+				},
+				counterExhaustionProtocol: {
+					connector: createRpcCounterExhaustionProtocolConnectorForTest,
+					acceptor: createRpcCounterExhaustionProtocolAcceptorForTest,
+				},
 				createActiveProtocolFaultMessage: () =>
 					encoder.encode(JSON.stringify({ kind: "bogus" })),
 			},
 			{ report: (result) => reports.push(result) },
 		);
 
-		expect(reports).toHaveLength(15);
+		expect(reports).toHaveLength(14);
 		expect(reports.every((result) => result.status === "passed")).toBe(true);
 	});
 

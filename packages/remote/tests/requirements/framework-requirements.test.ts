@@ -16,9 +16,10 @@ import {
 	type IRpcAcceptor,
 	type IRpcConnection,
 	type IRpcConnector,
-	type IRpcProtocol,
 	RpcCloseReasonEnum,
 	type RpcEvent,
+	type RpcProtocolAcceptorFactory,
+	type RpcProtocolConnectorFactory,
 } from "../../src/index";
 import type {
 	IRpcProtocolAcceptorHost,
@@ -90,40 +91,35 @@ function createConnectorHarness(options: ConnectorHarnessOptions = {}): {
 	};
 	let connectorHost: IRpcProtocolConnectorHost | undefined;
 	let sessionHost: IRpcProtocolSessionHost | undefined;
-	const protocol: IRpcProtocol = {
-		createConnector(host) {
-			connectorHost = host;
-			return {
-				bind(connection) {
-					calls.bind += 1;
-					connection.message$.subscribe();
-					return Promise.resolve().then(() => {
-						sessionHost = host.attachSession(session);
-						if (sessionHost === undefined) {
-							throw new Error("Expected the test Session to attach.");
-						}
-					});
-				},
-				shutdown() {
-					calls.shutdown += 1;
-					return options.shutdown?.() ?? Promise.resolve();
-				},
-				close() {
-					calls.close += 1;
-					options.close?.();
-				},
-				cleanup() {
-					calls.cleanup += 1;
-					return options.cleanup?.() ?? Promise.resolve();
-				},
-			};
-		},
-		createAcceptor() {
-			throw new Error("Connector harness cannot create an Acceptor runtime.");
-		},
+	const protocolFactory: RpcProtocolConnectorFactory = (host) => {
+		connectorHost = host;
+		return {
+			bind(connection) {
+				calls.bind += 1;
+				connection.message$.subscribe();
+				return Promise.resolve().then(() => {
+					sessionHost = host.attachSession(session);
+					if (sessionHost === undefined) {
+						throw new Error("Expected the test Session to attach.");
+					}
+				});
+			},
+			shutdown() {
+				calls.shutdown += 1;
+				return options.shutdown?.() ?? Promise.resolve();
+			},
+			close() {
+				calls.close += 1;
+				options.close?.();
+			},
+			cleanup() {
+				calls.cleanup += 1;
+				return options.cleanup?.() ?? Promise.resolve();
+			},
+		};
 	};
 	const connector = createRpcConnector({
-		protocol,
+		protocolFactory,
 		runtimePolicy: { shutdownDeadlineMs: 50 },
 	});
 	if (connectorHost === undefined) {
@@ -174,22 +170,17 @@ function createAcceptorHarness(
 	readonly host: IRpcProtocolAcceptorHost;
 } {
 	let acceptorHost: IRpcProtocolAcceptorHost | undefined;
-	const protocol: IRpcProtocol = {
-		createConnector() {
-			throw new Error("Acceptor harness cannot create a Connector runtime.");
-		},
-		createAcceptor(host) {
-			acceptorHost = host;
-			return {
-				async accept() {},
-				async shutdown() {},
-				close() {},
-				cleanup: options.cleanup ?? (() => Promise.resolve()),
-			};
-		},
+	const protocolFactory: RpcProtocolAcceptorFactory = (host) => {
+		acceptorHost = host;
+		return {
+			async accept() {},
+			async shutdown() {},
+			close() {},
+			cleanup: options.cleanup ?? (() => Promise.resolve()),
+		};
 	};
 	const acceptor = createRpcAcceptor({
-		protocol,
+		protocolFactory,
 		runtimePolicy: { shutdownDeadlineMs: 50 },
 	});
 	if (acceptorHost === undefined) {
@@ -204,32 +195,34 @@ describe("Framework requirement evidence", () => {
 		let acceptorCreations = 0;
 		let bindCalls = 0;
 		let acceptCalls = 0;
-		const protocol: IRpcProtocol = {
-			createConnector() {
-				connectorCreations += 1;
-				return {
-					async bind() {
-						bindCalls += 1;
-					},
-					async shutdown() {},
-					close() {},
-					async cleanup() {},
-				};
-			},
-			createAcceptor() {
-				acceptorCreations += 1;
-				return {
-					async accept() {
-						acceptCalls += 1;
-					},
-					async shutdown() {},
-					close() {},
-					async cleanup() {},
-				};
-			},
+		const connectorProtocolFactory: RpcProtocolConnectorFactory = () => {
+			connectorCreations += 1;
+			return {
+				async bind() {
+					bindCalls += 1;
+				},
+				async shutdown() {},
+				close() {},
+				async cleanup() {},
+			};
 		};
-		const connector = createRpcConnector({ protocol });
-		const acceptor = createRpcAcceptor({ protocol });
+		const acceptorProtocolFactory: RpcProtocolAcceptorFactory = () => {
+			acceptorCreations += 1;
+			return {
+				async accept() {
+					acceptCalls += 1;
+				},
+				async shutdown() {},
+				close() {},
+				async cleanup() {},
+			};
+		};
+		const connector = createRpcConnector({
+			protocolFactory: connectorProtocolFactory,
+		});
+		const acceptor = createRpcAcceptor({
+			protocolFactory: acceptorProtocolFactory,
+		});
 		const before = [
 			connectorCreations,
 			acceptorCreations,
@@ -277,7 +270,8 @@ describe("Framework requirement evidence", () => {
 			"createRpcAcceptor",
 			"createRpcConnector",
 			"createRpcConnectorReconnection",
-			"createRpcProtocol",
+			"createRpcProtocolAcceptor",
+			"createRpcProtocolConnector",
 		]);
 		expect(Object.keys(protocolEntry).sort()).toEqual([
 			"RpcCallTerminalTypeEnum",
@@ -285,7 +279,8 @@ describe("Framework requirement evidence", () => {
 			"RpcExceptionCodeEnum",
 			"RpcIncomingCallKindEnum",
 			"RpcProtocolSessionTransitionTypeEnum",
-			"createRpcProtocol",
+			"createRpcProtocolAcceptor",
+			"createRpcProtocolConnector",
 		]);
 		expect(Object.keys(transportEntry)).toEqual([]);
 

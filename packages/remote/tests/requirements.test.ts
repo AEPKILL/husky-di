@@ -192,7 +192,7 @@ describe("Remote RPC requirement evidence", () => {
 			"packages/remote/src/impls/owner/rpc-connector.impl.ts",
 			"packages/remote/src/impls/peer/rpc-peer.impl.ts",
 			"packages/remote/src/utils/rpc-exposure.util.ts",
-			"packages/remote/src/utils/rpc-protocol-runtime.util.ts",
+			"packages/remote/src/utils/rpc-protocol-role.util.ts",
 		] as const;
 		const nonNullObjectGuardConsumerPaths = [
 			"packages/remote/src/conformance/rpc-protocol-conformance.util.ts",
@@ -200,7 +200,7 @@ describe("Remote RPC requirement evidence", () => {
 			"packages/remote/src/impls/owner/rpc-acceptor.impl.ts",
 			"packages/remote/src/impls/owner/rpc-connector.impl.ts",
 			"packages/remote/src/impls/peer/rpc-peer.impl.ts",
-			"packages/remote/src/utils/rpc-protocol-runtime.util.ts",
+			"packages/remote/src/utils/rpc-protocol-role.util.ts",
 		] as const;
 		const undefinedGuardConsumerPaths = [
 			"packages/remote/src/impls/owner/rpc-acceptor.impl.ts",

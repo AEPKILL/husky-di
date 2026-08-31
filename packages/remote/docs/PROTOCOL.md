@@ -1,7 +1,10 @@
 # Implementing an RPC Protocol
 
 Import the complete implementor surface from `@husky-di/remote/protocol`. A
-Protocol creates separate Connector and Acceptor runtimes and retains its own
+Protocol provider supplies separate `RpcProtocolConnectorFactory` and
+`RpcProtocolAcceptorFactory` functions. Each factory receives its role-specific
+Framework host and synchronously creates a fresh owner-scoped
+`IRpcProtocolConnector` or `IRpcProtocolAcceptor`. The role retains its own
 Session state. Framework-owned host ports provide normalized Application Value
 snapshots, outgoing and incoming call transactions, lifecycle projection, and
 fault scoping. `reserveRetainedBytes()` atomically charges the Topology Owner's
@@ -17,14 +20,26 @@ Incarnation and therefore depends on a confidential, integrity-protected,
 endpoint-authenticated Transport such as correctly validated TLS/WSS.
 
 An independent provider package that wants the built-in semantics without
-copying its state machines can delegate to `createRpcProtocol()`, exported with
-the same identity from `@husky-di/remote` and `@husky-di/remote/protocol`. The
-returned Protocol is frozen and reusable; each role factory still creates an
-isolated runtime.
+copying its state machines can re-export `createRpcProtocolConnector` and
+`createRpcProtocolAcceptor`. Both are exported with the same identities from
+`@husky-di/remote` and `@husky-di/remote/protocol`; each invocation creates an
+isolated role.
+
+Pass only the matching factory to each Owner:
+
+```typescript
+const connector = createRpcConnector({
+  protocolFactory: createMyProtocolConnector,
+});
+
+const acceptor = createRpcAcceptor({
+  protocolFactory: createMyProtocolAcceptor,
+});
+```
 
 ## Required lifecycle
 
-Each role runtime implements:
+Each Protocol role implements:
 
 - `bind()` or `accept()` to synchronously observe a handed-off Connection and
   complete the binding attempt asynchronously only after its exact Physical
@@ -52,10 +67,23 @@ cancellation, failed admission, Endpoint close, or Session terminal winner.
 
 ## Verification
 
-Run `runRpcProtocolConformance()` from `@husky-di/remote/conformance` against a
-fresh fixture for every case. Conformance is necessary but not sufficient for a
-custom Protocol: also exercise its encoding, security, resource boundaries, and
-platform-specific behavior in package-local runtime tests.
+Run `runRpcProtocolConformance()` from `@husky-di/remote/conformance` with a
+candidate fixture. Its `protocol` and `counterExhaustionProtocol` values each
+pair compatible role factories:
+
+```typescript
+{
+  connector: createMyProtocolConnector,
+  acceptor: createMyProtocolAcceptor,
+}
+```
+
+The pair is conformance-only test tooling; a production Owner accepts only its
+matching role factory. Each factory must create a fresh role when the runner
+invokes it for a case.
+Conformance is necessary but not sufficient for a custom Protocol: also exercise
+its encoding, security, resource boundaries, and platform-specific behavior in
+package-local runtime tests.
 
 The authoritative member contracts and ordering rules are in
 [SPECIFICATION.md](SPECIFICATION.md).

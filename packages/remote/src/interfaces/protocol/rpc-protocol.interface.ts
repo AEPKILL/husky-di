@@ -231,25 +231,18 @@ export interface IRpcProtocolAcceptorHost extends IRpcProtocolHost {
 	): IRpcProtocolSessionHost | undefined;
 }
 
-export interface IRpcProtocolRoleRuntime {
+export interface IRpcProtocolConnector {
+	bind(connection: IRpcConnection, signal: AbortSignal): Promise<void>;
 	shutdown(): Promise<void>;
 	close(): void;
 	cleanup(): Promise<void>;
 }
 
-export interface IRpcProtocolConnectorRuntime extends IRpcProtocolRoleRuntime {
-	bind(connection: IRpcConnection, signal: AbortSignal): Promise<void>;
-}
-
-export interface IRpcProtocolAcceptorRuntime extends IRpcProtocolRoleRuntime {
+export interface IRpcProtocolAcceptor {
 	accept(connection: IRpcConnection, signal: AbortSignal): Promise<void>;
-}
-
-export interface IRpcProtocol {
-	createConnector(
-		host: IRpcProtocolConnectorHost,
-	): IRpcProtocolConnectorRuntime;
-	createAcceptor(host: IRpcProtocolAcceptorHost): IRpcProtocolAcceptorRuntime;
+	shutdown(): Promise<void>;
+	close(): void;
+	cleanup(): Promise<void>;
 }
 
 declare const RPC_APPLICATION_SNAPSHOT_TYPE: unique symbol;

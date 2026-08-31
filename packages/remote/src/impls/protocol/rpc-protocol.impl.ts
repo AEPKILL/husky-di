@@ -1,5 +1,5 @@
 /**
- * @overview Private built-in husky-di-rpc/1 Protocol bootstrap programs and role runtimes.
+ * @overview Private built-in husky-di-rpc/1 Protocol roles and bootstrap programs.
  * @author AEPKILL
  * @created 2026-08-19 00:00:00
  */
@@ -22,10 +22,10 @@ import type {
 } from "@/interfaces/endpoint/rpc-bindings.interface";
 import type { IRpcCodec } from "@/interfaces/protocol/rpc-codec.interface";
 import type {
+	IRpcProtocolAcceptor,
 	IRpcProtocolAcceptorHost,
-	IRpcProtocolAcceptorRuntime,
+	IRpcProtocolConnector,
 	IRpcProtocolConnectorHost,
-	IRpcProtocolConnectorRuntime,
 } from "@/interfaces/protocol/rpc-protocol.interface";
 import type {
 	IRpcSession,
@@ -41,10 +41,8 @@ import type {
 	RpcResumeRequest,
 } from "@/types/protocol/rpc-wire-record.type";
 
-/** Active one-to-one Default Protocol runtime and bootstrap program owner. */
-export class RpcProtocolConnectorRuntimeImpl
-	implements IRpcProtocolConnectorRuntime
-{
+/** Active one-to-one Default Protocol role and bootstrap program owner. */
+export class RpcProtocolConnectorImpl implements IRpcProtocolConnector {
 	readonly _host: IRpcProtocolConnectorHost;
 	readonly _codec: IRpcCodec;
 	readonly _bindings: IRpcConnectorBindings;
@@ -228,10 +226,8 @@ export class RpcProtocolConnectorRuntimeImpl
 	}
 }
 
-/** Passive one-to-many Default Protocol runtime and bootstrap program owner. */
-export class RpcProtocolAcceptorRuntimeImpl
-	implements IRpcProtocolAcceptorRuntime
-{
+/** Passive one-to-many Default Protocol role and bootstrap program owner. */
+export class RpcProtocolAcceptorImpl implements IRpcProtocolAcceptor {
 	readonly _host: IRpcProtocolAcceptorHost;
 	readonly _codec: IRpcCodec;
 	readonly _createSecurityCarrier: () => string;

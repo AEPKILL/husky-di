@@ -5,10 +5,7 @@
  */
 
 import { RPC_PROTECTED_SESSION_BYTES } from "@/constants/protocol/rpc-profile.const";
-import type {
-	IRpcProtocol,
-	IRpcProtocolRuntimePolicy,
-} from "@/interfaces/protocol/rpc-protocol.interface";
+import type { IRpcProtocolRuntimePolicy } from "@/interfaces/protocol/rpc-protocol.interface";
 import type {
 	RpcAcceptorOptions,
 	RpcAcceptorRuntimePolicyOptions,
@@ -69,16 +66,21 @@ export function snapshotRpcFactoryOptions<
 	TOptions extends RpcConnectorOptions | RpcAcceptorOptions,
 >(options: TOptions | undefined): RpcFactoryOptionsSnapshot<TOptions> {
 	if (options === undefined) {
-		return Object.freeze({ protocol: undefined, runtimePolicy: undefined });
+		return Object.freeze({
+			protocolFactory: undefined,
+			runtimePolicy: undefined,
+		});
 	}
 
 	const record = readRpcClosedOptionsRecord(
 		options,
-		new Set(["protocol", "runtimePolicy"]),
+		new Set(["protocolFactory", "runtimePolicy"]),
 		"options",
 	);
 	return Object.freeze({
-		protocol: record.protocol as IRpcProtocol | undefined,
+		protocolFactory: record.protocolFactory as
+			| TOptions["protocolFactory"]
+			| undefined,
 		runtimePolicy: record.runtimePolicy as
 			| TOptions["runtimePolicy"]
 			| undefined,
@@ -100,7 +102,7 @@ export function createRpcAcceptorRuntimePolicy(
 type RpcFactoryOptionsSnapshot<
 	TOptions extends RpcConnectorOptions | RpcAcceptorOptions,
 > = {
-	readonly protocol: IRpcProtocol | undefined;
+	readonly protocolFactory: TOptions["protocolFactory"] | undefined;
 	readonly runtimePolicy: TOptions["runtimePolicy"] | undefined;
 };
 

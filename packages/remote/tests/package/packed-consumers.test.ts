@@ -25,12 +25,13 @@ const tscPath = resolve(packageRoot, "node_modules/typescript/bin/tsc");
 const esbuildPath = resolve(packageRoot, "node_modules/.bin/esbuild");
 let tarballPath = "";
 
-const nodeRuntimeExportAssertions = `assert.deepEqual(Object.keys(root).sort(), ["RpcAcceptorListenerStopReasonEnum", "RpcCallDirectionEnum", "RpcCallStatusEnum", "RpcCloseOutcomeEnum", "RpcCloseReasonEnum", "RpcConnectorReconnectionAttemptFailureStageEnum", "RpcConnectorReconnectionEventTypeEnum", "RpcConnectorReconnectionStopReasonEnum", "RpcEventTypeEnum", "RpcException", "RpcExceptionCodeEnum", "RpcStateStatusEnum", "createRemoteServiceDescriptor", "createRpcAcceptor", "createRpcConnector", "createRpcConnectorReconnection", "createRpcProtocol"]);
+const nodeRuntimeExportAssertions = `assert.deepEqual(Object.keys(root).sort(), ["RpcAcceptorListenerStopReasonEnum", "RpcCallDirectionEnum", "RpcCallStatusEnum", "RpcCloseOutcomeEnum", "RpcCloseReasonEnum", "RpcConnectorReconnectionAttemptFailureStageEnum", "RpcConnectorReconnectionEventTypeEnum", "RpcConnectorReconnectionStopReasonEnum", "RpcEventTypeEnum", "RpcException", "RpcExceptionCodeEnum", "RpcStateStatusEnum", "createRemoteServiceDescriptor", "createRpcAcceptor", "createRpcConnector", "createRpcConnectorReconnection", "createRpcProtocolAcceptor", "createRpcProtocolConnector"]);
 assert.equal(new root.RpcException(root.RpcExceptionCodeEnum.unavailable).code, "unavailable");
 assert.equal(root.RpcCallDirectionEnum.incoming, "incoming");
-assert.deepEqual(Object.keys(protocol).sort(), ["RpcCallTerminalTypeEnum", "RpcCloseReasonEnum", "RpcExceptionCodeEnum", "RpcIncomingCallKindEnum", "RpcProtocolSessionTransitionTypeEnum", "createRpcProtocol"]);
+assert.deepEqual(Object.keys(protocol).sort(), ["RpcCallTerminalTypeEnum", "RpcCloseReasonEnum", "RpcExceptionCodeEnum", "RpcIncomingCallKindEnum", "RpcProtocolSessionTransitionTypeEnum", "createRpcProtocolAcceptor", "createRpcProtocolConnector"]);
 assert.equal(protocol.RpcCloseReasonEnum.cleanupFailed, "cleanup-failed");
-assert.equal(Object.isFrozen(protocol.createRpcProtocol()), true);
+assert.equal(root.createRpcProtocolAcceptor, protocol.createRpcProtocolAcceptor);
+assert.equal(root.createRpcProtocolConnector, protocol.createRpcProtocolConnector);
 assert.deepEqual(Object.keys(transport), []);
 assert.deepEqual(Object.keys(conformance).sort(), ["RpcConformanceStatusEnum", "runRpcAcceptorAdapterConformance", "runRpcConnectorAdapterConformance", "runRpcProtocolConformance"]);`;
 
@@ -278,7 +279,7 @@ assert.throws(
 		);
 		writeFileSync(
 			resolve(consumerRoot, "index.ts"),
-			`import { RpcAcceptorListenerStopReasonEnum, RpcCallDirectionEnum, RpcCallStatusEnum, RpcCloseOutcomeEnum, RpcCloseReasonEnum, RpcConnectorReconnectionAttemptFailureStageEnum, RpcConnectorReconnectionEventTypeEnum, RpcConnectorReconnectionStopReasonEnum, RpcEventTypeEnum, RpcException, RpcExceptionCodeEnum, RpcStateStatusEnum, createRemoteServiceDescriptor, createRpcAcceptor, createRpcConnector, createRpcConnectorReconnection } from "@husky-di/remote";
+			`import { RpcAcceptorListenerStopReasonEnum, RpcCallDirectionEnum, RpcCallStatusEnum, RpcCloseOutcomeEnum, RpcCloseReasonEnum, RpcConnectorReconnectionAttemptFailureStageEnum, RpcConnectorReconnectionEventTypeEnum, RpcConnectorReconnectionStopReasonEnum, RpcEventTypeEnum, RpcException, RpcExceptionCodeEnum, RpcStateStatusEnum, createRemoteServiceDescriptor, createRpcAcceptor, createRpcConnector, createRpcConnectorReconnection, createRpcProtocolAcceptor, createRpcProtocolConnector } from "@husky-di/remote";
 import { RpcCallTerminalTypeEnum, RpcIncomingCallKindEnum, RpcProtocolSessionTransitionTypeEnum } from "@husky-di/remote/protocol";
 import type {
   RemoteServiceDescriptor, IRpcPeer, IRpcConnector, IRpcConnectorReconnection,
@@ -288,23 +289,24 @@ import type {
   RpcConnectorOptions, RpcConnectorConnectOptions, RpcAcceptorOptions,
   RpcConnectorRuntimePolicyOptions,
   RpcAcceptorRuntimePolicyOptions, IRpcConnection as RootConnection,
-  IRpcConnectorAdapter, IRpcAcceptorAdapter, IRpcProtocol as RootProtocol,
+  IRpcConnectorAdapter, IRpcAcceptorAdapter,
   IRpcProtocolRuntimePolicy, IRpcApplicationRecord, RpcApplicationValue,
   RpcCallFailure, RpcProtocolFaultReason, RpcSessionCloseReason,
   CreateRpcConnectorReconnectionOptions, RpcConnectorAdapterFactory,
   RpcConnectorReconnectionEvent, RpcConnectorReconnectionPolicyOptions,
-  RpcConnectorReconnectionState,
+  RpcConnectorReconnectionState, RpcProtocolAcceptorFactory as RootProtocolAcceptorFactory,
+  RpcProtocolConnectorFactory as RootProtocolConnectorFactory,
 } from "@husky-di/remote";
 import type {
   IRpcConnection as ProtocolConnection, IRpcApplicationArgumentsSnapshot,
   IRpcApplicationRecord as ProtocolApplicationRecord, IRpcApplicationSnapshot,
-  IRpcProtocol, IRpcProtocolAcceptorHost,
-  IRpcProtocolAcceptorRuntime, IRpcProtocolConnectorHost,
-  IRpcProtocolConnectorRuntime, IRpcProtocolHost, IRpcProtocolIncomingCall,
+  IRpcProtocolAcceptor, IRpcProtocolAcceptorHost,
+  IRpcProtocolConnector, IRpcProtocolConnectorHost,
+  IRpcProtocolHost, IRpcProtocolIncomingCall,
   IRpcProtocolIncomingCallRequest, IRpcProtocolIncomingCallReservation,
   IRpcProtocolIncomingHandlerCall, IRpcProtocolInvocation,
   IRpcProtocolInvocationRequest, IRpcProtocolInvocationReservation,
-  IRpcProtocolInvocationSink, IRpcProtocolRoleRuntime,
+  IRpcProtocolInvocationSink,
   IRpcProtocolRuntimePolicy as ProtocolRuntimePolicy, IRpcProtocolSession,
   IRpcProtocolSessionHost, IRpcRetainedBytesReservation, RpcCallOutcome, RpcHandlerOutcome,
   RpcApplicationValue as ProtocolApplicationValue,
@@ -313,6 +315,8 @@ import type {
   RpcProtocolIncomingCallReservation,
   RpcProtocolSessionTransition, RpcProtocolSessionTransitionCloseReason,
   RpcSessionCloseReason as ProtocolSessionCloseReason, RpcUnknownCallFailure,
+  RpcProtocolAcceptorFactory as ProtocolAcceptorFactory,
+  RpcProtocolConnectorFactory as ProtocolConnectorFactory,
 } from "@husky-di/remote/protocol";
 import type {
   IRpcAcceptorAdapter as TransportAcceptorAdapter,
@@ -328,11 +332,12 @@ import type {
   IRpcAcceptorAdapterConformanceFixture, IRpcAdapterConformanceRemote,
   IRpcConnectorAdapterConformanceFixture, IRpcProtocolConformanceFixture,
   RpcConformanceCaseResult, RpcConformanceFailure, RpcConformanceOptions,
-  RpcConformanceReport,
+  RpcConformanceReport, RpcProtocolConformanceCandidate,
 } from "@husky-di/remote/conformance";
 
 type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
-const rootProtocolIdentity: Equal<RootProtocol, IRpcProtocol> = true;
+const protocolAcceptorFactoryIdentity: Equal<RootProtocolAcceptorFactory, ProtocolAcceptorFactory> = true;
+const protocolConnectorFactoryIdentity: Equal<RootProtocolConnectorFactory, ProtocolConnectorFactory> = true;
 const connectionIdentity: Equal<RootConnection, ProtocolConnection & TransportConnection> = true;
 const adapterIdentity: Equal<
   IRpcConnectorAdapter & IRpcAcceptorAdapter,
@@ -380,9 +385,10 @@ void [
 	RpcConnectorReconnectionEventTypeEnum,
 	RpcConnectorReconnectionStopReasonEnum,
 	createRemoteServiceDescriptor, createRpcAcceptor, createRpcConnector,
-	createRpcConnectorReconnection,
+		createRpcConnectorReconnection, createRpcProtocolAcceptor, createRpcProtocolConnector,
 	RpcConformanceStatusEnum, runRpcAcceptorAdapterConformance, runRpcConnectorAdapterConformance,
-	runRpcProtocolConformance, rootProtocolIdentity, connectionIdentity,
+		runRpcProtocolConformance, protocolAcceptorFactoryIdentity,
+		protocolConnectorFactoryIdentity, connectionIdentity,
 	adapterIdentity, protocolSharedIdentity, callerException, callDirection, closeReason,
 	connectorConnectOptions, adapterFactory, reconnectionPolicy, reconnectionOptions,
 	reconnection, reconnectionState, reconnectionEvent,
@@ -401,26 +407,38 @@ type Inventory = [
 	RpcConnectorReconnectionEvent, RpcConnectorReconnectionPolicyOptions,
 	RpcConnectorReconnectionState,
   IRpcApplicationArgumentsSnapshot, IRpcApplicationSnapshot,
-  IRpcProtocolAcceptorHost, IRpcProtocolAcceptorRuntime, IRpcProtocolConnectorHost,
-  IRpcProtocolConnectorRuntime, IRpcProtocolHost, IRpcProtocolIncomingCall,
+  IRpcProtocolAcceptor, IRpcProtocolAcceptorHost, IRpcProtocolConnector,
+  IRpcProtocolConnectorHost, IRpcProtocolHost, IRpcProtocolIncomingCall,
   IRpcProtocolIncomingCallRequest, IRpcProtocolIncomingCallReservation,
   IRpcProtocolIncomingHandlerCall, IRpcProtocolInvocation,
   IRpcProtocolInvocationRequest, IRpcProtocolInvocationReservation,
-  IRpcProtocolInvocationSink, IRpcProtocolRoleRuntime, IRpcProtocolSession,
+  IRpcProtocolInvocationSink, IRpcProtocolSession,
   IRpcProtocolSessionHost, IRpcRetainedBytesReservation, RpcCallOutcome,
   RpcHandlerOutcome, RpcIncomingFailure,
   RpcIncomingTerminal, RpcProtocolIncomingCallReservation,
   RpcProtocolSessionTransition, RpcProtocolSessionTransitionCloseReason,
   RpcUnknownCallFailure, IRpcAcceptorAdapterConformanceFixture,
   IRpcAdapterConformanceRemote, IRpcConnectorAdapterConformanceFixture,
-  IRpcProtocolConformanceFixture, RpcConformanceCaseResult, RpcConformanceFailure,
+  IRpcProtocolConformanceFixture, RpcProtocolConformanceCandidate,
+  RpcConformanceCaseResult, RpcConformanceFailure,
   RpcConformanceOptions, RpcConformanceReport, ProtocolCallFailure,
-  ProtocolFaultReason, ProtocolSessionCloseReason,
+  ProtocolFaultReason, ProtocolSessionCloseReason, RootProtocolAcceptorFactory,
+  RootProtocolConnectorFactory, ProtocolAcceptorFactory, ProtocolConnectorFactory,
 ];
 declare const inventory: Inventory;
 void inventory;
 // @ts-expect-error The built-in Protocol is private.
 import { defaultRpcProtocol } from "@husky-di/remote";
+// @ts-expect-error The aggregate Protocol seam was removed in favor of role factories.
+import type { IRpcProtocol } from "@husky-di/remote";
+// @ts-expect-error The shared role runtime was removed in favor of role contracts.
+import type { IRpcProtocolRoleRuntime } from "@husky-di/remote/protocol";
+// @ts-expect-error The Connector runtime name was replaced by the Connector role contract.
+import type { IRpcProtocolConnectorRuntime } from "@husky-di/remote/protocol";
+// @ts-expect-error The Acceptor runtime name was replaced by the Acceptor role contract.
+import type { IRpcProtocolAcceptorRuntime } from "@husky-di/remote/protocol";
+// @ts-expect-error The aggregate factory was replaced by reusable role factories.
+import { createRpcProtocol } from "@husky-di/remote/protocol";
 // @ts-expect-error Descriptor mapped helpers are private.
 import type { RemoteService, RpcMethodDefinitions } from "@husky-di/remote";
 // @ts-expect-error The legacy interface-prefixed Descriptor name is not exported.
@@ -460,17 +478,17 @@ acceptor.resolveAll;
 		writeFileSync(
 			entryPath,
 			`import { createRpcConnector, createRpcConnectorReconnection } from "@husky-di/remote";
-import type { IRpcProtocol } from "@husky-di/remote/protocol";
+import type { RpcProtocolConnectorFactory } from "@husky-di/remote";
 import type { IRpcConnectorAdapter } from "@husky-di/remote/transport";
 import { runRpcConnectorAdapterConformance } from "@husky-di/remote/conformance";
 
 declare const connection$: IRpcConnectorAdapter["connection$"];
-declare const protocol: IRpcProtocol;
+declare const protocolFactory: RpcProtocolConnectorFactory;
 const adapter: IRpcConnectorAdapter = {
   connection$,
   async connect(signal: AbortSignal) { signal.throwIfAborted(); },
 };
-const connector = createRpcConnector({ protocol });
+const connector = createRpcConnector({ protocolFactory });
 const reconnection = createRpcConnectorReconnection({
   connector,
   adapterFactory: () => adapter,

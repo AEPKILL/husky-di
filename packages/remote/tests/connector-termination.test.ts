@@ -9,8 +9,8 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
 	createRpcConnector,
-	type IRpcProtocol,
 	RpcCloseReasonEnum,
+	type RpcProtocolConnectorFactory,
 } from "../src/index";
 import type {
 	IRpcConnection,
@@ -21,25 +21,13 @@ import { RpcProtocolSessionTransitionTypeEnum } from "../src/protocol";
 
 function createColdProtocol(overrides?: {
 	readonly cleanup?: () => Promise<void>;
-}): IRpcProtocol {
-	return {
-		createConnector() {
-			return {
-				async bind() {},
-				async shutdown() {},
-				close() {},
-				cleanup: overrides?.cleanup ?? (async () => {}),
-			};
-		},
-		createAcceptor() {
-			return {
-				async accept() {},
-				async shutdown() {},
-				close() {},
-				async cleanup() {},
-			};
-		},
-	};
+}): RpcProtocolConnectorFactory {
+	return () => ({
+		async bind() {},
+		async shutdown() {},
+		close() {},
+		cleanup: overrides?.cleanup ?? (async () => {}),
+	});
 }
 
 describe("Connector termination cleanup", () => {
@@ -51,25 +39,15 @@ describe("Connector termination cleanup", () => {
 		let bindCalls = 0;
 		let closeCalls = 0;
 		const connector = createRpcConnector({
-			protocol: {
-				createConnector() {
-					return {
-						async bind() {
-							bindCalls += 1;
-						},
-						async shutdown() {},
-						close() {},
-						async cleanup() {},
-					};
-				},
-				createAcceptor() {
-					return {
-						async accept() {},
-						async shutdown() {},
-						close() {},
-						async cleanup() {},
-					};
-				},
+			protocolFactory() {
+				return {
+					async bind() {
+						bindCalls += 1;
+					},
+					async shutdown() {},
+					close() {},
+					async cleanup() {},
+				};
 			},
 		});
 		const startup = connector.connect({
@@ -119,36 +97,26 @@ describe("Connector termination cleanup", () => {
 			},
 		}));
 		let binding = 0;
-		const protocol: IRpcProtocol = {
-			createConnector(host) {
-				return {
-					bind() {
-						const session = sessions[binding];
-						binding += 1;
-						return Promise.resolve().then(() => {
-							if (
-								session === undefined ||
-								host.attachSession(session) === undefined
-							) {
-								throw new Error("Expected a fresh Session attachment.");
-							}
-						});
-					},
-					async shutdown() {},
-					close() {},
-					async cleanup() {},
-				};
-			},
-			createAcceptor() {
-				return {
-					async accept() {},
-					async shutdown() {},
-					close() {},
-					async cleanup() {},
-				};
-			},
+		const protocolFactory: RpcProtocolConnectorFactory = (host) => {
+			return {
+				bind() {
+					const session = sessions[binding];
+					binding += 1;
+					return Promise.resolve().then(() => {
+						if (
+							session === undefined ||
+							host.attachSession(session) === undefined
+						) {
+							throw new Error("Expected a fresh Session attachment.");
+						}
+					});
+				},
+				async shutdown() {},
+				close() {},
+				async cleanup() {},
+			};
 		};
-		const connector = createRpcConnector({ protocol });
+		const connector = createRpcConnector({ protocolFactory });
 		const events: string[] = [];
 		connector.event$.subscribe((event) => events.push(event.type));
 		const createAdapter = (index: number, kind?: "startup" | "source") => {
@@ -204,28 +172,23 @@ describe("Connector termination cleanup", () => {
 				});
 			},
 		};
-		const protocol: IRpcProtocol = {
-			createConnector(host) {
-				return {
-					bind() {
-						return Promise.resolve().then(() => {
-							sessionHost = host.attachSession(session);
-							if (sessionHost === undefined) {
-								throw new Error("Expected a provisional Session host.");
-							}
-							sessionHost.fault(RpcCloseReasonEnum.protocolFault, fault);
-						});
-					},
-					async shutdown() {},
-					close() {},
-					async cleanup() {},
-				};
-			},
-			createAcceptor() {
-				throw new Error("Acceptor runtime is not used by this test.");
-			},
+		const protocolFactory: RpcProtocolConnectorFactory = (host) => {
+			return {
+				bind() {
+					return Promise.resolve().then(() => {
+						sessionHost = host.attachSession(session);
+						if (sessionHost === undefined) {
+							throw new Error("Expected a provisional Session host.");
+						}
+						sessionHost.fault(RpcCloseReasonEnum.protocolFault, fault);
+					});
+				},
+				async shutdown() {},
+				close() {},
+				async cleanup() {},
+			};
 		};
-		const connector = createRpcConnector({ protocol });
+		const connector = createRpcConnector({ protocolFactory });
 		const connectionSource = new Subject<IRpcConnection>();
 
 		const startup = connector.connect({
@@ -275,40 +238,30 @@ describe("Connector termination cleanup", () => {
 				}
 			},
 		};
-		const protocol: IRpcProtocol = {
-			createConnector(host) {
-				return {
-					bind(connection, signal) {
-						connection.message$.subscribe();
-						bindCalls += 1;
-						if (bindCalls === 1) {
-							return Promise.resolve().then(() => {
-								sessionHost = host.attachSession(session);
-								if (sessionHost === undefined) {
-									throw new Error("Expected a fresh Session attachment.");
-								}
-							});
-						}
-						recoverySignal = signal;
-						return new Promise<void>(() => {});
-					},
-					async shutdown() {},
-					close() {
-						runtimeCloseCalls += 1;
-					},
-					async cleanup() {},
-				};
-			},
-			createAcceptor() {
-				return {
-					async accept() {},
-					async shutdown() {},
-					close() {},
-					async cleanup() {},
-				};
-			},
+		const protocolFactory: RpcProtocolConnectorFactory = (host) => {
+			return {
+				bind(connection, signal) {
+					connection.message$.subscribe();
+					bindCalls += 1;
+					if (bindCalls === 1) {
+						return Promise.resolve().then(() => {
+							sessionHost = host.attachSession(session);
+							if (sessionHost === undefined) {
+								throw new Error("Expected a fresh Session attachment.");
+							}
+						});
+					}
+					recoverySignal = signal;
+					return new Promise<void>(() => {});
+				},
+				async shutdown() {},
+				close() {
+					runtimeCloseCalls += 1;
+				},
+				async cleanup() {},
+			};
 		};
-		const connector = createRpcConnector({ protocol });
+		const connector = createRpcConnector({ protocolFactory });
 		const connect = (onClose?: () => void) => {
 			const connectionSource = new Subject<IRpcConnection>();
 			return connector.connect({
@@ -386,28 +339,18 @@ describe("Connector termination cleanup", () => {
 		const messageSource = new Subject<Uint8Array>();
 		let closeCalls = 0;
 		let connectorSignal: AbortSignal | undefined;
-		const protocol: IRpcProtocol = {
-			createConnector() {
-				return {
-					bind(connection) {
-						connection.message$.subscribe();
-						return new Promise<void>(() => {});
-					},
-					async shutdown() {},
-					close() {},
-					async cleanup() {},
-				};
-			},
-			createAcceptor() {
-				return {
-					async accept() {},
-					async shutdown() {},
-					close() {},
-					async cleanup() {},
-				};
-			},
+		const protocolFactory: RpcProtocolConnectorFactory = () => {
+			return {
+				bind(connection) {
+					connection.message$.subscribe();
+					return new Promise<void>(() => {});
+				},
+				async shutdown() {},
+				close() {},
+				async cleanup() {},
+			};
 		};
-		const connector = createRpcConnector({ protocol });
+		const connector = createRpcConnector({ protocolFactory });
 		const startup = connector.connect({
 			adapter: {
 				connection$: connectionSource.asObservable(),
@@ -455,32 +398,22 @@ describe("Connector termination cleanup", () => {
 			},
 			forceClose() {},
 		};
-		const protocol: IRpcProtocol = {
-			createConnector(host) {
-				return {
-					bind(ownedConnection) {
-						ownedConnection.message$.subscribe();
-						return Promise.resolve().then(() => {
-							if (host.attachSession(session) === undefined) {
-								throw new Error("Expected Session attachment.");
-							}
-						});
-					},
-					async shutdown() {},
-					close() {},
-					async cleanup() {},
-				};
-			},
-			createAcceptor() {
-				return {
-					async accept() {},
-					async shutdown() {},
-					close() {},
-					async cleanup() {},
-				};
-			},
+		const protocolFactory: RpcProtocolConnectorFactory = (host) => {
+			return {
+				bind(ownedConnection) {
+					ownedConnection.message$.subscribe();
+					return Promise.resolve().then(() => {
+						if (host.attachSession(session) === undefined) {
+							throw new Error("Expected Session attachment.");
+						}
+					});
+				},
+				async shutdown() {},
+				close() {},
+				async cleanup() {},
+			};
 		};
-		const connector = createRpcConnector({ protocol });
+		const connector = createRpcConnector({ protocolFactory });
 		await connector.connect({
 			adapter: {
 				connection$: connectionSource.asObservable(),
@@ -507,7 +440,9 @@ describe("Connector termination cleanup", () => {
 	it("RPC-CLEANUP-002 RPC-CLEANUP-003 preserves a Connection cleanup rejection that settles before termination", async () => {
 		const closeError = new Error("early Connection cleanup failed");
 		const connectionSource = new Subject<IRpcConnection>();
-		const connector = createRpcConnector({ protocol: createColdProtocol() });
+		const connector = createRpcConnector({
+			protocolFactory: createColdProtocol(),
+		});
 
 		await expect(
 			connector.connect({
@@ -542,35 +477,30 @@ describe("Connector termination cleanup", () => {
 			reserveInvocation: () => undefined,
 			forceClose() {},
 		};
-		const protocol: IRpcProtocol = {
-			createConnector(host) {
-				return {
-					bind(connection) {
-						connection.message$.subscribe();
-						bindCalls += 1;
-						return Promise.resolve().then(() => {
-							if (bindCalls === 1) {
-								sessionHost = host.attachSession(session);
-								if (sessionHost === undefined) {
-									throw new Error("Expected a fresh Session attachment.");
-								}
-							} else {
-								sessionHost?.transition({
-									type: RpcProtocolSessionTransitionTypeEnum.recovered,
-								});
+		const protocolFactory: RpcProtocolConnectorFactory = (host) => {
+			return {
+				bind(connection) {
+					connection.message$.subscribe();
+					bindCalls += 1;
+					return Promise.resolve().then(() => {
+						if (bindCalls === 1) {
+							sessionHost = host.attachSession(session);
+							if (sessionHost === undefined) {
+								throw new Error("Expected a fresh Session attachment.");
 							}
-						});
-					},
-					async shutdown() {},
-					close() {},
-					async cleanup() {},
-				};
-			},
-			createAcceptor() {
-				throw new Error("Acceptor runtime is not used by this test.");
-			},
+						} else {
+							sessionHost?.transition({
+								type: RpcProtocolSessionTransitionTypeEnum.recovered,
+							});
+						}
+					});
+				},
+				async shutdown() {},
+				close() {},
+				async cleanup() {},
+			};
 		};
-		const connector = createRpcConnector({ protocol });
+		const connector = createRpcConnector({ protocolFactory });
 		const closeErrors = [
 			new Error("first native close failed"),
 			new Error("second native close failed"),
@@ -634,7 +564,9 @@ describe("Connector termination cleanup", () => {
 	it("RPC-CLEANUP-002 RPC-CLEANUP-003 preserves an interrupted Adapter startup cleanup rejection", async () => {
 		const startupError = new Error("Adapter startup cleanup failed");
 		const connectionSource = new Subject<IRpcConnection>();
-		const connector = createRpcConnector({ protocol: createColdProtocol() });
+		const connector = createRpcConnector({
+			protocolFactory: createColdProtocol(),
+		});
 		const startup = connector.connect({
 			adapter: {
 				connection$: connectionSource.asObservable(),
@@ -667,7 +599,7 @@ describe("Connector termination cleanup", () => {
 	it("RPC-CLEANUP-003 reuses one trusted cleanup Error", async () => {
 		const cleanupError = new Error("cleanup failed");
 		const connector = createRpcConnector({
-			protocol: createColdProtocol({
+			protocolFactory: createColdProtocol({
 				cleanup: () => Promise.reject(cleanupError),
 			}),
 		});
@@ -685,7 +617,7 @@ describe("Connector termination cleanup", () => {
 		vi.useFakeTimers();
 		try {
 			const connector = createRpcConnector({
-				protocol: createColdProtocol({
+				protocolFactory: createColdProtocol({
 					cleanup: () => new Promise<void>(() => {}),
 				}),
 				runtimePolicy: { shutdownDeadlineMs: 5 },
@@ -717,29 +649,19 @@ describe("Connector termination cleanup", () => {
 				forceClose() {},
 			};
 			const connector = createRpcConnector({
-				protocol: {
-					createConnector(host) {
-						return {
-							bind() {
-								return Promise.resolve().then(() => {
-									if (host.attachSession(session) === undefined) {
-										throw new Error("Expected a fresh Session attachment.");
-									}
-								});
-							},
-							async shutdown() {},
-							close() {},
-							cleanup: () => new Promise<void>(() => {}),
-						};
-					},
-					createAcceptor() {
-						return {
-							async accept() {},
-							async shutdown() {},
-							close() {},
-							async cleanup() {},
-						};
-					},
+				protocolFactory(host) {
+					return {
+						bind() {
+							return Promise.resolve().then(() => {
+								if (host.attachSession(session) === undefined) {
+									throw new Error("Expected a fresh Session attachment.");
+								}
+							});
+						},
+						async shutdown() {},
+						close() {},
+						cleanup: () => new Promise<void>(() => {}),
+					};
 				},
 				runtimePolicy: { shutdownDeadlineMs: 10 },
 			});
@@ -783,30 +705,20 @@ describe("Connector termination cleanup", () => {
 			forceClose() {},
 		};
 		const connector = createRpcConnector({
-			protocol: {
-				createConnector(host) {
-					return {
-						bind() {
-							return Promise.resolve().then(() => {
-								sessionHost = host.attachSession(session);
-								if (sessionHost === undefined) {
-									throw new Error("Expected a fresh Session attachment.");
-								}
-							});
-						},
-						async shutdown() {},
-						close() {},
-						async cleanup() {},
-					};
-				},
-				createAcceptor() {
-					return {
-						async accept() {},
-						async shutdown() {},
-						close() {},
-						async cleanup() {},
-					};
-				},
+			protocolFactory(host) {
+				return {
+					bind() {
+						return Promise.resolve().then(() => {
+							sessionHost = host.attachSession(session);
+							if (sessionHost === undefined) {
+								throw new Error("Expected a fresh Session attachment.");
+							}
+						});
+					},
+					async shutdown() {},
+					close() {},
+					async cleanup() {},
+				};
 			},
 		});
 		await connector.connect({
@@ -849,30 +761,20 @@ describe("Connector termination cleanup", () => {
 			forceClose() {},
 		};
 		const connector = createRpcConnector({
-			protocol: {
-				createConnector(host) {
-					return {
-						bind() {
-							return Promise.resolve().then(() => {
-								sessionHost = host.attachSession(session);
-								if (sessionHost === undefined) {
-									throw new Error("Expected a fresh Session attachment.");
-								}
-							});
-						},
-						async shutdown() {},
-						close() {},
-						async cleanup() {},
-					};
-				},
-				createAcceptor() {
-					return {
-						async accept() {},
-						async shutdown() {},
-						close() {},
-						async cleanup() {},
-					};
-				},
+			protocolFactory(host) {
+				return {
+					bind() {
+						return Promise.resolve().then(() => {
+							sessionHost = host.attachSession(session);
+							if (sessionHost === undefined) {
+								throw new Error("Expected a fresh Session attachment.");
+							}
+						});
+					},
+					async shutdown() {},
+					close() {},
+					async cleanup() {},
+				};
 			},
 		});
 		await connector.connect({
@@ -920,32 +822,22 @@ describe("Connector termination cleanup", () => {
 			},
 		};
 		const connector = createRpcConnector({
-			protocol: {
-				createConnector(host) {
-					return {
-						bind() {
-							return Promise.resolve().then(() => {
-								sessionHost = host.attachSession(session);
-								if (sessionHost === undefined) {
-									throw new Error("Expected a fresh Session attachment.");
-								}
-							});
-						},
-						async shutdown() {},
-						close() {
-							runtimeCloseCalls += 1;
-						},
-						async cleanup() {},
-					};
-				},
-				createAcceptor() {
-					return {
-						async accept() {},
-						async shutdown() {},
-						close() {},
-						async cleanup() {},
-					};
-				},
+			protocolFactory(host) {
+				return {
+					bind() {
+						return Promise.resolve().then(() => {
+							sessionHost = host.attachSession(session);
+							if (sessionHost === undefined) {
+								throw new Error("Expected a fresh Session attachment.");
+							}
+						});
+					},
+					async shutdown() {},
+					close() {
+						runtimeCloseCalls += 1;
+					},
+					async cleanup() {},
+				};
 			},
 		});
 		await connector.connect({
@@ -990,32 +882,22 @@ describe("Connector termination cleanup", () => {
 			},
 		};
 		const connector = createRpcConnector({
-			protocol: {
-				createConnector(host) {
-					return {
-						bind() {
-							return Promise.resolve().then(() => {
-								sessionHost = host.attachSession(session);
-								if (sessionHost === undefined) {
-									throw new Error("Expected a fresh Session attachment.");
-								}
-							});
-						},
-						async shutdown() {
-							runtimeShutdownCalls += 1;
-						},
-						close() {},
-						async cleanup() {},
-					};
-				},
-				createAcceptor() {
-					return {
-						async accept() {},
-						async shutdown() {},
-						close() {},
-						async cleanup() {},
-					};
-				},
+			protocolFactory(host) {
+				return {
+					bind() {
+						return Promise.resolve().then(() => {
+							sessionHost = host.attachSession(session);
+							if (sessionHost === undefined) {
+								throw new Error("Expected a fresh Session attachment.");
+							}
+						});
+					},
+					async shutdown() {
+						runtimeShutdownCalls += 1;
+					},
+					close() {},
+					async cleanup() {},
+				};
 			},
 		});
 		const events: string[] = [];

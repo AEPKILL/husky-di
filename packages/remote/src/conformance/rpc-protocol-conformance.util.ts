@@ -6,7 +6,10 @@
 
 import { Observable, Subject } from "rxjs";
 import type { IRpcProtocolConformanceFixture } from "@/conformance/rpc-conformance.interface";
-import type { RpcConformanceOptions } from "@/conformance/rpc-conformance.type";
+import type {
+	RpcConformanceOptions,
+	RpcProtocolConformanceCandidate,
+} from "@/conformance/rpc-conformance.type";
 import {
 	assertRpcConformance,
 	type IRpcConformanceCase,
@@ -22,11 +25,10 @@ import { RpcExceptionCodeEnum } from "@/enums/rpc-exception-code.enum";
 import type {
 	IRpcApplicationArgumentsSnapshot,
 	IRpcApplicationSnapshot,
-	IRpcProtocol,
+	IRpcProtocolAcceptor,
 	IRpcProtocolAcceptorHost,
-	IRpcProtocolAcceptorRuntime,
+	IRpcProtocolConnector,
 	IRpcProtocolConnectorHost,
-	IRpcProtocolConnectorRuntime,
 	IRpcProtocolHost,
 	IRpcProtocolIncomingCall,
 	IRpcProtocolIncomingHandlerCall,
@@ -61,25 +63,16 @@ export function runRpcProtocolConformance(
 	return runRpcConformanceCases(
 		[
 			{
-				caseId: "protocol.construction.immutable",
-				run: () => {
-					assertRpcConformance(
-						Object.isFrozen(fixture.protocol),
-						"Protocol must be immutable.",
-					);
-				},
-			},
-			{
 				caseId: "protocol.construction.connector-fresh-non-reentrant",
 				run: async () => {
 					const probe = createConnectorHostProbe();
-					const first = fixture.protocol.createConnector(probe.host);
-					const second = fixture.protocol.createConnector(probe.host);
-					assertRoleRuntime(first);
-					assertRoleRuntime(second);
+					const first = fixture.protocol.connector(probe.host);
+					const second = fixture.protocol.connector(probe.host);
+					assertProtocolRole(first);
+					assertProtocolRole(second);
 					assertRpcConformance(
 						first !== second,
-						"Connector runtimes must be fresh.",
+						"Connector Protocol roles must be fresh.",
 					);
 					assertRpcConformance(
 						probe.calls === 0,
@@ -96,13 +89,13 @@ export function runRpcProtocolConformance(
 				caseId: "protocol.construction.acceptor-fresh-non-reentrant",
 				run: async () => {
 					const probe = createAcceptorHostProbe();
-					const first = fixture.protocol.createAcceptor(probe.host);
-					const second = fixture.protocol.createAcceptor(probe.host);
-					assertRoleRuntime(first);
-					assertRoleRuntime(second);
+					const first = fixture.protocol.acceptor(probe.host);
+					const second = fixture.protocol.acceptor(probe.host);
+					assertProtocolRole(first);
+					assertProtocolRole(second);
 					assertRpcConformance(
 						first !== second,
-						"Acceptor runtimes must be fresh.",
+						"Acceptor Protocol roles must be fresh.",
 					);
 					assertRpcConformance(
 						probe.calls === 0,
@@ -123,11 +116,11 @@ export function runRpcProtocolConformance(
 						assertRpcConformance(
 							pair.transport.connectorSubscriptions === 1 &&
 								pair.transport.acceptorSubscriptions === 1,
-							"Runtime did not synchronously subscribe exactly once.",
+							"Protocol roles did not synchronously subscribe exactly once.",
 						);
 						assertRpcConformance(
 							!pair.transport.handoffViolation,
-							"Runtime performed binding work before the handoff barrier.",
+							"Protocol role performed binding work before the handoff barrier.",
 						);
 						assertRpcConformance(
 							pair.connectorProbe.attachCount === 1 &&
@@ -287,15 +280,15 @@ export function runRpcProtocolConformance(
 				caseId: "protocol.termination.shutdown-phase",
 				run: async () => {
 					const pair = await openProtocolPair(fixture.protocol);
-					await within(pair.connectorRuntime.shutdown(), "Protocol shutdown");
+					await within(pair.connector.shutdown(), "Protocol shutdown");
 					assertRpcConformance(
 						pair.transport.closeCount > 0,
 						"shutdown() fulfilled before Direct Close.",
 					);
-					pair.acceptorRuntime.close();
+					pair.acceptor.close();
 					await Promise.all([
-						pair.connectorRuntime.cleanup(),
-						pair.acceptorRuntime.cleanup(),
+						pair.connector.cleanup(),
+						pair.acceptor.cleanup(),
 					]);
 				},
 			},
@@ -303,27 +296,27 @@ export function runRpcProtocolConformance(
 				caseId: "protocol.termination.close-phase",
 				run: async () => {
 					const pair = await openProtocolPair(fixture.protocol);
-					pair.connectorRuntime.close();
+					pair.connector.close();
 					assertRpcConformance(
 						pair.transport.closeCount > 0,
 						"close() did not synchronously invoke Direct Close.",
 					);
-					pair.acceptorRuntime.close();
+					pair.acceptor.close();
 					await Promise.all([
-						pair.connectorRuntime.cleanup(),
-						pair.acceptorRuntime.cleanup(),
+						pair.connector.cleanup(),
+						pair.acceptor.cleanup(),
 					]);
 				},
 			},
 			{
 				caseId: "protocol.termination.cleanup-cached",
 				run: async () => {
-					const runtime = fixture.protocol.createConnector(
+					const protocol = fixture.protocol.connector(
 						createConnectorHostProbe().host,
 					);
-					runtime.close();
-					const first = runtime.cleanup();
-					const second = runtime.cleanup();
+					protocol.close();
+					const first = protocol.cleanup();
+					const second = protocol.cleanup();
 					assertRpcConformance(
 						first === second,
 						"cleanup() did not return its cached task.",
@@ -391,8 +384,8 @@ interface TrackedProtocolTransport {
 }
 
 interface ProtocolPair {
-	readonly connectorRuntime: IRpcProtocolConnectorRuntime;
-	readonly acceptorRuntime: IRpcProtocolAcceptorRuntime;
+	readonly connector: IRpcProtocolConnector;
+	readonly acceptor: IRpcProtocolAcceptor;
 	readonly connectorProbe: ProtocolHostProbe<IRpcProtocolConnectorHost>;
 	readonly acceptorProbe: ProtocolHostProbe<IRpcProtocolAcceptorHost>;
 	readonly connectorSession: IRpcProtocolSession;
@@ -483,21 +476,21 @@ function createSnapshot(value: unknown): unknown {
 	return Object.freeze({ value, weight: 1 });
 }
 
-function assertRoleRuntime(value: unknown): void {
+function assertProtocolRole(value: unknown): void {
 	assertRpcConformance(
 		isNonNullObject(value),
-		"Protocol factory must return a runtime.",
+		"Protocol factory must return a role.",
 	);
 	for (const member of ["shutdown", "close", "cleanup"] as const) {
 		assertRpcConformance(
 			isCallable(Reflect.get(value as object, member)),
-			`Protocol runtime is missing ${member}().`,
+			`Protocol role is missing ${member}().`,
 		);
 	}
 }
 
 function createIncomingDispositionCases(
-	protocol: IRpcProtocol,
+	protocol: RpcProtocolConformanceCandidate,
 ): IRpcConformanceCase[] {
 	return [
 		{
@@ -614,16 +607,18 @@ function createIncomingDispositionCases(
 	];
 }
 
-async function openProtocolPair(protocol: IRpcProtocol): Promise<ProtocolPair> {
+async function openProtocolPair(
+	protocol: RpcProtocolConformanceCandidate,
+): Promise<ProtocolPair> {
 	const connectorProbe = createSessionHostProbe("connector");
 	const acceptorProbe = createSessionHostProbe("acceptor");
-	const connectorRuntime = protocol.createConnector(connectorProbe.host);
-	const acceptorRuntime = protocol.createAcceptor(acceptorProbe.host);
+	const connector = protocol.connector(connectorProbe.host);
+	const acceptor = protocol.acceptor(acceptorProbe.host);
 	const transport = createTrackedTransport();
 	const controller = new AbortController();
 
 	transport.acceptorHandoff = true;
-	const acceptance = acceptorRuntime.accept(
+	const acceptance = acceptor.accept(
 		transport.acceptorConnection,
 		controller.signal,
 	);
@@ -634,7 +629,7 @@ async function openProtocolPair(protocol: IRpcProtocol): Promise<ProtocolPair> {
 	);
 
 	transport.connectorHandoff = true;
-	const binding = connectorRuntime.bind(
+	const binding = connector.bind(
 		transport.connectorConnection,
 		controller.signal,
 	);
@@ -650,8 +645,8 @@ async function openProtocolPair(protocol: IRpcProtocol): Promise<ProtocolPair> {
 		"Protocol handoff did not install both Sessions.",
 	);
 	return {
-		connectorRuntime,
-		acceptorRuntime,
+		connector,
+		acceptor,
 		connectorProbe,
 		acceptorProbe,
 		connectorSession: connectorProbe.session,
@@ -660,13 +655,10 @@ async function openProtocolPair(protocol: IRpcProtocol): Promise<ProtocolPair> {
 }
 
 async function closeProtocolPair(pair: ProtocolPair): Promise<void> {
-	pair.connectorRuntime.close();
-	pair.acceptorRuntime.close();
+	pair.connector.close();
+	pair.acceptor.close();
 	await within(
-		Promise.all([
-			pair.connectorRuntime.cleanup(),
-			pair.acceptorRuntime.cleanup(),
-		]),
+		Promise.all([pair.connector.cleanup(), pair.acceptor.cleanup()]),
 		"Protocol pair cleanup",
 	);
 }

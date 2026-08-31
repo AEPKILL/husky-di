@@ -5,7 +5,7 @@
  */
 
 import { RpcStateStatusEnum } from "@/enums/rpc-state-status.enum";
-import { createRpcProtocol } from "@/factories/rpc-protocol.factory";
+import { createRpcProtocolAcceptor } from "@/factories/rpc-protocol.factory";
 import { RpcRetainedBytesLedgerImpl } from "@/impls/common/rpc-retained-bytes-ledger.impl";
 import { RpcAcceptorImpl } from "@/impls/owner/rpc-acceptor.impl";
 import { RpcHandlerSchedulerImpl } from "@/impls/owner/rpc-handler-scheduler.impl";
@@ -17,7 +17,7 @@ import type {
 	RpcAcceptorOptions,
 	RpcAcceptorState,
 } from "@/types/common/rpc-caller.type";
-import { createRpcProtocolAcceptorRuntime } from "@/utils/rpc-protocol-runtime.util";
+import { createRpcProtocolAcceptorForOwner } from "@/utils/rpc-protocol-role.util";
 import {
 	createRpcAcceptorRuntimePolicy,
 	snapshotRpcFactoryOptions,
@@ -28,8 +28,8 @@ export function createRpcAcceptor(options?: RpcAcceptorOptions): IRpcAcceptor {
 	const snapshot = snapshotRpcFactoryOptions(options);
 	const policy = createRpcAcceptorRuntimePolicy(snapshot.runtimePolicy);
 	let acceptor: RpcAcceptorImpl | undefined;
-	const runtime = createRpcProtocolAcceptorRuntime(
-		snapshot.protocol ?? createRpcProtocol(),
+	const protocol = createRpcProtocolAcceptorForOwner(
+		snapshot.protocolFactory ?? createRpcProtocolAcceptor,
 		policy,
 		{
 			reserveRetainedBytes: (bytes) => acceptor?.reserveRetainedBytes(bytes),
@@ -38,7 +38,7 @@ export function createRpcAcceptor(options?: RpcAcceptorOptions): IRpcAcceptor {
 		},
 	);
 	acceptor = new RpcAcceptorImpl({
-		runtime,
+		protocol,
 		policy,
 		mutationBatch: new RpcOwnerMutationBatchImpl<RpcAcceptorState>({
 			initialState: Object.freeze({
@@ -50,7 +50,7 @@ export function createRpcAcceptor(options?: RpcAcceptorOptions): IRpcAcceptor {
 			policy.maxRetainedBytesTotal,
 		),
 		custody: new RpcOwnerCustodyImpl(policy.shutdownDeadlineMs, () =>
-			runtime.cleanup(),
+			protocol.cleanup(),
 		),
 		handlerScheduler: new RpcHandlerSchedulerImpl(
 			policy.maxHandlersTotal,

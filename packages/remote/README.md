@@ -169,9 +169,10 @@ Five concepts make up the public caller API:
 | Transport Adapter | Creates or accepts physical connections. It is supplied separately and does not define RPC semantics. |
 | Connector Reconnection | An optional supervisor that owns initial and replacement Connector attempts under one finite retry policy. |
 
-The built-in `husky-di-rpc/1` Protocol is used when `protocol` is omitted from
-`createRpcConnector()` or `createRpcAcceptor()`. Most applications should use the
-default. Protocol implementors can use the dedicated SPI described in the
+The built-in `husky-di-rpc/1` Protocol role is used when `protocolFactory` is
+omitted from `createRpcConnector()` or `createRpcAcceptor()`. Most applications
+should use the default. Protocol implementors can provide a role-specific factory
+through that option; the dedicated SPI is described in the
 [Protocol guide](docs/PROTOCOL.md).
 
 Factories are cold: creating an owner or Reconnection supervisor does not start

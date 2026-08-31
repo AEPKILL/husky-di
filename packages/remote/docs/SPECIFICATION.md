@@ -23,8 +23,10 @@ Recovery, and exactly-once external side effects are outside this specification.
 
 - **Framework**: the caller-facing owner, peer, registry, value-normalization, handler-scheduling, event, and
   cleanup implementation supplied by `@husky-di/remote`.
-- **Protocol**: the replaceable semantic engine behind `IRpcProtocol`. The built-in Protocol implements
-  `husky-di-rpc/1`.
+- **Protocol**: the replaceable semantic engine supplied through role-specific Connector and Acceptor factories.
+  The built-in Protocol implements `husky-di-rpc/1`.
+- **Protocol Role**: one fresh owner-scoped `IRpcProtocolConnector` or `IRpcProtocolAcceptor` created by its
+  matching role factory.
 - **Transport Adapter**: a component that creates finite Physical Connections and owns framing and native
   queue limits.
 - **Physical Connection**: one finite, ordered, full-duplex message channel.
@@ -79,19 +81,21 @@ The first stable release is `@husky-di/remote@1.0.0`.
 
 | Entry point | Contract |
 | --- | --- |
-| `@husky-di/remote` | Caller API, built-in Protocol factory, and caller-required structural Protocol/Transport types |
-| `@husky-di/remote/protocol` | Built-in Protocol factory and complete third-party Protocol implementor SPI |
+| `@husky-di/remote` | Caller API, built-in Protocol role factories, and caller-required structural Protocol/Transport types |
+| `@husky-di/remote/protocol` | Built-in Protocol role factories and complete third-party Protocol implementor SPI |
 | `@husky-di/remote/transport` | Physical Connection and role-specific Adapter seams |
 | `@husky-di/remote/conformance` | Framework-neutral Protocol and Adapter conformance runners |
 
 **RPC-PKG-002 — Single identity.** A symbol re-exported from the root and a specialist subpath **MUST** resolve
 to the same declaration and runtime value. The package **MUST NOT** create parallel nominal identities.
 
-**RPC-PKG-003 — Private default.** Omitting `options.protocol` **MUST** select the package's built-in Protocol.
-The root and implementor entries **MAY** expose the same `createRpcProtocol()` runtime identity so an independent
-provider package can delegate to the same immutable implementation. The package **MUST NOT** export a
-`defaultRpcProtocol` value, concrete
-Protocol implementation class, or public default Codec, Handshake, resume-credential, ledger, or scheduler type.
+**RPC-PKG-003 — Private default.** Omitting `options.protocolFactory` **MUST** select the Owner role's built-in
+Protocol factory. The root and implementor entries **MUST** expose the same runtime identity for each of
+`createRpcProtocolConnector` and `createRpcProtocolAcceptor` so an independent provider package can delegate to
+the same implementation. The package **MUST** expose production Protocol construction only through the
+role-specific contracts and built-in factories in `RPC-PKG-007` and `RPC-PKG-008`. It **MUST NOT** export a
+preconstructed default Protocol role, a concrete Protocol implementation class, or a public default Codec,
+Handshake, resume-credential, ledger, or scheduler type.
 
 **RPC-PKG-004 — Private validation grammar.** Every package-owned materialized record, tuple, and tagged-union
 grammar **MUST** have one package-private Zod schema as its sole executable data-shape source; the package
@@ -120,7 +124,8 @@ Every public subpath **MUST** resolve from the installed tarball without workspa
 
 **RPC-PKG-007 — Root inventory.** The root **MUST** export runtime values
 `createRemoteServiceDescriptor`, `createRpcConnector`, `createRpcAcceptor`, `createRpcConnectorReconnection`,
-`createRpcProtocol`, `RpcException`, `RpcAcceptorListenerStopReasonEnum`, `RpcCallDirectionEnum`,
+`createRpcProtocolConnector`, `createRpcProtocolAcceptor`, `RpcException`, `RpcAcceptorListenerStopReasonEnum`,
+`RpcCallDirectionEnum`,
 `RpcCallStatusEnum`, `RpcCloseOutcomeEnum`, `RpcCloseReasonEnum`,
 `RpcConnectorReconnectionAttemptFailureStageEnum`, `RpcConnectorReconnectionEventTypeEnum`,
 `RpcConnectorReconnectionStopReasonEnum`, `RpcEventTypeEnum`, `RpcExceptionCodeEnum`, and `RpcStateStatusEnum`;
@@ -131,28 +136,31 @@ caller types
 `RpcConnectorConnectOptions`, `RpcConnectorRuntimePolicyOptions`, `RpcAcceptorRuntimePolicyOptions`,
 `IRpcConnectorReconnection`, `CreateRpcConnectorReconnectionOptions`, `RpcConnectorAdapterFactory`,
 `RpcConnectorReconnectionPolicyOptions`, `RpcConnectorReconnectionState`, and `RpcConnectorReconnectionEvent`;
-Transport types `IRpcConnection`, `IRpcConnectorAdapter`, and `IRpcAcceptorAdapter`; and shared SPI types `IRpcProtocol`,
-`IRpcProtocolRuntimePolicy`, `IRpcApplicationRecord`, `RpcApplicationValue`, `RpcCallFailure`,
-`RpcProtocolFaultReason`, and `RpcSessionCloseReason`.
+Transport types `IRpcConnection`, `IRpcConnectorAdapter`, and `IRpcAcceptorAdapter`; and shared SPI types
+`RpcProtocolConnectorFactory`, `RpcProtocolAcceptorFactory`, `IRpcProtocolRuntimePolicy`,
+`IRpcApplicationRecord`, `RpcApplicationValue`, `RpcCallFailure`, `RpcProtocolFaultReason`, and
+`RpcSessionCloseReason`.
 
-**RPC-PKG-008 — Protocol inventory.** `/protocol` **MUST** export runtime values `createRpcProtocol`,
-`RpcCallTerminalTypeEnum`, `RpcCloseReasonEnum`, `RpcExceptionCodeEnum`, `RpcIncomingCallKindEnum`, and
-`RpcProtocolSessionTransitionTypeEnum` plus the complete issue-17 SPI vocabulary:
+**RPC-PKG-008 — Protocol inventory.** `/protocol` **MUST** export runtime values
+`createRpcProtocolConnector`, `createRpcProtocolAcceptor`, `RpcCallTerminalTypeEnum`, `RpcCloseReasonEnum`,
+`RpcExceptionCodeEnum`, `RpcIncomingCallKindEnum`, and `RpcProtocolSessionTransitionTypeEnum` plus the complete
+issue-17 SPI vocabulary:
 `IRpcConnection`, `RpcApplicationValue`, `IRpcApplicationRecord`, `IRpcApplicationSnapshot`,
 `IRpcApplicationArgumentsSnapshot`, `RpcCallFailure`, `RpcUnknownCallFailure`, `RpcIncomingFailure`,
 `RpcCallOutcome`, `RpcHandlerOutcome`, `RpcIncomingTerminal`, `IRpcProtocolRuntimePolicy`,
 `IRpcRetainedBytesReservation`, `IRpcProtocolHost`, all outgoing invocation
 request/sink/reservation/invocation/session types, all incoming request/call/handler/reservation types,
 `RpcCloseReasonEnum`, `RpcProtocolFaultReason`, `RpcSessionCloseReason`,
-`RpcProtocolSessionTransitionCloseReason`, `RpcProtocolSessionTransition`, all Session/role host and runtime
-interfaces, and `IRpcProtocol`.
+`RpcProtocolSessionTransitionCloseReason`, `RpcProtocolSessionTransition`, all Session/role host and role
+interfaces, and `RpcProtocolConnectorFactory` and `RpcProtocolAcceptorFactory`.
 
 **RPC-PKG-009 — No helper exports.** Descriptor conditional/mapped helpers, concrete facade and implementation
 mapped types, a generic Topology Owner base, and implementation classes **MUST NOT** be exported. `/transport`
 **MUST** export exactly the three structural Transport types. `/conformance` **MUST** export
 `RpcConformanceStatusEnum`, the three named runners, plus exactly `RpcConformanceFailure`,
 `RpcConformanceCaseResult`, `RpcConformanceReport`,
-`RpcConformanceOptions`, `IRpcProtocolConformanceFixture`, `IRpcAdapterConformanceRemote`,
+`RpcConformanceOptions`, `RpcProtocolConformanceCandidate`, `IRpcProtocolConformanceFixture`,
+`IRpcAdapterConformanceRemote`,
 `IRpcConnectorAdapterConformanceFixture`, and `IRpcAcceptorAdapterConformanceFixture`.
 
 ## 4. Common application value model
@@ -486,7 +494,7 @@ export type RpcConnectorRuntimePolicyOptions = Pick<
 >;
 
 export type RpcConnectorOptions = {
-  readonly protocol?: IRpcProtocol;
+  readonly protocolFactory?: RpcProtocolConnectorFactory;
   readonly runtimePolicy?: RpcConnectorRuntimePolicyOptions;
 };
 
@@ -496,7 +504,7 @@ export type RpcConnectorConnectOptions = {
 };
 
 export type RpcAcceptorOptions = {
-  readonly protocol?: IRpcProtocol;
+  readonly protocolFactory?: RpcProtocolAcceptorFactory;
   readonly runtimePolicy?: RpcAcceptorRuntimePolicyOptions;
 };
 
@@ -506,9 +514,9 @@ export function createRpcAcceptor(options?: RpcAcceptorOptions): IRpcAcceptor;
 
 **RPC-API-001 — Factories.** Owner factories **MUST** synchronously snapshot and validate a closed options and
 policy schema. Invalid values, unknown keys, non-positive/non-finite/non-safe-integer limits, or invalid
-cross-field combinations **MUST** throw `TypeError` before an Owner exists. A custom Protocol construction throw
-or invalid runtime **MUST** synchronously throw Framework `RpcException` with code `protocol` and may preserve only
-the trusted local cause.
+cross-field combinations **MUST** throw `TypeError` before an Owner exists. If a custom Protocol factory throws
+or returns an invalid role, the Owner factory **MUST** synchronously throw Framework `RpcException` with code
+`protocol` and may preserve only the trusted local cause.
 
 **RPC-API-002 — Stable peer.** A Connector **MUST** expose one stable `peer` before its first connection. An
 Acceptor **MUST** create one stable peer per admitted fresh Session and keep that object through Recovery.
@@ -1041,11 +1049,6 @@ export type RpcIncomingTerminal =
   | { readonly type: RpcCallTerminalTypeEnum.failed; readonly code: RpcIncomingFailure }
   | { readonly type: RpcCallTerminalTypeEnum.sessionTerminated };
 
-export interface IRpcProtocol {
-  createConnector(host: IRpcProtocolConnectorHost): IRpcProtocolConnectorRuntime;
-  createAcceptor(host: IRpcProtocolAcceptorHost): IRpcProtocolAcceptorRuntime;
-}
-
 export interface IRpcProtocolRuntimePolicy {
   readonly maxSessions: number;
   readonly maxHandshakes: number;
@@ -1099,9 +1102,10 @@ export interface IRpcProtocolHost {
 }
 ```
 
-**RPC-SPI-001 — Structural factory.** `IRpcProtocol` **MUST** be an immutable reusable structural value. Every
-`create*` call **MUST** synchronously return a fresh owner-scoped runtime. Construction **MUST** only read frozen
-policy and retain host ports; it **MUST NOT** mutate/fault/attach/admit, perform I/O, or queue asynchronous work.
+**RPC-SPI-001 — Role factories.** `RpcProtocolConnectorFactory` and `RpcProtocolAcceptorFactory` **MUST** be
+reusable functions. Every invocation **MUST** synchronously return a fresh owner-scoped Protocol role.
+Construction **MUST** only read frozen policy and retain host ports; it **MUST NOT** mutate/fault/attach/admit,
+perform I/O, or queue asynchronous work.
 
 **RPC-SPI-002 — Normalized values.** Framework **MUST** give the Protocol opaque detached immutable application
 snapshots with deterministic weight and semantic-equality/normalization ports. Only Framework **MUST** create
@@ -1208,7 +1212,7 @@ handler permit. Incoming terminal **MUST** be limited to returned/void,
 `canceled | handler-failed | unknown-service | unknown-method`, or private `session-terminated`; it **MUST NOT**
 report `unavailable` or `outcome-unknown` through a created incoming handle.
 
-### 8.3 Sessions, role runtimes, and faults
+### 8.3 Sessions, Protocol roles, and faults
 
 ```typescript
 export type RpcSessionCloseReason = Exclude<
@@ -1257,26 +1261,42 @@ export interface IRpcProtocolAcceptorHost extends IRpcProtocolHost {
   ): IRpcProtocolSessionHost | undefined;
 }
 
-export interface IRpcProtocolRoleRuntime {
+export interface IRpcProtocolConnector {
+  bind(connection: IRpcConnection, signal: AbortSignal): Promise<void>;
   shutdown(): Promise<void>;
   close(): void;
   cleanup(): Promise<void>;
 }
 
-export interface IRpcProtocolConnectorRuntime extends IRpcProtocolRoleRuntime {
-  bind(connection: IRpcConnection, signal: AbortSignal): Promise<void>;
+export interface IRpcProtocolAcceptor {
+  accept(connection: IRpcConnection, signal: AbortSignal): Promise<void>;
+  shutdown(): Promise<void>;
+  close(): void;
+  cleanup(): Promise<void>;
 }
 
-export interface IRpcProtocolAcceptorRuntime extends IRpcProtocolRoleRuntime {
-  accept(connection: IRpcConnection, signal: AbortSignal): Promise<void>;
-}
+export type RpcProtocolConnectorFactory = (
+  host: IRpcProtocolConnectorHost,
+) => IRpcProtocolConnector;
+
+export type RpcProtocolAcceptorFactory = (
+  host: IRpcProtocolAcceptorHost,
+) => IRpcProtocolAcceptor;
+
+export function createRpcProtocolConnector(
+  host: IRpcProtocolConnectorHost,
+): IRpcProtocolConnector;
+
+export function createRpcProtocolAcceptor(
+  host: IRpcProtocolAcceptorHost,
+): IRpcProtocolAcceptor;
 ```
 
 **RPC-SPI-008 — Synchronous subscription.** Framework **MUST** call `bind()`/`accept()` inside the Adapter
-`connection$.next` stack. Runtime **MUST** synchronously subscribe to hot `message$`, but before the handoff
-barrier it **MUST NOT** send, close, linearize or activate a binding, or project state and **MAY** retain only
-bounded provisional ingress. Fulfillment **MUST** mean fresh/resume Binding Activation; later connection loss
-**MUST NOT** retroactively reject it.
+`connection$.next` stack. The Protocol role **MUST** synchronously subscribe to hot `message$`, but before the
+handoff barrier it **MUST NOT** send, close, linearize or activate a binding, or project state and **MAY** retain
+only bounded provisional ingress. Fulfillment **MUST** mean fresh/resume Binding Activation; later connection
+loss **MUST NOT** retroactively reject it.
 
 **RPC-SPI-009 — Session attachment.** Fresh Connector Session **MUST** attach to the stable peer anchor; fresh
 Acceptor Session **MUST** atomically admit a new stable peer. Resume **MUST** reuse the retained Session host.
@@ -1289,15 +1309,15 @@ token-authorized `session-terminated` reject **MUST** normalize to `remote-termi
 
 **RPC-SPI-011 — Fault scope.** Session Protocol/resource fault **MUST** synchronously reenter a Framework fault
 transaction that calls `session.forceClose()` before projecting peer terminal. A shared owner fault **MUST**
-call `runtime.close()` before projecting Owner/siblings. Protocol **MUST NOT** also request a second closed
-transition for the same fault.
+call the Protocol role's `close()` before projecting Owner/siblings. Protocol **MUST NOT** also request a second
+closed transition for the same fault.
 
-**RPC-SPI-012 — Three termination phases.** Runtime `shutdown()` **MUST** synchronously gate new work and fulfill
-only when every semantic Session shell has gracefully completed or locally terminalled and Direct Close has
-been invoked; it **MUST NOT** await physical cleanup. Runtime `close()` **MUST** synchronously force gates, finish
-sinks, fence endpoints, and invoke Direct Close before returning, without sending Protocol Close. `cleanup()`
-**MUST** be a cached Protocol-owned final task and **MUST NOT** include Connection/listener cleanup or running
-handlers, which Framework tracks separately.
+**RPC-SPI-012 — Three termination phases.** Protocol role `shutdown()` **MUST** synchronously gate new work and
+fulfill only when every semantic Session shell has gracefully completed or locally terminalled and Direct Close
+has been invoked; it **MUST NOT** await physical cleanup. Protocol role `close()` **MUST** synchronously force
+gates, finish sinks, fence endpoints, and invoke Direct Close before returning, without sending Protocol Close.
+`cleanup()` **MUST** be a cached Protocol-owned final task and **MUST NOT** include Connection/listener cleanup or
+running handlers, which Framework tracks separately.
 
 ## 9. Built-in Protocol profile
 
@@ -1975,7 +1995,7 @@ shutdownDeadlineMs                  = 5,000
 options **MAY** override only pending/session-bytes/session-handlers and the seven timing fields; Framework
 **MUST** derive `maxSessions = maxHandshakes = 1`, `maxRetainedBytesTotal =
 maxRetainedBytesPerSession`, and `maxHandlersTotal = maxHandlersPerSession`. The complete frozen required policy
-**MUST** be passed to custom Protocol runtime.
+**MUST** be exposed to the custom Protocol role factory as `host.policy`.
 
 **RPC-POLICY-002 — Derived subcaps.** Replay-entry count **MUST** be `4 * maxPendingInvocationsPerSession` and
 ingress count **MUST** remain `64`. Ingress, Pending, incoming-args, and terminal-payload byte subcaps **MUST** be
@@ -2234,9 +2254,14 @@ export type RpcConformanceOptions = {
   readonly report?: RpcConformanceReport;
 };
 
+export type RpcProtocolConformanceCandidate = Readonly<{
+  readonly connector: RpcProtocolConnectorFactory;
+  readonly acceptor: RpcProtocolAcceptorFactory;
+}>;
+
 export interface IRpcProtocolConformanceFixture {
-  readonly protocol: IRpcProtocol;
-  readonly counterExhaustionProtocol: IRpcProtocol;
+  readonly protocol: RpcProtocolConformanceCandidate;
+  readonly counterExhaustionProtocol: RpcProtocolConformanceCandidate;
   createActiveProtocolFaultMessage(): Uint8Array;
 }
 
@@ -2286,7 +2311,8 @@ export function runRpcAcceptorAdapterConformance(
 ): Promise<void>;
 ```
 
-Their fixture/options types are structural test tooling; they do not extend the production Owner lifecycle.
+These candidate/fixture/options types are structural test tooling. A production Owner accepts only its matching
+role factory, and the tooling does not extend the production Owner lifecycle.
 
 **RPC-CONFORMANCE-001 — Runner result.** Each runner **MUST** be independent of Vitest/Jest, fulfill `void` on
 success, and reject an `AggregateError` whose `errors` are `RpcConformanceFailure` objects in stable case order
@@ -2296,14 +2322,16 @@ Case IDs **MUST** be documented by the conformance entry point, remain stable af
 `string` rather than a closed exported literal union so additive cases do not break fixture types. It
 **MUST NOT** expose Default-Protocol private module or decoded-record types through its fixture contract.
 
-**RPC-CONFORMANCE-002 — Protocol suite.** Protocol runner **MUST** cover construction non-reentrancy, handoff,
-normalized snapshots, outgoing reserve/commit/sink, incoming resource/semantic/handler dispositions, handler
-permit ownership, fault scope, counter drain, and shutdown/close/cleanup phases. The package-private default and
-an independent minimal custom Protocol **MUST** both pass; the default **MUST** additionally pass its runtime
-validation and security suites. `counterExhaustionProtocol` **MUST** be the same candidate under test-only
-configuration such that the first otherwise admissible call on a fresh Session reaches counter drain.
-`createActiveProtocolFaultMessage()` **MUST** return one candidate-grammar byte message that faults an active
-Session; neither hook changes the production SPI or exposes the built-in grammar.
+**RPC-CONFORMANCE-002 — Protocol suite.** Protocol runner **MUST** cover role-factory construction
+non-reentrancy, handoff, normalized snapshots, outgoing reserve/commit/sink, incoming
+resource/semantic/handler dispositions, handler permit ownership, fault scope, counter drain, and
+shutdown/close/cleanup phases. Each `RpcProtocolConformanceCandidate` **MUST** pair compatible Connector and
+Acceptor factories. The package-private default and an independent minimal custom Protocol **MUST** both pass;
+the default **MUST** additionally pass its runtime validation and security suites. `counterExhaustionProtocol`
+**MUST** be the same candidate under test-only configuration such that the first otherwise admissible call on a
+fresh Session reaches counter drain. `createActiveProtocolFaultMessage()` **MUST** return one candidate-grammar
+byte message that faults an active Session; neither hook changes the production SPI or exposes the built-in
+grammar.
 
 **RPC-CONFORMANCE-003 — Adapter suite.** Both Adapter runners **MUST** cover subscribe-before-start, handoff and
 ownership, source/message identity/order/hot terminal behavior, Local Admission/single send/backpressure,
@@ -2395,7 +2423,7 @@ audit; publication requires every row to be `verified`. This summary groups the 
 
 This specification does not prescribe private classes, files, reducers, codecs, queues, or scheduler objects.
 The Framework should remain a deep module around the public seams. In particular, the public Owner
-`close(): Promise<void>`, Protocol runtime `close(): void`, and Physical Connection `close(): Promise<void>` are
+`close(): Promise<void>`, Protocol role `close(): void`, and Physical Connection `close(): Promise<void>` are
 three different operations and must not be implemented as aliases.
 
 Concrete WebSocket factory names, native frame/queue defaults, HTTP-server borrowing, origin/TLS options, and
@@ -2445,8 +2473,7 @@ have no independent authority. The `Design lineage` column in [REQUIREMENTS.md](
 
 Early caller prototypes informed the final API but did not remain authoritative. In particular, the final
 surface has six-state peers, separate `shutdown()` and `close()` semantics, payload-free observations, and no
-Framework-owned aggregate Acceptor facade. The final Protocol SPI likewise exposes one role-specific deep seam;
-its Codec, Handshake, ACK, credential, ledger, and scheduler decomposition remains private.
+Framework-owned aggregate Acceptor facade.
 
 ### C.2 Why the built-in Protocol is purpose-built
 

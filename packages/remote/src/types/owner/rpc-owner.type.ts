@@ -10,8 +10,8 @@ import type { IRpcOwnerCustody } from "@/interfaces/owner/rpc-owner-custody.inte
 import type { IRpcOwnerMutationBatch } from "@/interfaces/owner/rpc-owner-mutation-batch.interface";
 import type { RpcPeerFactory } from "@/interfaces/peer/rpc-peer-runtime.interface";
 import type {
-	IRpcProtocolAcceptorRuntime,
-	IRpcProtocolConnectorRuntime,
+	IRpcProtocolAcceptor,
+	IRpcProtocolConnector,
 	IRpcProtocolRuntimePolicy,
 } from "@/interfaces/protocol/rpc-protocol.interface";
 import type {
@@ -22,13 +22,13 @@ import type {
 export type CreateRpcConnectorImplOptions = CreateRpcOwnerImplOptions &
 	Readonly<{
 		readonly mutationBatch: IRpcOwnerMutationBatch<RpcConnectorState>;
-		readonly runtime: IRpcProtocolConnectorRuntime;
+		readonly protocol: IRpcProtocolConnector;
 	}>;
 
 export type CreateRpcAcceptorImplOptions = CreateRpcOwnerImplOptions &
 	Readonly<{
 		readonly mutationBatch: IRpcOwnerMutationBatch<RpcAcceptorState>;
-		readonly runtime: IRpcProtocolAcceptorRuntime;
+		readonly protocol: IRpcProtocolAcceptor;
 	}>;
 
 type CreateRpcOwnerImplOptions = Readonly<{

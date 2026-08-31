@@ -11,8 +11,8 @@ import { describe, expect, it, vi } from "vitest";
 import {
 	createRemoteServiceDescriptor,
 	createRpcAcceptor,
-	type IRpcProtocol,
 	RpcCloseReasonEnum,
+	type RpcProtocolAcceptorFactory,
 } from "../src/index";
 import type {
 	IRpcConnection,
@@ -35,21 +35,16 @@ describe("Acceptor termination cleanup", () => {
 			| ReturnType<IRpcProtocolAcceptorHost["admitSession"]>
 			| undefined;
 		const fault = new Error("authenticated active Session violation");
-		const protocol: IRpcProtocol = {
-			createConnector() {
-				throw new Error("Connector runtime is not used by this test.");
-			},
-			createAcceptor(host) {
-				protocolHost = host;
-				return {
-					async accept() {},
-					async shutdown() {},
-					close() {},
-					async cleanup() {},
-				};
-			},
+		const protocolFactory: RpcProtocolAcceptorFactory = (host) => {
+			protocolHost = host;
+			return {
+				async accept() {},
+				async shutdown() {},
+				close() {},
+				async cleanup() {},
+			};
 		};
-		const acceptor = createRpcAcceptor({ protocol });
+		const acceptor = createRpcAcceptor({ protocolFactory });
 		sessionHost = protocolHost?.admitSession({
 			reserveInvocation: () => undefined,
 			forceClose() {
@@ -80,23 +75,18 @@ describe("Acceptor termination cleanup", () => {
 		let firstForceCalls = 0;
 		let runtimeCloseCalls = 0;
 		const fault = new Error("first Session violated the invocation seam");
-		const protocol: IRpcProtocol = {
-			createConnector() {
-				throw new Error("Connector runtime is not used by this test.");
-			},
-			createAcceptor(host) {
-				protocolHost = host;
-				return {
-					async accept() {},
-					async shutdown() {},
-					close() {
-						runtimeCloseCalls += 1;
-					},
-					async cleanup() {},
-				};
-			},
+		const protocolFactory: RpcProtocolAcceptorFactory = (host) => {
+			protocolHost = host;
+			return {
+				async accept() {},
+				async shutdown() {},
+				close() {
+					runtimeCloseCalls += 1;
+				},
+				async cleanup() {},
+			};
 		};
-		const acceptor = createRpcAcceptor({ protocol });
+		const acceptor = createRpcAcceptor({ protocolFactory });
 		protocolHost?.admitSession({
 			reserveInvocation() {
 				throw fault;
@@ -139,25 +129,20 @@ describe("Acceptor termination cleanup", () => {
 		let protocolHost: IRpcProtocolAcceptorHost | undefined;
 		let resolveShutdown!: () => void;
 		const forced = [0, 0];
-		const protocol: IRpcProtocol = {
-			createConnector() {
-				throw new Error("Connector runtime is not used by this test.");
-			},
-			createAcceptor(host) {
-				protocolHost = host;
-				return {
-					async accept() {},
-					shutdown() {
-						return new Promise<void>((resolve) => {
-							resolveShutdown = resolve;
-						});
-					},
-					close() {},
-					async cleanup() {},
-				};
-			},
+		const protocolFactory: RpcProtocolAcceptorFactory = (host) => {
+			protocolHost = host;
+			return {
+				async accept() {},
+				shutdown() {
+					return new Promise<void>((resolve) => {
+						resolveShutdown = resolve;
+					});
+				},
+				close() {},
+				async cleanup() {},
+			};
 		};
-		const acceptor = createRpcAcceptor({ protocol });
+		const acceptor = createRpcAcceptor({ protocolFactory });
 		const firstHost = protocolHost?.admitSession({
 			reserveInvocation: () => undefined,
 			forceClose() {
@@ -206,27 +191,17 @@ describe("Acceptor termination cleanup", () => {
 		const connectionSource = new Subject<IRpcConnection>();
 		let acceptCalls = 0;
 		let stateDuringAbort: string | undefined;
-		const protocol: IRpcProtocol = {
-			createConnector() {
-				return {
-					async bind() {},
-					async shutdown() {},
-					close() {},
-					async cleanup() {},
-				};
-			},
-			createAcceptor() {
-				return {
-					async accept() {
-						acceptCalls += 1;
-					},
-					async shutdown() {},
-					close() {},
-					async cleanup() {},
-				};
-			},
+		const protocolFactory: RpcProtocolAcceptorFactory = () => {
+			return {
+				async accept() {
+					acceptCalls += 1;
+				},
+				async shutdown() {},
+				close() {},
+				async cleanup() {},
+			};
 		};
-		const acceptor = createRpcAcceptor({ protocol });
+		const acceptor = createRpcAcceptor({ protocolFactory });
 		const connection: IRpcConnection = {
 			message$: new Subject<Uint8Array>().asObservable(),
 			async send() {},
@@ -256,30 +231,20 @@ describe("Acceptor termination cleanup", () => {
 		const connectionSource = new Subject<IRpcConnection>();
 		let acceptCalls = 0;
 		let listenerSignal: AbortSignal | undefined;
-		const protocol: IRpcProtocol = {
-			createConnector() {
-				return {
-					async bind() {},
-					async shutdown() {},
-					close() {},
-					async cleanup() {},
-				};
-			},
-			createAcceptor() {
-				return {
-					accept(connection) {
-						acceptCalls += 1;
-						connection.message$.subscribe();
-						return new Promise<void>(() => {});
-					},
-					async shutdown() {},
-					close() {},
-					async cleanup() {},
-				};
-			},
+		const protocolFactory: RpcProtocolAcceptorFactory = () => {
+			return {
+				accept(connection) {
+					acceptCalls += 1;
+					connection.message$.subscribe();
+					return new Promise<void>(() => {});
+				},
+				async shutdown() {},
+				close() {},
+				async cleanup() {},
+			};
 		};
 		const acceptor = createRpcAcceptor({
-			protocol,
+			protocolFactory,
 			runtimePolicy: { maxSessions: 1, maxHandshakes: 1 },
 		});
 		await acceptor.listen({
@@ -323,24 +288,19 @@ describe("Acceptor termination cleanup", () => {
 		});
 		let acceptCalls = 0;
 		let restartCalls = 0;
-		const protocol: IRpcProtocol = {
-			createConnector() {
-				throw new Error("Connector runtime is not used by this test.");
-			},
-			createAcceptor() {
-				return {
-					accept() {
-						acceptCalls += 1;
-						return new Promise<void>(() => {});
-					},
-					async shutdown() {},
-					close() {},
-					async cleanup() {},
-				};
-			},
+		const protocolFactory: RpcProtocolAcceptorFactory = () => {
+			return {
+				accept() {
+					acceptCalls += 1;
+					return new Promise<void>(() => {});
+				},
+				async shutdown() {},
+				close() {},
+				async cleanup() {},
+			};
 		};
 		const acceptor = createRpcAcceptor({
-			protocol,
+			protocolFactory,
 			runtimePolicy: { maxSessions: 1, maxHandshakes: 1 },
 		});
 		await acceptor.listen({
@@ -391,20 +351,15 @@ describe("Acceptor termination cleanup", () => {
 			  }
 			| undefined;
 		const listenerCleanupFailure = new Error("listener cleanup failed");
-		const protocol: IRpcProtocol = {
-			createConnector() {
-				throw new Error("Connector runtime is not used by this test.");
-			},
-			createAcceptor() {
-				return {
-					async accept() {},
-					async shutdown() {},
-					close() {},
-					async cleanup() {},
-				};
-			},
+		const protocolFactory: RpcProtocolAcceptorFactory = () => {
+			return {
+				async accept() {},
+				async shutdown() {},
+				close() {},
+				async cleanup() {},
+			};
 		};
-		const acceptor = createRpcAcceptor({ protocol });
+		const acceptor = createRpcAcceptor({ protocolFactory });
 		await acceptor.listen({
 			connection$: {
 				subscribe(nextObserver: { complete(): void }) {
@@ -450,24 +405,19 @@ describe("Acceptor termination cleanup", () => {
 		let listenerSignal: AbortSignal | undefined;
 		const closeCalls = [0, 0, 0, 0];
 		const closeFailure = new Error("native close did not release the socket");
-		const protocol: IRpcProtocol = {
-			createConnector() {
-				throw new Error("Connector runtime is not used by this test.");
-			},
-			createAcceptor() {
-				return {
-					accept() {
-						acceptCalls += 1;
-						return new Promise<void>(() => {});
-					},
-					async shutdown() {},
-					close() {},
-					async cleanup() {},
-				};
-			},
+		const protocolFactory: RpcProtocolAcceptorFactory = () => {
+			return {
+				accept() {
+					acceptCalls += 1;
+					return new Promise<void>(() => {});
+				},
+				async shutdown() {},
+				close() {},
+				async cleanup() {},
+			};
 		};
 		const acceptor = createRpcAcceptor({
-			protocol,
+			protocolFactory,
 			runtimePolicy: { maxSessions: 1, maxHandshakes: 1 },
 		});
 		await acceptor.listen({
@@ -526,32 +476,22 @@ describe("Acceptor termination cleanup", () => {
 			reserveInvocation: () => undefined,
 			forceClose() {},
 		};
-		const protocol: IRpcProtocol = {
-			createConnector() {
-				return {
-					async bind() {},
-					async shutdown() {},
-					close() {},
-					async cleanup() {},
-				};
-			},
-			createAcceptor(host) {
-				return {
-					accept(ownedConnection) {
-						ownedConnection.message$.subscribe();
-						return Promise.resolve().then(() => {
-							if (host.admitSession(session) === undefined) {
-								throw new Error("Expected Session admission.");
-							}
-						});
-					},
-					async shutdown() {},
-					close() {},
-					async cleanup() {},
-				};
-			},
+		const protocolFactory: RpcProtocolAcceptorFactory = (host) => {
+			return {
+				accept(ownedConnection) {
+					ownedConnection.message$.subscribe();
+					return Promise.resolve().then(() => {
+						if (host.admitSession(session) === undefined) {
+							throw new Error("Expected Session admission.");
+						}
+					});
+				},
+				async shutdown() {},
+				close() {},
+				async cleanup() {},
+			};
 		};
-		const acceptor = createRpcAcceptor({ protocol });
+		const acceptor = createRpcAcceptor({ protocolFactory });
 		await acceptor.listen({
 			connection$: connectionSource.asObservable(),
 			async listen() {
@@ -576,20 +516,15 @@ describe("Acceptor termination cleanup", () => {
 	it("RPC-CLEANUP-002 RPC-CLEANUP-003 retains listener and startup cleanup failures in admission order", async () => {
 		const listenerFailure = new Error("listener unsubscribe failed");
 		const startupFailure = new Error("listener startup cleanup failed");
-		const protocol: IRpcProtocol = {
-			createConnector() {
-				throw new Error("Connector runtime is not used by this test.");
-			},
-			createAcceptor() {
-				return {
-					async accept() {},
-					async shutdown() {},
-					close() {},
-					async cleanup() {},
-				};
-			},
+		const protocolFactory: RpcProtocolAcceptorFactory = () => {
+			return {
+				async accept() {},
+				async shutdown() {},
+				close() {},
+				async cleanup() {},
+			};
 		};
-		const acceptor = createRpcAcceptor({ protocol });
+		const acceptor = createRpcAcceptor({ protocolFactory });
 		const startup = acceptor.listen({
 			connection$: {
 				subscribe() {
@@ -638,21 +573,16 @@ describe("Acceptor termination cleanup", () => {
 			const lastClose = new Promise<void>((resolve) => {
 				resolveLastClose = resolve;
 			});
-			const protocol: IRpcProtocol = {
-				createConnector() {
-					throw new Error("Connector runtime is not used by this test.");
-				},
-				createAcceptor() {
-					return {
-						async accept() {},
-						async shutdown() {},
-						close() {},
-						async cleanup() {},
-					};
-				},
+			const protocolFactory: RpcProtocolAcceptorFactory = () => {
+				return {
+					async accept() {},
+					async shutdown() {},
+					close() {},
+					async cleanup() {},
+				};
 			};
 			const acceptor = createRpcAcceptor({
-				protocol,
+				protocolFactory,
 				runtimePolicy: { shutdownDeadlineMs: 10 },
 			});
 			await acceptor.listen({

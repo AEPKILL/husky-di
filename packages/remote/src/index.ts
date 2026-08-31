@@ -12,7 +12,6 @@ export type { RemoteServiceDescriptor } from "@/types/peer/remote-service-descri
 export type { IRpcPeer } from "@/interfaces/peer/rpc-peer.interface";
 export type {
 	IRpcApplicationRecord,
-	IRpcProtocol,
 	IRpcProtocolRuntimePolicy,
 	RpcApplicationValue,
 	RpcCallFailure,
@@ -44,6 +43,10 @@ export type {
 	RpcConnectorState,
 	RpcPeerState,
 } from "@/types/common/rpc-caller.type";
+export type {
+	RpcProtocolAcceptorFactory,
+	RpcProtocolConnectorFactory,
+} from "@/types/protocol/rpc-protocol-factory.type";
 export { RpcAcceptorListenerStopReasonEnum } from "@/enums/rpc-acceptor-listener-stop-reason.enum";
 export { RpcCallDirectionEnum } from "@/enums/rpc-call-direction.enum";
 export { RpcCallStatusEnum } from "@/enums/rpc-call-status.enum";
@@ -60,4 +63,7 @@ export { createRemoteServiceDescriptor } from "@/factories/remote-service-descri
 export { createRpcAcceptor } from "@/factories/rpc-acceptor.factory";
 export { createRpcConnector } from "@/factories/rpc-connector.factory";
 export { createRpcConnectorReconnection } from "@/factories/rpc-connector-reconnection.factory";
-export { createRpcProtocol } from "@/factories/rpc-protocol.factory";
+export {
+	createRpcProtocolAcceptor,
+	createRpcProtocolConnector,
+} from "@/factories/rpc-protocol.factory";

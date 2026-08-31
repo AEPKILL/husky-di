@@ -6,12 +6,14 @@
 
 import { Subject } from "rxjs";
 import { describe, expect, it, vi } from "vitest";
-import { createRpcProtocol } from "../../src/factories/rpc-protocol.factory";
+import {
+	createRpcProtocolAcceptor,
+	createRpcProtocolConnector,
+} from "../../src/factories/rpc-protocol.factory";
 import { RpcRetainedBytesLedgerImpl } from "../../src/impls/common/rpc-retained-bytes-ledger.impl";
 import { RpcEndpointImpl } from "../../src/impls/endpoint/rpc-endpoint.impl";
 import { createRpcAcceptor, createRpcConnector } from "../../src/index";
 import type {
-	IRpcProtocol,
 	IRpcProtocolHost,
 	IRpcProtocolSession,
 } from "../../src/interfaces/protocol/rpc-protocol.interface";
@@ -183,26 +185,17 @@ describe("Default RPC Protocol owner retained bytes", () => {
 		"Acceptor",
 		"Connector",
 	] as const)("RPC-RESOURCE-002 RPC-RESOURCE-003 holds and releases the %s protected Session reservation", async (role) => {
-		const builtIn = createRpcProtocol();
 		let capturedHost: IRpcProtocolHost | undefined;
-		const protocol: IRpcProtocol = {
-			createAcceptor: (host) => {
-				if (role === "Acceptor") {
-					capturedHost = host;
-				}
-				return builtIn.createAcceptor(host);
-			},
-			createConnector: (host) => {
-				if (role === "Connector") {
-					capturedHost = host;
-				}
-				return builtIn.createConnector(host);
-			},
-		};
 		const maximumBytes = 4 * mebibyte;
 		const network = createRpcTestNetwork();
 		const acceptor = createRpcAcceptor({
-			protocol: role === "Acceptor" ? protocol : undefined,
+			protocolFactory:
+				role === "Acceptor"
+					? (host) => {
+							capturedHost = host;
+							return createRpcProtocolAcceptor(host);
+						}
+					: undefined,
 			runtimePolicy: {
 				maxSessions: 1,
 				maxHandshakes: 1,
@@ -211,7 +204,13 @@ describe("Default RPC Protocol owner retained bytes", () => {
 			},
 		});
 		const connector = createRpcConnector({
-			protocol: role === "Connector" ? protocol : undefined,
+			protocolFactory:
+				role === "Connector"
+					? (host) => {
+							capturedHost = host;
+							return createRpcProtocolConnector(host);
+						}
+					: undefined,
 			runtimePolicy: {
 				maxRetainedBytesPerSession: maximumBytes,
 			},

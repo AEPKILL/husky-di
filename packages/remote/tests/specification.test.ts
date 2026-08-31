@@ -20,7 +20,6 @@ import {
 	createRpcConnectorReconnection,
 	type IRpcConnector,
 	type IRpcConnectorAdapter,
-	type IRpcProtocol,
 	type RemoteServiceDescriptor,
 	RpcAcceptorListenerStopReasonEnum,
 	RpcCallDirectionEnum,
@@ -35,6 +34,8 @@ import {
 	RpcEventTypeEnum,
 	RpcException,
 	RpcExceptionCodeEnum,
+	type RpcProtocolAcceptorFactory,
+	type RpcProtocolConnectorFactory,
 	RpcStateStatusEnum,
 } from "../src/index";
 import type {
@@ -46,7 +47,8 @@ import type {
 	IRpcProtocolSessionHost,
 } from "../src/protocol";
 import {
-	createRpcProtocol,
+	createRpcProtocolAcceptor,
+	createRpcProtocolConnector,
 	RpcCallTerminalTypeEnum,
 	RpcIncomingCallKindEnum,
 	RpcProtocolSessionTransitionTypeEnum,
@@ -90,7 +92,8 @@ const sessionCapacityPolicy = {
 };
 
 function createProtocolHarness(): {
-	readonly protocol: IRpcProtocol;
+	readonly connectorFactory: RpcProtocolConnectorFactory;
+	readonly acceptorFactory: RpcProtocolAcceptorFactory;
 	readonly connectorHosts: IRpcProtocolConnectorHost[];
 	readonly acceptorHosts: IRpcProtocolAcceptorHost[];
 	readonly calls: {
@@ -111,44 +114,48 @@ function createProtocolHarness(): {
 		cleanup: 0,
 	};
 
-	const protocol = Object.freeze<IRpcProtocol>({
-		createConnector(host) {
-			connectorHosts.push(host);
-			return {
-				async bind() {
-					calls.connectorBind += 1;
-				},
-				async shutdown() {
-					calls.shutdown += 1;
-				},
-				close() {
-					calls.close += 1;
-				},
-				async cleanup() {
-					calls.cleanup += 1;
-				},
-			};
-		},
-		createAcceptor(host) {
-			acceptorHosts.push(host);
-			return {
-				async accept() {
-					calls.acceptorAccept += 1;
-				},
-				async shutdown() {
-					calls.shutdown += 1;
-				},
-				close() {
-					calls.close += 1;
-				},
-				async cleanup() {
-					calls.cleanup += 1;
-				},
-			};
-		},
-	});
+	const connectorFactory: RpcProtocolConnectorFactory = (host) => {
+		connectorHosts.push(host);
+		return {
+			async bind() {
+				calls.connectorBind += 1;
+			},
+			async shutdown() {
+				calls.shutdown += 1;
+			},
+			close() {
+				calls.close += 1;
+			},
+			async cleanup() {
+				calls.cleanup += 1;
+			},
+		};
+	};
+	const acceptorFactory: RpcProtocolAcceptorFactory = (host) => {
+		acceptorHosts.push(host);
+		return {
+			async accept() {
+				calls.acceptorAccept += 1;
+			},
+			async shutdown() {
+				calls.shutdown += 1;
+			},
+			close() {
+				calls.close += 1;
+			},
+			async cleanup() {
+				calls.cleanup += 1;
+			},
+		};
+	};
 
-	return { protocol, connectorHosts, acceptorHosts, calls };
+	return {
+		connectorFactory,
+		acceptorFactory,
+		connectorHosts,
+		acceptorHosts,
+		calls,
+	};
 }
 
 async function connectProtocolSession(
@@ -164,34 +171,24 @@ async function connectProtocolSession(
 	const messageSource = new Subject<Uint8Array>();
 	let connectorHost: IRpcProtocolConnectorHost | undefined;
 	let sessionHost: IRpcProtocolSessionHost | undefined;
-	const protocol: IRpcProtocol = {
-		createConnector(host) {
-			connectorHost = host;
-			return {
-				bind(connection) {
-					connection.message$.subscribe();
-					return Promise.resolve().then(() => {
-						sessionHost = host.attachSession(session);
-						if (sessionHost === undefined) {
-							throw new Error("The test Session was not attached.");
-						}
-					});
-				},
-				async shutdown() {},
-				close() {},
-				async cleanup() {},
-			};
-		},
-		createAcceptor() {
-			return {
-				async accept() {},
-				async shutdown() {},
-				close() {},
-				async cleanup() {},
-			};
-		},
+	const protocolFactory: RpcProtocolConnectorFactory = (host) => {
+		connectorHost = host;
+		return {
+			bind(connection) {
+				connection.message$.subscribe();
+				return Promise.resolve().then(() => {
+					sessionHost = host.attachSession(session);
+					if (sessionHost === undefined) {
+						throw new Error("The test Session was not attached.");
+					}
+				});
+			},
+			async shutdown() {},
+			close() {},
+			async cleanup() {},
+		};
 	};
-	const connector = createRpcConnector({ protocol, runtimePolicy });
+	const connector = createRpcConnector({ protocolFactory, runtimePolicy });
 	const events: RpcEvent[] = [];
 	connector.event$.subscribe((event) => events.push(event));
 	await connector.connect({
@@ -217,7 +214,7 @@ async function connectProtocolSession(
 }
 
 function createReconnectionProtocolHarness(): {
-	readonly protocol: IRpcProtocol;
+	readonly protocolFactory: RpcProtocolConnectorFactory;
 	readonly sessionHost: () => IRpcProtocolSessionHost;
 } {
 	const session: IRpcProtocolSession = {
@@ -225,40 +222,30 @@ function createReconnectionProtocolHarness(): {
 		forceClose() {},
 	};
 	let retainedSessionHost: IRpcProtocolSessionHost | undefined;
-	const protocol: IRpcProtocol = {
-		createConnector(host) {
-			return {
-				bind() {
-					return Promise.resolve().then(() => {
+	const protocolFactory: RpcProtocolConnectorFactory = (host) => {
+		return {
+			bind() {
+				return Promise.resolve().then(() => {
+					if (retainedSessionHost === undefined) {
+						retainedSessionHost = host.attachSession(session);
 						if (retainedSessionHost === undefined) {
-							retainedSessionHost = host.attachSession(session);
-							if (retainedSessionHost === undefined) {
-								throw new Error("The test Session was not attached.");
-							}
-							return;
+							throw new Error("The test Session was not attached.");
 						}
-						retainedSessionHost.transition({
-							type: RpcProtocolSessionTransitionTypeEnum.recovered,
-						});
+						return;
+					}
+					retainedSessionHost.transition({
+						type: RpcProtocolSessionTransitionTypeEnum.recovered,
 					});
-				},
-				async shutdown() {},
-				close() {},
-				async cleanup() {},
-			};
-		},
-		createAcceptor() {
-			return {
-				async accept() {},
-				async shutdown() {},
-				close() {},
-				async cleanup() {},
-			};
-		},
+				});
+			},
+			async shutdown() {},
+			close() {},
+			async cleanup() {},
+		};
 	};
 
 	return {
-		protocol,
+		protocolFactory,
 		sessionHost: () => {
 			if (retainedSessionHost === undefined) {
 				throw new Error("The test Session has not been attached.");
@@ -352,13 +339,34 @@ describe("Remote Service Descriptor", () => {
 });
 
 describe("cold Topology Owner factories", () => {
-	it("RPC-PKG-003 exposes the immutable built-in Protocol factory through the implementor entry", () => {
-		const protocol = createRpcProtocol();
-		const connector = createRpcConnector({ protocol });
+	it("RPC-PKG-003 exposes reusable built-in Protocol role factories through the implementor entry", () => {
+		const connectorFactory = vi.fn(createRpcProtocolConnector);
+		const acceptorFactory = vi.fn(createRpcProtocolAcceptor);
+		const connectors = [
+			createRpcConnector({ protocolFactory: connectorFactory }),
+			createRpcConnector({ protocolFactory: connectorFactory }),
+		];
+		const acceptors = [
+			createRpcAcceptor({ protocolFactory: acceptorFactory }),
+			createRpcAcceptor({ protocolFactory: acceptorFactory }),
+		];
 
-		expect(Object.isFrozen(protocol)).toBe(true);
-		expect(createRpcProtocol()).toBe(protocol);
-		expect(connector.state).toEqual({ status: "active" });
+		expect(connectorFactory).toHaveBeenCalledTimes(2);
+		expect(acceptorFactory).toHaveBeenCalledTimes(2);
+		expect(connectorFactory.mock.results[0]?.value).not.toBe(
+			connectorFactory.mock.results[1]?.value,
+		);
+		expect(acceptorFactory.mock.results[0]?.value).not.toBe(
+			acceptorFactory.mock.results[1]?.value,
+		);
+		expect(connectors.map((connector) => connector.state)).toEqual([
+			{ status: "active" },
+			{ status: "active" },
+		]);
+		expect(acceptors.map((acceptor) => acceptor.state.status)).toEqual([
+			"active",
+			"active",
+		]);
 	});
 
 	it("RPC-PKG-004 RPC-PKG-005 keeps validation private and exposes portable package metadata", () => {
@@ -387,7 +395,9 @@ describe("cold Topology Owner factories", () => {
 
 	it("RPC-API-001 RPC-SPI-001 constructs only the selected custom Protocol role", () => {
 		const connectorHarness = createProtocolHarness();
-		createRpcConnector({ protocol: connectorHarness.protocol });
+		createRpcConnector({
+			protocolFactory: connectorHarness.connectorFactory,
+		});
 
 		expect(connectorHarness.connectorHosts).toHaveLength(1);
 		expect(connectorHarness.acceptorHosts).toHaveLength(0);
@@ -400,7 +410,7 @@ describe("cold Topology Owner factories", () => {
 		});
 
 		const acceptorHarness = createProtocolHarness();
-		createRpcAcceptor({ protocol: acceptorHarness.protocol });
+		createRpcAcceptor({ protocolFactory: acceptorHarness.acceptorFactory });
 
 		expect(acceptorHarness.connectorHosts).toHaveLength(0);
 		expect(acceptorHarness.acceptorHosts).toHaveLength(1);
@@ -414,8 +424,10 @@ describe("cold Topology Owner factories", () => {
 	});
 
 	it("RPC-API-002 RPC-API-003 RPC-STATE-001 expose frozen cold Connector snapshots", () => {
-		const { protocol } = createProtocolHarness();
-		const connector = createRpcConnector({ protocol });
+		const { connectorFactory } = createProtocolHarness();
+		const connector = createRpcConnector({
+			protocolFactory: connectorFactory,
+		});
 		const ownerStates: unknown[] = [];
 		const peerStates: unknown[] = [];
 
@@ -431,8 +443,8 @@ describe("cold Topology Owner factories", () => {
 	});
 
 	it("RPC-API-003 exposes frozen cold Acceptor state without replayed events", () => {
-		const { protocol } = createProtocolHarness();
-		const acceptor = createRpcAcceptor({ protocol });
+		const { acceptorFactory } = createProtocolHarness();
+		const acceptor = createRpcAcceptor({ protocolFactory: acceptorFactory });
 		const ownerStates: unknown[] = [];
 		const memberships: unknown[] = [];
 		const events: unknown[] = [];
@@ -459,9 +471,11 @@ describe("cold Topology Owner factories", () => {
 	});
 
 	it("RPC-API-003 replays final state and membership snapshots to late subscribers", async () => {
-		const { protocol } = createProtocolHarness();
-		const connector = createRpcConnector({ protocol });
-		const acceptor = createRpcAcceptor({ protocol });
+		const { connectorFactory, acceptorFactory } = createProtocolHarness();
+		const connector = createRpcConnector({
+			protocolFactory: connectorFactory,
+		});
+		const acceptor = createRpcAcceptor({ protocolFactory: acceptorFactory });
 		await Promise.all([connector.close(), acceptor.close()]);
 
 		const observations: string[] = [];
@@ -506,9 +520,11 @@ describe("cold Topology Owner factories", () => {
 
 	it("RPC-POLICY-001 passes exact frozen role defaults to the Protocol", () => {
 		const connectorHarness = createProtocolHarness();
-		createRpcConnector({ protocol: connectorHarness.protocol });
+		createRpcConnector({
+			protocolFactory: connectorHarness.connectorFactory,
+		});
 		const acceptorHarness = createProtocolHarness();
-		createRpcAcceptor({ protocol: acceptorHarness.protocol });
+		createRpcAcceptor({ protocolFactory: acceptorHarness.acceptorFactory });
 
 		expect(connectorHarness.connectorHosts[0]?.policy).toEqual({
 			maxSessions: 1,
@@ -543,7 +559,7 @@ describe("cold Topology Owner factories", () => {
 
 	it("RPC-SPI-003 RPC-RESOURCE-003 exposes an atomic idempotent Owner retained-byte port", () => {
 		const harness = createProtocolHarness();
-		createRpcConnector({ protocol: harness.protocol });
+		createRpcConnector({ protocolFactory: harness.connectorFactory });
 		const host = harness.connectorHosts[0];
 		if (host === undefined) {
 			throw new Error("Expected the Connector Protocol host.");
@@ -578,7 +594,10 @@ describe("cold Topology Owner factories", () => {
 			shutdownDeadlineMs: 100,
 		};
 
-		createRpcConnector({ protocol: harness.protocol, runtimePolicy });
+		createRpcConnector({
+			protocolFactory: harness.connectorFactory,
+			runtimePolicy,
+		});
 		runtimePolicy.maxRetainedBytesPerSession = 8 * 1024 * 1024;
 		runtimePolicy.maxHandlersPerSession = 4;
 
@@ -606,7 +625,7 @@ describe("cold Topology Owner factories", () => {
 
 		expect(() =>
 			createRpcConnector({
-				protocol: harness.protocol,
+				protocolFactory: harness.connectorFactory,
 				runtimePolicy: {
 					maxPendingInvocationsPerSession: value,
 				} as never,
@@ -621,7 +640,7 @@ describe("cold Topology Owner factories", () => {
 		const validHarness = createProtocolHarness();
 		expect(() =>
 			createRpcConnector({
-				protocol: validHarness.protocol,
+				protocolFactory: validHarness.connectorFactory,
 				runtimePolicy: {
 					ackDelayMs: maximumProbeIntervalMs,
 					activityProbeIntervalMs: maximumProbeIntervalMs,
@@ -682,7 +701,7 @@ describe("cold Topology Owner factories", () => {
 			expect(
 				() =>
 					createRpcConnector({
-						protocol: harness.protocol,
+						protocolFactory: harness.connectorFactory,
 						runtimePolicy: testCase.runtimePolicy,
 					}),
 				testCase.key,
@@ -727,7 +746,10 @@ describe("cold Topology Owner factories", () => {
 			const harness = createProtocolHarness();
 			expect(() =>
 				createRpcConnector(
-					Object.assign({ protocol: harness.protocol }, options) as never,
+					Object.assign(
+						{ protocolFactory: harness.connectorFactory },
+						options,
+					) as never,
 				),
 			).toThrow(TypeError);
 			expect(harness.connectorHosts).toHaveLength(0);
@@ -738,7 +760,7 @@ describe("cold Topology Owner factories", () => {
 		const validHarness = createProtocolHarness();
 		expect(() =>
 			createRpcAcceptor({
-				protocol: validHarness.protocol,
+				protocolFactory: validHarness.acceptorFactory,
 				runtimePolicy: {
 					maxSessions: 64,
 					maxRetainedBytesPerSession: 32 * 1024 * 1024,
@@ -757,7 +779,7 @@ describe("cold Topology Owner factories", () => {
 		const invalidHarness = createProtocolHarness();
 		expect(() =>
 			createRpcAcceptor({
-				protocol: invalidHarness.protocol,
+				protocolFactory: invalidHarness.acceptorFactory,
 				runtimePolicy: { maxRetainedBytesTotal: 66_584_575 },
 			}),
 		).toThrow(TypeError);
@@ -768,7 +790,7 @@ describe("cold Topology Owner factories", () => {
 		const maximumSafeHandshakeCount = 2_147_483_647;
 		const validHarness = createProtocolHarness();
 		createRpcAcceptor({
-			protocol: validHarness.protocol,
+			protocolFactory: validHarness.acceptorFactory,
 			runtimePolicy: {
 				maxSessions: 1,
 				maxHandshakes: maximumSafeHandshakeCount,
@@ -786,7 +808,7 @@ describe("cold Topology Owner factories", () => {
 		const invalidHarness = createProtocolHarness();
 		expect(() =>
 			createRpcAcceptor({
-				protocol: invalidHarness.protocol,
+				protocolFactory: invalidHarness.acceptorFactory,
 				runtimePolicy: {
 					maxSessions: 1,
 					maxHandshakes: maximumSafeHandshakeCount + 1,
@@ -802,25 +824,38 @@ describe("cold Topology Owner factories", () => {
 
 	it("RPC-API-001 wraps custom Protocol construction failures", () => {
 		const cause = new Error("construction failed");
-		const throwingProtocol: IRpcProtocol = {
-			createConnector() {
-				throw cause;
-			},
-			createAcceptor() {
-				throw cause;
-			},
+		const throwingConnectorFactory: RpcProtocolConnectorFactory = () => {
+			throw cause;
 		};
 
 		try {
-			createRpcConnector({ protocol: throwingProtocol });
+			createRpcConnector({ protocolFactory: throwingConnectorFactory });
 			throw new Error("Expected Protocol construction to fail.");
 		} catch (error) {
 			expect(error).toMatchObject({ code: "protocol", cause });
 		}
 
-		expect(() => createRpcAcceptor({ protocol: {} as IRpcProtocol })).toThrow(
-			expect.objectContaining({ code: "protocol" }),
-		);
+		const invalidConnectorFactory = (() => ({
+			async shutdown() {},
+			close() {},
+			async cleanup() {},
+		})) as unknown as RpcProtocolConnectorFactory;
+		expect(() =>
+			createRpcConnector({ protocolFactory: invalidConnectorFactory }),
+		).toThrow(expect.objectContaining({ code: "protocol" }));
+
+		const invalidAcceptorFactory = (() => ({
+			async shutdown() {},
+			close() {},
+			async cleanup() {},
+		})) as unknown as RpcProtocolAcceptorFactory;
+		expect(() =>
+			createRpcAcceptor({ protocolFactory: invalidAcceptorFactory }),
+		).toThrow(expect.objectContaining({ code: "protocol" }));
+
+		expect(() =>
+			createRpcAcceptor({ protocolFactory: {} as RpcProtocolAcceptorFactory }),
+		).toThrow(expect.objectContaining({ code: "protocol" }));
 	});
 });
 
@@ -1233,7 +1268,7 @@ describe("Default Protocol Session capacity", () => {
 describe("Application Value normalization", () => {
 	it("RPC-VALUE-001 RPC-VALUE-002 RPC-VALUE-005 creates a detached frozen snapshot with deterministic weight", () => {
 		const harness = createProtocolHarness();
-		createRpcConnector({ protocol: harness.protocol });
+		createRpcConnector({ protocolFactory: harness.connectorFactory });
 		const input = { b: [1, true], a: null };
 
 		const snapshot =
@@ -1260,7 +1295,7 @@ describe("Application Value normalization", () => {
 
 	it("RPC-VALUE-001 RPC-VALUE-002 rejects unsupported shapes without invoking user accessors", () => {
 		const harness = createProtocolHarness();
-		createRpcConnector({ protocol: harness.protocol });
+		createRpcConnector({ protocolFactory: harness.connectorFactory });
 		const normalize = (value: unknown) =>
 			harness.connectorHosts[0]?.normalizeApplicationValue(value);
 		let getterCalls = 0;
@@ -1327,7 +1362,7 @@ describe("Application Value normalization", () => {
 
 	it("RPC-VALUE-002 ignores non-enumerable record data and converts Proxy trap failure to TypeError", () => {
 		const harness = createProtocolHarness();
-		createRpcConnector({ protocol: harness.protocol });
+		createRpcConnector({ protocolFactory: harness.connectorFactory });
 		const record = { visible: 1 };
 		Object.defineProperty(record, "hidden", { value: 2 });
 
@@ -1362,7 +1397,7 @@ describe("Application Value normalization", () => {
 
 	it("RPC-VALUE-004 RPC-VALUE-005 fixes argument roots and compact-JSON weights", () => {
 		const harness = createProtocolHarness();
-		createRpcConnector({ protocol: harness.protocol });
+		createRpcConnector({ protocolFactory: harness.connectorFactory });
 		const host = harness.connectorHosts[0];
 		if (host === undefined) {
 			throw new Error("Expected the Connector Protocol host.");
@@ -1388,7 +1423,7 @@ describe("Application Value normalization", () => {
 
 	it("RPC-VALUE-006 compares normalized semantic values instead of identity or member order", () => {
 		const harness = createProtocolHarness();
-		createRpcConnector({ protocol: harness.protocol });
+		createRpcConnector({ protocolFactory: harness.connectorFactory });
 		const host = harness.connectorHosts[0];
 		if (host === undefined) {
 			throw new Error("Expected the Connector Protocol host.");
@@ -1426,7 +1461,7 @@ describe("Application Value normalization", () => {
 
 	it("RPC-VALUE-004 accepts every fixed limit and rejects the next value", () => {
 		const harness = createProtocolHarness();
-		createRpcConnector({ protocol: harness.protocol });
+		createRpcConnector({ protocolFactory: harness.connectorFactory });
 		const normalize = (value: unknown) =>
 			harness.connectorHosts[0]?.normalizeApplicationValue(value);
 		const nested = (depth: number): unknown => {
@@ -1483,8 +1518,10 @@ describe("Application Value normalization", () => {
 
 describe("exposure registries and remote facades", () => {
 	it("RPC-DESC-004 RPC-DESC-005 installs exposures atomically and cleans them up idempotently", () => {
-		const { protocol } = createProtocolHarness();
-		const connector = createRpcConnector({ protocol });
+		const { connectorFactory } = createProtocolHarness();
+		const connector = createRpcConnector({
+			protocolFactory: connectorFactory,
+		});
 		const descriptor = createRemoteServiceDescriptor(ICalculatorService, {
 			wireName: "example.calculator.v1",
 			methods: {
@@ -1524,7 +1561,7 @@ describe("exposure registries and remote facades", () => {
 	it("RPC-CALL-001 creates a frozen non-thenable single-peer facade", async () => {
 		const connectorHarness = createProtocolHarness();
 		const connector = createRpcConnector({
-			protocol: connectorHarness.protocol,
+			protocolFactory: connectorHarness.connectorFactory,
 		});
 		const descriptor = createRemoteServiceDescriptor(ICalculatorService, {
 			wireName: "example.calculator.v1",
@@ -1543,8 +1580,8 @@ describe("exposure registries and remote facades", () => {
 	});
 
 	it("RPC-API-007 omits the aggregate Acceptor facade", () => {
-		const { protocol } = createProtocolHarness();
-		const acceptor = createRpcAcceptor({ protocol });
+		const { acceptorFactory } = createProtocolHarness();
+		const acceptor = createRpcAcceptor({ protocolFactory: acceptorFactory });
 
 		expect("resolveAll" in acceptor).toBe(false);
 		expect(
@@ -1553,8 +1590,8 @@ describe("exposure registries and remote facades", () => {
 	});
 
 	it("RPC-DESC-004 RPC-DESC-005 applies the same duplicate and cleanup rules to Acceptor owner exposure", () => {
-		const { protocol } = createProtocolHarness();
-		const acceptor = createRpcAcceptor({ protocol });
+		const { acceptorFactory } = createProtocolHarness();
+		const acceptor = createRpcAcceptor({ protocolFactory: acceptorFactory });
 		const descriptor = createRemoteServiceDescriptor(ICalculatorService, {
 			wireName: "example.calculator.v1",
 			methods: { add: true },
@@ -1573,8 +1610,10 @@ describe("exposure registries and remote facades", () => {
 	});
 
 	it("RPC-CALL-002 validates the dedicated cancellation slot before peer availability", async () => {
-		const { protocol } = createProtocolHarness();
-		const connector = createRpcConnector({ protocol });
+		const { connectorFactory } = createProtocolHarness();
+		const connector = createRpcConnector({
+			protocolFactory: connectorFactory,
+		});
 		const descriptor = createRemoteServiceDescriptor(ICalculatorService, {
 			wireName: "example.calculator.v1",
 			methods: { cancel: { cancelable: true } },
@@ -1618,7 +1657,7 @@ describe("exposure registries and remote facades", () => {
 describe("Adapter startup and Protocol handoff", () => {
 	it("RPC-START-005 rejects unknown Connector attempt options without starting its Adapter", async () => {
 		const connector = createRpcConnector({
-			protocol: createProtocolHarness().protocol,
+			protocolFactory: createProtocolHarness().connectorFactory,
 		});
 		let adapterStarts = 0;
 		const connectionSource = new Subject<IRpcConnection>();
@@ -1641,8 +1680,10 @@ describe("Adapter startup and Protocol handoff", () => {
 	});
 
 	it("RPC-START-005 rejects a pre-aborted Connector attempt without touching its Adapter", async () => {
-		const { protocol } = createProtocolHarness();
-		const connector = createRpcConnector({ protocol });
+		const { connectorFactory } = createProtocolHarness();
+		const connector = createRpcConnector({
+			protocolFactory: connectorFactory,
+		});
 		const controller = new AbortController();
 		controller.abort();
 		let adapterReads = 0;
@@ -1672,8 +1713,10 @@ describe("Adapter startup and Protocol handoff", () => {
 	});
 
 	it("RPC-START-005 aborts an unsettled fresh attempt and releases Connector authority", async () => {
-		const { protocol } = createProtocolHarness();
-		const connector = createRpcConnector({ protocol });
+		const { connectorFactory } = createProtocolHarness();
+		const connector = createRpcConnector({
+			protocolFactory: connectorFactory,
+		});
 		const controller = new AbortController();
 		let adapterSignal: AbortSignal | undefined;
 		const adapter: IRpcConnectorAdapter = {
@@ -1707,34 +1750,24 @@ describe("Adapter startup and Protocol handoff", () => {
 			reserveInvocation: () => undefined,
 			forceClose() {},
 		};
-		const protocol: IRpcProtocol = {
-			createConnector(host) {
-				return {
-					bind() {
-						return Promise.resolve().then(() => {
-							if (host.attachSession(session) === undefined) {
-								throw new Error("The test Session was not attached.");
-							}
-						});
-					},
-					async shutdown() {},
-					close() {},
-					async cleanup() {},
-				};
-			},
-			createAcceptor() {
-				return {
-					async accept() {},
-					async shutdown() {},
-					close() {},
-					async cleanup() {},
-				};
-			},
+		const protocolFactory: RpcProtocolConnectorFactory = (host) => {
+			return {
+				bind() {
+					return Promise.resolve().then(() => {
+						if (host.attachSession(session) === undefined) {
+							throw new Error("The test Session was not attached.");
+						}
+					});
+				},
+				async shutdown() {},
+				close() {},
+				async cleanup() {},
+			};
 		};
 		const controller = new AbortController();
 		const connectionSource = new Subject<IRpcConnection>();
 		let closeCalls = 0;
-		const connector = createRpcConnector({ protocol });
+		const connector = createRpcConnector({ protocolFactory });
 		connector.event$.subscribe((event) => {
 			if (event.type === RpcEventTypeEnum.peerOpened) {
 				controller.abort("caller-controlled reason");
@@ -1764,7 +1797,7 @@ describe("Adapter startup and Protocol handoff", () => {
 
 	it("RPC-START-005 keeps AbortError authoritative when abort wins an ordinary-failure race", async () => {
 		const connector = createRpcConnector({
-			protocol: createProtocolHarness().protocol,
+			protocolFactory: createProtocolHarness().connectorFactory,
 		});
 		const controller = new AbortController();
 		const connectionSource = new Subject<IRpcConnection>();
@@ -1798,31 +1831,21 @@ describe("Adapter startup and Protocol handoff", () => {
 			reserveInvocation: () => undefined,
 			forceClose() {},
 		};
-		const protocol: IRpcProtocol = {
-			createConnector(host) {
-				return {
-					bind() {
-						return Promise.resolve().then(() => {
-							if (host.attachSession(session) === undefined) {
-								throw new Error("The test Session was not attached.");
-							}
-						});
-					},
-					async shutdown() {},
-					close() {},
-					async cleanup() {},
-				};
-			},
-			createAcceptor() {
-				return {
-					async accept() {},
-					async shutdown() {},
-					close() {},
-					async cleanup() {},
-				};
-			},
+		const protocolFactory: RpcProtocolConnectorFactory = (host) => {
+			return {
+				bind() {
+					return Promise.resolve().then(() => {
+						if (host.attachSession(session) === undefined) {
+							throw new Error("The test Session was not attached.");
+						}
+					});
+				},
+				async shutdown() {},
+				close() {},
+				async cleanup() {},
+			};
 		};
-		const connector = createRpcConnector({ protocol });
+		const connector = createRpcConnector({ protocolFactory });
 		const events: RpcEvent[] = [];
 		let closeTask: Promise<void> | undefined;
 		connector.event$.subscribe((event) => events.push(event));
@@ -1872,35 +1895,25 @@ describe("Adapter startup and Protocol handoff", () => {
 			async send() {},
 			async close() {},
 		};
-		const protocol: IRpcProtocol = {
-			createConnector(host) {
-				connectorHost = host;
-				return {
-					bind(boundConnection) {
-						bindRanInsideNotification = insideHandoffNotification;
-						boundConnection.message$.subscribe((message) =>
-							receivedMessages.push(message),
-						);
-						return new Promise<void>((resolve) => {
-							releaseBinding = () => {
-								expect(host.attachSession(session)).toBeDefined();
-								resolve();
-							};
-						});
-					},
-					async shutdown() {},
-					close() {},
-					async cleanup() {},
-				};
-			},
-			createAcceptor() {
-				return {
-					async accept() {},
-					async shutdown() {},
-					close() {},
-					async cleanup() {},
-				};
-			},
+		const protocolFactory: RpcProtocolConnectorFactory = (host) => {
+			connectorHost = host;
+			return {
+				bind(boundConnection) {
+					bindRanInsideNotification = insideHandoffNotification;
+					boundConnection.message$.subscribe((message) =>
+						receivedMessages.push(message),
+					);
+					return new Promise<void>((resolve) => {
+						releaseBinding = () => {
+							expect(host.attachSession(session)).toBeDefined();
+							resolve();
+						};
+					});
+				},
+				async shutdown() {},
+				close() {},
+				async cleanup() {},
+			};
 		};
 		const adapter = {
 			connection$: new Observable<IRpcConnection>((subscriber) => {
@@ -1917,7 +1930,7 @@ describe("Adapter startup and Protocol handoff", () => {
 			},
 		};
 
-		const connector = createRpcConnector({ protocol });
+		const connector = createRpcConnector({ protocolFactory });
 		const startup = connector.connect({ adapter });
 		expect(connector.peer.state).toEqual({ status: "connecting" });
 		expect(bindRanInsideNotification).toBe(true);
@@ -1946,7 +1959,9 @@ describe("Adapter startup and Protocol handoff", () => {
 				closeCalls += 1;
 			},
 		};
-		const connector = createRpcConnector({ protocol: harness.protocol });
+		const connector = createRpcConnector({
+			protocolFactory: harness.connectorFactory,
+		});
 
 		await expect(
 			connector.connect({
@@ -1966,7 +1981,9 @@ describe("Adapter startup and Protocol handoff", () => {
 	it("RPC-TRANSPORT-008 rejects a Connector Adapter that completes without handoff", async () => {
 		const harness = createProtocolHarness();
 		const connectionSubject = new Subject<IRpcConnection>();
-		const connector = createRpcConnector({ protocol: harness.protocol });
+		const connector = createRpcConnector({
+			protocolFactory: harness.connectorFactory,
+		});
 		const startup = connector.connect({
 			adapter: {
 				connection$: connectionSubject.asObservable(),
@@ -2012,34 +2029,24 @@ describe("Adapter startup and Protocol handoff", () => {
 			async send() {},
 			async close() {},
 		};
-		const protocol: IRpcProtocol = {
-			createConnector() {
-				return {
-					async bind() {},
-					async shutdown() {},
-					close() {},
-					async cleanup() {},
-				};
-			},
-			createAcceptor(host) {
-				return {
-					accept(boundConnection) {
-						acceptRanInsideNotification = insideHandoffNotification;
-						boundConnection.message$.subscribe((message) =>
-							receivedMessages.push(message),
-						);
-						return new Promise<void>((resolve) => {
-							releaseAcceptance = () => {
-								expect(host.admitSession(session)).toBeDefined();
-								resolve();
-							};
-						});
-					},
-					async shutdown() {},
-					close() {},
-					async cleanup() {},
-				};
-			},
+		const protocolFactory: RpcProtocolAcceptorFactory = (host) => {
+			return {
+				accept(boundConnection) {
+					acceptRanInsideNotification = insideHandoffNotification;
+					boundConnection.message$.subscribe((message) =>
+						receivedMessages.push(message),
+					);
+					return new Promise<void>((resolve) => {
+						releaseAcceptance = () => {
+							expect(host.admitSession(session)).toBeDefined();
+							resolve();
+						};
+					});
+				},
+				async shutdown() {},
+				close() {},
+				async cleanup() {},
+			};
 		};
 		const adapter = {
 			connection$: new Observable<IRpcConnection>((subscriber) => {
@@ -2058,7 +2065,7 @@ describe("Adapter startup and Protocol handoff", () => {
 			},
 		};
 
-		const acceptor = createRpcAcceptor({ protocol });
+		const acceptor = createRpcAcceptor({ protocolFactory });
 		const startup = acceptor.listen(adapter);
 		expect(acceptor.state).toEqual({
 			status: "active",
@@ -2097,7 +2104,7 @@ describe("Adapter startup and Protocol handoff", () => {
 		const completedHarness = createProtocolHarness();
 		const completedSource = new Subject<IRpcConnection>();
 		const completedAcceptor = createRpcAcceptor({
-			protocol: completedHarness.protocol,
+			protocolFactory: completedHarness.acceptorFactory,
 		});
 		const completedStartup = completedAcceptor.listen({
 			connection$: completedSource.asObservable(),
@@ -2123,7 +2130,7 @@ describe("Adapter startup and Protocol handoff", () => {
 		const failedHarness = createProtocolHarness();
 		const failedSource = new Subject<IRpcConnection>();
 		const failedAcceptor = createRpcAcceptor({
-			protocol: failedHarness.protocol,
+			protocolFactory: failedHarness.acceptorFactory,
 		});
 		const failedStartup = failedAcceptor.listen({
 			connection$: failedSource.asObservable(),
@@ -2147,27 +2154,17 @@ describe("Adapter startup and Protocol handoff", () => {
 		const messageSource = new Subject<Uint8Array>();
 		const sourceFailure = new Error("source lifetime failed");
 		let closeCalls = 0;
-		const protocol: IRpcProtocol = {
-			createConnector() {
-				return {
-					async bind() {},
-					async shutdown() {},
-					close() {},
-					async cleanup() {},
-				};
-			},
-			createAcceptor() {
-				return {
-					async accept() {
-						throw new Error("one connection failed");
-					},
-					async shutdown() {},
-					close() {},
-					async cleanup() {},
-				};
-			},
+		const protocolFactory: RpcProtocolAcceptorFactory = () => {
+			return {
+				async accept() {
+					throw new Error("one connection failed");
+				},
+				async shutdown() {},
+				close() {},
+				async cleanup() {},
+			};
 		};
-		const acceptor = createRpcAcceptor({ protocol });
+		const acceptor = createRpcAcceptor({ protocolFactory });
 		const startup = acceptor.listen({
 			connection$: connectionSource.asObservable(),
 			async listen() {},
@@ -2344,30 +2341,25 @@ describe("custom Protocol outgoing invocations", () => {
 		await connector.close();
 	});
 
-	it("RPC-SPI-011 closes the Acceptor runtime before projecting an owner fault", async () => {
+	it("RPC-SPI-011 closes the Acceptor Protocol role before projecting an owner fault", async () => {
 		let protocolHost: IRpcProtocolAcceptorHost | undefined;
 		let acceptor: ReturnType<typeof createRpcAcceptor> | undefined;
 		const operations: string[] = [];
-		const protocol: IRpcProtocol = {
-			createConnector() {
-				throw new Error("Connector runtime is not used by this test.");
-			},
-			createAcceptor(host) {
-				protocolHost = host;
-				return {
-					async accept() {},
-					async shutdown() {},
-					close() {
-						operations.push("runtime-close");
-						expect(acceptor?.state.status).toBe("active");
-					},
-					async cleanup() {
-						operations.push("runtime-cleanup");
-					},
-				};
-			},
+		const protocolFactory: RpcProtocolAcceptorFactory = (host) => {
+			protocolHost = host;
+			return {
+				async accept() {},
+				async shutdown() {},
+				close() {
+					operations.push("runtime-close");
+					expect(acceptor?.state.status).toBe("active");
+				},
+				async cleanup() {
+					operations.push("runtime-cleanup");
+				},
+			};
 		};
-		acceptor = createRpcAcceptor({ protocol });
+		acceptor = createRpcAcceptor({ protocolFactory });
 		const events: RpcEvent[] = [];
 		acceptor.event$.subscribe((event) => events.push(event));
 		const first = protocolHost?.admitSession({
@@ -3141,7 +3133,9 @@ describe("custom Protocol incoming calls", () => {
 describe("Protocol Session state projection", () => {
 	it("RPC-API-005 commits related Connector snapshots before terminal notifications and settles last", async () => {
 		const harness = createProtocolHarness();
-		const connector = createRpcConnector({ protocol: harness.protocol });
+		const connector = createRpcConnector({
+			protocolFactory: harness.connectorFactory,
+		});
 		let taskSettled = false;
 		const observations: Array<{
 			readonly source: string;
@@ -3271,7 +3265,9 @@ describe("Protocol Session state projection", () => {
 
 	it("RPC-API-003 RPC-API-005 RPC-CLEANUP-004 serializes reentrant forced close after the graceful notification wave", async () => {
 		const harness = createProtocolHarness();
-		const connector = createRpcConnector({ protocol: harness.protocol });
+		const connector = createRpcConnector({
+			protocolFactory: harness.connectorFactory,
+		});
 		const order: string[] = [];
 		let taskSettled = false;
 		const reentrantCloseTasks: Promise<void>[] = [];
@@ -3527,31 +3523,21 @@ describe("Connector Reconnection", () => {
 			reserveInvocation: () => undefined,
 			forceClose() {},
 		};
-		const protocol: IRpcProtocol = {
-			createConnector(host) {
-				return {
-					bind() {
-						return Promise.resolve().then(() => {
-							if (host.attachSession(session) === undefined) {
-								throw new Error("The test Session was not attached.");
-							}
-						});
-					},
-					async shutdown() {},
-					close() {},
-					async cleanup() {},
-				};
-			},
-			createAcceptor() {
-				return {
-					async accept() {},
-					async shutdown() {},
-					close() {},
-					async cleanup() {},
-				};
-			},
+		const protocolFactory: RpcProtocolConnectorFactory = (host) => {
+			return {
+				bind() {
+					return Promise.resolve().then(() => {
+						if (host.attachSession(session) === undefined) {
+							throw new Error("The test Session was not attached.");
+						}
+					});
+				},
+				async shutdown() {},
+				close() {},
+				async cleanup() {},
+			};
 		};
-		const connector = createRpcConnector({ protocol });
+		const connector = createRpcConnector({ protocolFactory });
 		let factoryCalls = 0;
 		const reconnection = createRpcConnectorReconnection({
 			connector,
@@ -3588,7 +3574,7 @@ describe("Connector Reconnection", () => {
 
 	it("RPC-RECONNECT-001 terminates after an initial Adapter Factory failure", async () => {
 		const connector = createRpcConnector({
-			protocol: createProtocolHarness().protocol,
+			protocolFactory: createProtocolHarness().connectorFactory,
 		});
 		const cause = new Error("Factory failed.");
 		const reconnection = createRpcConnectorReconnection({
@@ -3615,7 +3601,7 @@ describe("Connector Reconnection", () => {
 
 	it("RPC-RECONNECT-001 does not retry an ordinary initial Connector failure", async () => {
 		const connector = createRpcConnector({
-			protocol: createProtocolHarness().protocol,
+			protocolFactory: createProtocolHarness().connectorFactory,
 		});
 		let factoryCalls = 0;
 		const events: unknown[] = [];
@@ -3652,7 +3638,7 @@ describe("Connector Reconnection", () => {
 
 	it("RPC-RECONNECT-004 reports Connector termination during the initial attempt", async () => {
 		const connector = createRpcConnector({
-			protocol: createProtocolHarness().protocol,
+			protocolFactory: createProtocolHarness().connectorFactory,
 		});
 		let adapterSignal: AbortSignal | undefined;
 		const events: unknown[] = [];
@@ -3697,7 +3683,7 @@ describe("Connector Reconnection", () => {
 	it("RPC-RECONNECT-002 replays its frozen terminal state to a late subscriber", async () => {
 		const reconnection = createRpcConnectorReconnection({
 			connector: createRpcConnector({
-				protocol: createProtocolHarness().protocol,
+				protocolFactory: createProtocolHarness().connectorFactory,
 			}),
 			adapterFactory: () => {
 				throw new Error("Factory failed.");
@@ -3727,38 +3713,28 @@ describe("Connector Reconnection", () => {
 			forceClose() {},
 		};
 		let sessionHost: IRpcProtocolSessionHost | undefined;
-		const protocol: IRpcProtocol = {
-			createConnector(host) {
-				return {
-					bind() {
-						return Promise.resolve().then(() => {
+		const protocolFactory: RpcProtocolConnectorFactory = (host) => {
+			return {
+				bind() {
+					return Promise.resolve().then(() => {
+						if (sessionHost === undefined) {
+							sessionHost = host.attachSession(session);
 							if (sessionHost === undefined) {
-								sessionHost = host.attachSession(session);
-								if (sessionHost === undefined) {
-									throw new Error("The test Session was not attached.");
-								}
-								return;
+								throw new Error("The test Session was not attached.");
 							}
-							sessionHost.transition({
-								type: RpcProtocolSessionTransitionTypeEnum.recovered,
-							});
+							return;
+						}
+						sessionHost.transition({
+							type: RpcProtocolSessionTransitionTypeEnum.recovered,
 						});
-					},
-					async shutdown() {},
-					close() {},
-					async cleanup() {},
-				};
-			},
-			createAcceptor() {
-				return {
-					async accept() {},
-					async shutdown() {},
-					close() {},
-					async cleanup() {},
-				};
-			},
+					});
+				},
+				async shutdown() {},
+				close() {},
+				async cleanup() {},
+			};
 		};
-		const connector = createRpcConnector({ protocol });
+		const connector = createRpcConnector({ protocolFactory });
 		const adapters: IRpcConnectorAdapter[] = [];
 		const reconnection = createRpcConnectorReconnection({
 			connector,
@@ -3872,38 +3848,28 @@ describe("Connector Reconnection", () => {
 				forceClose() {},
 			};
 			let sessionHost: IRpcProtocolSessionHost | undefined;
-			const protocol: IRpcProtocol = {
-				createConnector(host) {
-					return {
-						bind() {
-							return Promise.resolve().then(() => {
+			const protocolFactory: RpcProtocolConnectorFactory = (host) => {
+				return {
+					bind() {
+						return Promise.resolve().then(() => {
+							if (sessionHost === undefined) {
+								sessionHost = host.attachSession(session);
 								if (sessionHost === undefined) {
-									sessionHost = host.attachSession(session);
-									if (sessionHost === undefined) {
-										throw new Error("The test Session was not attached.");
-									}
-									return;
+									throw new Error("The test Session was not attached.");
 								}
-								sessionHost.transition({
-									type: RpcProtocolSessionTransitionTypeEnum.recovered,
-								});
+								return;
+							}
+							sessionHost.transition({
+								type: RpcProtocolSessionTransitionTypeEnum.recovered,
 							});
-						},
-						async shutdown() {},
-						close() {},
-						async cleanup() {},
-					};
-				},
-				createAcceptor() {
-					return {
-						async accept() {},
-						async shutdown() {},
-						close() {},
-						async cleanup() {},
-					};
-				},
+						});
+					},
+					async shutdown() {},
+					close() {},
+					async cleanup() {},
+				};
 			};
-			const connector = createRpcConnector({ protocol });
+			const connector = createRpcConnector({ protocolFactory });
 			let factoryCalls = 0;
 			const retryDelaysMs = [100];
 			const reconnection = createRpcConnectorReconnection({
@@ -3983,7 +3949,9 @@ describe("Connector Reconnection", () => {
 		vi.useFakeTimers();
 		try {
 			const harness = createReconnectionProtocolHarness();
-			const connector = createRpcConnector({ protocol: harness.protocol });
+			const connector = createRpcConnector({
+				protocolFactory: harness.protocolFactory,
+			});
 			let factoryCalls = 0;
 			let replacementSignal: AbortSignal | undefined;
 			const failures: unknown[] = [];
@@ -4050,7 +4018,9 @@ describe("Connector Reconnection", () => {
 		try {
 			const maximumTimerDelayMs = 2_147_483_647;
 			const harness = createReconnectionProtocolHarness();
-			const connector = createRpcConnector({ protocol: harness.protocol });
+			const connector = createRpcConnector({
+				protocolFactory: harness.protocolFactory,
+			});
 			let factoryCalls = 0;
 			const reconnection = createRpcConnectorReconnection({
 				connector,
@@ -4098,7 +4068,9 @@ describe("Connector Reconnection", () => {
 		vi.useFakeTimers();
 		try {
 			const harness = createReconnectionProtocolHarness();
-			const connector = createRpcConnector({ protocol: harness.protocol });
+			const connector = createRpcConnector({
+				protocolFactory: harness.protocolFactory,
+			});
 			let factoryCalls = 0;
 			const reconnection = createRpcConnectorReconnection({
 				connector,
@@ -4145,7 +4117,9 @@ describe("Connector Reconnection", () => {
 
 	it("RPC-RECONNECT-004 stops an active replacement before direct Connector takeover", async () => {
 		const harness = createReconnectionProtocolHarness();
-		const connector = createRpcConnector({ protocol: harness.protocol });
+		const connector = createRpcConnector({
+			protocolFactory: harness.protocolFactory,
+		});
 		let factoryCalls = 0;
 		let replacementSignal: AbortSignal | undefined;
 		const events: unknown[] = [];
@@ -4197,7 +4171,7 @@ describe("Connector Reconnection", () => {
 
 	it("RPC-RECONNECT-004 stops and awaits an unsettled initial connection attempt", async () => {
 		const connector = createRpcConnector({
-			protocol: createProtocolHarness().protocol,
+			protocolFactory: createProtocolHarness().connectorFactory,
 		});
 		let adapterSignal: AbortSignal | undefined;
 		const reconnection = createRpcConnectorReconnection({
@@ -4246,7 +4220,9 @@ describe("Connector Reconnection", () => {
 		vi.useFakeTimers();
 		try {
 			const harness = createReconnectionProtocolHarness();
-			const connector = createRpcConnector({ protocol: harness.protocol });
+			const connector = createRpcConnector({
+				protocolFactory: harness.protocolFactory,
+			});
 			let factoryCalls = 0;
 			const reconnection = createRpcConnectorReconnection({
 				connector,
@@ -4293,7 +4269,9 @@ describe("Connector Reconnection", () => {
 
 	it("RPC-RECONNECT-004 observes Connector termination reentrant from monitoring", async () => {
 		const harness = createReconnectionProtocolHarness();
-		const connector = createRpcConnector({ protocol: harness.protocol });
+		const connector = createRpcConnector({
+			protocolFactory: harness.protocolFactory,
+		});
 		const reconnection = createRpcConnectorReconnection({
 			connector,
 			adapterFactory: createSuccessfulConnectorAdapter,
@@ -4316,7 +4294,9 @@ describe("Connector Reconnection", () => {
 
 	it("RPC-RECONNECT-005 emits payload-free failure telemetry after the resulting state", async () => {
 		const harness = createReconnectionProtocolHarness();
-		const connector = createRpcConnector({ protocol: harness.protocol });
+		const connector = createRpcConnector({
+			protocolFactory: harness.protocolFactory,
+		});
 		let factoryCalls = 0;
 		const reconnection = createRpcConnectorReconnection({
 			connector,
@@ -4372,7 +4352,9 @@ describe("Connector Reconnection", () => {
 
 	it("RPC-RECONNECT-005 classifies a background Adapter Factory failure", async () => {
 		const harness = createReconnectionProtocolHarness();
-		const connector = createRpcConnector({ protocol: harness.protocol });
+		const connector = createRpcConnector({
+			protocolFactory: harness.protocolFactory,
+		});
 		let factoryCalls = 0;
 		const reconnection = createRpcConnectorReconnection({
 			connector,
@@ -4410,7 +4392,9 @@ describe("Connector Reconnection", () => {
 describe("Topology Owner termination", () => {
 	it("RPC-LIFE-001 RPC-LIFE-002 RPC-CLOSE-003 gives cold Connector shutdown and close distinct cached modes", async () => {
 		const gracefulHarness = createProtocolHarness();
-		const graceful = createRpcConnector({ protocol: gracefulHarness.protocol });
+		const graceful = createRpcConnector({
+			protocolFactory: gracefulHarness.connectorFactory,
+		});
 		const gracefulEvents: RpcEvent[] = [];
 		graceful.event$.subscribe((event) => gracefulEvents.push(event));
 		const gracefulTask = graceful.shutdown();
@@ -4440,7 +4424,9 @@ describe("Topology Owner termination", () => {
 		expect(graceful.close()).toBe(gracefulTask);
 
 		const forcedHarness = createProtocolHarness();
-		const forced = createRpcConnector({ protocol: forcedHarness.protocol });
+		const forced = createRpcConnector({
+			protocolFactory: forcedHarness.connectorFactory,
+		});
 		const forcedEvents: RpcEvent[] = [];
 		forced.event$.subscribe((event) => forcedEvents.push(event));
 		const forcedTask = forced.close();
@@ -4473,33 +4459,23 @@ describe("Topology Owner termination", () => {
 		let resolveShutdown: (() => void) | undefined;
 		let closeCalls = 0;
 		let cleanupCalls = 0;
-		const protocol: IRpcProtocol = {
-			createConnector() {
-				return {
-					async bind() {},
-					shutdown() {
-						return new Promise<void>((resolve) => {
-							resolveShutdown = resolve;
-						});
-					},
-					close() {
-						closeCalls += 1;
-					},
-					async cleanup() {
-						cleanupCalls += 1;
-					},
-				};
-			},
-			createAcceptor() {
-				return {
-					async accept() {},
-					async shutdown() {},
-					close() {},
-					async cleanup() {},
-				};
-			},
+		const protocolFactory: RpcProtocolConnectorFactory = () => {
+			return {
+				async bind() {},
+				shutdown() {
+					return new Promise<void>((resolve) => {
+						resolveShutdown = resolve;
+					});
+				},
+				close() {
+					closeCalls += 1;
+				},
+				async cleanup() {
+					cleanupCalls += 1;
+				},
+			};
 		};
-		const connector = createRpcConnector({ protocol });
+		const connector = createRpcConnector({ protocolFactory });
 		const task = connector.shutdown();
 		expect(connector.state).toEqual({ status: "draining" });
 		expect(connector.close()).toBe(task);
@@ -4521,7 +4497,7 @@ describe("Acceptor Topology Owner termination", () => {
 	it("RPC-LIFE-001 RPC-LIFE-002 RPC-CLOSE-003 gives an empty Acceptor distinct cached shutdown and close modes", async () => {
 		const gracefulHarness = createProtocolHarness();
 		const graceful = createRpcAcceptor({
-			protocol: gracefulHarness.protocol,
+			protocolFactory: gracefulHarness.acceptorFactory,
 		});
 		const gracefulEvents: RpcEvent[] = [];
 		graceful.event$.subscribe((event) => gracefulEvents.push(event));
@@ -4550,7 +4526,9 @@ describe("Acceptor Topology Owner termination", () => {
 		expect(graceful.close()).toBe(gracefulTask);
 
 		const forcedHarness = createProtocolHarness();
-		const forced = createRpcAcceptor({ protocol: forcedHarness.protocol });
+		const forced = createRpcAcceptor({
+			protocolFactory: forcedHarness.acceptorFactory,
+		});
 		const forcedEvents: RpcEvent[] = [];
 		forced.event$.subscribe((event) => forcedEvents.push(event));
 
@@ -4582,7 +4560,9 @@ describe("Acceptor Topology Owner termination", () => {
 		const connectionSource = new Subject<IRpcConnection>();
 		let listenerSignal: AbortSignal | undefined;
 		let listenerTeardowns = 0;
-		const acceptor = createRpcAcceptor({ protocol: harness.protocol });
+		const acceptor = createRpcAcceptor({
+			protocolFactory: harness.acceptorFactory,
+		});
 
 		await acceptor.listen({
 			connection$: new Observable<IRpcConnection>((subscriber) => {
@@ -4624,7 +4604,9 @@ describe("Acceptor Topology Owner termination", () => {
 		let listenerSignal: AbortSignal | undefined;
 		let listenerTeardowns = 0;
 		let resolveReady: (() => void) | undefined;
-		const acceptor = createRpcAcceptor({ protocol: harness.protocol });
+		const acceptor = createRpcAcceptor({
+			protocolFactory: harness.acceptorFactory,
+		});
 		const startup = acceptor.listen({
 			connection$: new Observable<IRpcConnection>(() => {
 				return () => {
@@ -4676,7 +4658,9 @@ describe("Acceptor Topology Owner termination", () => {
 				connectionCloseCalls += 1;
 			},
 		};
-		const acceptor = createRpcAcceptor({ protocol: harness.protocol });
+		const acceptor = createRpcAcceptor({
+			protocolFactory: harness.acceptorFactory,
+		});
 		await acceptor.listen({
 			connection$: connectionSource.asObservable(),
 			async listen(signal) {
@@ -4702,35 +4686,25 @@ describe("Acceptor Topology Owner termination", () => {
 		let closeCalls = 0;
 		let cleanupCalls = 0;
 		let recoveringForceCalls = 0;
-		const protocol: IRpcProtocol = {
-			createConnector() {
-				return {
-					async bind() {},
-					async shutdown() {},
-					close() {},
-					async cleanup() {},
-				};
-			},
-			createAcceptor(host) {
-				acceptorHost = host;
-				return {
-					async accept() {},
-					shutdown() {
-						shutdownCalls += 1;
-						return new Promise<void>((resolve) => {
-							resolveShutdown = resolve;
-						});
-					},
-					close() {
-						closeCalls += 1;
-					},
-					async cleanup() {
-						cleanupCalls += 1;
-					},
-				};
-			},
+		const protocolFactory: RpcProtocolAcceptorFactory = (host) => {
+			acceptorHost = host;
+			return {
+				async accept() {},
+				shutdown() {
+					shutdownCalls += 1;
+					return new Promise<void>((resolve) => {
+						resolveShutdown = resolve;
+					});
+				},
+				close() {
+					closeCalls += 1;
+				},
+				async cleanup() {
+					cleanupCalls += 1;
+				},
+			};
 		};
-		const acceptor = createRpcAcceptor({ protocol });
+		const acceptor = createRpcAcceptor({ protocolFactory });
 		const connectedSession: IRpcProtocolSession = {
 			reserveInvocation: () => undefined,
 			forceClose() {},
@@ -4811,35 +4785,25 @@ describe("Acceptor Topology Owner termination", () => {
 		let shutdownCalls = 0;
 		let closeCalls = 0;
 		let cleanupCalls = 0;
-		const protocol: IRpcProtocol = {
-			createConnector() {
-				return {
-					async bind() {},
-					async shutdown() {},
-					close() {},
-					async cleanup() {},
-				};
-			},
-			createAcceptor(host) {
-				acceptorHost = host;
-				return {
-					async accept() {},
-					shutdown() {
-						shutdownCalls += 1;
-						return new Promise<void>((resolve) => {
-							resolveShutdown = resolve;
-						});
-					},
-					close() {
-						closeCalls += 1;
-					},
-					async cleanup() {
-						cleanupCalls += 1;
-					},
-				};
-			},
+		const protocolFactory: RpcProtocolAcceptorFactory = (host) => {
+			acceptorHost = host;
+			return {
+				async accept() {},
+				shutdown() {
+					shutdownCalls += 1;
+					return new Promise<void>((resolve) => {
+						resolveShutdown = resolve;
+					});
+				},
+				close() {
+					closeCalls += 1;
+				},
+				async cleanup() {
+					cleanupCalls += 1;
+				},
+			};
 		};
-		const acceptor = createRpcAcceptor({ protocol });
+		const acceptor = createRpcAcceptor({ protocolFactory });
 		const session: IRpcProtocolSession = {
 			reserveInvocation: () => undefined,
 			forceClose() {},
@@ -4904,32 +4868,22 @@ describe("Acceptor Topology Owner termination", () => {
 		let resolveCleanup: (() => void) | undefined;
 		let closeCalls = 0;
 		let cleanupCalls = 0;
-		const protocol: IRpcProtocol = {
-			createConnector() {
-				return {
-					async bind() {},
-					async shutdown() {},
-					close() {},
-					async cleanup() {},
-				};
-			},
-			createAcceptor() {
-				return {
-					async accept() {},
-					async shutdown() {},
-					close() {
-						closeCalls += 1;
-					},
-					cleanup() {
-						cleanupCalls += 1;
-						return new Promise<void>((resolve) => {
-							resolveCleanup = resolve;
-						});
-					},
-				};
-			},
+		const protocolFactory: RpcProtocolAcceptorFactory = () => {
+			return {
+				async accept() {},
+				async shutdown() {},
+				close() {
+					closeCalls += 1;
+				},
+				cleanup() {
+					cleanupCalls += 1;
+					return new Promise<void>((resolve) => {
+						resolveCleanup = resolve;
+					});
+				},
+			};
 		};
-		const acceptor = createRpcAcceptor({ protocol });
+		const acceptor = createRpcAcceptor({ protocolFactory });
 		const task = acceptor.shutdown();
 		await Promise.resolve();
 		await Promise.resolve();
@@ -4956,33 +4910,23 @@ describe("Acceptor Topology Owner termination", () => {
 			let shutdownCalls = 0;
 			let closeCalls = 0;
 			let cleanupCalls = 0;
-			const protocol: IRpcProtocol = {
-				createConnector() {
-					return {
-						async bind() {},
-						async shutdown() {},
-						close() {},
-						async cleanup() {},
-					};
-				},
-				createAcceptor() {
-					return {
-						async accept() {},
-						shutdown() {
-							shutdownCalls += 1;
-							return new Promise<void>(() => {});
-						},
-						close() {
-							closeCalls += 1;
-						},
-						async cleanup() {
-							cleanupCalls += 1;
-						},
-					};
-				},
+			const protocolFactory: RpcProtocolAcceptorFactory = () => {
+				return {
+					async accept() {},
+					shutdown() {
+						shutdownCalls += 1;
+						return new Promise<void>(() => {});
+					},
+					close() {
+						closeCalls += 1;
+					},
+					async cleanup() {
+						cleanupCalls += 1;
+					},
+				};
 			};
 			const acceptor = createRpcAcceptor({
-				protocol,
+				protocolFactory,
 				runtimePolicy: { shutdownDeadlineMs: 10 },
 			});
 			let outcome: "pending" | "fulfilled" | "rejected" = "pending";
@@ -5026,33 +4970,23 @@ describe("Acceptor Topology Owner termination", () => {
 		try {
 			let closeCalls = 0;
 			let cleanupCalls = 0;
-			const protocol: IRpcProtocol = {
-				createConnector() {
-					return {
-						async bind() {},
-						async shutdown() {},
-						close() {},
-						async cleanup() {},
-					};
-				},
-				createAcceptor() {
-					return {
-						async accept() {},
-						shutdown() {
-							return new Promise<void>(() => {});
-						},
-						close() {
-							closeCalls += 1;
-						},
-						cleanup() {
-							cleanupCalls += 1;
-							return new Promise<void>(() => {});
-						},
-					};
-				},
+			const protocolFactory: RpcProtocolAcceptorFactory = () => {
+				return {
+					async accept() {},
+					shutdown() {
+						return new Promise<void>(() => {});
+					},
+					close() {
+						closeCalls += 1;
+					},
+					cleanup() {
+						cleanupCalls += 1;
+						return new Promise<void>(() => {});
+					},
+				};
 			};
 			const acceptor = createRpcAcceptor({
-				protocol,
+				protocolFactory,
 				runtimePolicy: { shutdownDeadlineMs: 10 },
 			});
 			const outcome = acceptor.shutdown().then(
@@ -5089,33 +5023,23 @@ describe("Acceptor Topology Owner termination", () => {
 			let resolveCleanup: (() => void) | undefined;
 			let closeCalls = 0;
 			let cleanupCalls = 0;
-			const protocol: IRpcProtocol = {
-				createConnector() {
-					return {
-						async bind() {},
-						async shutdown() {},
-						close() {},
-						async cleanup() {},
-					};
-				},
-				createAcceptor() {
-					return {
-						async accept() {},
-						async shutdown() {},
-						close() {
-							closeCalls += 1;
-						},
-						cleanup() {
-							cleanupCalls += 1;
-							return new Promise<void>((resolve) => {
-								resolveCleanup = resolve;
-							});
-						},
-					};
-				},
+			const protocolFactory: RpcProtocolAcceptorFactory = () => {
+				return {
+					async accept() {},
+					async shutdown() {},
+					close() {
+						closeCalls += 1;
+					},
+					cleanup() {
+						cleanupCalls += 1;
+						return new Promise<void>((resolve) => {
+							resolveCleanup = resolve;
+						});
+					},
+				};
 			};
 			const acceptor = createRpcAcceptor({
-				protocol,
+				protocolFactory,
 				runtimePolicy: { shutdownDeadlineMs: 10 },
 			});
 			const task = acceptor.close();
@@ -5155,27 +5079,17 @@ describe("Acceptor Topology Owner termination", () => {
 
 	it("RPC-CLEANUP-003 RPC-CLEANUP-004 preserves a trusted cleanup rejection and settles after stream completion", async () => {
 		const cleanupError = new Error("acceptor cleanup failed");
-		const protocol: IRpcProtocol = {
-			createConnector() {
-				return {
-					async bind() {},
-					async shutdown() {},
-					close() {},
-					async cleanup() {},
-				};
-			},
-			createAcceptor() {
-				return {
-					async accept() {},
-					async shutdown() {},
-					close() {},
-					async cleanup() {
-						throw cleanupError;
-					},
-				};
-			},
+		const protocolFactory: RpcProtocolAcceptorFactory = () => {
+			return {
+				async accept() {},
+				async shutdown() {},
+				close() {},
+				async cleanup() {
+					throw cleanupError;
+				},
+			};
 		};
-		const acceptor = createRpcAcceptor({ protocol });
+		const acceptor = createRpcAcceptor({ protocolFactory });
 		const order: string[] = [];
 		acceptor.state$.subscribe({
 			next: (state) => {

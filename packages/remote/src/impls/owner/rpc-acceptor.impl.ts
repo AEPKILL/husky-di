@@ -28,7 +28,7 @@ import type {
 	RpcPeerFactory,
 } from "@/interfaces/peer/rpc-peer-runtime.interface";
 import type {
-	IRpcProtocolAcceptorRuntime,
+	IRpcProtocolAcceptor,
 	IRpcProtocolRuntimePolicy,
 	IRpcProtocolSession,
 	IRpcProtocolSessionHost,
@@ -69,7 +69,7 @@ import {
 
 /** Owns Acceptor listener state and its current stable peer membership. */
 export class RpcAcceptorImpl implements IRpcAcceptor {
-	readonly #runtime: IRpcProtocolAcceptorRuntime;
+	readonly #protocol: IRpcProtocolAcceptor;
 	readonly #policy: IRpcProtocolRuntimePolicy;
 	readonly #retainedBytesLedger: IRpcRetainedBytesLedger;
 	readonly #ownerExposureRegistry: RpcExposureRegistry = new Map();
@@ -101,9 +101,9 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 			mutationBatch,
 			policy,
 			retainedBytesLedger,
-			runtime,
+			protocol,
 		} = options;
-		this.#runtime = runtime;
+		this.#protocol = protocol;
 		this.#policy = policy;
 		this.#custody = custody;
 		this.#retainedBytesLedger = retainedBytesLedger;
@@ -354,7 +354,7 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 		let acceptance: Promise<unknown>;
 		try {
 			acceptance = Promise.resolve(
-				this.#runtime.accept(
+				this.#protocol.accept(
 					ownedConnection.connection,
 					this.#listenerAttempt?.abortController.signal ??
 						new AbortController().signal,
@@ -535,7 +535,7 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 
 		let grace: Promise<unknown>;
 		try {
-			grace = Promise.resolve(this.#runtime.shutdown());
+			grace = Promise.resolve(this.#protocol.shutdown());
 		} catch {
 			this.#beginClosing(RpcCloseReasonEnum.forcedClose, true);
 			return;
@@ -585,7 +585,7 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 						this.#faultingSessions.add(session);
 					}
 					try {
-						this.#runtime.close();
+						this.#protocol.close();
 					} catch {
 						// Only cleanup failure rejects the shared termination task.
 					} finally {
@@ -1024,7 +1024,7 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 				beforeSnapshotCommit: () => {
 					this.#abortListener();
 					try {
-						this.#runtime.close();
+						this.#protocol.close();
 					} catch {
 						// The original shared Protocol fault remains authoritative.
 					}

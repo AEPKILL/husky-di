@@ -10,11 +10,10 @@ export type {
 	IRpcApplicationArgumentsSnapshot,
 	IRpcApplicationRecord,
 	IRpcApplicationSnapshot,
-	IRpcProtocol,
+	IRpcProtocolAcceptor,
 	IRpcProtocolAcceptorHost,
-	IRpcProtocolAcceptorRuntime,
+	IRpcProtocolConnector,
 	IRpcProtocolConnectorHost,
-	IRpcProtocolConnectorRuntime,
 	IRpcProtocolHost,
 	IRpcProtocolIncomingCall,
 	IRpcProtocolIncomingCallRequest,
@@ -24,7 +23,6 @@ export type {
 	IRpcProtocolInvocationRequest,
 	IRpcProtocolInvocationReservation,
 	IRpcProtocolInvocationSink,
-	IRpcProtocolRoleRuntime,
 	IRpcProtocolRuntimePolicy,
 	IRpcProtocolSession,
 	IRpcProtocolSessionHost,
@@ -43,9 +41,16 @@ export type {
 	RpcUnknownCallFailure,
 } from "@/interfaces/protocol/rpc-protocol.interface";
 export type { IRpcConnection } from "@/interfaces/transport/rpc-connection.interface";
+export type {
+	RpcProtocolAcceptorFactory,
+	RpcProtocolConnectorFactory,
+} from "@/types/protocol/rpc-protocol-factory.type";
 export { RpcCallTerminalTypeEnum } from "@/enums/protocol/rpc-call-terminal-type.enum";
 export { RpcIncomingCallKindEnum } from "@/enums/protocol/rpc-incoming-call-kind.enum";
 export { RpcProtocolSessionTransitionTypeEnum } from "@/enums/protocol/rpc-protocol-session-transition-type.enum";
 export { RpcCloseReasonEnum } from "@/enums/rpc-close-reason.enum";
 export { RpcExceptionCodeEnum } from "@/enums/rpc-exception-code.enum";
-export { createRpcProtocol } from "@/factories/rpc-protocol.factory";
+export {
+	createRpcProtocolAcceptor,
+	createRpcProtocolConnector,
+} from "@/factories/rpc-protocol.factory";

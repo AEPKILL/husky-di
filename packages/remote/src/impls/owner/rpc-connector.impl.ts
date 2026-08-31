@@ -22,7 +22,7 @@ import type {
 import type { IRpcOwnerMutationBatch } from "@/interfaces/owner/rpc-owner-mutation-batch.interface";
 import type { IRpcPeerRuntime } from "@/interfaces/peer/rpc-peer-runtime.interface";
 import type {
-	IRpcProtocolConnectorRuntime,
+	IRpcProtocolConnector,
 	IRpcProtocolRuntimePolicy,
 	IRpcProtocolSession,
 	IRpcProtocolSessionHost,
@@ -58,9 +58,9 @@ import {
 	isUndefined,
 } from "@/utils/type-guard.util";
 
-/** Owns one stable Connector peer and one owner-scoped Protocol runtime. */
+/** Owns one stable Connector peer and one owner-scoped Protocol role. */
 export class RpcConnectorImpl implements IRpcConnector {
-	readonly #runtime: IRpcProtocolConnectorRuntime;
+	readonly #protocol: IRpcProtocolConnector;
 	readonly #policy: IRpcProtocolRuntimePolicy;
 	readonly #retainedBytesLedger: IRpcRetainedBytesLedger;
 	readonly #mutationBatch: IRpcOwnerMutationBatch<RpcConnectorState>;
@@ -87,9 +87,9 @@ export class RpcConnectorImpl implements IRpcConnector {
 			mutationBatch,
 			policy,
 			retainedBytesLedger,
-			runtime,
+			protocol,
 		} = options;
-		this.#runtime = runtime;
+		this.#protocol = protocol;
 		this.#policy = policy;
 		this.#custody = custody;
 		this.#mutationBatch = mutationBatch;
@@ -285,7 +285,7 @@ export class RpcConnectorImpl implements IRpcConnector {
 					attempt.connection = ownedConnection;
 					attempt.insideHandoff = true;
 					try {
-						const result = this.#runtime.bind(
+						const result = this.#protocol.bind(
 							ownedConnection.connection,
 							attempt.abortController.signal,
 						);
@@ -725,7 +725,7 @@ export class RpcConnectorImpl implements IRpcConnector {
 					// The original Protocol fault remains authoritative.
 				}
 				try {
-					this.#runtime.close();
+					this.#protocol.close();
 				} catch {
 					// The original Protocol fault remains authoritative.
 				}
@@ -876,7 +876,7 @@ export class RpcConnectorImpl implements IRpcConnector {
 		);
 		let grace: Promise<unknown>;
 		try {
-			grace = Promise.resolve(this.#runtime.shutdown());
+			grace = Promise.resolve(this.#protocol.shutdown());
 		} catch {
 			this.#beginClosing(RpcCloseReasonEnum.forcedClose, true);
 			return;
@@ -957,7 +957,7 @@ export class RpcConnectorImpl implements IRpcConnector {
 						this.#faultingSessions.add(session);
 					}
 					try {
-						this.#runtime.close();
+						this.#protocol.close();
 					} catch {
 						// Only cleanup failure rejects the shared termination task.
 					} finally {

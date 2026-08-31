@@ -5,6 +5,15 @@
  */
 
 import type { RpcConformanceStatusEnum } from "@/enums/conformance/rpc-conformance-status.enum";
+import type {
+	RpcProtocolAcceptorFactory,
+	RpcProtocolConnectorFactory,
+} from "@/types/protocol/rpc-protocol-factory.type";
+
+export type RpcProtocolConformanceCandidate = Readonly<{
+	readonly connector: RpcProtocolConnectorFactory;
+	readonly acceptor: RpcProtocolAcceptorFactory;
+}>;
 
 export type RpcConformanceFailure = Error & {
 	readonly caseId: string;

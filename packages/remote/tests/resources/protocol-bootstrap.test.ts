@@ -8,15 +8,18 @@ import { Observable, Subject } from "rxjs";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { RpcDecodePhaseEnum } from "../../src/enums/protocol/rpc-decode-phase.enum";
 import { RpcWireRecordKindEnum } from "../../src/enums/protocol/rpc-wire-record-kind.enum";
-import { createRpcProtocol } from "../../src/factories/rpc-protocol.factory";
+import {
+	createRpcProtocolAcceptor,
+	createRpcProtocolConnector,
+} from "../../src/factories/rpc-protocol.factory";
 import { RpcRetainedBytesLedgerImpl } from "../../src/impls/common/rpc-retained-bytes-ledger.impl";
 import { RpcCodecImpl } from "../../src/impls/protocol/rpc-codec.impl";
 import type { RpcSessionImpl } from "../../src/impls/session/rpc-session.impl";
 import type {
+	IRpcProtocolAcceptor,
 	IRpcProtocolAcceptorHost,
-	IRpcProtocolAcceptorRuntime,
+	IRpcProtocolConnector,
 	IRpcProtocolConnectorHost,
-	IRpcProtocolConnectorRuntime,
 	IRpcProtocolRuntimePolicy,
 	RpcProtocolSessionTransition,
 } from "../../src/interfaces/protocol/rpc-protocol.interface";
@@ -74,7 +77,7 @@ function createAcceptorRuntime(
 	shouldAdmitSession: () => boolean = () => true,
 	onAdmitSession: () => void = () => {},
 ): {
-	readonly runtime: IRpcProtocolAcceptorRuntime;
+	readonly runtime: IRpcProtocolAcceptor;
 	readonly ownerFaults: string[];
 	readonly admittedSessions: number[];
 	readonly retainedBytes: RpcRetainedBytesLedgerImpl;
@@ -108,7 +111,7 @@ function createAcceptorRuntime(
 		},
 	};
 	return {
-		runtime: createRpcProtocol().createAcceptor(host),
+		runtime: createRpcProtocolAcceptor(host),
 		ownerFaults,
 		admittedSessions,
 		retainedBytes,
@@ -117,7 +120,7 @@ function createAcceptorRuntime(
 }
 
 function createConnectorRuntime(policy: IRpcProtocolRuntimePolicy): {
-	readonly runtime: IRpcProtocolConnectorRuntime;
+	readonly runtime: IRpcProtocolConnector;
 	readonly ownerFaults: string[];
 	readonly attachedSessions: number[];
 } {
@@ -143,7 +146,7 @@ function createConnectorRuntime(policy: IRpcProtocolRuntimePolicy): {
 		},
 	};
 	return {
-		runtime: createRpcProtocol().createConnector(host),
+		runtime: createRpcProtocolConnector(host),
 		ownerFaults,
 		attachedSessions,
 	};
@@ -233,7 +236,7 @@ function createFreshAccept(
 }
 
 function accept(
-	runtime: IRpcProtocolAcceptorRuntime,
+	runtime: IRpcProtocolAcceptor,
 	connection: IBootstrapConnectionHarness,
 ): Promise<void> {
 	const task = runtime.accept(
@@ -389,7 +392,7 @@ describe("Default RPC Protocol bootstrap resources", () => {
 			maxRetainedBytesTotal: totalBytes,
 			bindingAttemptTimeoutMs: 1_000,
 		});
-		let runtime: IRpcProtocolAcceptorRuntime;
+		let runtime: IRpcProtocolAcceptor;
 		let replacementStarted = false;
 		const reentrant = createBootstrapConnection();
 		const created = createAcceptorRuntime(policy, (transition) => {

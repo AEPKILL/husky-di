@@ -19,11 +19,16 @@ import {
 	type RpcConnectorAdapterFactory,
 	type RpcConnectorOptions,
 	type RpcConnectorReconnectionState,
+	type RpcProtocolAcceptorFactory,
+	type RpcProtocolConnectorFactory,
 } from "../../src/index";
 
 declare const adapterFactory: RpcConnectorAdapterFactory;
+declare const connectorProtocolFactory: RpcProtocolConnectorFactory;
+declare const acceptorProtocolFactory: RpcProtocolAcceptorFactory;
 
 const connector = createRpcConnector({
+	protocolFactory: connectorProtocolFactory,
 	runtimePolicy: {
 		maxPendingInvocationsPerSession: 8,
 		maxRetainedBytesPerSession: 4 * 1024 * 1024,
@@ -40,6 +45,7 @@ const connector = createRpcConnector({
 
 test("RPC-API-001 exposes typed Topology Owner factories", () => {
 	const acceptor = createRpcAcceptor({
+		protocolFactory: acceptorProtocolFactory,
 		runtimePolicy: {
 			maxSessions: 2,
 			maxHandshakes: 1,
@@ -79,8 +85,10 @@ test("RPC-API-001 exposes typed Topology Owner factories", () => {
 			signal: new AbortController().signal,
 		}),
 	).toEqualTypeOf<Promise<void>>();
-	assertType<RpcConnectorOptions>({});
-	assertType<RpcAcceptorOptions>({});
+	assertType<RpcConnectorOptions>({
+		protocolFactory: connectorProtocolFactory,
+	});
+	assertType<RpcAcceptorOptions>({ protocolFactory: acceptorProtocolFactory });
 	assertType<RpcCloseReasonEnum>(RpcCloseReasonEnum.cleanupFailed);
 });
 
@@ -120,5 +128,10 @@ test("RPC-API-001 closes Topology Owner option schemas", () => {
 			// @ts-expect-error RPC-API-001 closes the policy schema.
 			unknown: 1,
 		},
+	});
+
+	createRpcConnector({
+		// @ts-expect-error RPC-API-001 removes the aggregate Protocol option.
+		protocol: connectorProtocolFactory,
 	});
 });

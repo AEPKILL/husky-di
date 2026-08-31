@@ -8,7 +8,10 @@ import { createServiceIdentifier } from "@husky-di/core";
 import { describe, expect, it, vi } from "vitest";
 import { RpcWireRecordKindEnum } from "../../src/enums/protocol/rpc-wire-record-kind.enum";
 import { RpcExceptionCodeEnum } from "../../src/enums/rpc-exception-code.enum";
-import { createRpcCounterExhaustionProtocolForTest } from "../../src/factories/rpc-protocol.factory";
+import {
+	createRpcCounterExhaustionProtocolAcceptorForTest,
+	createRpcCounterExhaustionProtocolConnectorForTest,
+} from "../../src/factories/rpc-protocol.factory";
 import {
 	createRemoteServiceDescriptor,
 	createRpcAcceptor,
@@ -109,14 +112,17 @@ describe("Default RPC Protocol counter drain", () => {
 	});
 
 	it("RPC-COUNTER-002 RPC-COUNTER-004 reserves the final 512 sequences and settles the triggering Pending Invocation", async () => {
-		const protocol = createRpcCounterExhaustionProtocolForTest();
 		const network = createRpcTestNetwork();
 		const descriptor = createRemoteServiceDescriptor(ICounterService, {
 			wireName: "example.counter.v1",
 			methods: { run: true },
 		});
-		const acceptor = createRpcAcceptor({ protocol });
-		const connector = createRpcConnector({ protocol });
+		const acceptor = createRpcAcceptor({
+			protocolFactory: createRpcCounterExhaustionProtocolAcceptorForTest,
+		});
+		const connector = createRpcConnector({
+			protocolFactory: createRpcCounterExhaustionProtocolConnectorForTest,
+		});
 		const states: string[] = [];
 		connector.peer.state$.subscribe((state) => states.push(state.status));
 		acceptor.expose(descriptor, { run: () => 1 });
@@ -145,14 +151,17 @@ describe("Default RPC Protocol counter drain", () => {
 	});
 
 	it("RPC-COUNTER-004 completes an empty counter drain with one unsequenced Close", async () => {
-		const protocol = createRpcCounterExhaustionProtocolForTest();
 		const network = createRpcTestNetwork();
 		const descriptor = createRemoteServiceDescriptor(ICounterService, {
 			wireName: "example.counter.v1",
 			methods: { run: true },
 		});
-		const acceptor = createRpcAcceptor({ protocol });
-		const connector = createRpcConnector({ protocol });
+		const acceptor = createRpcAcceptor({
+			protocolFactory: createRpcCounterExhaustionProtocolAcceptorForTest,
+		});
+		const connector = createRpcConnector({
+			protocolFactory: createRpcCounterExhaustionProtocolConnectorForTest,
+		});
 		acceptor.expose(descriptor, { run: () => 1 });
 
 		await acceptor.listen(network.acceptorAdapter);

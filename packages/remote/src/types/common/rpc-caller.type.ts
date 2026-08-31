@@ -11,12 +11,15 @@ import type { RpcExceptionCodeEnum } from "@/enums/rpc-exception-code.enum";
 import type { RpcStateStatusEnum } from "@/enums/rpc-state-status.enum";
 import type { RpcException } from "@/exceptions/rpc.exception";
 import type {
-	IRpcProtocol,
 	IRpcProtocolRuntimePolicy,
 	RpcProtocolFaultReason,
 	RpcSessionCloseReason,
 } from "@/interfaces/protocol/rpc-protocol.interface";
 import type { IRpcConnectorAdapter } from "@/interfaces/transport/rpc-adapter.interface";
+import type {
+	RpcProtocolAcceptorFactory,
+	RpcProtocolConnectorFactory,
+} from "@/types/protocol/rpc-protocol-factory.type";
 
 export type RpcPeerState =
 	| { readonly status: RpcStateStatusEnum.unbound }
@@ -79,7 +82,7 @@ export type RpcConnectorRuntimePolicyOptions = Pick<
 >;
 
 export type RpcConnectorOptions = {
-	readonly protocol?: IRpcProtocol;
+	readonly protocolFactory?: RpcProtocolConnectorFactory;
 	readonly runtimePolicy?: RpcConnectorRuntimePolicyOptions;
 };
 
@@ -89,7 +92,7 @@ export type RpcConnectorConnectOptions = {
 };
 
 export type RpcAcceptorOptions = {
-	readonly protocol?: IRpcProtocol;
+	readonly protocolFactory?: RpcProtocolAcceptorFactory;
 	readonly runtimePolicy?: RpcAcceptorRuntimePolicyOptions;
 };
 

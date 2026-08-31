@@ -7,7 +7,10 @@
 import { createServiceIdentifier } from "@husky-di/core";
 import { Subject } from "rxjs";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createRpcCounterExhaustionProtocolForTest } from "../src/factories/rpc-protocol.factory";
+import {
+	createRpcCounterExhaustionProtocolAcceptorForTest,
+	createRpcCounterExhaustionProtocolConnectorForTest,
+} from "../src/factories/rpc-protocol.factory";
 import {
 	createRemoteServiceDescriptor,
 	createRpcAcceptor,
@@ -774,14 +777,17 @@ describe("Default RPC Protocol", () => {
 	});
 
 	it("ORDER-003 exposes a package-private real-ledger counter exhaustion seam RPC-CORPUS-002", async () => {
-		const protocol = createRpcCounterExhaustionProtocolForTest();
 		const descriptor = createRemoteServiceDescriptor(ICalculatorService, {
 			wireName: "example.calculator.v1",
 			methods: { add: true },
 		});
 		const adapters = createMemoryAdapters();
-		const acceptor = createRpcAcceptor({ protocol });
-		const connector = createRpcConnector({ protocol });
+		const acceptor = createRpcAcceptor({
+			protocolFactory: createRpcCounterExhaustionProtocolAcceptorForTest,
+		});
+		const connector = createRpcConnector({
+			protocolFactory: createRpcCounterExhaustionProtocolConnectorForTest,
+		});
 		acceptor.expose(descriptor, { add: (left, right) => left + right });
 
 		await acceptor.listen(adapters.acceptorAdapter);

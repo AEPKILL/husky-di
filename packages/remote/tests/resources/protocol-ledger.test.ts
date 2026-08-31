@@ -11,7 +11,7 @@ import { RpcIncomingCallKindEnum } from "../../src/enums/protocol/rpc-incoming-c
 import { RpcWireRecordKindEnum } from "../../src/enums/protocol/rpc-wire-record-kind.enum";
 import { RpcCallDirectionEnum } from "../../src/enums/rpc-call-direction.enum";
 import { RpcEventTypeEnum } from "../../src/enums/rpc-event-type.enum";
-import { createRpcProtocol } from "../../src/factories/rpc-protocol.factory";
+import { createRpcProtocolAcceptor } from "../../src/factories/rpc-protocol.factory";
 import type { RpcRetainedBytesLedgerImpl } from "../../src/impls/common/rpc-retained-bytes-ledger.impl";
 import { RpcCodecImpl } from "../../src/impls/protocol/rpc-codec.impl";
 import {
@@ -19,10 +19,7 @@ import {
 	createRpcAcceptor,
 	createRpcConnector,
 } from "../../src/index";
-import type {
-	IRpcProtocol,
-	IRpcProtocolHost,
-} from "../../src/interfaces/protocol/rpc-protocol.interface";
+import type { IRpcProtocolHost } from "../../src/interfaces/protocol/rpc-protocol.interface";
 import { normalizeRpcApplicationArguments } from "../../src/utils/rpc-application-value.util";
 import {
 	createRpcDirectSessionHarness,
@@ -115,15 +112,13 @@ describe("Default RPC Protocol retained ledger", () => {
 
 	it("RPC-CALL-008 RPC-RESOURCE-003 releases committed incoming storage when reentrant Owner close wins", async () => {
 		const maximumBytes = 4 * 1024 * 1024;
-		const builtIn = createRpcProtocol();
 		let capturedHost: IRpcProtocolHost | undefined;
-		const protocol = Object.freeze<IRpcProtocol>({
-			createAcceptor: (host) => {
-				capturedHost = host;
-				return builtIn.createAcceptor(host);
-			},
-			createConnector: (host) => builtIn.createConnector(host),
-		});
+		const protocolFactory = (
+			host: Parameters<typeof createRpcProtocolAcceptor>[0],
+		) => {
+			capturedHost = host;
+			return createRpcProtocolAcceptor(host);
+		};
 		const network = createRpcTestNetwork();
 		const descriptor = createRemoteServiceDescriptor(ILedgerService, {
 			wireName: "example.reentrant-incoming-ledger.v1",
@@ -131,7 +126,7 @@ describe("Default RPC Protocol retained ledger", () => {
 		});
 		const handler = vi.fn((value: number) => value);
 		const acceptor = createRpcAcceptor({
-			protocol,
+			protocolFactory,
 			runtimePolicy: {
 				maxSessions: 1,
 				maxHandshakes: 1,

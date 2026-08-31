@@ -5,7 +5,7 @@
  */
 
 import { RpcStateStatusEnum } from "@/enums/rpc-state-status.enum";
-import { createRpcProtocol } from "@/factories/rpc-protocol.factory";
+import { createRpcProtocolConnector } from "@/factories/rpc-protocol.factory";
 import { RpcRetainedBytesLedgerImpl } from "@/impls/common/rpc-retained-bytes-ledger.impl";
 import { RpcConnectorImpl } from "@/impls/owner/rpc-connector.impl";
 import { RpcHandlerSchedulerImpl } from "@/impls/owner/rpc-handler-scheduler.impl";
@@ -17,7 +17,7 @@ import type {
 	RpcConnectorOptions,
 	RpcConnectorState,
 } from "@/types/common/rpc-caller.type";
-import { createRpcProtocolConnectorRuntime } from "@/utils/rpc-protocol-runtime.util";
+import { createRpcProtocolConnectorForOwner } from "@/utils/rpc-protocol-role.util";
 import {
 	createRpcConnectorRuntimePolicy,
 	snapshotRpcFactoryOptions,
@@ -30,8 +30,8 @@ export function createRpcConnector(
 	const snapshot = snapshotRpcFactoryOptions(options);
 	const policy = createRpcConnectorRuntimePolicy(snapshot.runtimePolicy);
 	let connector: RpcConnectorImpl | undefined;
-	const runtime = createRpcProtocolConnectorRuntime(
-		snapshot.protocol ?? createRpcProtocol(),
+	const protocol = createRpcProtocolConnectorForOwner(
+		snapshot.protocolFactory ?? createRpcProtocolConnector,
 		policy,
 		{
 			reserveRetainedBytes: (bytes) => connector?.reserveRetainedBytes(bytes),
@@ -40,7 +40,7 @@ export function createRpcConnector(
 		},
 	);
 	connector = new RpcConnectorImpl({
-		runtime,
+		protocol,
 		policy,
 		mutationBatch: new RpcOwnerMutationBatchImpl<RpcConnectorState>({
 			initialState: Object.freeze({ status: RpcStateStatusEnum.active }),
@@ -49,7 +49,7 @@ export function createRpcConnector(
 			policy.maxRetainedBytesTotal,
 		),
 		custody: new RpcOwnerCustodyImpl(policy.shutdownDeadlineMs, () =>
-			runtime.cleanup(),
+			protocol.cleanup(),
 		),
 		handlerScheduler: new RpcHandlerSchedulerImpl(
 			policy.maxHandlersTotal,

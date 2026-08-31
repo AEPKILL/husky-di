@@ -12,10 +12,10 @@ import {
 	createRemoteServiceDescriptor,
 	createRpcAcceptor,
 	type IRpcAcceptor,
-	type IRpcProtocol,
 	RpcCloseReasonEnum,
 	type RpcEvent,
 	RpcExceptionCodeEnum,
+	type RpcProtocolAcceptorFactory,
 } from "../../src/index";
 import type {
 	IRpcConnection,
@@ -51,21 +51,16 @@ function createAcceptorHarness(
 	} = {},
 ): AcceptorHarness {
 	let host: IRpcProtocolAcceptorHost | undefined;
-	const protocol: IRpcProtocol = {
-		createConnector() {
-			throw new Error("Acceptor harness cannot create a Connector runtime.");
-		},
-		createAcceptor(nextHost) {
-			host = nextHost;
-			return {
-				async accept() {},
-				shutdown: options.shutdown ?? (() => Promise.resolve()),
-				close: options.close ?? (() => {}),
-				async cleanup() {},
-			};
-		},
+	const protocolFactory: RpcProtocolAcceptorFactory = (nextHost) => {
+		host = nextHost;
+		return {
+			async accept() {},
+			shutdown: options.shutdown ?? (() => Promise.resolve()),
+			close: options.close ?? (() => {}),
+			async cleanup() {},
+		};
 	};
-	const acceptor = createRpcAcceptor({ protocol });
+	const acceptor = createRpcAcceptor({ protocolFactory });
 	if (host === undefined) {
 		throw new Error("Expected an Acceptor Protocol host.");
 	}

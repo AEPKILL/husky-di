@@ -33,7 +33,7 @@
         <mxCell id="peer-runtime" value="RpcPeerImpl&#xa;稳定逻辑身份 · exposure registry · 类型代理&#xa;双向调用 · state$ / event$" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontFamily=PingFang SC;fontSize=14;fontStyle=1;" vertex="1" parent="framework-layer">
           <mxGeometry x="150" y="70" width="600" height="120" as="geometry" />
         </mxCell>
-        <mxCell id="protocol-runtime" value="Protocol Runtime 与 Policy&#xa;内置 husky-di-rpc/1 或自定义 IRpcProtocol&#xa;规范化 · 调用事务 · 资源边界 · 生命周期" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontFamily=PingFang SC;fontSize=14;" vertex="1" parent="framework-layer">
+        <mxCell id="protocol-runtime" value="Protocol Role 与 Runtime Policy&#xa;内置 husky-di-rpc/1 或自定义 role factory&#xa;规范化 · 调用事务 · 资源边界 · 生命周期" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontFamily=PingFang SC;fontSize=14;" vertex="1" parent="framework-layer">
           <mxGeometry x="950" y="70" width="600" height="120" as="geometry" />
         </mxCell>
 

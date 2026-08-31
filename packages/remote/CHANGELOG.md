@@ -6,8 +6,8 @@
 - Use the breaking `connector.connect({ adapter, signal? })` options record for extensible, cancellable Connector attempts.
 - Add the opt-in `createRpcConnectorReconnection()` supervisor with configurable finite retries, fresh Adapter creation, orchestration state, and payload-free failure telemetry.
 - Add the semantic third-party Protocol SPI and Transport Adapter seams.
-- Add the resumable, resource-bounded `husky-di-rpc/1` Protocol and its immutable
-  `createRpcProtocol()` provider factory.
+- Add the resumable, resource-bounded `husky-di-rpc/1` Protocol and its built-in
+  `createRpcProtocolConnector` and `createRpcProtocolAcceptor` role factories.
 - Establish Session continuity with one independent stable 256-bit opaque
   `resumeToken` bearer credential per retained Session Incarnation. The token is
   issued only in the protected fresh accept, repeated only in resume requests,

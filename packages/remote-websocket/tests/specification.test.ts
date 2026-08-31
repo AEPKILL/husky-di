@@ -9,7 +9,7 @@ import {
 	createRpcConnector,
 	createRpcConnectorReconnection,
 	type IRpcConnection,
-	type IRpcProtocol,
+	type RpcProtocolConnectorFactory,
 } from "@husky-di/remote";
 import {
 	type IRpcProtocolSession,
@@ -88,38 +88,26 @@ describe("Connector Reconnection composition", () => {
 			forceClose() {},
 		};
 		let sessionHost: IRpcProtocolSessionHost | undefined;
-		const protocol: IRpcProtocol = {
-			createConnector(host) {
-				return {
-					bind() {
-						return Promise.resolve().then(() => {
-							if (sessionHost === undefined) {
-								sessionHost = host.attachSession(session);
-								if (sessionHost === undefined) {
-									throw new Error("The test Session was not attached.");
-								}
-								return;
-							}
-							sessionHost.transition({
-								type: RpcProtocolSessionTransitionTypeEnum.recovered,
-							});
-						});
-					},
-					async shutdown() {},
-					close() {},
-					async cleanup() {},
-				};
+		const protocolFactory: RpcProtocolConnectorFactory = (host) => ({
+			bind() {
+				return Promise.resolve().then(() => {
+					if (sessionHost === undefined) {
+						sessionHost = host.attachSession(session);
+						if (sessionHost === undefined) {
+							throw new Error("The test Session was not attached.");
+						}
+						return;
+					}
+					sessionHost.transition({
+						type: RpcProtocolSessionTransitionTypeEnum.recovered,
+					});
+				});
 			},
-			createAcceptor() {
-				return {
-					async accept() {},
-					async shutdown() {},
-					close() {},
-					async cleanup() {},
-				};
-			},
-		};
-		const connector = createRpcConnector({ protocol });
+			async shutdown() {},
+			close() {},
+			async cleanup() {},
+		});
+		const connector = createRpcConnector({ protocolFactory });
 		const reconnection = createRpcConnectorReconnection({
 			connector,
 			adapterFactory: () =>
