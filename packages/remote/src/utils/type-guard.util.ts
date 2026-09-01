@@ -10,9 +10,9 @@ export function isArray(value: unknown): value is readonly unknown[] {
 }
 
 /** Returns whether a value has JavaScript's callable brand. */
-export function isCallable(
-	value: unknown,
-): value is (...arguments_: never[]) => unknown {
+export function isCallable<T>(
+	value: T,
+): value is T & ((...arguments_: never[]) => unknown) {
 	return typeof value === "function";
 }
 

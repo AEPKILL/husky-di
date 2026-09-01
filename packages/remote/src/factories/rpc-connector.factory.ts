@@ -4,7 +4,9 @@
  * @created 2026-08-19 00:00:00
  */
 
+import { RpcExceptionCodeEnum } from "@/enums/rpc-exception-code.enum";
 import { RpcStateStatusEnum } from "@/enums/rpc-state-status.enum";
+import { createRpcException } from "@/factories/rpc-exception.factory";
 import { createRpcProtocolConnector } from "@/factories/rpc-protocol.factory";
 import { RpcRetainedBytesLedgerImpl } from "@/impls/common/rpc-retained-bytes-ledger.impl";
 import { RpcConnectorImpl } from "@/impls/owner/rpc-connector.impl";
@@ -13,6 +15,7 @@ import { RpcOwnerCustodyImpl } from "@/impls/owner/rpc-owner-custody.impl";
 import { RpcOwnerMutationBatchImpl } from "@/impls/owner/rpc-owner-mutation-batch.impl";
 import { RpcPeerImpl } from "@/impls/peer/rpc-peer.impl";
 import type { IRpcConnector } from "@/interfaces/owner/rpc-connector.interface";
+import type { IRpcProtocolConnector } from "@/interfaces/protocol/rpc-protocol.interface";
 import type {
 	RpcConnectorOptions,
 	RpcConnectorState,
@@ -30,15 +33,25 @@ export function createRpcConnector(
 	const snapshot = snapshotRpcFactoryOptions(options);
 	const policy = createRpcConnectorRuntimePolicy(snapshot.runtimePolicy);
 	let connector: RpcConnectorImpl | undefined;
-	const protocol = createRpcProtocolConnectorForOwner(
-		snapshot.protocolFactory ?? createRpcProtocolConnector,
-		policy,
-		{
-			reserveRetainedBytes: (bytes) => connector?.reserveRetainedBytes(bytes),
-			attachSession: (session) => connector?.attachProtocolSession(session),
-			fault: (reason, error) => connector?.protocolFault(reason, error),
-		},
-	);
+	let protocol: IRpcProtocolConnector;
+	try {
+		protocol = createRpcProtocolConnectorForOwner(
+			snapshot.protocolFactory ?? createRpcProtocolConnector,
+			policy,
+			{
+				reserveRetainedBytes: (bytes) => connector?.reserveRetainedBytes(bytes),
+				attachSession: (session) => connector?.attachProtocolSession(session),
+				fault: (reason, error) => connector?.protocolFault(reason, error),
+			},
+		);
+	} catch (error) {
+		throw createRpcException(
+			RpcExceptionCodeEnum.protocol,
+			error instanceof Error
+				? error
+				: new Error("Protocol construction failed."),
+		);
+	}
 	connector = new RpcConnectorImpl({
 		protocol,
 		policy,

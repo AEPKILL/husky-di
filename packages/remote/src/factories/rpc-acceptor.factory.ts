@@ -4,7 +4,9 @@
  * @created 2026-08-19 00:00:00
  */
 
+import { RpcExceptionCodeEnum } from "@/enums/rpc-exception-code.enum";
 import { RpcStateStatusEnum } from "@/enums/rpc-state-status.enum";
+import { createRpcException } from "@/factories/rpc-exception.factory";
 import { createRpcProtocolAcceptor } from "@/factories/rpc-protocol.factory";
 import { RpcRetainedBytesLedgerImpl } from "@/impls/common/rpc-retained-bytes-ledger.impl";
 import { RpcAcceptorImpl } from "@/impls/owner/rpc-acceptor.impl";
@@ -13,6 +15,7 @@ import { RpcOwnerCustodyImpl } from "@/impls/owner/rpc-owner-custody.impl";
 import { RpcOwnerMutationBatchImpl } from "@/impls/owner/rpc-owner-mutation-batch.impl";
 import { RpcPeerImpl } from "@/impls/peer/rpc-peer.impl";
 import type { IRpcAcceptor } from "@/interfaces/owner/rpc-acceptor.interface";
+import type { IRpcProtocolAcceptor } from "@/interfaces/protocol/rpc-protocol.interface";
 import type {
 	RpcAcceptorOptions,
 	RpcAcceptorState,
@@ -28,15 +31,25 @@ export function createRpcAcceptor(options?: RpcAcceptorOptions): IRpcAcceptor {
 	const snapshot = snapshotRpcFactoryOptions(options);
 	const policy = createRpcAcceptorRuntimePolicy(snapshot.runtimePolicy);
 	let acceptor: RpcAcceptorImpl | undefined;
-	const protocol = createRpcProtocolAcceptorForOwner(
-		snapshot.protocolFactory ?? createRpcProtocolAcceptor,
-		policy,
-		{
-			reserveRetainedBytes: (bytes) => acceptor?.reserveRetainedBytes(bytes),
-			admitSession: (session) => acceptor?.admitProtocolSession(session),
-			fault: (reason, error) => acceptor?.protocolFault(reason, error),
-		},
-	);
+	let protocol: IRpcProtocolAcceptor;
+	try {
+		protocol = createRpcProtocolAcceptorForOwner(
+			snapshot.protocolFactory ?? createRpcProtocolAcceptor,
+			policy,
+			{
+				reserveRetainedBytes: (bytes) => acceptor?.reserveRetainedBytes(bytes),
+				admitSession: (session) => acceptor?.admitProtocolSession(session),
+				fault: (reason, error) => acceptor?.protocolFault(reason, error),
+			},
+		);
+	} catch (error) {
+		throw createRpcException(
+			RpcExceptionCodeEnum.protocol,
+			error instanceof Error
+				? error
+				: new Error("Protocol construction failed."),
+		);
+	}
 	acceptor = new RpcAcceptorImpl({
 		protocol,
 		policy,
