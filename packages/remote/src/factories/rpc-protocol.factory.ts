@@ -17,8 +17,8 @@ import {
 } from "@/impls/protocol/rpc-protocol.impl";
 import { RpcSessionImpl } from "@/impls/session/rpc-session.impl";
 import type {
-	CreateRpcEndpointOptions,
 	IRpcEndpoint,
+	RpcEndpointFactory,
 } from "@/interfaces/endpoint/rpc-endpoint.interface";
 import type {
 	IRpcProtocolAcceptor,
@@ -59,7 +59,7 @@ export function createRpcCounterExhaustionProtocolAcceptorForTest(
 
 const codec = Object.freeze(new RpcCodecImpl());
 
-const createEndpoint = (options: CreateRpcEndpointOptions): IRpcEndpoint =>
+const createEndpoint: RpcEndpointFactory = (options): IRpcEndpoint =>
 	new RpcEndpointImpl(options);
 
 function createBuiltInRpcProtocolConnector(

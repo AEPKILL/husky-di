@@ -1,18 +1,10 @@
 /**
- * @overview Private Physical Connection Binding contracts, programs, decisions, and assembly inputs.
+ * @overview Private Physical Connection Binding contracts, programs, and decisions.
  * @author AEPKILL
  * @created 2026-08-28 23:19:00
  */
 
 import type { RpcEndpointFailureEnum } from "@/enums/protocol/rpc-endpoint-failure.enum";
-import type {
-	CreateRpcEndpointOptions,
-	IRpcEndpoint,
-} from "@/interfaces/endpoint/rpc-endpoint.interface";
-import type {
-	IRpcProtocolAcceptorHost,
-	IRpcProtocolConnectorHost,
-} from "@/interfaces/protocol/rpc-protocol.interface";
 import type {
 	IRpcSession,
 	RpcBindingCandidate,
@@ -166,16 +158,6 @@ export type RpcAcceptorBindingAcceptance = RpcConnectorBindingInstallation &
 	Readonly<{
 		readonly reply: Uint8Array;
 	}>;
-
-export type CreateRpcConnectorBindingsOptions = Readonly<{
-	readonly host: IRpcProtocolConnectorHost;
-	readonly createEndpoint: (options: CreateRpcEndpointOptions) => IRpcEndpoint;
-}>;
-
-export type CreateRpcAcceptorBindingsOptions = Readonly<{
-	readonly host: IRpcProtocolAcceptorHost;
-	readonly createEndpoint: (options: CreateRpcEndpointOptions) => IRpcEndpoint;
-}>;
 
 export type RpcBindingFailure = Readonly<{
 	readonly error: unknown;

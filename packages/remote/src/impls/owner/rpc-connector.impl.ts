@@ -14,13 +14,17 @@ import { RpcStateStatusEnum } from "@/enums/rpc-state-status.enum";
 import { createRpcException } from "@/factories/rpc-exception.factory";
 import type { IRpcRetainedBytesLedger } from "@/interfaces/common/rpc-retained-bytes-ledger.interface";
 import type { IRpcConnector } from "@/interfaces/owner/rpc-connector.interface";
+import type { IRpcHandlerScheduler } from "@/interfaces/owner/rpc-handler-scheduler.interface";
 import type {
 	IRpcOwnerCustody,
 	RpcOwnedCleanup,
 	RpcOwnedConnection,
 } from "@/interfaces/owner/rpc-owner-custody.interface";
 import type { IRpcOwnerMutationBatch } from "@/interfaces/owner/rpc-owner-mutation-batch.interface";
-import type { IRpcPeerRuntime } from "@/interfaces/peer/rpc-peer-runtime.interface";
+import type {
+	IRpcPeerRuntime,
+	RpcPeerFactory,
+} from "@/interfaces/peer/rpc-peer-runtime.interface";
 import type {
 	IRpcProtocolConnector,
 	IRpcProtocolRuntimePolicy,
@@ -39,7 +43,6 @@ import type {
 	RpcPeerState,
 } from "@/types/common/rpc-caller.type";
 import type { RpcEvent } from "@/types/owner/rpc-event.type";
-import type { CreateRpcConnectorImplOptions } from "@/types/owner/rpc-owner.type";
 import type { RpcOwnerMutation } from "@/types/owner/rpc-owner-mutation-batch.type";
 import type { RpcSessionTerminalProjection } from "@/types/owner/rpc-session-projection.type";
 import {
@@ -57,6 +60,16 @@ import {
 	isNonNullObject,
 	isUndefined,
 } from "@/utils/type-guard.util";
+
+export type CreateRpcConnectorImplOptions = Readonly<{
+	readonly policy: IRpcProtocolRuntimePolicy;
+	readonly retainedBytesLedger: IRpcRetainedBytesLedger;
+	readonly custody: IRpcOwnerCustody;
+	readonly handlerScheduler: IRpcHandlerScheduler;
+	readonly createPeer: RpcPeerFactory;
+	readonly mutationBatch: IRpcOwnerMutationBatch<RpcConnectorState>;
+	readonly protocol: IRpcProtocolConnector;
+}>;
 
 /** Owns one stable Connector peer and one owner-scoped Protocol role. */
 export class RpcConnectorImpl implements IRpcConnector {

@@ -44,7 +44,6 @@ import type {
 } from "@/types/common/rpc-caller.type";
 import type { RpcExposureRegistry } from "@/types/common/rpc-exposure.type";
 import type { RpcEvent } from "@/types/owner/rpc-event.type";
-import type { CreateRpcAcceptorImplOptions } from "@/types/owner/rpc-owner.type";
 import type { RpcOwnerPeerMutation } from "@/types/owner/rpc-owner-mutation-batch.type";
 import type {
 	RpcSessionClosureProjectionIntent,
@@ -66,6 +65,16 @@ import {
 	isNonNullObject,
 	isUndefined,
 } from "@/utils/type-guard.util";
+
+export type CreateRpcAcceptorImplOptions = Readonly<{
+	readonly policy: IRpcProtocolRuntimePolicy;
+	readonly retainedBytesLedger: IRpcRetainedBytesLedger;
+	readonly custody: IRpcOwnerCustody;
+	readonly handlerScheduler: IRpcHandlerScheduler;
+	readonly createPeer: RpcPeerFactory;
+	readonly mutationBatch: IRpcOwnerMutationBatch<RpcAcceptorState>;
+	readonly protocol: IRpcProtocolAcceptor;
+}>;
 
 /** Owns Acceptor listener state and its current stable peer membership. */
 export class RpcAcceptorImpl implements IRpcAcceptor {

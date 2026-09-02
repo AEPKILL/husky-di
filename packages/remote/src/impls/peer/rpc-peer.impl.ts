@@ -18,10 +18,10 @@ import { getRemoteServiceDescriptorData } from "@/factories/remote-service-descr
 import { createRpcException } from "@/factories/rpc-exception.factory";
 import type { IRpcHandlerScheduler } from "@/interfaces/owner/rpc-handler-scheduler.interface";
 import type {
-	CreateRpcPeerOptions,
 	IRpcPeerCommittedInvocation,
 	IRpcPeerInvocationReservation,
 	IRpcPeerRuntime,
+	RpcPeerFactory,
 } from "@/interfaces/peer/rpc-peer-runtime.interface";
 import type {
 	IRpcApplicationArgumentsSnapshot,
@@ -62,6 +62,8 @@ import {
 import { installRpcExposure } from "@/utils/rpc-exposure.util";
 import { createRpcFacade } from "@/utils/rpc-facade.util";
 import { isCallable, isNonNullObject } from "@/utils/type-guard.util";
+
+export type CreateRpcPeerOptions = Parameters<RpcPeerFactory>[0];
 
 /** Retains one stable Peer identity and its replay-latest state snapshot. */
 export class RpcPeerImpl implements IRpcPeerRuntime {

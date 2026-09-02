@@ -1,5 +1,5 @@
 /**
- * @overview Internal current Physical Connection Endpoint seam and creation inputs.
+ * @overview Internal current Physical Connection Endpoint seam and factory contract.
  * @author AEPKILL
  * @created 2026-08-19 00:00:00
  */
@@ -17,12 +17,14 @@ export interface IRpcEndpoint {
 	fenceAndClose(): void;
 }
 
-export type CreateRpcEndpointOptions = {
-	readonly connection: IRpcConnection;
-	readonly reserveRetainedBytes?: (
-		bytes: number,
-	) => IRpcRetainedBytesReservation | undefined;
-	readonly onIngressAdmitted?: () => void;
-	readonly onMessage: (message: Uint8Array) => Promise<void> | void;
-	readonly onFailure: (reason: RpcEndpointFailureEnum, error?: Error) => void;
-};
+export type RpcEndpointFactory = (
+	options: Readonly<{
+		readonly connection: IRpcConnection;
+		readonly reserveRetainedBytes?: (
+			bytes: number,
+		) => IRpcRetainedBytesReservation | undefined;
+		readonly onIngressAdmitted?: () => void;
+		readonly onMessage: (message: Uint8Array) => Promise<void> | void;
+		readonly onFailure: (reason: RpcEndpointFailureEnum, error?: Error) => void;
+	}>,
+) => IRpcEndpoint;

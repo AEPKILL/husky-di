@@ -44,17 +44,17 @@ export interface IRpcPeerRuntime extends IRpcPeer {
 	readonly localExposureRegistry: RpcExposureRegistry;
 }
 
-export type CreateRpcPeerOptions = Readonly<{
-	readonly initialState: RpcPeerState;
-	readonly ownerExposureRegistry: RpcExposureRegistry;
-	readonly isOwnerActive: () => boolean;
-	readonly emitEvent: (event: RpcPeerCallEvent) => void;
-	readonly onProtocolFault: (error: Error) => void;
-	readonly handlerScheduler: IRpcHandlerScheduler;
-	readonly maximumIncomingBytes: number;
-	readonly reserveRetainedBytes: (
-		bytes: number,
-	) => IRpcRetainedBytesReservation | undefined;
-}>;
-
-export type RpcPeerFactory = (options: CreateRpcPeerOptions) => IRpcPeerRuntime;
+export type RpcPeerFactory = (
+	options: Readonly<{
+		readonly initialState: RpcPeerState;
+		readonly ownerExposureRegistry: RpcExposureRegistry;
+		readonly isOwnerActive: () => boolean;
+		readonly emitEvent: (event: RpcPeerCallEvent) => void;
+		readonly onProtocolFault: (error: Error) => void;
+		readonly handlerScheduler: IRpcHandlerScheduler;
+		readonly maximumIncomingBytes: number;
+		readonly reserveRetainedBytes: (
+			bytes: number,
+		) => IRpcRetainedBytesReservation | undefined;
+	}>,
+) => IRpcPeerRuntime;

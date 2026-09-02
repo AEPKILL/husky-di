@@ -23,12 +23,6 @@ export type RpcConnectorReconnectionPolicyOptions = {
 export type RpcConnectorReconnectionPolicy =
 	Required<RpcConnectorReconnectionPolicyOptions>;
 
-export type CreateRpcConnectorReconnectionOptions = {
-	readonly connector: IRpcConnector;
-	readonly adapterFactory: RpcConnectorAdapterFactory;
-	readonly policy?: RpcConnectorReconnectionPolicyOptions;
-};
-
 export type RpcConnectorReconnectionState =
 	| { readonly status: RpcStateStatusEnum.idle }
 	| { readonly status: RpcStateStatusEnum.connecting }

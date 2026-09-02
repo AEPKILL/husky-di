@@ -13,12 +13,14 @@ import {
 } from "@/constants/protocol/rpc-profile.const";
 import { RpcEndpointFailureEnum } from "@/enums/protocol/rpc-endpoint-failure.enum";
 import type {
-	CreateRpcEndpointOptions,
 	IRpcEndpoint,
+	RpcEndpointFactory,
 } from "@/interfaces/endpoint/rpc-endpoint.interface";
 import type { IRpcRetainedBytesReservation } from "@/interfaces/protocol/rpc-protocol.interface";
 import type { IRpcConnection } from "@/interfaces/transport/rpc-connection.interface";
 import { isPositiveSafeInteger, isUint8Array } from "@/utils/type-guard.util";
+
+export type CreateRpcEndpointOptions = Parameters<RpcEndpointFactory>[0];
 
 /** Owns one exact Physical Connection endpoint and its bounded local work. */
 export class RpcEndpointImpl implements IRpcEndpoint {

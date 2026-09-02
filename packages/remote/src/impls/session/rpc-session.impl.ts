@@ -34,7 +34,6 @@ import type {
 	RpcIncomingTerminal,
 } from "@/interfaces/protocol/rpc-protocol.interface";
 import type {
-	CreateRpcSessionOptions,
 	IRpcSession,
 	RpcBindingCandidate,
 	RpcBindingCommit,
@@ -46,6 +45,7 @@ import type {
 	RpcResponderResumeRequest,
 	RpcResponderResumeReview,
 	RpcSessionAuthorityCommit,
+	RpcSessionFactory,
 	RpcSessionRecovery,
 } from "@/interfaces/session/rpc-session.interface";
 import type {
@@ -63,6 +63,8 @@ import {
 	registerRpcSessionRetainedBytes,
 	unregisterRpcSessionRetainedBytes,
 } from "@/utils/rpc-session-retained-bytes.util";
+
+export type CreateRpcSessionOptions = Parameters<RpcSessionFactory>[0];
 
 /** Retains one Session Incarnation independently from its current Connection. */
 export class RpcSessionImpl implements IRpcSession {

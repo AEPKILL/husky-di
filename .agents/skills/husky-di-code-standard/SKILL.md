@@ -32,7 +32,7 @@ Organize source by file role first:
 | Directory | Responsibility | Required suffix or shape |
 | --- | --- | --- |
 | `interfaces` | Structural and behavioral contracts | `*.interface.ts`; interface names start with `I` |
-| `types` | Options, aliases, unions, mapped and conditional types | `*.type.ts` |
+| `types` | Standalone options, aliases, unions, mapped and conditional types | `*.type.ts` |
 | `impls` | Concrete behavior and stateful implementations | `*.impl.ts` |
 | `factories` | Creation and dependency assembly | `*.factory.ts`; exported functions use `createXxx` |
 | `utils` | Mostly stateless helpers | `*.util.ts` |
@@ -56,9 +56,11 @@ src/
 └── types/protocol/
 ```
 
-The role directory remains authoritative: an `impls/**` directory contains only
-`*.impl.ts`; move constants, interfaces, and types to their matching role
-directories even when they belong to the same domain.
+The role directory remains authoritative for files: an `impls/**` directory
+contains only `*.impl.ts`; move standalone constant, interface, and type modules
+to their matching role directories even when they belong to the same domain.
+Owner-specific declarations may be co-located as described under Assembly
+Boundaries.
 
 Additional placement rules:
 
@@ -103,7 +105,25 @@ When a component is intentionally replaceable at construction time:
 - derive the smallest behavioral contract from real consumers before writing the
   concrete implementation;
 - put its contract in `interfaces/<domain>/`;
-- put construction inputs in `types/<domain>/` as `CreateXxxOptions`;
+- identify each construction input's semantic owner: the constructor or
+  `createXxx` factory whose call contract it describes. Do not infer ownership
+  from the declaration's current file or from modules that merely pass it
+  through;
+- name constructor and factory input bags `CreateXxxOptions` and place them with
+  their owner: constructor-owned options in the corresponding `*.impl.ts`,
+  `createXxx`-owned options in the corresponding `*.factory.ts`, and genuinely
+  ownerless shared options in `types/<domain>/`;
+- export `CreateXxxOptions` from its owner module when that module exports the
+  matching class or factory; keep options used only by a file-local helper
+  file-local;
+- keep injected creation callbacks dependency-neutral as `XxxFactory` contracts
+  in `interfaces/<domain>/`. When its single required parameter is exactly an
+  implementation constructor's options object, define the parameter record
+  inline on `XxxFactory` and export the constructor-facing name from the
+  implementation as
+  `export type CreateXxxOptions = Parameters<XxxFactory>[0]`. Modules that inject
+  creation behavior depend on `XxxFactory`; direct constructor callers may
+  import `CreateXxxOptions` from the implementation module;
 - put the concrete class in `impls/<domain>/` as `XxxImpl`;
 - assemble dependencies in a `*.factory.ts` file;
 - use `readonly` references and snapshot or freeze assembly options when runtime
@@ -142,8 +162,11 @@ boundary—not for speculative flexibility.
   Shape.
 - Keep `index.ts` focused on exports; route public APIs through the package
   entrypoint.
-- Keep implementation classes and assembly seams private unless the public API
-  explicitly requires them.
+- Treat source-module exports and package exposure as separate decisions.
+  Source-module exports support internal imports; package entrypoints expose the
+  caller-facing API.
+- Keep implementation classes and internal assembly seams out of package
+  entrypoints unless the public API explicitly requires them.
 - When an internal boundary must stay private, preserve or add compile-time
   negative surface tests.
 
@@ -192,8 +215,9 @@ API, state, constructor, public methods, and internal helpers.
 
 - Prefer direct, explicit code over speculative abstraction.
 - Use explicit types and immutability where they clarify ownership.
-- Keep factories, implementations, constants, types, and helpers in their own
-  roles.
+- Keep factories, implementations, standalone constants and types, and helpers
+  in their own roles; co-locate owner-specific construction types according to
+  Assembly Boundaries.
 - Comment intent, constraints, and edge cases—not obvious operations.
 - Extract every compound `if` condition that spans multiple lines into a
   semantically named local boolean immediately before the branch. Precede the
@@ -224,6 +248,8 @@ only for shared global styling or a case existing utilities cannot express.
   specification and matching `specification.test.ts` coverage in the same change.
 - When a test file moves without a behavior change, update requirement evidence
   paths such as `docs/REQUIREMENTS.md`.
+- When a public type moves between source modules without changing its contract,
+  preserve its package-entrypoint re-export and rerun consumer/type-surface tests.
 - When public API changes, update package entrypoints and consumer/type-surface
   tests.
 - After a rename, search the affected package for the old symbol, directory, and

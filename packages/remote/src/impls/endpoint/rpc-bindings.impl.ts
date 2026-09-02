@@ -8,8 +8,6 @@ import { RPC_PROTECTED_SESSION_BYTES } from "@/constants/protocol/rpc-profile.co
 import { RpcEndpointFailureEnum } from "@/enums/protocol/rpc-endpoint-failure.enum";
 import { RpcCloseReasonEnum } from "@/enums/rpc-close-reason.enum";
 import type {
-	CreateRpcAcceptorBindingsOptions,
-	CreateRpcConnectorBindingsOptions,
 	IRpcAcceptorBindingContext,
 	IRpcAcceptorBindingProgram,
 	IRpcAcceptorBindings,
@@ -30,14 +28,31 @@ import type {
 	RpcPreparedFresh,
 	RpcPreparedSession,
 } from "@/interfaces/endpoint/rpc-bindings.interface";
-import type { IRpcEndpoint } from "@/interfaces/endpoint/rpc-endpoint.interface";
-import type { IRpcRetainedBytesReservation } from "@/interfaces/protocol/rpc-protocol.interface";
+import type {
+	IRpcEndpoint,
+	RpcEndpointFactory,
+} from "@/interfaces/endpoint/rpc-endpoint.interface";
+import type {
+	IRpcProtocolAcceptorHost,
+	IRpcProtocolConnectorHost,
+	IRpcRetainedBytesReservation,
+} from "@/interfaces/protocol/rpc-protocol.interface";
 import type {
 	IRpcSession,
 	RpcBindingCandidate,
 	RpcBindingEpoch,
 } from "@/interfaces/session/rpc-session.interface";
 import type { IRpcConnection } from "@/interfaces/transport/rpc-connection.interface";
+
+export type CreateRpcConnectorBindingsOptions = Readonly<{
+	readonly host: IRpcProtocolConnectorHost;
+	readonly createEndpoint: RpcEndpointFactory;
+}>;
+
+export type CreateRpcAcceptorBindingsOptions = Readonly<{
+	readonly host: IRpcProtocolAcceptorHost;
+	readonly createEndpoint: RpcEndpointFactory;
+}>;
 
 /** Owns the consecutive Physical Connection Bindings of one Connector role. */
 export class RpcConnectorBindingsImpl implements IRpcConnectorBindings {
@@ -564,9 +579,7 @@ type CreateRpcBindingTransactionExecutorOptions = Readonly<{
 	readonly reserveRetainedBytes: (
 		bytes: number,
 	) => IRpcRetainedBytesReservation | undefined;
-	readonly createEndpoint: (
-		options: Parameters<CreateRpcConnectorBindingsOptions["createEndpoint"]>[0],
-	) => IRpcEndpoint;
+	readonly createEndpoint: RpcEndpointFactory;
 	readonly isCurrent: () => boolean;
 	readonly isRetainedSession: (session: IRpcSession) => boolean;
 	readonly retainSession: (session: IRpcSession) => boolean;

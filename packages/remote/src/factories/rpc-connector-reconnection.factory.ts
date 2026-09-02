@@ -11,10 +11,10 @@ import {
 import { RpcConnectorReconnectionImpl } from "@/impls/reconnection/rpc-connector-reconnection.impl";
 import type { IRpcConnector } from "@/interfaces/owner/rpc-connector.interface";
 import type {
-	CreateRpcConnectorReconnectionOptions,
 	IRpcConnectorReconnection,
 	RpcConnectorAdapterFactory,
 	RpcConnectorReconnectionPolicy,
+	RpcConnectorReconnectionPolicyOptions,
 } from "@/interfaces/reconnection/rpc-connector-reconnection.interface";
 import {
 	readRpcClosedOptionsRecord,
@@ -29,6 +29,12 @@ import {
 	isObjectOrFunction,
 	isObjectType,
 } from "@/utils/type-guard.util";
+
+export type CreateRpcConnectorReconnectionOptions = {
+	readonly connector: IRpcConnector;
+	readonly adapterFactory: RpcConnectorAdapterFactory;
+	readonly policy?: RpcConnectorReconnectionPolicyOptions;
+};
 
 /** Creates a cold, single-use Connector Reconnection supervisor. */
 export function createRpcConnectorReconnection(

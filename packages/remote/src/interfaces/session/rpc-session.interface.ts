@@ -41,15 +41,13 @@ export interface IRpcSession extends IRpcProtocolSession {
 	shutdown(): Promise<void>;
 }
 
-export type CreateRpcSessionOptions = {
-	readonly host: IRpcProtocolHost;
-	readonly sessionId: string;
-	readonly resumeToken: string;
-	readonly onTerminal: () => void;
-};
-
 export type RpcSessionFactory = (
-	options: CreateRpcSessionOptions,
+	options: Readonly<{
+		readonly host: IRpcProtocolHost;
+		readonly sessionId: string;
+		readonly resumeToken: string;
+		readonly onTerminal: () => void;
+	}>,
 ) => IRpcSession;
 
 export type RpcSessionRecovery = Readonly<{

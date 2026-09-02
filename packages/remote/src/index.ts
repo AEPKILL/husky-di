@@ -19,13 +19,13 @@ export type {
 	RpcSessionCloseReason,
 } from "@/interfaces/protocol/rpc-protocol.interface";
 export type {
-	CreateRpcConnectorReconnectionOptions,
 	IRpcConnectorReconnection,
 	RpcConnectorAdapterFactory,
 	RpcConnectorReconnectionEvent,
 	RpcConnectorReconnectionPolicyOptions,
 	RpcConnectorReconnectionState,
 } from "@/interfaces/reconnection/rpc-connector-reconnection.interface";
+export type { CreateRpcConnectorReconnectionOptions } from "@/factories/rpc-connector-reconnection.factory";
 export type {
 	IRpcAcceptorAdapter,
 	IRpcConnectorAdapter,
