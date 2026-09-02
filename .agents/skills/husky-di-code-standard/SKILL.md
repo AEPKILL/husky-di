@@ -5,15 +5,17 @@ description: "husky-di code changes: apply repository-specific placement, naming
 
 # husky-di Code Standard
 
-Local precedent is authoritative where this skill is silent. Prefer it over
-generic TypeScript conventions; use `packages/core` only for shared naming when
-the affected package has no precedent.
+Normative specifications and accepted ADRs outrank implementation precedent; the
+checker governs mechanical rules in its scope. Where those sources are silent,
+prefer the nearest stable local pattern over generic TypeScript conventions and
+use `packages/core` only as a shared-naming fallback.
 
 ## Workflow
 
-1. **Inspect.** Read the nearest neighbors and closest equivalent. Identify each
-   target's role, owner, public/private surface, and behavior impact; read
-   `CONTEXT.md` and relevant ADRs when domain concepts change.
+1. **Inspect.** Read the nearest neighbors, closest equivalent, and any normative
+   specification or ADR governing the task. Read `CONTEXT.md` when domain
+   concepts change. Identify each target's role, owner, public/private surface,
+   and behavior impact.
 2. **Classify.** Confirm the topology, role, and suffix of every added or moved
    file before implementation.
 3. **Implement and propagate.** Match the local code shape and update every
@@ -92,8 +94,9 @@ keep internal creation policy private.
   tool-required defaults in config and generated files.
 - A source export enables internal reuse; only a declared entrypoint creates
   caller exposure. Keep entrypoints export-only except for imports and stable
-  constant forwarding, and keep implementations and assembly seams private.
-  Protect important private surfaces with negative type tests.
+  constant forwarding. Keep concrete implementations and internal assembly
+  seams private unless an entrypoint declares a public extension surface; protect
+  important private surfaces with negative type tests.
 
 ## File Shape
 
@@ -130,15 +133,13 @@ state, constructor, public methods, then internal helpers.
 ## Implementation Style
 
 - When a complex compound condition obscures a domain decision, extract a
-  semantically named predicate in the branch's polarity and comment its intent
-  when the name is insufficient. Preserve left-to-right short-circuit order; use
-  one snapshot in the predicate and guarded code when narrowing an optional or
-  mutable value.
+  semantically named local boolean in the branch's polarity and comment its
+  intent when the name is insufficient. Preserve left-to-right short-circuit
+  order; use one snapshot in the boolean and guarded code when narrowing an
+  optional or mutable value.
 - Keep each `biome-ignore` at the narrowest scope and include a specific reason
   after `:`. Keep source comments and errors in the package's established
   language, normally English.
-- In frontend code, prefer existing Tailwind utilities and theme tokens; add CSS
-  for shared/global styling or behavior they cannot express cleanly.
 
 ## Tests, Specs, And Moves
 
@@ -147,8 +148,9 @@ state, constructor, public methods, then internal helpers.
 - A move or rename includes source imports, tests, entrypoints, build references,
   and requirement-evidence paths. Use `rg` to review old symbol and path forms,
   including intentional prose matches.
-- For a public API change or public-type move, update or preserve every declared
-  entrypoint and run its consumer/type-surface coverage.
+- For a public API change or public-type move, update or preserve every entrypoint
+  that currently exposes the affected contract and run its consumer/type-surface
+  coverage.
 
 ## Validation
 
@@ -158,8 +160,8 @@ After a structural edit, run the structural checker early:
 pnpm --filter @husky-di/scripts check:code-standard
 ```
 
-Before completion, run the root `pnpm check:code-standard`, the affected
-workspace's available `test` and `typecheck` scripts, and its `build` when
-declarations or package surfaces changed. Run task-specific scripts such as
-`bench` when applicable. Finish with `git diff --check` and confirm that no
-unexpected generated artifacts entered the change.
+Before completion, run the root `pnpm check:code-standard`, then the affected
+workspace's available `test`, `typecheck`, and—when declarations or package
+surfaces changed—`build` scripts. Run task-specific scripts such as `bench` when
+applicable. Finish with `git diff --check` and confirm that no unexpected
+generated artifacts entered the change.
