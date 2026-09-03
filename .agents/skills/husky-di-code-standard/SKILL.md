@@ -72,9 +72,9 @@ construction types follow Assembly Boundaries.
 
 ### Assembly Boundaries
 
-When introducing or changing a replaceable implementation, injected creation
-callback, factory/constructor input bag, or dependency-assembly seam, read and
-apply [references/assembly-boundaries.md](references/assembly-boundaries.md).
+When introducing or changing a dependency, implementation, injected creation
+callback, factory/constructor input bag, or assembly seam, read and apply
+[references/assembly-boundaries.md](references/assembly-boundaries.md).
 
 ### Exceptions
 

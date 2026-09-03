@@ -12,15 +12,20 @@ import {
 	RPC_MAX_MESSAGE_BYTES,
 } from "@/constants/protocol/rpc-profile.const";
 import { RpcEndpointFailureEnum } from "@/enums/protocol/rpc-endpoint-failure.enum";
-import type {
-	IRpcEndpoint,
-	RpcEndpointFactory,
-} from "@/interfaces/endpoint/rpc-endpoint.interface";
+import type { IRpcEndpoint } from "@/interfaces/endpoint/rpc-endpoint.interface";
 import type { IRpcRetainedBytesReservation } from "@/interfaces/protocol/rpc-protocol.interface";
 import type { IRpcConnection } from "@/interfaces/transport/rpc-connection.interface";
 import { isPositiveSafeInteger, isUint8Array } from "@/utils/type-guard.util";
 
-export type CreateRpcEndpointOptions = Parameters<RpcEndpointFactory>[0];
+export type CreateRpcEndpointOptions = Readonly<{
+	readonly connection: IRpcConnection;
+	readonly reserveRetainedBytes?: (
+		bytes: number,
+	) => IRpcRetainedBytesReservation | undefined;
+	readonly onIngressAdmitted?: () => void;
+	readonly onMessage: (message: Uint8Array) => Promise<void> | void;
+	readonly onFailure: (reason: RpcEndpointFailureEnum, error?: Error) => void;
+}>;
 
 /** Owns one exact Physical Connection endpoint and its bounded local work. */
 export class RpcEndpointImpl implements IRpcEndpoint {

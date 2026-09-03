@@ -9,17 +9,17 @@ import {
 	RpcAcceptorBindingsImpl,
 	RpcConnectorBindingsImpl,
 } from "@/impls/endpoint/rpc-bindings.impl";
-import { RpcEndpointImpl } from "@/impls/endpoint/rpc-endpoint.impl";
+import {
+	type CreateRpcEndpointOptions,
+	RpcEndpointImpl,
+} from "@/impls/endpoint/rpc-endpoint.impl";
 import { RpcCodecImpl } from "@/impls/protocol/rpc-codec.impl";
 import {
 	RpcProtocolAcceptorImpl,
 	RpcProtocolConnectorImpl,
 } from "@/impls/protocol/rpc-protocol.impl";
 import { RpcSessionImpl } from "@/impls/session/rpc-session.impl";
-import type {
-	IRpcEndpoint,
-	RpcEndpointFactory,
-} from "@/interfaces/endpoint/rpc-endpoint.interface";
+import type { IRpcEndpoint } from "@/interfaces/endpoint/rpc-endpoint.interface";
 import type {
 	IRpcProtocolAcceptor,
 	IRpcProtocolAcceptorHost,
@@ -59,7 +59,7 @@ export function createRpcCounterExhaustionProtocolAcceptorForTest(
 
 const codec = Object.freeze(new RpcCodecImpl());
 
-const createEndpoint: RpcEndpointFactory = (options): IRpcEndpoint =>
+const createEndpoint = (options: CreateRpcEndpointOptions): IRpcEndpoint =>
 	new RpcEndpointImpl(options);
 
 function createBuiltInRpcProtocolConnector(

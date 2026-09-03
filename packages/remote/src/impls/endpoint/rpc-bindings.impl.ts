@@ -28,10 +28,7 @@ import type {
 	RpcPreparedFresh,
 	RpcPreparedSession,
 } from "@/interfaces/endpoint/rpc-bindings.interface";
-import type {
-	IRpcEndpoint,
-	RpcEndpointFactory,
-} from "@/interfaces/endpoint/rpc-endpoint.interface";
+import type { IRpcEndpoint } from "@/interfaces/endpoint/rpc-endpoint.interface";
 import type {
 	IRpcProtocolAcceptorHost,
 	IRpcProtocolConnectorHost,
@@ -43,15 +40,16 @@ import type {
 	RpcBindingEpoch,
 } from "@/interfaces/session/rpc-session.interface";
 import type { IRpcConnection } from "@/interfaces/transport/rpc-connection.interface";
+import type { CreateRpcEndpointOptions } from "./rpc-endpoint.impl";
 
 export type CreateRpcConnectorBindingsOptions = Readonly<{
 	readonly host: IRpcProtocolConnectorHost;
-	readonly createEndpoint: RpcEndpointFactory;
+	readonly createEndpoint: (options: CreateRpcEndpointOptions) => IRpcEndpoint;
 }>;
 
 export type CreateRpcAcceptorBindingsOptions = Readonly<{
 	readonly host: IRpcProtocolAcceptorHost;
-	readonly createEndpoint: RpcEndpointFactory;
+	readonly createEndpoint: CreateRpcConnectorBindingsOptions["createEndpoint"];
 }>;
 
 /** Owns the consecutive Physical Connection Bindings of one Connector role. */
@@ -579,7 +577,7 @@ type CreateRpcBindingTransactionExecutorOptions = Readonly<{
 	readonly reserveRetainedBytes: (
 		bytes: number,
 	) => IRpcRetainedBytesReservation | undefined;
-	readonly createEndpoint: RpcEndpointFactory;
+	readonly createEndpoint: CreateRpcConnectorBindingsOptions["createEndpoint"];
 	readonly isCurrent: () => boolean;
 	readonly isRetainedSession: (session: IRpcSession) => boolean;
 	readonly retainSession: (session: IRpcSession) => boolean;

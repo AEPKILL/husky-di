@@ -1,8 +1,10 @@
 # Assembly Boundaries
 
-Use this reference only for a real construction-time replacement, testing, or
-implementation boundary. Derive the smallest behavioral contract from actual
-consumers before adding the seam; speculative flexibility is not a boundary.
+Program to behavioral abstractions throughout the repository. Treat every
+dependency, construction, testing, or implementation boundary as a seam. Derive
+the smallest dependency-neutral contract from actual consumers before writing
+the concrete behavior. Consumer code depends on that contract; only dependency
+assembly and implementation-local code may name the concrete implementation.
 
 ## Placement And Ownership
 
@@ -36,8 +38,9 @@ implementation-facing alias as:
 export type CreateXxxOptions = Parameters<XxxFactory>[0];
 ```
 
-Code that injects creation behavior depends on `XxxFactory`; direct constructor
-callers may import `CreateXxxOptions` from the implementation module.
+Code that injects or consumes creation behavior depends on `XxxFactory`; only
+dependency assembly that selects the concrete implementation may import
+`CreateXxxOptions` from the implementation module.
 
 ## Lifetime And Surface
 
