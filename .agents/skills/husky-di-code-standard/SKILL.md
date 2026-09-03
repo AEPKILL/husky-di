@@ -72,9 +72,19 @@ construction types follow Assembly Boundaries.
 
 ### Assembly Boundaries
 
+The repository's design preference is to program to behavioral abstractions,
+including package-private collaborators and seams with only one current
+implementation. Adapter or caller count alone is not evidence that a seam is
+hypothetical. When a contract is too broad, shallow, or mirrors its
+implementation, first narrow or repartition it around actual consumer
+capabilities; remove it only when no behavior, state, lifetime, or effect crosses
+that consumer boundary.
+
 When introducing or changing a dependency, implementation, injected creation
 callback, factory/constructor input bag, or assembly seam, read and apply
-[references/assembly-boundaries.md](references/assembly-boundaries.md).
+[references/assembly-boundaries.md](references/assembly-boundaries.md) for
+contract derivation, concrete-type visibility, placement, ownership, and
+lifetime rules.
 
 ### Exceptions
 
