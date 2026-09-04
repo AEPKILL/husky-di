@@ -13,6 +13,7 @@ import { RpcProtocolSessionTransitionTypeEnum } from "@/enums/protocol/rpc-proto
 import { RpcResumeRejectCodeEnum } from "@/enums/protocol/rpc-resume-reject-code.enum";
 import { RpcWireRecordKindEnum } from "@/enums/protocol/rpc-wire-record-kind.enum";
 import { RpcCloseReasonEnum } from "@/enums/rpc-close-reason.enum";
+import type { CreateRpcSessionOptions } from "@/factories/rpc-protocol.factory";
 import {
 	closeUnboundConnection,
 	RpcBindingAttempt,
@@ -22,10 +23,7 @@ import type {
 	IRpcProtocolAcceptor,
 	IRpcProtocolAcceptorHost,
 } from "@/interfaces/protocol/rpc-protocol.interface";
-import type {
-	IRpcSession,
-	RpcSessionFactory,
-} from "@/interfaces/session/rpc-session.interface";
+import type { IRpcSession } from "@/interfaces/session/rpc-session.interface";
 import type { IRpcConnection } from "@/interfaces/transport/rpc-connection.interface";
 import type {
 	RpcFreshAccept,
@@ -39,7 +37,7 @@ export type CreateRpcProtocolAcceptorOptions = Readonly<{
 	readonly host: IRpcProtocolAcceptorHost;
 	readonly codec: IRpcCodec;
 	readonly createSecurityCarrier: () => string;
-	readonly createSession: RpcSessionFactory;
+	readonly createSession: (options: CreateRpcSessionOptions) => IRpcSession;
 }>;
 
 type RpcFreshSession = Readonly<{
@@ -54,7 +52,7 @@ export class RpcProtocolAcceptorImpl implements IRpcProtocolAcceptor {
 	readonly _host: IRpcProtocolAcceptorHost;
 	readonly _codec: IRpcCodec;
 	readonly _createSecurityCarrier: () => string;
-	readonly _createSession: RpcSessionFactory;
+	readonly _createSession: (options: CreateRpcSessionOptions) => IRpcSession;
 	readonly _attempts = new Set<RpcBindingAttempt>();
 	readonly _sessions = new Map<string, IRpcSession>();
 	readonly _provisionalSessionIds = new Set<string>();

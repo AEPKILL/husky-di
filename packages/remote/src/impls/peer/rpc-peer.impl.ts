@@ -18,7 +18,7 @@ import { getRemoteServiceDescriptorData } from "@/factories/remote-service-descr
 import { createRpcException } from "@/factories/rpc-exception.factory";
 import type { IRpcHandlerScheduler } from "@/interfaces/owner/rpc-handler-scheduler.interface";
 import type { IRpcPeer } from "@/interfaces/peer/rpc-peer.interface";
-import type { RpcPeerFactory } from "@/interfaces/peer/rpc-peer-host.interface";
+import type { RpcPeerStateView } from "@/interfaces/peer/rpc-peer-host.interface";
 import type {
 	IRpcApplicationArgumentsSnapshot,
 	IRpcApplicationSnapshot,
@@ -60,7 +60,19 @@ import { installRpcExposure } from "@/utils/rpc-exposure.util";
 import { createRpcFacade } from "@/utils/rpc-facade.util";
 import { isCallable, isNonNullObject } from "@/utils/type-guard.util";
 
-export type CreateRpcPeerOptions = Parameters<RpcPeerFactory>[0];
+export type CreateRpcPeerOptions = RpcPeerStateView &
+	Readonly<{
+		readonly getSession: () => IRpcProtocolSession | undefined;
+		readonly findOwnerExposure: (wireName: string) => RpcExposure | undefined;
+		readonly isOwnerActive: () => boolean;
+		readonly callEventSink: RpcCallEventSink;
+		readonly onProtocolFault: (error: Error) => void;
+		readonly handlerScheduler: IRpcHandlerScheduler;
+		readonly maximumIncomingBytes: number;
+		readonly reserveRetainedBytes: (
+			bytes: number,
+		) => IRpcRetainedBytesReservation | undefined;
+	}>;
 
 /** Retains one stable Peer identity and its replay-latest state snapshot. */
 export class RpcPeerImpl implements IRpcPeer {

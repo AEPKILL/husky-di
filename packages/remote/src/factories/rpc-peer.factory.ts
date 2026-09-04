@@ -10,6 +10,8 @@ import {
 } from "@/impls/peer/rpc-peer.impl";
 import type { IRpcPeerHost } from "@/interfaces/peer/rpc-peer-host.interface";
 
+export type { CreateRpcPeerOptions } from "@/impls/peer/rpc-peer.impl";
+
 /** Creates one Peer identity and its focused Owner-facing host. */
 export function createRpcPeer(options: CreateRpcPeerOptions): IRpcPeerHost {
 	const peer = new RpcPeerImpl(options);

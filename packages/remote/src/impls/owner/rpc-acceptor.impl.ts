@@ -13,6 +13,7 @@ import { RpcEventTypeEnum } from "@/enums/rpc-event-type.enum";
 import { RpcExceptionCodeEnum } from "@/enums/rpc-exception-code.enum";
 import { RpcStateStatusEnum } from "@/enums/rpc-state-status.enum";
 import { createRpcException } from "@/factories/rpc-exception.factory";
+import type { CreateRpcPeerOptions } from "@/factories/rpc-peer.factory";
 import type { IRpcRetainedBytesLedger } from "@/interfaces/common/rpc-retained-bytes-ledger.interface";
 import type { IRpcAcceptor } from "@/interfaces/owner/rpc-acceptor.interface";
 import type { IRpcHandlerScheduler } from "@/interfaces/owner/rpc-handler-scheduler.interface";
@@ -23,10 +24,7 @@ import type {
 } from "@/interfaces/owner/rpc-owner-custody.interface";
 import type { IRpcAcceptorPublisher } from "@/interfaces/owner/rpc-owner-publisher.interface";
 import type { IRpcPeer } from "@/interfaces/peer/rpc-peer.interface";
-import type {
-	IRpcPeerHost,
-	RpcPeerFactory,
-} from "@/interfaces/peer/rpc-peer-host.interface";
+import type { IRpcPeerHost } from "@/interfaces/peer/rpc-peer-host.interface";
 import type {
 	IRpcProtocolAcceptor,
 	IRpcProtocolRuntimePolicy,
@@ -72,7 +70,7 @@ export type CreateRpcAcceptorImplOptions = Readonly<{
 	readonly retainedBytesLedger: IRpcRetainedBytesLedger;
 	readonly custody: IRpcOwnerCustody;
 	readonly handlerScheduler: IRpcHandlerScheduler;
-	readonly createPeer: RpcPeerFactory;
+	readonly createPeer: (options: CreateRpcPeerOptions) => IRpcPeerHost;
 	readonly publisher: IRpcAcceptorPublisher;
 	readonly protocol: IRpcProtocolAcceptor;
 }>;
@@ -91,7 +89,7 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 	readonly #handlerScheduler: IRpcHandlerScheduler;
 	readonly #custody: IRpcOwnerCustody;
 	readonly #publisher: IRpcAcceptorPublisher;
-	readonly #createPeer: RpcPeerFactory;
+	readonly #createPeer: (options: CreateRpcPeerOptions) => IRpcPeerHost;
 	readonly #ordinaryConnectionLimit: number;
 	#overflowConnection: RpcOwnedConnection | undefined;
 	#listenerCleanupBarrier: Promise<void> | undefined;

@@ -12,6 +12,7 @@ import { RpcEventTypeEnum } from "@/enums/rpc-event-type.enum";
 import { RpcExceptionCodeEnum } from "@/enums/rpc-exception-code.enum";
 import { RpcStateStatusEnum } from "@/enums/rpc-state-status.enum";
 import { createRpcException } from "@/factories/rpc-exception.factory";
+import type { CreateRpcPeerOptions } from "@/factories/rpc-peer.factory";
 import type { IRpcRetainedBytesLedger } from "@/interfaces/common/rpc-retained-bytes-ledger.interface";
 import type { IRpcConnector } from "@/interfaces/owner/rpc-connector.interface";
 import type { IRpcHandlerScheduler } from "@/interfaces/owner/rpc-handler-scheduler.interface";
@@ -22,10 +23,7 @@ import type {
 } from "@/interfaces/owner/rpc-owner-custody.interface";
 import type { IRpcConnectorPublisher } from "@/interfaces/owner/rpc-owner-publisher.interface";
 import type { IRpcPeer } from "@/interfaces/peer/rpc-peer.interface";
-import type {
-	IRpcPeerHost,
-	RpcPeerFactory,
-} from "@/interfaces/peer/rpc-peer-host.interface";
+import type { IRpcPeerHost } from "@/interfaces/peer/rpc-peer-host.interface";
 import type {
 	IRpcProtocolConnector,
 	IRpcProtocolRuntimePolicy,
@@ -71,7 +69,7 @@ export type CreateRpcConnectorImplOptions = Readonly<{
 	readonly retainedBytesLedger: IRpcRetainedBytesLedger;
 	readonly custody: IRpcOwnerCustody;
 	readonly handlerScheduler: IRpcHandlerScheduler;
-	readonly createPeer: RpcPeerFactory;
+	readonly createPeer: (options: CreateRpcPeerOptions) => IRpcPeerHost;
 	readonly publisher: IRpcConnectorPublisher;
 	readonly protocol: IRpcProtocolConnector;
 }>;

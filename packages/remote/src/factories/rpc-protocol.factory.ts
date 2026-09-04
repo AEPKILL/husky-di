@@ -8,15 +8,20 @@ import { RpcRetainedBytesLedgerImpl } from "@/impls/common/rpc-retained-bytes-le
 import { RpcCodecImpl } from "@/impls/protocol/rpc-codec.impl";
 import { RpcProtocolAcceptorImpl } from "@/impls/protocol/rpc-protocol-acceptor.impl";
 import { RpcProtocolConnectorImpl } from "@/impls/protocol/rpc-protocol-connector.impl";
-import { RpcSessionImpl } from "@/impls/session/rpc-session.impl";
+import {
+	type CreateRpcSessionOptions,
+	RpcSessionImpl,
+} from "@/impls/session/rpc-session.impl";
 import type {
 	IRpcProtocolAcceptor,
 	IRpcProtocolAcceptorHost,
 	IRpcProtocolConnector,
 	IRpcProtocolConnectorHost,
 } from "@/interfaces/protocol/rpc-protocol.interface";
-import type { RpcSessionFactory } from "@/interfaces/session/rpc-session.interface";
+import type { IRpcSession } from "@/interfaces/session/rpc-session.interface";
 import { createRpcSecurityCarrier } from "@/utils/protocol/rpc-base64-url-32-schema.util";
+
+export type { CreateRpcSessionOptions } from "@/impls/session/rpc-session.impl";
 
 /** Creates a fresh built-in Connector Protocol role for one owner. */
 export function createRpcProtocolConnector(
@@ -46,6 +51,18 @@ export function createRpcCounterExhaustionProtocolAcceptorForTest(
 	return createBuiltInRpcProtocolAcceptor(host, true);
 }
 
+/** Binds built-in Session dependencies for one Protocol role. */
+export function createBuiltInRpcSessionFactory(counterExhausted: boolean) {
+	return (options: CreateRpcSessionOptions): IRpcSession =>
+		new RpcSessionImpl(options, {
+			codec,
+			counterExhausted,
+			retainedBytesLedger: new RpcRetainedBytesLedgerImpl(
+				options.host.policy.maxRetainedBytesPerSession,
+			),
+		});
+}
+
 const codec = Object.freeze(new RpcCodecImpl());
 
 function createBuiltInRpcProtocolConnector(
@@ -69,17 +86,4 @@ function createBuiltInRpcProtocolAcceptor(
 		createSecurityCarrier: createRpcSecurityCarrier,
 		createSession: createBuiltInRpcSessionFactory(counterExhausted),
 	});
-}
-
-function createBuiltInRpcSessionFactory(
-	counterExhausted: boolean,
-): RpcSessionFactory {
-	return (options) =>
-		new RpcSessionImpl(options, {
-			codec,
-			counterExhausted,
-			retainedBytesLedger: new RpcRetainedBytesLedgerImpl(
-				options.host.policy.maxRetainedBytesPerSession,
-			),
-		});
 }

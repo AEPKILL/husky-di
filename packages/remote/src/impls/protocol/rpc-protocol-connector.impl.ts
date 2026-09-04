@@ -11,6 +11,7 @@ import {
 import { RpcDecodePhaseEnum } from "@/enums/protocol/rpc-decode-phase.enum";
 import { RpcResumeRejectCodeEnum } from "@/enums/protocol/rpc-resume-reject-code.enum";
 import { RpcWireRecordKindEnum } from "@/enums/protocol/rpc-wire-record-kind.enum";
+import type { CreateRpcSessionOptions } from "@/factories/rpc-protocol.factory";
 import {
 	closeUnboundConnection,
 	RpcBindingAttempt,
@@ -23,7 +24,6 @@ import type {
 import type {
 	IRpcSession,
 	RpcResumeOutcome,
-	RpcSessionFactory,
 } from "@/interfaces/session/rpc-session.interface";
 import type { IRpcConnection } from "@/interfaces/transport/rpc-connection.interface";
 import type {
@@ -34,7 +34,7 @@ import type {
 export type CreateRpcProtocolConnectorOptions = Readonly<{
 	readonly host: IRpcProtocolConnectorHost;
 	readonly codec: IRpcCodec;
-	readonly createSession: RpcSessionFactory;
+	readonly createSession: (options: CreateRpcSessionOptions) => IRpcSession;
 }>;
 
 type RpcFreshSession = Readonly<{
@@ -46,7 +46,7 @@ type RpcFreshSession = Readonly<{
 export class RpcProtocolConnectorImpl implements IRpcProtocolConnector {
 	readonly _host: IRpcProtocolConnectorHost;
 	readonly _codec: IRpcCodec;
-	readonly _createSession: RpcSessionFactory;
+	readonly _createSession: (options: CreateRpcSessionOptions) => IRpcSession;
 	_attempt: RpcBindingAttempt | undefined;
 	_session: IRpcSession | undefined;
 	_handshakeSlotsInUse = 0;

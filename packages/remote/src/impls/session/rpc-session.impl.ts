@@ -40,7 +40,6 @@ import type {
 	RpcResumeClaim,
 	RpcResumeDecision,
 	RpcResumeOutcome,
-	RpcSessionFactory,
 } from "@/interfaces/session/rpc-session.interface";
 import type {
 	RpcActiveRecord,
@@ -58,7 +57,12 @@ import {
 	unregisterRpcSessionRetainedBytes,
 } from "@/utils/rpc-session-retained-bytes.util";
 
-export type CreateRpcSessionOptions = Parameters<RpcSessionFactory>[0];
+export type CreateRpcSessionOptions = Readonly<{
+	readonly host: IRpcProtocolHost;
+	readonly sessionId: string;
+	readonly resumeToken: string;
+	readonly onTerminal: () => void;
+}>;
 
 /** Retains one Session Incarnation independently from its current Connection. */
 export class RpcSessionImpl implements IRpcSession {

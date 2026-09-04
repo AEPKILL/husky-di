@@ -128,7 +128,7 @@ describe("Remote package dependency direction", () => {
 		expect(peerHostDependencies).not.toContain(
 			"@/interfaces/owner/rpc-owner-publisher.interface",
 		);
-		expect(peerHostDependencies).toContain(
+		expect(peerHostDependencies).not.toContain(
 			"@/types/peer/rpc-peer-call-event.type",
 		);
 		for (const forbiddenMember of [
@@ -146,6 +146,34 @@ describe("Remote package dependency direction", () => {
 				resolve(sourceRoot, "interfaces/peer/rpc-peer-runtime.interface.ts"),
 			),
 		).toBe(false);
+	});
+
+	it("keeps concrete construction inputs with their implementation owners", () => {
+		const peerHostSource = readFileSync(
+			resolve(sourceRoot, "interfaces/peer/rpc-peer-host.interface.ts"),
+			"utf8",
+		);
+		const sessionContractSource = readFileSync(
+			resolve(sourceRoot, "interfaces/session/rpc-session.interface.ts"),
+			"utf8",
+		);
+		const peerImplementationSource = readFileSync(
+			resolve(implementationRoot, "peer/rpc-peer.impl.ts"),
+			"utf8",
+		);
+		const sessionImplementationSource = readFileSync(
+			resolve(implementationRoot, "session/rpc-session.impl.ts"),
+			"utf8",
+		);
+
+		expect(peerHostSource).not.toContain("RpcPeerFactory");
+		expect(sessionContractSource).not.toContain("RpcSessionFactory");
+		expect(peerImplementationSource).toContain(
+			"export type CreateRpcPeerOptions = RpcPeerStateView &",
+		);
+		expect(sessionImplementationSource).toContain(
+			"export type CreateRpcSessionOptions = Readonly<{",
+		);
 	});
 
 	it("assembles the concrete Peer only through its dedicated factory", () => {
