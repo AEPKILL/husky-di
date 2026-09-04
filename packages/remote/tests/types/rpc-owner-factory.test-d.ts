@@ -13,12 +13,17 @@ import {
 	createRpcConnectorReconnection,
 	type IRpcAcceptor,
 	type IRpcConnector,
+	type IRpcConnectorAdapter,
 	type IRpcConnectorReconnection,
 	type RpcAcceptorOptions,
+	type RpcAcceptorRuntimePolicyOptions,
 	RpcCloseReasonEnum,
 	type RpcConnectorAdapterFactory,
+	type RpcConnectorConnectOptions,
 	type RpcConnectorOptions,
+	type RpcConnectorReconnectionPolicyOptions,
 	type RpcConnectorReconnectionState,
+	type RpcConnectorRuntimePolicyOptions,
 	type RpcProtocolAcceptorFactory,
 	type RpcProtocolConnectorFactory,
 } from "../../src/index";
@@ -89,7 +94,36 @@ test("RPC-API-001 exposes typed Topology Owner factories", () => {
 		protocolFactory: connectorProtocolFactory,
 	});
 	assertType<RpcAcceptorOptions>({ protocolFactory: acceptorProtocolFactory });
+	assertType<RpcAcceptorRuntimePolicyOptions>({ maxSessions: undefined });
+	assertType<RpcConnectorRuntimePolicyOptions>({
+		maxHandlersPerSession: undefined,
+	});
+	expectTypeOf<
+		RpcConnectorConnectOptions["adapter"]
+	>().toEqualTypeOf<IRpcConnectorAdapter>();
+	expectTypeOf<RpcConnectorConnectOptions["signal"]>().toEqualTypeOf<
+		AbortSignal | undefined
+	>();
+	expectTypeOf<
+		CreateRpcConnectorReconnectionOptions["connector"]
+	>().toEqualTypeOf<IRpcConnector>();
+	expectTypeOf<
+		CreateRpcConnectorReconnectionOptions["adapterFactory"]
+	>().toEqualTypeOf<RpcConnectorAdapterFactory>();
+	expectTypeOf<
+		RpcConnectorReconnectionPolicyOptions["retryDelaysMs"]
+	>().toEqualTypeOf<readonly number[] | undefined>();
 	assertType<RpcCloseReasonEnum>(RpcCloseReasonEnum.cleanupFailed);
+});
+
+test("RPC-PKG-004 keeps schema-derived caller options readonly", () => {
+	const connectorOptions = {} as RpcConnectorOptions;
+	const policyOptions = {} as RpcConnectorReconnectionPolicyOptions;
+
+	// @ts-expect-error RPC-PKG-004 keeps schema-derived option fields readonly.
+	connectorOptions.runtimePolicy = {};
+	// @ts-expect-error RPC-PKG-004 keeps schema-derived policy fields readonly.
+	policyOptions.attemptTimeoutMs = 1;
 });
 
 test("RPC-START-005 requires the Connector connect options record", () => {

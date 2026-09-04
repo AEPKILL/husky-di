@@ -15,6 +15,7 @@ import {
 	runRpcConnectorAdapterConformance,
 	runRpcProtocolConformance,
 } from "../../src/conformance";
+import { runRpcConformanceCases } from "../../src/conformance/rpc-conformance.util";
 import {
 	createRpcCounterExhaustionProtocolAcceptorForTest,
 	createRpcCounterExhaustionProtocolConnectorForTest,
@@ -28,6 +29,73 @@ import {
 } from "./test.utils";
 
 describe("RPC conformance runner", () => {
+	it("RPC-CONFORMANCE-001 parses ordinary configuration objects and snapshots the reporter", async () => {
+		const metadata = Symbol("metadata");
+		const initialReports: RpcConformanceCaseResult[] = [];
+		const replacementReports: RpcConformanceCaseResult[] = [];
+		let reportReads = 0;
+		let report = (result: RpcConformanceCaseResult) => {
+			initialReports.push(result);
+		};
+		const options = new (class {
+			readonly [metadata] = true;
+
+			get report(): (result: RpcConformanceCaseResult) => void {
+				reportReads += 1;
+				return report;
+			}
+		})();
+
+		const outcome = runRpcProtocolConformance(
+			createMemoryProtocolFixture(),
+			options,
+		);
+		report = (result) => {
+			replacementReports.push(result);
+		};
+		await outcome;
+
+		expect(reportReads).toBe(1);
+		expect(initialReports).toHaveLength(15);
+		expect(replacementReports).toEqual([]);
+	});
+
+	it("RPC-CONFORMANCE-001 defaults omitted options and rejects unknown keys or an invalid reporter", async () => {
+		let caseRuns = 0;
+		const cases = [
+			{
+				caseId: "test.options-boundary",
+				run() {
+					caseRuns += 1;
+				},
+			},
+		];
+
+		await expect(runRpcConformanceCases(cases)).resolves.toBeUndefined();
+		await expect(
+			runRpcConformanceCases(cases, { report: undefined }),
+		).resolves.toBeUndefined();
+		const optionsError = await runRpcConformanceCases(cases, {
+			unknown: true,
+		} as never).catch((error: unknown) => error);
+		expect(optionsError).toBeInstanceOf(TypeError);
+		if (!(optionsError instanceof TypeError)) {
+			throw new Error("Expected a TypeError schema failure projection.");
+		}
+		expect(optionsError.cause).toBeInstanceOf(Error);
+		if (!(optionsError.cause instanceof Error)) {
+			throw new Error("Expected the schema failure to be retained as cause.");
+		}
+		expect(optionsError.message).toBe(optionsError.cause.message);
+		await expect(
+			runRpcConformanceCases(cases, { ["__proto__"]: true } as never),
+		).rejects.toBeInstanceOf(TypeError);
+		await expect(
+			runRpcConformanceCases(cases, { report: {} } as never),
+		).rejects.toBeInstanceOf(TypeError);
+		expect(caseRuns).toBe(2);
+	});
+
 	it("RPC-CONFORMANCE-001 continues, reports once, and aggregates the same failures in stable order", async () => {
 		const constructionError = new Error("construction failed");
 		const protocol = {

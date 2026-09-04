@@ -1,10 +1,11 @@
 /**
- * @overview Public opaque Remote Service Descriptor contract and type algebra.
+ * @overview Remote Service Descriptor schema, public contract, and type algebra.
  * @author AEPKILL
  * @created 2026-08-19 00:00:00
  */
 
 import type { Observable } from "rxjs";
+import { type input, type output, z } from "zod";
 
 import type { REMOTE_SERVICE_DESCRIPTOR_TYPE } from "@/constants/peer/remote-service-descriptor.const";
 import type {
@@ -14,6 +15,7 @@ import type {
 	IsAny,
 	RequiredKey,
 } from "@/types/common/common.type";
+import { rpcWireIdentifierSchema } from "@/utils/protocol/rpc-wire-identifier-schema.util";
 
 export type RemoteMethodKey<T> = {
 	[K in keyof T]-?: K extends string
@@ -96,6 +98,79 @@ export type RemoteServiceDescriptor<
 		definitions: Definitions,
 	) => readonly [T, Definitions];
 };
+
+export type RemoteServiceDescriptorOptions<
+	T,
+	Definitions extends RpcMethodDefinitions<T>,
+> = Omit<
+	Readonly<input<typeof remoteServiceDescriptorOptionsSchema>>,
+	"methods"
+> & {
+	readonly methods: Definitions &
+		ValidateMethodDefinitions<T, Definitions> &
+		NonEmptyMethodDefinitions<Definitions>;
+};
+
+export type RemoteServiceDescriptorOptionsSnapshot = Readonly<
+	output<typeof remoteServiceDescriptorOptionsSchema>
+>;
+
+export const rpcCancelableMethodDefinitionSchema = z
+	.preprocess(
+		(value) => ({
+			definition: value,
+			ownKeys: Object.keys(Object(value)),
+		}),
+		z.object({
+			definition: z.strictObject({
+				cancelable: z.literal(true),
+			}),
+			ownKeys: z.array(z.literal("cancelable")).max(1),
+		}),
+	)
+	.transform(({ definition }) => definition)
+	.readonly();
+
+export const rpcMethodNameSchema = rpcWireIdentifierSchema.refine(
+	(methodName) => methodName !== "then",
+);
+
+export const rpcMethodDefinitionSchema = z.union([
+	z.literal(true),
+	rpcCancelableMethodDefinitionSchema,
+]);
+
+export const rpcMethodDefinitionsSchema = z
+	.preprocess(
+		(value) => ({
+			source: value,
+			entries: Object.entries(Object(value)),
+		}),
+		z.object({
+			source: z.object({}),
+			entries: z
+				.array(z.tuple([rpcMethodNameSchema, rpcMethodDefinitionSchema]))
+				.min(1),
+		}),
+	)
+	.transform(({ entries }) => {
+		const methods = Object.create(null) as Record<
+			string,
+			true | { readonly cancelable: true }
+		>;
+		for (const [methodName, definition] of entries) {
+			methods[methodName] = definition;
+		}
+		return methods;
+	})
+	.readonly();
+
+export const remoteServiceDescriptorOptionsSchema = z
+	.object({
+		wireName: rpcWireIdentifierSchema,
+		methods: rpcMethodDefinitionsSchema,
+	})
+	.readonly();
 
 type ContainsAbortSignal<T> =
 	IsAny<T> extends true

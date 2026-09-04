@@ -4,6 +4,7 @@
  * @created 2026-08-19 00:00:00
  */
 
+import { DEFAULT_RPC_RUNTIME_POLICY } from "@/constants/protocol/rpc-runtime-policy.const";
 import { RpcExceptionCodeEnum } from "@/enums/rpc-exception-code.enum";
 import { RpcStateStatusEnum } from "@/enums/rpc-state-status.enum";
 import { createRpcException } from "@/factories/rpc-exception.factory";
@@ -16,22 +17,41 @@ import { RpcOwnerCustodyImpl } from "@/impls/owner/rpc-owner-custody.impl";
 import { RpcAcceptorPublisherImpl } from "@/impls/owner/rpc-owner-publisher.impl";
 import type { IRpcAcceptor } from "@/interfaces/owner/rpc-acceptor.interface";
 import type { IRpcProtocolAcceptor } from "@/interfaces/protocol/rpc-protocol.interface";
-import type { RpcAcceptorOptions } from "@/types/common/rpc-caller.type";
-import { createRpcProtocolAcceptorForOwner } from "@/utils/rpc-protocol-role.util";
 import {
-	createRpcAcceptorRuntimePolicy,
-	snapshotRpcFactoryOptions,
-} from "@/utils/rpc-runtime-policy.util";
+	type RpcAcceptorOptions,
+	rpcAcceptorOptionsSchema,
+} from "@/types/common/rpc-caller.type";
+import { rpcProtocolRuntimePolicySchema } from "@/types/protocol/rpc-runtime-policy.type";
+import { createRpcProtocolAcceptorForOwner } from "@/utils/rpc-protocol-role.util";
 
 /** Creates a cold Acceptor without starting transport I/O. */
 export function createRpcAcceptor(options?: RpcAcceptorOptions): IRpcAcceptor {
-	const snapshot = snapshotRpcFactoryOptions(options);
-	const policy = createRpcAcceptorRuntimePolicy(snapshot.runtimePolicy);
+	const optionsResult = rpcAcceptorOptionsSchema.safeParse(
+		options === undefined ? {} : options,
+	);
+	if (!optionsResult.success) {
+		throw new TypeError(optionsResult.error.message, {
+			cause: optionsResult.error,
+		});
+	}
+	const { protocolFactory, runtimePolicy } = optionsResult.data;
+	const policyResult = rpcProtocolRuntimePolicySchema.safeParse({
+		...DEFAULT_RPC_RUNTIME_POLICY,
+		...runtimePolicy,
+	});
+	if (!policyResult.success) {
+		throw new TypeError(policyResult.error.message, {
+			cause: policyResult.error,
+		});
+	}
+	const policy = policyResult.data;
 	let acceptor: RpcAcceptorImpl | undefined;
 	let protocol: IRpcProtocolAcceptor;
 	try {
 		protocol = createRpcProtocolAcceptorForOwner(
-			snapshot.protocolFactory ?? createRpcProtocolAcceptor,
+			protocolFactory === undefined
+				? createRpcProtocolAcceptor
+				: protocolFactory,
 			policy,
 			{
 				reserveRetainedBytes: (bytes) => acceptor?.reserveRetainedBytes(bytes),

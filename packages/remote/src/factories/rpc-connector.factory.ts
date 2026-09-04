@@ -4,6 +4,7 @@
  * @created 2026-08-19 00:00:00
  */
 
+import { DEFAULT_RPC_RUNTIME_POLICY } from "@/constants/protocol/rpc-runtime-policy.const";
 import { RpcExceptionCodeEnum } from "@/enums/rpc-exception-code.enum";
 import { RpcStateStatusEnum } from "@/enums/rpc-state-status.enum";
 import { createRpcException } from "@/factories/rpc-exception.factory";
@@ -16,24 +17,47 @@ import { RpcOwnerCustodyImpl } from "@/impls/owner/rpc-owner-custody.impl";
 import { RpcConnectorPublisherImpl } from "@/impls/owner/rpc-owner-publisher.impl";
 import type { IRpcConnector } from "@/interfaces/owner/rpc-connector.interface";
 import type { IRpcProtocolConnector } from "@/interfaces/protocol/rpc-protocol.interface";
-import type { RpcConnectorOptions } from "@/types/common/rpc-caller.type";
-import { createRpcProtocolConnectorForOwner } from "@/utils/rpc-protocol-role.util";
 import {
-	createRpcConnectorRuntimePolicy,
-	snapshotRpcFactoryOptions,
-} from "@/utils/rpc-runtime-policy.util";
+	type RpcConnectorOptions,
+	rpcConnectorOptionsSchema,
+} from "@/types/common/rpc-caller.type";
+import { rpcProtocolRuntimePolicySchema } from "@/types/protocol/rpc-runtime-policy.type";
+import { createRpcProtocolConnectorForOwner } from "@/utils/rpc-protocol-role.util";
 
 /** Creates a cold Connector without starting transport I/O. */
 export function createRpcConnector(
 	options?: RpcConnectorOptions,
 ): IRpcConnector {
-	const snapshot = snapshotRpcFactoryOptions(options);
-	const policy = createRpcConnectorRuntimePolicy(snapshot.runtimePolicy);
+	const optionsResult = rpcConnectorOptionsSchema.safeParse(
+		options === undefined ? {} : options,
+	);
+	if (!optionsResult.success) {
+		throw new TypeError(optionsResult.error.message, {
+			cause: optionsResult.error,
+		});
+	}
+	const { protocolFactory, runtimePolicy } = optionsResult.data;
+	const policyResult = rpcProtocolRuntimePolicySchema.safeParse({
+		...DEFAULT_RPC_RUNTIME_POLICY,
+		...runtimePolicy,
+		maxSessions: 1,
+		maxHandshakes: 1,
+		maxRetainedBytesTotal: runtimePolicy.maxRetainedBytesPerSession,
+		maxHandlersTotal: runtimePolicy.maxHandlersPerSession,
+	});
+	if (!policyResult.success) {
+		throw new TypeError(policyResult.error.message, {
+			cause: policyResult.error,
+		});
+	}
+	const policy = policyResult.data;
 	let connector: RpcConnectorImpl | undefined;
 	let protocol: IRpcProtocolConnector;
 	try {
 		protocol = createRpcProtocolConnectorForOwner(
-			snapshot.protocolFactory ?? createRpcProtocolConnector,
+			protocolFactory === undefined
+				? createRpcProtocolConnector
+				: protocolFactory,
 			policy,
 			{
 				reserveRetainedBytes: (bytes) => connector?.reserveRetainedBytes(bytes),

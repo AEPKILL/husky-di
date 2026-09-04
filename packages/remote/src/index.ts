@@ -18,14 +18,7 @@ export type {
 	RpcProtocolFaultReason,
 	RpcSessionCloseReason,
 } from "@/interfaces/protocol/rpc-protocol.interface";
-export type {
-	IRpcConnectorReconnection,
-	RpcConnectorAdapterFactory,
-	RpcConnectorReconnectionEvent,
-	RpcConnectorReconnectionPolicyOptions,
-	RpcConnectorReconnectionState,
-} from "@/interfaces/reconnection/rpc-connector-reconnection.interface";
-export type { CreateRpcConnectorReconnectionOptions } from "@/factories/rpc-connector-reconnection.factory";
+export type { IRpcConnectorReconnection } from "@/interfaces/reconnection/rpc-connector-reconnection.interface";
 export type {
 	IRpcAcceptorAdapter,
 	IRpcConnectorAdapter,
@@ -35,11 +28,9 @@ export type { RpcEvent } from "@/types/owner/rpc-event.type";
 export type {
 	RpcAcceptorListenerState,
 	RpcAcceptorOptions,
-	RpcAcceptorRuntimePolicyOptions,
 	RpcAcceptorState,
 	RpcConnectorConnectOptions,
 	RpcConnectorOptions,
-	RpcConnectorRuntimePolicyOptions,
 	RpcConnectorState,
 	RpcPeerState,
 } from "@/types/common/rpc-caller.type";
@@ -47,6 +38,17 @@ export type {
 	RpcProtocolAcceptorFactory,
 	RpcProtocolConnectorFactory,
 } from "@/types/protocol/rpc-protocol-factory.type";
+export type {
+	RpcAcceptorRuntimePolicyOptions,
+	RpcConnectorRuntimePolicyOptions,
+} from "@/types/protocol/rpc-runtime-policy.type";
+export type {
+	CreateRpcConnectorReconnectionOptions,
+	RpcConnectorAdapterFactory,
+	RpcConnectorReconnectionEvent,
+	RpcConnectorReconnectionPolicyOptions,
+	RpcConnectorReconnectionState,
+} from "@/types/reconnection/rpc-connector-reconnection.type";
 export { RpcAcceptorListenerStopReasonEnum } from "@/enums/rpc-acceptor-listener-stop-reason.enum";
 export { RpcCallDirectionEnum } from "@/enums/rpc-call-direction.enum";
 export { RpcCallStatusEnum } from "@/enums/rpc-call-status.enum";

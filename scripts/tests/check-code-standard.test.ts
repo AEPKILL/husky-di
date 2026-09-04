@@ -12,6 +12,41 @@ import { afterEach, describe, it } from "node:test";
 import { createConfig } from "../src/config/code-standard.config.js";
 import { validateCodeStandard } from "../src/utils/validate-code-standard.util.js";
 
+const ZOD_TYPE_DECLARATIONS = `
+export interface ZodType {
+	readonly _zod: object;
+	readonly(): ZodType;
+	email(): ZodType;
+	int(): ZodType;
+	optional(): ZodType;
+	parse(value: unknown): unknown;
+	pick(mask: object): ZodType;
+}
+
+export interface ZodCheck {
+	readonly _zod: object;
+}
+
+export declare namespace z {
+	type input<TSchema extends ZodType> = unknown;
+	function fromJSONSchema(value: unknown): ZodType;
+	function lt(value: number): ZodCheck;
+	function number(): ZodType;
+	function optional(schema: ZodType): ZodType;
+	function strictObject(shape: object): ZodType;
+	function string(): ZodType;
+	namespace coerce {
+		function number(): ZodType;
+	}
+	namespace iso {
+		function datetime(): ZodType;
+	}
+}
+
+export declare function fromJSONSchema(value: unknown): ZodType;
+export declare function toJSONSchema(schema: ZodType): unknown;
+`;
+
 const temporaryDirectoryPaths: string[] = [];
 
 afterEach(() => {
@@ -31,6 +66,15 @@ function createWorkspace(files: Record<string, string>): string {
 		const filePath = join(rootDirectoryPath, relativeFilePath);
 		mkdirSync(dirname(filePath), { recursive: true });
 		writeFileSync(filePath, sourceText);
+	}
+	if (Object.values(files).some((sourceText) => sourceText.includes('"zod"'))) {
+		const zodRootPath = join(rootDirectoryPath, "node_modules/zod");
+		mkdirSync(zodRootPath, { recursive: true });
+		writeFileSync(join(zodRootPath, "index.d.ts"), ZOD_TYPE_DECLARATIONS);
+		writeFileSync(
+			join(zodRootPath, "package.json"),
+			JSON.stringify({ name: "zod", types: "index.d.ts" }),
+		);
 	}
 
 	return rootDirectoryPath;
@@ -418,6 +462,42 @@ export type ValueType = string | number;
 		assert.deepEqual(getRuleIds(rootDirectoryPath), []);
 	});
 
+	it("allows direct and composed Zod schemas in .type.ts files", () => {
+		const rootDirectoryPath = createWorkspace({
+			"packages/core/src/types/options.type.ts": `/**
+ * @overview Schema-derived option types.
+ * @author AEPKILL
+ * @created 2025-08-09 14:55:21
+ */
+import { fromJSONSchema, z } from "zod";
+import { identifierSchema } from "../utils/identifier.util.js";
+
+export type Options = z.input<typeof optionsSchema>;
+
+export const optionalIdentifierSchema = identifierSchema.optional();
+export const optionalEmailSchema = z.optional(z.string().email());
+export const coercedNumberSchema = z.coerce.number().int();
+export const isoDateTimeSchema = z.iso.datetime();
+export const jsonSchema = fromJSONSchema({});
+export const optionsSchema = z
+	.strictObject({ identifier: optionalIdentifierSchema })
+	.readonly();
+export const selectedOptionsSchema = optionsSchema.pick({ identifier: true });
+`,
+			"packages/core/src/utils/identifier.util.ts": `/**
+ * @overview Identifier schema.
+ * @author AEPKILL
+ * @created 2025-08-09 14:55:21
+ */
+import { z } from "zod";
+
+export const identifierSchema = z.string();
+`,
+		});
+
+		assert.deepEqual(getRuleIds(rootDirectoryPath), []);
+	});
+
 	it("reports runtime values in .type.ts files", () => {
 		const rootDirectoryPath = createWorkspace({
 			"packages/core/src/types/invalid.type.ts": `/**
@@ -431,6 +511,143 @@ export const value = 42;
 		});
 
 		assert.deepEqual(getRuleIds(rootDirectoryPath), ["type-file/exports-only"]);
+	});
+
+	it("reports schema-looking constants that do not construct schemas", () => {
+		const rootDirectoryPath = createWorkspace({
+			"packages/core/src/types/invalid.type.ts": `/**
+ * @overview Invalid schema declarations.
+ * @author AEPKILL
+ * @created 2025-08-09 14:55:21
+ */
+import { z } from "zod";
+import { z as unrelatedZ } from "not-zod";
+import { value as importedSchema } from "../utils/value.util.js";
+
+export const objectSchema = {};
+export const parsedSchema = z.string().parse("value");
+export const checkSchema = z.lt(1);
+export const zodValue = z.string();
+let mutableSchema = z.number();
+export const unrelatedSchema = unrelatedZ.string();
+export const copiedSchema = importedSchema;
+`,
+			"packages/core/src/utils/value.util.ts": `/**
+ * @overview Plain runtime value.
+ * @author AEPKILL
+ * @created 2025-08-09 14:55:21
+ */
+export const value = 1;
+`,
+		});
+
+		assert.deepEqual(getRuleIds(rootDirectoryPath), [
+			"type-file/exports-only",
+			"type-file/exports-only",
+			"type-file/exports-only",
+			"type-file/exports-only",
+			"type-file/exports-only",
+			"type-file/exports-only",
+			"type-file/exports-only",
+		]);
+	});
+
+	it("continues to reject functions and classes in .type.ts files", () => {
+		const rootDirectoryPath = createWorkspace({
+			"packages/core/src/types/invalid.type.ts": `/**
+ * @overview Invalid runtime declarations.
+ * @author AEPKILL
+ * @created 2025-08-09 14:55:21
+ */
+import { z } from "zod";
+
+export function createValueSchema() {
+	return z.string();
+}
+
+export class ValueSchema {}
+`,
+		});
+
+		assert.deepEqual(getRuleIds(rootDirectoryPath), [
+			"type-file/exports-only",
+			"type-file/exports-only",
+		]);
+	});
+
+	it("allows only type and schema runtime re-exports in .type.ts files", () => {
+		const rootDirectoryPath = createWorkspace({
+			"packages/core/src/types/value.type.ts": `/**
+ * @overview Schema re-export boundary.
+ * @author AEPKILL
+ * @created 2025-08-09 14:55:21
+ */
+export type { Value } from "../utils/value.util.js";
+export { valueSchema } from "../utils/value.util.js";
+export { valueSchema as exportedSchema } from "../utils/value.util.js";
+export { value } from "../utils/value.util.js";
+export { value as valueAliasSchema } from "../utils/value.util.js";
+export { valueSchema as valueAlias } from "../utils/value.util.js";
+export * from "../utils/value.util.js";
+`,
+			"packages/core/src/utils/value.util.ts": `/**
+ * @overview Values used by the schema re-export test.
+ * @author AEPKILL
+ * @created 2025-08-09 14:55:21
+ */
+import { z } from "zod";
+
+export type Value = string;
+
+export const valueSchema = z.string();
+export const value = "value";
+`,
+		});
+
+		assert.deepEqual(getRuleIds(rootDirectoryPath), [
+			"type-file/exports-only",
+			"type-file/exports-only",
+			"type-file/exports-only",
+			"type-file/exports-only",
+		]);
+	});
+
+	it("rejects schema names whose static values are not Zod schemas", () => {
+		const rootDirectoryPath = createWorkspace({
+			"packages/core/src/types/invalid.type.ts": `/**
+ * @overview Schema provenance rejection cases.
+ * @author AEPKILL
+ * @created 2025-08-09 14:55:21
+ */
+import { type ZodType, toJSONSchema, z } from "zod";
+import { helperSchema } from "../utils/helper.util.js";
+
+export const fakeSchema = toJSONSchema;
+export const copiedSchema = helperSchema;
+export const maybeSchema = Math.random() > 0.5
+	? z.string()
+	: { _zod: {}, parse: (_value: unknown) => 1 };
+export const pickedSchema = {} as Pick<ZodType, "_zod" | "parse">;
+export { toJSONSchema as exportedSchema } from "zod";
+export { helperSchema as forwardedSchema } from "../utils/helper.util.js";
+`,
+			"packages/core/src/utils/helper.util.ts": `/**
+ * @overview Non-schema helper with a schema-looking name.
+ * @author AEPKILL
+ * @created 2025-08-09 14:55:21
+ */
+export const helperSchema = (): string => "value";
+`,
+		});
+
+		assert.deepEqual(getRuleIds(rootDirectoryPath), [
+			"type-file/exports-only",
+			"type-file/exports-only",
+			"type-file/exports-only",
+			"type-file/exports-only",
+			"type-file/exports-only",
+			"type-file/exports-only",
+		]);
 	});
 
 	it("allows interfaces in .type.ts files", () => {

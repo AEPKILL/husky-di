@@ -4,9 +4,10 @@
  * @created 2026-08-19 00:00:00
  */
 
-import type {
-	RpcConformanceFailure,
-	RpcConformanceOptions,
+import {
+	type RpcConformanceFailure,
+	type RpcConformanceOptions,
+	rpcConformanceOptionsSchema,
 } from "@/conformance/rpc-conformance.type";
 import { RpcConformanceStatusEnum } from "@/enums/conformance/rpc-conformance-status.enum";
 
@@ -54,12 +55,21 @@ export async function runRpcConformanceCases(
 	cases: readonly IRpcConformanceCase[],
 	options?: RpcConformanceOptions,
 ): Promise<void> {
+	const optionsResult = rpcConformanceOptionsSchema.safeParse(
+		options === undefined ? {} : options,
+	);
+	if (!optionsResult.success) {
+		throw new TypeError(optionsResult.error.message, {
+			cause: optionsResult.error,
+		});
+	}
+	const parsedOptions = optionsResult.data;
 	const failures: RpcConformanceFailure[] = [];
 
 	for (const testCase of cases) {
 		try {
 			await testCase.run();
-			options?.report?.(
+			parsedOptions.report?.(
 				Object.freeze({
 					caseId: testCase.caseId,
 					status: RpcConformanceStatusEnum.passed,
@@ -68,7 +78,7 @@ export async function runRpcConformanceCases(
 		} catch (cause) {
 			const failure = createRpcConformanceFailure(testCase.caseId, cause);
 			failures.push(failure);
-			options?.report?.(
+			parsedOptions.report?.(
 				Object.freeze({
 					caseId: testCase.caseId,
 					status: RpcConformanceStatusEnum.failed,

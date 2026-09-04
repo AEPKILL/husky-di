@@ -13,13 +13,13 @@ import { RpcExceptionCodeEnum } from "@/enums/rpc-exception-code.enum";
 import { RpcStateStatusEnum } from "@/enums/rpc-state-status.enum";
 import { createRpcException } from "@/factories/rpc-exception.factory";
 import type { IRpcConnector } from "@/interfaces/owner/rpc-connector.interface";
+import type { IRpcConnectorReconnection } from "@/interfaces/reconnection/rpc-connector-reconnection.interface";
 import type {
-	IRpcConnectorReconnection,
 	RpcConnectorAdapterFactory,
 	RpcConnectorReconnectionEvent,
 	RpcConnectorReconnectionPolicy,
 	RpcConnectorReconnectionState,
-} from "@/interfaces/reconnection/rpc-connector-reconnection.interface";
+} from "@/types/reconnection/rpc-connector-reconnection.type";
 
 /** Supervises the connection-attempt authority of one Connector. */
 export class RpcConnectorReconnectionImpl implements IRpcConnectorReconnection {

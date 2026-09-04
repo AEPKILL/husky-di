@@ -44,6 +44,26 @@ const rpcTypeGuardPath = resolve(
 	repositoryRoot,
 	"packages/remote/src/utils/type-guard.util.ts",
 );
+const conformanceTypesPath = resolve(
+	repositoryRoot,
+	"packages/remote/src/conformance/rpc-conformance.type.ts",
+);
+const callerTypesPath = resolve(
+	repositoryRoot,
+	"packages/remote/src/types/common/rpc-caller.type.ts",
+);
+const descriptorTypesPath = resolve(
+	repositoryRoot,
+	"packages/remote/src/types/peer/remote-service-descriptor.type.ts",
+);
+const runtimePolicyTypesPath = resolve(
+	repositoryRoot,
+	"packages/remote/src/types/protocol/rpc-runtime-policy.type.ts",
+);
+const reconnectionTypesPath = resolve(
+	repositoryRoot,
+	"packages/remote/src/types/reconnection/rpc-connector-reconnection.type.ts",
+);
 const canonicalIdPattern = /^RPC-[A-Z]+-[0-9]{3}$/;
 const allowedEvidenceKinds = new Set([
 	"RT",
@@ -145,10 +165,123 @@ function validateReference(
 }
 
 describe("Remote RPC requirement evidence", () => {
-	it("RPC-PKG-004 keeps composite Zod validation private, derives record types, and uses native primitive guards", () => {
+	it("RPC-PKG-004 colocates private schemas with derived configuration types and uses native primitive guards", () => {
+		const specificationSource = readFileSync(specificationPath, "utf8");
 		const grammarSource = readFileSync(protocolGrammarPath, "utf8");
 		const recordTypesSource = readFileSync(protocolRecordTypesPath, "utf8");
 		const rpcTypeGuardSource = readFileSync(rpcTypeGuardPath, "utf8");
+		const schemaTypeSources = [
+			{
+				source: readFileSync(conformanceTypesPath, "utf8"),
+				derivations: [
+					{
+						typeName: "RpcConformanceOptions",
+						projection: "input",
+						schemaName: "rpcConformanceOptionsSchema",
+					},
+					{
+						typeName: "RpcConformanceOptionsSnapshot",
+						projection: "output",
+						schemaName: "rpcConformanceOptionsSchema",
+					},
+				],
+			},
+			{
+				source: readFileSync(callerTypesPath, "utf8"),
+				derivations: [
+					{
+						typeName: "RpcConnectorOptions",
+						projection: "input",
+						schemaName: "rpcConnectorOptionsSchema",
+					},
+					{
+						typeName: "RpcConnectorConnectOptions",
+						projection: "input",
+						schemaName: "rpcConnectorConnectOptionsSchema",
+					},
+					{
+						typeName: "RpcConnectorConnectOptionsSnapshot",
+						projection: "output",
+						schemaName: "rpcConnectorConnectOptionsSchema",
+					},
+					{
+						typeName: "RpcAcceptorOptions",
+						projection: "input",
+						schemaName: "rpcAcceptorOptionsSchema",
+					},
+				],
+			},
+			{
+				source: readFileSync(descriptorTypesPath, "utf8"),
+				derivations: [
+					{
+						typeName: "RemoteServiceDescriptorOptions",
+						projection: "input",
+						schemaName: "remoteServiceDescriptorOptionsSchema",
+					},
+					{
+						typeName: "RemoteServiceDescriptorOptionsSnapshot",
+						projection: "output",
+						schemaName: "remoteServiceDescriptorOptionsSchema",
+					},
+				],
+			},
+			{
+				source: readFileSync(runtimePolicyTypesPath, "utf8"),
+				derivations: [
+					{
+						typeName: "RpcAcceptorRuntimePolicyOptions",
+						projection: "input",
+						schemaName: "rpcAcceptorRuntimePolicyOptionsSchema",
+					},
+					{
+						typeName: "RpcConnectorRuntimePolicyOptions",
+						projection: "input",
+						schemaName: "rpcConnectorRuntimePolicyOptionsSchema",
+					},
+					{
+						typeName: "RpcAcceptorRuntimePolicyOptionsSnapshot",
+						projection: "output",
+						schemaName: "rpcAcceptorRuntimePolicyOptionsSchema",
+					},
+					{
+						typeName: "RpcConnectorRuntimePolicyOptionsSnapshot",
+						projection: "output",
+						schemaName: "rpcConnectorRuntimePolicyOptionsSchema",
+					},
+					{
+						typeName: "RpcProtocolRuntimePolicy",
+						projection: "output",
+						schemaName: "rpcProtocolRuntimePolicySchema",
+					},
+				],
+			},
+			{
+				source: readFileSync(reconnectionTypesPath, "utf8"),
+				derivations: [
+					{
+						typeName: "RpcConnectorAdapterFactory",
+						projection: "output",
+						schemaName: "rpcConnectorAdapterFactorySchema",
+					},
+					{
+						typeName: "RpcConnectorReconnectionPolicyOptions",
+						projection: "input",
+						schemaName: "rpcConnectorReconnectionPolicySchema",
+					},
+					{
+						typeName: "RpcConnectorReconnectionPolicy",
+						projection: "output",
+						schemaName: "rpcConnectorReconnectionPolicySchema",
+					},
+					{
+						typeName: "CreateRpcConnectorReconnectionOptions",
+						projection: "input",
+						schemaName: "rpcConnectorReconnectionOptionsSchema",
+					},
+				],
+			},
+		] as const;
 		const compactRecordTypesSource = recordTypesSource.replaceAll(/\s+/gu, "");
 		const recordSchemaNames = [
 			"rpcJsonRecordSchema",
@@ -170,33 +303,35 @@ describe("Remote RPC requirement evidence", () => {
 			"rpcControlRecordSchema",
 			"rpcActiveRecordSchema",
 		] as const;
-		const ownerValidationPaths = [
-			"packages/remote/src/factories/remote-service-descriptor.factory.ts",
+		const runtimeSchemaOwnerPaths = [
 			"packages/remote/src/impls/peer/rpc-peer.impl.ts",
 			"packages/remote/src/utils/protocol/rpc-base64-url-32-schema.util.ts",
 			"packages/remote/src/utils/protocol/rpc-wire-grammar.util.ts",
 			"packages/remote/src/utils/protocol/rpc-wire-identifier-schema.util.ts",
 		] as const;
+		const schemaConsumerPaths = [
+			"packages/remote/src/conformance/rpc-conformance.util.ts",
+			"packages/remote/src/factories/remote-service-descriptor.factory.ts",
+			"packages/remote/src/factories/rpc-acceptor.factory.ts",
+			"packages/remote/src/factories/rpc-connector-reconnection.factory.ts",
+			"packages/remote/src/factories/rpc-connector.factory.ts",
+			"packages/remote/src/impls/owner/rpc-connector.impl.ts",
+		] as const;
 		const nativeGuardOwnerPaths = [
 			"packages/remote/src/conformance/rpc-protocol-conformance.util.ts",
-			"packages/remote/src/factories/rpc-connector-reconnection.factory.ts",
 			"packages/remote/src/impls/endpoint/rpc-endpoint.impl.ts",
 			"packages/remote/src/impls/common/rpc-retained-bytes-ledger.impl.ts",
 			"packages/remote/src/utils/rpc-exposure.util.ts",
-			"packages/remote/src/utils/rpc-runtime-policy.util.ts",
 		] as const;
 		const callableGuardConsumerPaths = [
 			"packages/remote/src/conformance/rpc-protocol-conformance.util.ts",
-			"packages/remote/src/factories/rpc-connector-reconnection.factory.ts",
 			"packages/remote/src/impls/owner/rpc-acceptor.impl.ts",
-			"packages/remote/src/impls/owner/rpc-connector.impl.ts",
 			"packages/remote/src/impls/peer/rpc-peer.impl.ts",
 			"packages/remote/src/utils/rpc-exposure.util.ts",
 			"packages/remote/src/utils/rpc-protocol-role.util.ts",
 		] as const;
 		const nonNullObjectGuardConsumerPaths = [
 			"packages/remote/src/conformance/rpc-protocol-conformance.util.ts",
-			"packages/remote/src/factories/rpc-connector-reconnection.factory.ts",
 			"packages/remote/src/impls/owner/rpc-acceptor.impl.ts",
 			"packages/remote/src/impls/owner/rpc-connector.impl.ts",
 			"packages/remote/src/impls/peer/rpc-peer.impl.ts",
@@ -204,9 +339,9 @@ describe("Remote RPC requirement evidence", () => {
 		] as const;
 		const undefinedGuardConsumerPaths = [
 			"packages/remote/src/impls/owner/rpc-acceptor.impl.ts",
-			"packages/remote/src/impls/owner/rpc-connector.impl.ts",
 		] as const;
 
+		expect(specificationSource).not.toMatch(/zod/iu);
 		expect(grammarSource).toContain('from "zod"');
 		expect(grammarSource).toContain("z.custom<number>(isPositiveSafeInteger)");
 		expect(grammarSource).toContain("isNonNegativeSafeInteger");
@@ -221,12 +356,8 @@ describe("Remote RPC requirement evidence", () => {
 			"isFiniteNumber",
 			"isNonNegativeSafeInteger",
 			"isNonNullObject",
-			"isNull",
 			"isObjectOrFunction",
-			"isObjectType",
-			"isPlainRecord",
 			"isPositiveSafeInteger",
-			"isString",
 			"isUndefined",
 			"isUint8Array",
 		] as const) {
@@ -237,10 +368,46 @@ describe("Remote RPC requirement evidence", () => {
 				`RpcSchemaOutput<typeof${schemaName}>`,
 			);
 		}
-		for (const ownerPath of ownerValidationPaths) {
-			expect(
-				readFileSync(resolve(repositoryRoot, ownerPath), "utf8"),
-			).toContain('from "zod"');
+		const colocatedSchemaNames = new Set<string>();
+		for (const { derivations, source } of schemaTypeSources) {
+			expect(source).toContain('from "zod"');
+			for (const { projection, schemaName, typeName } of derivations) {
+				expect(source).toContain(`const ${schemaName}`);
+				colocatedSchemaNames.add(schemaName);
+				const declarationStart = new RegExp(
+					`export type ${typeName}(?=[\\s<])`,
+					"u",
+				).exec(source)?.index;
+				expect(declarationStart).toBeDefined();
+				if (declarationStart === undefined) {
+					continue;
+				}
+				expect(declarationStart).toBeGreaterThanOrEqual(0);
+				const nextExport = source.indexOf("\nexport ", declarationStart + 1);
+				const declarationSource = source.slice(
+					declarationStart,
+					nextExport < 0 ? undefined : nextExport,
+				);
+				expect(declarationSource.replaceAll(/\s+/gu, "")).toContain(
+					`${projection}<typeof${schemaName}>`,
+				);
+			}
+		}
+		for (const ownerPath of runtimeSchemaOwnerPaths) {
+			const ownerSource = readFileSync(
+				resolve(repositoryRoot, ownerPath),
+				"utf8",
+			);
+			expect(ownerSource).toContain('from "zod"');
+		}
+		for (const consumerPath of schemaConsumerPaths) {
+			const consumerSource = readFileSync(
+				resolve(repositoryRoot, consumerPath),
+				"utf8",
+			);
+			expect(consumerSource).not.toMatch(/\bconst\s+\w+Schema\s*=/u);
+			expect(consumerSource).not.toContain("readRpcClosedOptionsRecord");
+			expect(consumerSource).not.toContain("validateRpcPositiveSafeInteger");
 		}
 		for (const ownerPath of nativeGuardOwnerPaths) {
 			const ownerSource = readFileSync(
@@ -273,6 +440,14 @@ describe("Remote RPC requirement evidence", () => {
 				resolve(repositoryRoot, "packages/remote/src/utils/rpc-schema.util.ts"),
 			),
 		).toBe(false);
+		expect(
+			existsSync(
+				resolve(
+					repositoryRoot,
+					"packages/remote/src/utils/rpc-runtime-policy.util.ts",
+				),
+			),
+		).toBe(false);
 		for (const publicEntry of [
 			"index",
 			"protocol",
@@ -286,6 +461,9 @@ describe("Remote RPC requirement evidence", () => {
 			expect(publicSource).not.toContain("type-guard");
 			expect(publicSource).not.toContain("rpc-wire-grammar");
 			expect(publicSource).not.toContain('from "zod"');
+			for (const schemaName of colocatedSchemaNames) {
+				expect(publicSource).not.toContain(schemaName);
+			}
 		}
 	});
 

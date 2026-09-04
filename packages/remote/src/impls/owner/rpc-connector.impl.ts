@@ -36,10 +36,14 @@ import type {
 } from "@/interfaces/protocol/rpc-protocol.interface";
 import type { IRpcConnectorAdapter } from "@/interfaces/transport/rpc-adapter.interface";
 import type { IRpcConnection } from "@/interfaces/transport/rpc-connection.interface";
-import type {
-	RpcConnectorConnectOptions,
-	RpcConnectorState,
-	RpcPeerState,
+import {
+	type RpcConnectorConnectOptions,
+	type RpcConnectorState,
+	type RpcPeerState,
+	rpcConnectorAdapterMembersSchema,
+	rpcConnectorCallableSchema,
+	rpcConnectorConnectOptionsSchema,
+	rpcConnectorObservableSchema,
 } from "@/types/common/rpc-caller.type";
 import type { RpcEvent } from "@/types/owner/rpc-event.type";
 import type { RpcConnectorCommit } from "@/types/owner/rpc-owner-publication.type";
@@ -47,22 +51,14 @@ import type {
 	RpcPeerLifecycleFact,
 	RpcSessionTerminalChange,
 } from "@/types/owner/rpc-session-projection.type";
-import {
-	installRpcAbortListener,
-	readRpcAbortSignalAborted,
-} from "@/utils/rpc-cancellation.util";
-import { readRpcClosedOptionsRecord } from "@/utils/rpc-runtime-policy.util";
+import { installRpcAbortListener } from "@/utils/rpc-cancellation.util";
 import {
 	isRpcSessionTerminalChange,
 	resolveRpcSessionClosure,
 	resolveRpcSessionTransition,
 } from "@/utils/rpc-session-projection.util";
 import { reserveRpcSessionRetainedBytes } from "@/utils/rpc-session-retained-bytes.util";
-import {
-	isCallable,
-	isNonNullObject,
-	isUndefined,
-} from "@/utils/type-guard.util";
+import { isCallable, isNonNullObject } from "@/utils/type-guard.util";
 
 export type CreateRpcConnectorImplOptions = Readonly<{
 	readonly policy: IRpcProtocolRuntimePolicy;
@@ -176,35 +172,36 @@ export class RpcConnectorImpl implements IRpcConnector {
 				createRpcException(RpcExceptionCodeEnum.unavailable),
 			);
 		}
-		const optionRecord = readRpcClosedOptionsRecord(
-			options,
-			connectorConnectOptionKeys,
-			"options",
-		);
-		const signal = optionRecord.signal;
-		if (signal !== undefined && readRpcAbortSignalAborted(signal)) {
+		const optionsResult = rpcConnectorConnectOptionsSchema.safeParse(options);
+		if (!optionsResult.success) {
+			throw new TypeError(optionsResult.error.message, {
+				cause: optionsResult.error,
+			});
+		}
+		const optionRecord = optionsResult.data;
+		const signal = optionRecord.signal?.signal;
+		if (optionRecord.signal?.aborted === true) {
 			return Promise.reject(
 				new DOMException("The connection attempt was aborted.", "AbortError"),
 			);
 		}
-		const adapter = optionRecord.adapter as IRpcConnectorAdapter;
-		if (!isNonNullObject(adapter)) {
-			return Promise.reject(new TypeError("adapter must be an object."));
-		}
-
-		const connectionSource = Reflect.get(adapter, "connection$") as unknown;
-		const connect = Reflect.get(adapter, "connect");
-		const subscribe = isUndefined(connectionSource)
-			? undefined
-			: Reflect.get(connectionSource as object, "subscribe");
-		// A Connector Adapter must provide callable subscription and connect entrypoints.
-		const adapterShapeIsInvalid =
-			!isCallable(subscribe) || !isCallable(connect);
-		if (adapterShapeIsInvalid) {
+		const adapterResult = rpcConnectorAdapterMembersSchema.safeParse(
+			optionRecord.adapter,
+		);
+		if (!adapterResult.success) {
 			return Promise.reject(new TypeError("adapter has an invalid shape."));
 		}
-		const validConnectionSource =
-			connectionSource as Observable<IRpcConnection>;
+		const { connect, connection$ } = adapterResult.data;
+		const connectionSourceIsInvalid =
+			!rpcConnectorObservableSchema.safeParse(connection$).success;
+		const connectIsInvalid =
+			!rpcConnectorCallableSchema.safeParse(connect).success;
+		if (connectionSourceIsInvalid || connectIsInvalid) {
+			return Promise.reject(new TypeError("adapter has an invalid shape."));
+		}
+		const adapter = optionRecord.adapter as IRpcConnectorAdapter;
+		const validConnectionSource = connection$ as Observable<IRpcConnection>;
+		const validConnect = connect as IRpcConnectorAdapter["connect"];
 
 		const fresh = this.peer.state.status === RpcStateStatusEnum.unbound;
 		let attempt!: RpcConnectorAttempt;
@@ -342,7 +339,7 @@ export class RpcConnectorImpl implements IRpcConnector {
 
 		try {
 			Promise.resolve(
-				Reflect.apply(connect, adapter, [attempt.abortController.signal]),
+				Reflect.apply(validConnect, adapter, [attempt.abortController.signal]),
 			).then(resolveAdapterStartup, rejectAdapterStartup);
 		} catch (error) {
 			rejectAdapterStartup(error);
@@ -1139,8 +1136,6 @@ interface RpcConnectorAttempt {
 	fenced: boolean;
 	ownerAbortError?: Error;
 }
-
-const connectorConnectOptionKeys = new Set(["adapter", "signal"]);
 
 function isProtocolSession(value: unknown): value is IRpcProtocolSession {
 	if (!isNonNullObject(value)) {

@@ -31,40 +31,14 @@ export function isNonNullObject(value: unknown): value is object {
 	return typeof value === "object" && value !== null;
 }
 
-/** Returns whether a value is JavaScript's null primitive. */
-export function isNull(value: unknown): value is null {
-	return value === null;
-}
-
 /** Returns whether a value is a non-null object or function. */
 export function isObjectOrFunction(value: unknown): value is object {
 	return isNonNullObject(value) || isCallable(value);
 }
 
-/** Returns whether JavaScript reports a value's type as object. */
-export function isObjectType(value: unknown): value is object | null {
-	return typeof value === "object";
-}
-
-/** Returns whether a value is a plain record with an ordinary or null prototype. */
-export function isPlainRecord(
-	value: unknown,
-): value is Record<PropertyKey, unknown> {
-	if (!isNonNullObject(value) || isArray(value)) {
-		return false;
-	}
-	const prototype = Object.getPrototypeOf(value);
-	return prototype === Object.prototype || prototype === null;
-}
-
 /** Returns whether a value is a positive safe integer. */
 export function isPositiveSafeInteger(value: unknown): value is number {
 	return typeof value === "number" && Number.isSafeInteger(value) && value > 0;
-}
-
-/** Returns whether a value is a JavaScript string primitive. */
-export function isString(value: unknown): value is string {
-	return typeof value === "string";
 }
 
 /** Returns whether a value is JavaScript's undefined primitive. */

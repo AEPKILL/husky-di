@@ -98,25 +98,33 @@ preconstructed default Protocol role, a concrete Protocol implementation class, 
 Handshake, resume-credential, ledger, or scheduler type.
 
 **RPC-PKG-004 — Private validation grammar.** Every package-owned materialized record, tuple, and tagged-union
-grammar **MUST** have one package-private Zod schema as its sole executable data-shape source; the package
-**MUST NOT** maintain a second hand-written field grammar. Each private type that mirrors such a schema **MUST**
-derive from Zod's `output` type (`z.output<typeof schema>` or its imported alias). A type-only facade or readonly
-or semantic-brand wrapper **MAY** layer on that output but **MUST NOT** redeclare its record fields. Focused
+grammar **MUST** have one package-private schema as its sole executable data-shape source; the package
+**MUST NOT** maintain a second hand-written field grammar. Each TypeScript type that mirrors such a schema
+**MUST** derive from the schema definition rather than redeclare its record fields. Caller configuration types
+**MUST** derive from the accepted input shape; materialized snapshots **MUST** derive from the normalized output
+shape. A type-only facade, readonly wrapper, or semantic-brand wrapper **MAY** layer on a derived type. Focused
 package-private native type guards **MAY** be shared for primitive built-in-brand, safe-integer, and plain-record
-predicates that own no record, tuple, or tagged-union field grammar. Schema failures **MUST** project to the error
-or fault specified for the owning seam; `ZodError` and schema diagnostics **MUST NOT** cross the Codec seam or
-enter a public error or cause. The package **MUST NOT** publish a built-in Protocol schema, validator,
-decoded-record type, data corpus, or any `./wire/*` subpath. Raw-byte parsing, safe Application Value
-normalization, and retained state/security/resource decisions **MUST** remain with their owning modules and
-**MUST NOT** be replaced by
-ordinary Zod parsing. `RpcApplicationValue`, Protocol SPI types, and caller-facing domain types that do not
+predicates that own no record, tuple, or tagged-union field grammar. Caller configuration records identified by
+this specification as schema-parsed **MUST** delegate their key, value, range, and cross-field validation to
+their private schemas;
+they **MUST NOT** repeat those decisions in standalone option validators. Schema refinements and transforms
+**MAY** enforce domain relations and create bounded detached snapshots. Opaque behavior-bearing capabilities
+retain their original identity and remain subject to their owning SPI seam. Schema failures **MUST** project to
+the error or fault specified for the owning seam. At a caller-configuration seam specified to throw or reject a
+`TypeError`, a private-schema rejection **MUST** be projected as a `TypeError` whose message equals the schema
+failure's message and whose `cause` is that failure; the diagnostic text and schema-specific cause shape are
+non-normative implementation details. Schema failures and diagnostics **MUST NOT** cross the Codec seam. The
+package **MUST NOT** publish a built-in Protocol schema, validator, decoded-record type, data corpus, or any
+`./wire/*` subpath. Raw-byte parsing, safe Application Value normalization, and retained
+state/security/resource decisions **MUST** remain with their owning modules and **MUST NOT** be replaced by
+ordinary schema parsing. `RpcApplicationValue`, Protocol SPI types, and caller-facing domain types that do not
 mirror the built-in decoded tree **MUST** remain owned by their defining interfaces. These validation-ownership
 requirements do not constrain an independent custom Protocol's grammar.
 
 **RPC-PKG-005 — Manifest.** The published manifest **MUST** declare `type: "module"`, public access,
 `engines.node: ">=23.6"`, source maps, and `sideEffects: false`. Runtime dependencies **MUST** be limited to
-`@husky-di/core`, `rxjs`, and `zod`; the packed manifest **MUST NOT** contain `workspace:*`, a test framework,
-`ws`, or a Node-only polyfill.
+`@husky-di/core`, `rxjs`, and at most one library used exclusively for package-private runtime validation; the
+packed manifest **MUST NOT** contain `workspace:*`, a test framework, `ws`, or a Node-only polyfill.
 
 **RPC-PKG-006 — Artifact.** The packed tarball **MUST** contain only declared build output, the architecture
 source and rendered diagram, declared package documentation, README, CHANGELOG, LICENSE, and package metadata.
@@ -393,10 +401,14 @@ method name `then` **MUST** be rejected by the type surface and validated again 
 Generic and overloaded call signatures **MUST** be documented as unsupported without claiming reliable static
 rejection or relationship preservation. Ordinary non-cancelable optional/rest parameters **MAY** map normally;
 a cancelable signature **MUST** have a fixed prefix and exact required trailing `AbortSignal`.
+`createRemoteServiceDescriptor()` **MUST** parse its conventional `options` object and dynamic `methods` record
+through package-private schemas using ordinary property access. It **MUST NOT** impose additional prototype or
+data-property restrictions; symbol metadata does not participate in the schema, while the method record uses its
+own enumerable string entries. Schema rejection **MUST** synchronously throw `TypeError`.
 
 **RPC-DESC-003 — Exact names.** Wire service and method names **MUST** be non-empty strings compared by exact
-Unicode code-point sequence without normalization or case folding. `then` **MUST** remain reserved at the type,
-runtime, and wire layers.
+Unicode code-point sequence without normalization or case folding. The own enumerable method name `__proto__`
+**MUST** be preserved as data. `then` **MUST** remain reserved at the type, runtime, and wire layers.
 
 **RPC-DESC-004 — Atomic exposure.** `expose()` **MUST** validate the entire Descriptor/implementation pair and
 all selected members before atomically installing it. It **MUST** snapshot the selected function references and
@@ -515,11 +527,15 @@ export function createRpcConnector(options?: RpcConnectorOptions): IRpcConnector
 export function createRpcAcceptor(options?: RpcAcceptorOptions): IRpcAcceptor;
 ```
 
-**RPC-API-001 — Factories.** Owner factories **MUST** synchronously snapshot and validate a closed options and
-policy schema. Invalid values, unknown keys, non-positive/non-finite/non-safe-integer limits, or invalid
-cross-field combinations **MUST** throw `TypeError` before an Owner exists. If a custom Protocol factory throws
-or returns an invalid role, the Owner factory **MUST** synchronously throw Framework `RpcException` with code
-`protocol` and may preserve only the trusted local cause.
+**RPC-API-001 — Factories.** Owner factories **MUST** synchronously parse `options` and `runtimePolicy` as
+conventional JavaScript configuration objects through package-private strict schemas, then materialize a
+detached effective policy snapshot. Schema evaluation **MUST** use ordinary property access rather than property
+descriptor inspection; no additional prototype or property-descriptor restrictions apply, unknown
+schema-visible string keys are rejected, and symbol-keyed metadata does not participate in the schema.
+Schema-rejected values, non-positive/non-finite/non-safe-integer limits, or invalid cross-field combinations
+**MUST** throw `TypeError` before an Owner exists. Supplying a `protocolFactory` candidate that is not callable,
+throws when called, or returns an invalid role **MUST** cause the Owner factory to synchronously throw Framework
+`RpcException` with code `protocol` and may preserve only the trusted local cause.
 
 **RPC-API-002 — Stable peer.** A Connector **MUST** expose one stable `peer` before its first connection. An
 Acceptor **MUST** create one stable peer per admitted fresh Session and keep that object through Recovery.
@@ -903,10 +919,13 @@ resource pressure has won, Framework **MUST** record `stopped(normal, completed)
 `listen()` Promise with `RpcException(unavailable)` without a cause; it **MUST NOT** fulfill a readiness operation
 that never reached ready.
 
-**RPC-START-005 — Connector attempt cancellation.** `connect()` **MUST** accept a closed
-`{ adapter, signal? }` options record. Its eligibility gate **MUST** run before reading that record. After the
-gate, a non-platform signal **MUST** reject `TypeError`; an already-aborted signal **MUST** reject `AbortError`
-without inspecting or starting the Adapter. A later abort **MUST** fence and cancel only the unsettled attempt,
+**RPC-START-005 — Connector attempt cancellation.** `connect()` **MUST** accept a conventional
+`{ adapter, signal? }` configuration object whose schema-visible keys are closed by a package-private strict
+schema. Its eligibility gate **MUST** run before reading that object. Parsing **MUST** use ordinary property access
+without additional prototype or property-descriptor restrictions; symbol metadata does not participate in the
+schema, and schema rejection **MUST** reject the returned Promise with `TypeError`. After the gate, a non-platform
+signal **MUST** reject `TypeError`; an already-aborted signal **MUST** reject `AbortError` without inspecting
+Adapter capability members or starting the Adapter. A later abort **MUST** fence and cancel only the unsettled attempt,
 abort the Framework-owned signal passed to Adapter and Protocol, Direct Close any handed-off Connection, return
 a fresh peer to `unbound`, and leave a recovering peer `recovering`. Binding success, abort, ordinary failure,
 and Owner/Session terminal **MUST** select one winner. Binding success is Binding Activation; abort after
@@ -1741,11 +1760,15 @@ export function createRpcConnectorReconnection(
 ```
 
 **RPC-RECONNECT-001 — Construction and initial attempt.** `createRpcConnectorReconnection()` **MUST** create a
-cold, opt-in, single-use supervisor from a closed `{ connector, adapterFactory, policy? }` record and expose the
-exact supplied Connector as `readonly connector`. Its synchronous, argument-free Adapter Factory **MUST** be
-called only when an attempt begins and **MUST** return a fresh cold single-use Adapter. `connect()` **MUST** be
-accepted once, call the Factory once, and settle when the initial Connector attempt settles; it **MUST NOT**
-retry initial failure. Factory throw **MUST** remain the initial rejection. Initial failure **MUST** stop with
+cold, opt-in, single-use supervisor from a conventional `{ connector, adapterFactory, policy? }` configuration
+object whose schema-visible keys are closed by strict schemas, and expose the exact supplied Connector as
+`readonly connector`. The outer object and nested policy **MUST** be parsed by package-private strict schemas
+using ordinary property access, without additional prototype or property-descriptor restrictions; symbol
+metadata does not participate in either schema, and schema or capability rejection **MUST** synchronously throw
+`TypeError`. Its synchronous, argument-free Adapter Factory **MUST** be called only when an attempt begins and
+**MUST** return a fresh cold single-use Adapter. `connect()` **MUST** be accepted once, call the Factory once, and
+settle when the initial Connector attempt settles; it **MUST NOT** retry initial failure. Factory throw **MUST**
+remain the initial rejection. Initial failure **MUST** stop with
 `initial-connection-failed`; initial success **MUST** enter `monitoring` and leave later Recovery supervision in
 the background.
 
@@ -1757,9 +1780,11 @@ initial success, the first `recovering` projection **MUST** synchronously publis
 and defer Factory invocation until a microtask, so Peer Recovery is observable first. Successful replacement
 **MUST** return to `monitoring`; a later Recovery episode **MUST** restart numbering at one.
 
-**RPC-RECONNECT-003 — Finite policy.** Policy construction **MUST** snapshot at most 64 non-negative
-safe-integer `retryDelaysMs` values and one positive safe-integer `attemptTimeoutMs`. The default delays **MUST**
-be `[1000, 2000, 5000, 10000, 20000, 30000, 60000, 60000, 60000]` and the default timeout **MUST** be 30000 ms.
+**RPC-RECONNECT-003 — Finite policy.** The policy schema **MUST** snapshot at most 64 non-negative
+safe-integer `retryDelaysMs` values and one positive safe-integer `attemptTimeoutMs`. It **MUST** reject an
+oversized delay list before reading any delay item, read an accepted list through ordinary indexed access without
+invoking its iterator, and produce a detached frozen snapshot. The default delays **MUST** be
+`[1000, 2000, 5000, 10000, 20000, 30000, 60000, 60000, 60000]` and the default timeout **MUST** be 30000 ms.
 Each Recovery episode **MUST** make one immediate replacement attempt; delay item N **MUST** authorize attempt
 N+2 exactly that many milliseconds after attempt N+1 settles. The timeout **MUST** cover only each replacement
 Adapter startup, handoff, and Protocol binding, cancel through the Connector signal, and **MUST NOT** move the
@@ -2315,8 +2340,14 @@ role factory, and the tooling does not extend the production Owner lifecycle.
 
 **RPC-CONFORMANCE-001 — Runner result.** Each runner **MUST** be independent of Vitest/Jest, fulfill `void` on
 success, and reject an `AggregateError` whose `errors` are `RpcConformanceFailure` objects in stable case order
-on failure. It **MUST** run all cases that remain possible after a case failure and call a contract-valid
-non-throwing reporter once after each attempted case with the same failure object used by `AggregateError`.
+on failure. Before running a case, it **MUST** parse an omitted `options` argument as an empty configuration or a
+supplied `RpcConformanceOptions` as a conventional JavaScript configuration object through a package-private
+strict schema. Parsing **MUST** use ordinary property access without additional prototype or property-descriptor
+restrictions; schema-visible string keys are limited to the optional callable `report`, symbol metadata does not
+participate, and schema rejection **MUST** reject the returned Promise with `TypeError`. The parsed snapshot **MUST**
+retain the exact reporter reference so later caller mutation cannot change reporting. The runner **MUST** run all
+cases that remain possible after a case failure and call a contract-valid non-throwing reporter once after each
+attempted case with the same failure object used by `AggregateError`.
 Case IDs **MUST** be documented by the conformance entry point, remain stable after publication, and use plain
 `string` rather than a closed exported literal union so additive cases do not break fixture types. It
 **MUST NOT** expose Default-Protocol private module or decoded-record types through its fixture contract.
@@ -2350,7 +2381,7 @@ fixture-owned external resources; they **MUST NOT** close or settle candidate-ow
 ### 14.3 Default Protocol validation and abnormal-state matrix
 
 **RPC-CORPUS-001 — Runtime validation coverage.** Node release tests **MUST** directly exercise the built-in
-Protocol's raw byte parser, decoded-record Zod grammar, and CSPRNG bearer-token behavior. Browser release tests
+Protocol's raw byte parser, decoded-record schema grammar, and CSPRNG bearer-token behavior. Browser release tests
 **MUST** exercise the built-in round trip plus fresh token issuance and cross-Connection presentation. The
 bounded raw parser
 **MUST** independently cover strict UTF-8, BOM, duplicate keys, trailing data, number spelling, and allocation
@@ -2439,12 +2470,13 @@ package-private Record Grammar is the sole executable owner of decoded record sh
 `SemanticMessage` union; downstream modules consume schema-derived records instead of recomposing the grammar.
 Readonly or semantic wrappers may refine those private outputs without copying their fields.
 
-Runtime schemas should live beside the module that owns their invariant. A focused package-private primitive
-may be shared only when multiple owners enforce the same domain rule; unrelated schemas should not accumulate
-in a catch-all catalog, and the implementation should not introduce a Validator interface, class, adapter, or
-registry. The Codec should replace Zod diagnostics with its stable seam-level error or fault. Its encoder accepts
-only internally constructed records and performs serialization plus complete-message-size enforcement without
-rerunning the full inbound validation pipeline.
+A caller-configuration runtime schema should be colocated in the `.type.ts` module that owns its mirrored data
+shape. Caller-input types should derive from the accepted-input shape, while normalized snapshots should derive
+from the output shape. A focused package-private primitive may be shared only when multiple owners enforce the
+same domain rule; unrelated schemas should not accumulate in a catch-all catalog, and the implementation should
+not introduce a Validator interface, class, adapter, or registry. The Codec should replace schema diagnostics
+with its stable seam-level error or fault. Its encoder accepts only internally constructed records and performs
+serialization plus complete-message-size enforcement without rerunning the full inbound validation pipeline.
 
 ## Appendix C. Non-normative decision lineage and research rationale
 
@@ -2471,7 +2503,7 @@ have no independent authority. The `Design lineage` column in [REQUIREMENTS.md](
 | 15 | Package surface, verification, conformance, and release contract | Sections 3 and 14 and Appendix A |
 | 16 | Completion audit and handoff into this specification | This appendix; no independent requirement |
 | 18 | Graceful shutdown, forced close, and bounded cleanup convergence | `RPC-WIRE-015` and Section 13 |
-| Zod validation | Private executable grammar and removal of published wire data assets | `RPC-PKG-004`–`006`, `RPC-CORPUS-001`, and Appendix B |
+| Private schema validation | Private executable grammar and removal of published wire data assets | `RPC-PKG-004`–`006`, `RPC-CORPUS-001`, and Appendix B |
 
 Early caller prototypes informed the final API but did not remain authoritative. In particular, the final
 surface has six-state peers, separate `shutdown()` and `close()` semantics, payload-free observations, and no
@@ -2493,7 +2525,7 @@ profile or a substantially larger stack:
 
 The resulting `husky-di-rpc/1` profile therefore fixes one strict UTF-8 JSON representation rather than exposing
 a Codec matrix. The research also evaluated CBOR/CDDL and machine-readable public grammars; v1 instead keeps the
-executable Zod grammar private because there is no cross-language interoperability commitment. Framing remains
+executable record grammar private because there is no cross-language interoperability commitment. Framing remains
 an Adapter concern, sequence remains distinct from Call Identity, and unknown fields are distinct from unknown
 required message kinds.
 
@@ -2537,9 +2569,9 @@ Earlier design notes explored an HMAC/HKDF/JCS transcript proof. That constructi
 reject policy, and credential lifetime. The superseded proof fields, signed rejects, JCS preservation rules, and
 published security vectors are not part of `husky-di-rpc/1`.
 
-Zod begins only after bounded raw parsing has preserved the lexical facts ordinary object materialization would
-lose, including duplicate names, malformed UTF-8, trailing data, number spelling, and allocation boundaries.
-Application Value normalization separately inspects untrusted caller objects without invoking getters or
-coercion. Session phase, token authority, sequence/ACK continuity, retained evidence, and capacity remain
-stateful decisions. This separation is why private Zod schemas can be the single executable decoded-shape
-grammar without becoming a general validation framework or a published wire artifact.
+Within the built-in wire-validation pipeline, schema validation begins only after bounded raw parsing has
+preserved the lexical facts ordinary object materialization would lose, including duplicate names, malformed
+UTF-8, trailing data, number spelling, and allocation boundaries. Application Value normalization separately
+inspects untrusted caller objects without invoking getters or coercion. Session phase, token authority,
+sequence/ACK continuity, retained evidence, and capacity remain stateful decisions. This separation is why
+private schemas can be the single executable decoded-shape grammar without becoming a published wire artifact.

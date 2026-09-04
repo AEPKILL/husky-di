@@ -11,6 +11,7 @@ import type { RpcCloseReasonEnum } from "@/enums/rpc-close-reason.enum";
 import type { RpcExceptionCodeEnum } from "@/enums/rpc-exception-code.enum";
 import type { IRpcRetainedBytesReservation } from "@/interfaces/common/rpc-retained-bytes-ledger.interface";
 import type { IRpcConnection } from "@/interfaces/transport/rpc-connection.interface";
+import type { RpcProtocolRuntimePolicy } from "@/types/protocol/rpc-runtime-policy.type";
 
 export type { IRpcRetainedBytesReservation };
 
@@ -89,22 +90,7 @@ export type RpcIncomingTerminal =
 	  }
 	| { readonly type: RpcCallTerminalTypeEnum.sessionTerminated };
 
-export interface IRpcProtocolRuntimePolicy {
-	readonly maxSessions: number;
-	readonly maxHandshakes: number;
-	readonly maxPendingInvocationsPerSession: number;
-	readonly maxRetainedBytesPerSession: number;
-	readonly maxRetainedBytesTotal: number;
-	readonly maxHandlersPerSession: number;
-	readonly maxHandlersTotal: number;
-	readonly ackDelayMs: number;
-	readonly activityProbeIntervalMs: number;
-	readonly silenceTimeoutMs: number;
-	readonly sendProgressTimeoutMs: number;
-	readonly bindingAttemptTimeoutMs: number;
-	readonly recoveryGraceMs: number;
-	readonly shutdownDeadlineMs: number;
-}
+export interface IRpcProtocolRuntimePolicy extends RpcProtocolRuntimePolicy {}
 
 export type RpcProtocolFaultReason = Extract<
 	RpcCloseReasonEnum,

@@ -38,7 +38,7 @@ and validators are the mechanical source of truth for suffixes and naming.
 | Role | Meaning |
 | --- | --- |
 | `interfaces` | Structural or behavioral contracts; contract interfaces use `I...` |
-| `types` | Runtime-free standalone data composition and type-level models |
+| `types` | Standalone data composition, type-level models, and their canonical schemas |
 | `impls` | Concrete behavior or state; replaceable implementations use `XxxImpl` |
 | `factories` | Creation and assembly; creator functions use `createXxx` |
 | `utils` | Mostly stateless helpers with verb-led names |
@@ -122,6 +122,13 @@ responsibility changes. A minimal new-file header is:
  * @created YYYY-MM-DD HH:mm:ss
  */
 ```
+
+A `.type.ts` file may colocate canonical Zod schemas with the types derived from
+them. Schema values use `const` names ending in `Schema`, and their initializer's
+static type must be a Zod schema. Named runtime re-exports are allowed only when
+both the source and exported names end in `Schema` and the exported value has a
+Zod schema type; keep all other runtime declarations with their owning runtime
+role.
 
 After the header, place directive prologues and imports, then keep these
 top-level blocks in order:

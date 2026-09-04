@@ -305,6 +305,27 @@ function createSuccessfulConnectorAdapter(): IRpcConnectorAdapter {
 	};
 }
 
+function captureThrownError(run: () => unknown): unknown {
+	try {
+		run();
+	} catch (error) {
+		return error;
+	}
+	return undefined;
+}
+
+function expectSchemaFailureTypeError(error: unknown): void {
+	expect(error).toBeInstanceOf(TypeError);
+	if (!(error instanceof TypeError)) {
+		throw new Error("Expected a TypeError schema failure projection.");
+	}
+	expect(error.cause).toBeInstanceOf(Error);
+	if (!(error.cause instanceof Error)) {
+		throw new Error("Expected the schema failure to be retained as cause.");
+	}
+	expect(error.message).toBe(error.cause.message);
+}
+
 describe("Remote Service Descriptor", () => {
 	it("RPC-DESC-001 creates an opaque Descriptor from local and wire identities", () => {
 		const descriptor = createRemoteServiceDescriptor(ICalculatorService, {
@@ -330,6 +351,79 @@ describe("Remote Service Descriptor", () => {
 		expect("methods" in descriptor).toBe(false);
 	});
 
+	it("RPC-DESC-002 RPC-DESC-003 parses ordinary Descriptor configuration objects", () => {
+		const metadata = Symbol("metadata");
+		const reads: string[] = [];
+		const cancelableDefinition = new (class {
+			constructor() {
+				Object.defineProperty(this, metadata, { value: true });
+			}
+
+			get cancelable(): true {
+				reads.push("methods.cancel.cancelable");
+				return true;
+			}
+		})();
+		const methods = new (class {
+			constructor() {
+				Object.defineProperty(this, metadata, { value: true });
+				Object.defineProperty(this, "add", {
+					enumerable: true,
+					get: () => {
+						reads.push("methods.add");
+						return true;
+					},
+				});
+				Object.defineProperty(this, "cancel", {
+					enumerable: true,
+					get: () => cancelableDefinition,
+				});
+			}
+
+			declare readonly add: true;
+			declare readonly cancel: typeof cancelableDefinition;
+		})();
+		const options = new (class {
+			readonly [metadata] = true;
+
+			get wireName(): string {
+				reads.push("options.wireName");
+				return "example.ordinary.v1";
+			}
+
+			get methods(): typeof methods {
+				reads.push("options.methods");
+				return methods;
+			}
+		})();
+
+		expect(() =>
+			createRemoteServiceDescriptor(ICalculatorService, options),
+		).not.toThrow();
+		expect(reads).toEqual(
+			expect.arrayContaining([
+				"options.wireName",
+				"options.methods",
+				"methods.add",
+				"methods.cancel.cancelable",
+			]),
+		);
+	});
+
+	it("RPC-DESC-002 RPC-DESC-003 preserves the exact __proto__ method name", () => {
+		const methods = Object.create(null) as Record<string, true>;
+		methods.__proto__ = true;
+		const descriptor = createRemoteServiceDescriptor(ICalculatorService, {
+			wireName: "example.prototype.v1",
+			methods,
+		} as never);
+		const connector = createRpcConnector();
+
+		expect(() =>
+			connector.peer.expose(descriptor, Object.create(null)),
+		).toThrow("Selected implementation member __proto__ is missing.");
+	});
+
 	it.each([
 		["an empty wire name", { wireName: "", methods: { add: true } }],
 		["an empty allowlist", { wireName: "example.calculator.v1", methods: {} }],
@@ -351,16 +445,27 @@ describe("Remote Service Descriptor", () => {
 			"an invalid method definition",
 			{ wireName: "example.calculator.v1", methods: { add: false } },
 		],
-	])("RPC-DESC-002 RPC-DESC-003 rejects %s", (_label, options) => {
-		expect(() =>
-			createRemoteServiceDescriptor(
-				ICalculatorService,
-				options as unknown as {
-					readonly wireName: string;
-					readonly methods: { readonly add: true };
+		[
+			"an unknown __proto__ method definition member",
+			{
+				wireName: "example.calculator.v1",
+				methods: {
+					add: { cancelable: true, ["__proto__"]: false },
 				},
+			},
+		],
+	])("RPC-DESC-002 RPC-DESC-003 rejects %s", (_label, options) => {
+		expectSchemaFailureTypeError(
+			captureThrownError(() =>
+				createRemoteServiceDescriptor(
+					ICalculatorService,
+					options as unknown as {
+						readonly wireName: string;
+						readonly methods: { readonly add: true };
+					},
+				),
 			),
-		).toThrow(TypeError);
+		);
 	});
 
 	it("RPC-DESC-003 compares the reserved method name exactly", () => {
@@ -590,6 +695,93 @@ describe("cold Topology Owner factories", () => {
 		);
 	});
 
+	it("RPC-API-001 RPC-POLICY-001 parses ordinary Owner configuration objects", () => {
+		const metadata = Symbol("metadata");
+		const reads: string[] = [];
+		const connectorHarness = createProtocolHarness();
+		const connectorPolicy = new (class {
+			readonly [metadata] = true;
+
+			get maxHandlersPerSession(): number {
+				reads.push("connector.policy");
+				return 2;
+			}
+		})();
+		const connectorOptions = new (class {
+			readonly [metadata] = true;
+
+			get protocolFactory(): RpcProtocolConnectorFactory {
+				reads.push("connector.protocolFactory");
+				return connectorHarness.connectorFactory;
+			}
+
+			get runtimePolicy(): typeof connectorPolicy {
+				reads.push("connector.runtimePolicy");
+				return connectorPolicy;
+			}
+		})();
+		const acceptorHarness = createProtocolHarness();
+		const acceptorPolicy = new (class {
+			readonly [metadata] = true;
+
+			get maxSessions(): number {
+				reads.push("acceptor.policy");
+				return 2;
+			}
+		})();
+		const acceptorOptions = new (class {
+			readonly [metadata] = true;
+
+			get protocolFactory(): RpcProtocolAcceptorFactory {
+				reads.push("acceptor.protocolFactory");
+				return acceptorHarness.acceptorFactory;
+			}
+
+			get runtimePolicy(): typeof acceptorPolicy {
+				reads.push("acceptor.runtimePolicy");
+				return acceptorPolicy;
+			}
+		})();
+
+		createRpcConnector(connectorOptions);
+		createRpcAcceptor(acceptorOptions);
+
+		expect(reads).toEqual(
+			expect.arrayContaining([
+				"connector.protocolFactory",
+				"connector.runtimePolicy",
+				"connector.policy",
+				"acceptor.protocolFactory",
+				"acceptor.runtimePolicy",
+				"acceptor.policy",
+			]),
+		);
+		expect(connectorHarness.connectorHosts[0]?.policy).toMatchObject({
+			maxHandlersPerSession: 2,
+			maxHandlersTotal: 2,
+		});
+		expect(acceptorHarness.acceptorHosts[0]?.policy.maxSessions).toBe(2);
+	});
+
+	it("RPC-API-001 RPC-POLICY-001 defaults explicit undefined policy options", () => {
+		const connectorHarness = createProtocolHarness();
+		const acceptorHarness = createProtocolHarness();
+
+		createRpcConnector({
+			protocolFactory: connectorHarness.connectorFactory,
+			runtimePolicy: { maxHandlersPerSession: undefined } as never,
+		});
+		createRpcAcceptor({
+			protocolFactory: acceptorHarness.acceptorFactory,
+			runtimePolicy: { maxSessions: undefined } as never,
+		});
+
+		expect(
+			connectorHarness.connectorHosts[0]?.policy.maxHandlersPerSession,
+		).toBe(16);
+		expect(acceptorHarness.acceptorHosts[0]?.policy.maxSessions).toBe(64);
+	});
+
 	it("RPC-SPI-003 RPC-RESOURCE-003 exposes an atomic idempotent Owner retained-byte port", () => {
 		const harness = createProtocolHarness();
 		createRpcConnector({ protocolFactory: harness.connectorFactory });
@@ -746,7 +938,9 @@ describe("cold Topology Owner factories", () => {
 	it("RPC-API-001 RPC-POLICY-003 rejects closed-schema and cross-field violations before Protocol construction", () => {
 		const cases: readonly unknown[] = [
 			{ unknown: true },
+			{ ["__proto__"]: true },
 			{ runtimePolicy: { unknown: 1 } },
+			{ runtimePolicy: { ["__proto__"]: 1 } },
 			{ runtimePolicy: { maxSessions: 2 } },
 			{
 				runtimePolicy: {
@@ -777,16 +971,35 @@ describe("cold Topology Owner factories", () => {
 
 		for (const options of cases) {
 			const harness = createProtocolHarness();
-			expect(() =>
-				createRpcConnector(
-					Object.assign(
-						{ protocolFactory: harness.connectorFactory },
-						options,
-					) as never,
+			expectSchemaFailureTypeError(
+				captureThrownError(() =>
+					createRpcConnector({
+						protocolFactory: harness.connectorFactory,
+						...(options as object),
+					} as never),
 				),
-			).toThrow(TypeError);
+			);
 			expect(harness.connectorHosts).toHaveLength(0);
 		}
+
+		const acceptorHarness = createProtocolHarness();
+		expectSchemaFailureTypeError(
+			captureThrownError(() =>
+				createRpcAcceptor({
+					protocolFactory: acceptorHarness.acceptorFactory,
+					["__proto__"]: true,
+				} as never),
+			),
+		);
+		expectSchemaFailureTypeError(
+			captureThrownError(() =>
+				createRpcAcceptor({
+					protocolFactory: acceptorHarness.acceptorFactory,
+					runtimePolicy: { ["__proto__"]: true },
+				} as never),
+			),
+		);
+		expect(acceptorHarness.acceptorHosts).toHaveLength(0);
 	});
 
 	it("RPC-POLICY-003 accepts equality boundaries and enforces aggregate reserve", () => {
@@ -810,12 +1023,14 @@ describe("cold Topology Owner factories", () => {
 		).not.toThrow();
 
 		const invalidHarness = createProtocolHarness();
-		expect(() =>
-			createRpcAcceptor({
-				protocolFactory: invalidHarness.acceptorFactory,
-				runtimePolicy: { maxRetainedBytesTotal: 66_584_575 },
-			}),
-		).toThrow(TypeError);
+		expectSchemaFailureTypeError(
+			captureThrownError(() =>
+				createRpcAcceptor({
+					protocolFactory: invalidHarness.acceptorFactory,
+					runtimePolicy: { maxRetainedBytesTotal: 66_584_575 },
+				}),
+			),
+		);
 		expect(invalidHarness.acceptorHosts).toHaveLength(0);
 	});
 
@@ -889,6 +1104,12 @@ describe("cold Topology Owner factories", () => {
 		expect(() =>
 			createRpcAcceptor({ protocolFactory: {} as RpcProtocolAcceptorFactory }),
 		).toThrow(expect.objectContaining({ code: "protocol" }));
+		expect(() =>
+			createRpcConnector({ protocolFactory: null as never }),
+		).toThrow(expect.objectContaining({ code: "protocol" }));
+		expect(() => createRpcAcceptor({ protocolFactory: null as never })).toThrow(
+			expect.objectContaining({ code: "protocol" }),
+		);
 	});
 });
 
@@ -1704,6 +1925,65 @@ describe("exposure registries and remote facades", () => {
 });
 
 describe("Adapter startup and Protocol handoff", () => {
+	it("RPC-START-005 parses ordinary Connector attempt configuration objects", async () => {
+		const metadata = Symbol("metadata");
+		const reads: string[] = [];
+		const harness = createReconnectionProtocolHarness();
+		const connector = createRpcConnector({
+			protocolFactory: harness.protocolFactory,
+		});
+		const connectionSource = new Subject<IRpcConnection>();
+		const callableConnectionSource = Object.assign(() => undefined, {
+			subscribe: connectionSource.subscribe.bind(connectionSource),
+		});
+		const adapter = new (class implements IRpcConnectorAdapter {
+			get connection$(): Observable<IRpcConnection> {
+				reads.push("adapter.connection$");
+				return callableConnectionSource as unknown as Observable<IRpcConnection>;
+			}
+
+			async connect(): Promise<void> {
+				connectionSource.next({
+					message$: new Subject<Uint8Array>().asObservable(),
+					async send() {},
+					async close() {},
+				});
+				connectionSource.complete();
+			}
+		})();
+		const options = new (class {
+			readonly [metadata] = true;
+
+			get adapter(): IRpcConnectorAdapter {
+				reads.push("options.adapter");
+				return adapter;
+			}
+		})();
+
+		await expect(connector.connect(options)).resolves.toBeUndefined();
+		expect(reads).toEqual(
+			expect.arrayContaining(["options.adapter", "adapter.connection$"]),
+		);
+		await connector.close();
+	});
+
+	it("RPC-START-001 RPC-START-005 gates Connector availability before parsing options", async () => {
+		const connector = createRpcConnector();
+		await connector.close();
+		let adapterReads = 0;
+		const options = new (class {
+			get adapter(): IRpcConnectorAdapter {
+				adapterReads += 1;
+				throw new Error("Unavailable Connector must not read options.");
+			}
+		})();
+
+		await expect(connector.connect(options)).rejects.toMatchObject({
+			code: "unavailable",
+		});
+		expect(adapterReads).toBe(0);
+	});
+
 	it("RPC-START-005 rejects unknown Connector attempt options without starting its Adapter", async () => {
 		const connector = createRpcConnector({
 			protocolFactory: createProtocolHarness().connectorFactory,
@@ -1720,9 +2000,16 @@ describe("Adapter startup and Protocol handoff", () => {
 			},
 		};
 
-		await expect(
-			connector.connect({ adapter, unknown: true } as never),
-		).rejects.toBeInstanceOf(TypeError);
+		for (const options of [
+			{ adapter, unknown: true },
+			{ adapter, ["__proto__"]: true },
+		]) {
+			expectSchemaFailureTypeError(
+				await connector
+					.connect(options as never)
+					.catch((error: unknown) => error),
+			);
+		}
 
 		expect(adapterStarts).toBe(0);
 		expect(connector.peer.state).toEqual({ status: "unbound" });
@@ -4325,7 +4612,7 @@ describe("Protocol Session state projection", () => {
 });
 
 describe("Connector Reconnection", () => {
-	it("RPC-RECONNECT-001 rejects malformed or unbounded Reconnection policy", () => {
+	it("RPC-RECONNECT-001 RPC-RECONNECT-003 rejects malformed or unbounded Reconnection policy", () => {
 		const connector = createRpcConnector();
 		const adapterFactory = () => createSuccessfulConnectorAdapter();
 		const invalidPolicies = [
@@ -4338,27 +4625,172 @@ describe("Connector Reconnection", () => {
 		];
 
 		for (const policy of invalidPolicies) {
-			expect(() =>
+			expectSchemaFailureTypeError(
+				captureThrownError(() =>
+					createRpcConnectorReconnection({
+						connector,
+						adapterFactory,
+						policy,
+					}),
+				),
+			);
+		}
+		expectSchemaFailureTypeError(
+			captureThrownError(() =>
 				createRpcConnectorReconnection({
 					connector,
 					adapterFactory,
-					policy,
+					policy: { unknown: true } as never,
 				}),
-			).toThrow(TypeError);
-		}
+			),
+		);
+		expectSchemaFailureTypeError(
+			captureThrownError(() =>
+				createRpcConnectorReconnection({
+					connector: {} as never,
+					adapterFactory,
+				}),
+			),
+		);
+		expectSchemaFailureTypeError(
+			captureThrownError(() =>
+				createRpcConnectorReconnection({
+					connector,
+					adapterFactory,
+					unknown: true,
+				} as never),
+			),
+		);
+		expectSchemaFailureTypeError(
+			captureThrownError(() =>
+				createRpcConnectorReconnection({
+					connector,
+					adapterFactory,
+					["__proto__"]: true,
+				} as never),
+			),
+		);
+		expectSchemaFailureTypeError(
+			captureThrownError(() =>
+				createRpcConnectorReconnection({
+					connector,
+					adapterFactory,
+					policy: { ["__proto__"]: true },
+				} as never),
+			),
+		);
+		expectSchemaFailureTypeError(
+			captureThrownError(() =>
+				createRpcConnectorReconnection({
+					connector,
+					adapterFactory: {} as never,
+				}),
+			),
+		);
+	});
+
+	it("RPC-RECONNECT-001 RPC-RECONNECT-003 parses ordinary Reconnection configuration objects", () => {
+		const metadata = Symbol("metadata");
+		const reads: string[] = [];
+		const connector = createRpcConnector();
+		const retryDelaysMs = [0];
+		Object.defineProperty(retryDelaysMs, "0", {
+			enumerable: true,
+			get() {
+				reads.push("policy.retryDelaysMs[0]");
+				return 0;
+			},
+		});
+		const policy = new (class {
+			readonly [metadata] = true;
+
+			get retryDelaysMs(): readonly number[] {
+				reads.push("policy.retryDelaysMs");
+				return retryDelaysMs;
+			}
+
+			get attemptTimeoutMs(): number {
+				reads.push("policy.attemptTimeoutMs");
+				return 100;
+			}
+		})();
+		let adapterFactoryCalls = 0;
+		const adapterFactory = () => {
+			adapterFactoryCalls += 1;
+			return createSuccessfulConnectorAdapter();
+		};
+		const options = new (class {
+			readonly [metadata] = true;
+
+			get connector(): IRpcConnector {
+				reads.push("options.connector");
+				return connector;
+			}
+
+			get adapterFactory(): typeof adapterFactory {
+				reads.push("options.adapterFactory");
+				return adapterFactory;
+			}
+
+			get policy(): typeof policy {
+				reads.push("options.policy");
+				return policy;
+			}
+		})();
+
+		const reconnection = createRpcConnectorReconnection(options);
+
+		expect(reconnection.connector).toBe(connector);
+		expect(adapterFactoryCalls).toBe(0);
+		expect(reads).toEqual(
+			expect.arrayContaining([
+				"options.connector",
+				"options.adapterFactory",
+				"options.policy",
+				"policy.retryDelaysMs",
+				"policy.retryDelaysMs[0]",
+				"policy.attemptTimeoutMs",
+			]),
+		);
+
+		const callableStateSource = Object.assign(() => undefined, {
+			subscribe: () => ({ unsubscribe() {} }),
+		});
+		expect(() =>
+			createRpcConnectorReconnection({
+				connector: {
+					connect: async () => {},
+					state: {},
+					state$: callableStateSource,
+					peer: { state: {}, state$: callableStateSource },
+				} as never,
+				adapterFactory,
+			}),
+		).not.toThrow();
+	});
+
+	it("RPC-RECONNECT-003 rejects an oversized delay list before reading its items", () => {
+		const connector = createRpcConnector();
+		const retryDelaysMs = Array.from({ length: 65 }, () => 0);
+		let itemReads = 0;
+		Object.defineProperty(retryDelaysMs, "0", {
+			enumerable: true,
+			get() {
+				itemReads += 1;
+				throw new Error(
+					"Oversized lists must be rejected before item parsing.",
+				);
+			},
+		});
+
 		expect(() =>
 			createRpcConnectorReconnection({
 				connector,
-				adapterFactory,
-				policy: { unknown: true } as never,
+				adapterFactory: createSuccessfulConnectorAdapter,
+				policy: { retryDelaysMs },
 			}),
 		).toThrow(TypeError);
-		expect(() =>
-			createRpcConnectorReconnection({
-				connector: {} as never,
-				adapterFactory,
-			}),
-		).toThrow(TypeError);
+		expect(itemReads).toBe(0);
 	});
 
 	it("RPC-RECONNECT-003 snapshots retry delays without invoking a caller iterator", () => {
