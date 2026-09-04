@@ -4,29 +4,15 @@
  * @created 2026-08-19 00:00:00
  */
 
-import { RpcRetainedBytesLedgerImpl } from "@/impls/common/rpc-retained-bytes-ledger.impl";
-import {
-	RpcAcceptorBindingsImpl,
-	RpcConnectorBindingsImpl,
-} from "@/impls/endpoint/rpc-bindings.impl";
-import {
-	type CreateRpcEndpointOptions,
-	RpcEndpointImpl,
-} from "@/impls/endpoint/rpc-endpoint.impl";
 import { RpcCodecImpl } from "@/impls/protocol/rpc-codec.impl";
-import {
-	RpcProtocolAcceptorImpl,
-	RpcProtocolConnectorImpl,
-} from "@/impls/protocol/rpc-protocol.impl";
-import { RpcSessionImpl } from "@/impls/session/rpc-session.impl";
-import type { IRpcEndpoint } from "@/interfaces/endpoint/rpc-endpoint.interface";
+import { RpcProtocolAcceptorImpl } from "@/impls/protocol/rpc-protocol-acceptor.impl";
+import { RpcProtocolConnectorImpl } from "@/impls/protocol/rpc-protocol-connector.impl";
 import type {
 	IRpcProtocolAcceptor,
 	IRpcProtocolAcceptorHost,
 	IRpcProtocolConnector,
 	IRpcProtocolConnectorHost,
 } from "@/interfaces/protocol/rpc-protocol.interface";
-import type { RpcSessionFactory } from "@/interfaces/session/rpc-session.interface";
 import { createRpcSecurityCarrier } from "@/utils/protocol/rpc-base64-url-32-schema.util";
 
 /** Creates a fresh built-in Connector Protocol role for one owner. */
@@ -59,43 +45,25 @@ export function createRpcCounterExhaustionProtocolAcceptorForTest(
 
 const codec = Object.freeze(new RpcCodecImpl());
 
-const createEndpoint = (options: CreateRpcEndpointOptions): IRpcEndpoint =>
-	new RpcEndpointImpl(options);
-
 function createBuiltInRpcProtocolConnector(
 	host: IRpcProtocolConnectorHost,
 	counterExhausted: boolean,
 ): IRpcProtocolConnector {
-	const bindings = new RpcConnectorBindingsImpl({ host, createEndpoint });
-	return new RpcProtocolConnectorImpl(
+	return new RpcProtocolConnectorImpl({
 		host,
 		codec,
-		bindings,
-		createRpcSessionFactory(counterExhausted),
-	);
+		counterExhausted,
+	});
 }
 
 function createBuiltInRpcProtocolAcceptor(
 	host: IRpcProtocolAcceptorHost,
 	counterExhausted: boolean,
 ): IRpcProtocolAcceptor {
-	const bindings = new RpcAcceptorBindingsImpl({ host, createEndpoint });
-	return new RpcProtocolAcceptorImpl(
+	return new RpcProtocolAcceptorImpl({
 		host,
 		codec,
-		createRpcSecurityCarrier,
-		bindings,
-		createRpcSessionFactory(counterExhausted),
-	);
-}
-
-function createRpcSessionFactory(counterExhausted: boolean): RpcSessionFactory {
-	return (options) =>
-		new RpcSessionImpl(options, {
-			codec,
-			counterExhausted,
-			retainedBytesLedger: new RpcRetainedBytesLedgerImpl(
-				options.host.policy.maxRetainedBytesPerSession,
-			),
-		});
+		createSecurityCarrier: createRpcSecurityCarrier,
+		counterExhausted,
+	});
 }

@@ -1,0 +1,357 @@
+/**
+ * @overview Private one-to-one built-in Protocol role and binding policy.
+ * @author AEPKILL
+ * @created 2026-09-04 00:00:00
+ */
+
+import {
+	RPC_PROFILE,
+	RPC_PROTECTED_SESSION_BYTES,
+} from "@/constants/protocol/rpc-profile.const";
+import { RpcDecodePhaseEnum } from "@/enums/protocol/rpc-decode-phase.enum";
+import { RpcResumeRejectCodeEnum } from "@/enums/protocol/rpc-resume-reject-code.enum";
+import { RpcWireRecordKindEnum } from "@/enums/protocol/rpc-wire-record-kind.enum";
+import { RpcRetainedBytesLedgerImpl } from "@/impls/common/rpc-retained-bytes-ledger.impl";
+import {
+	closeUnboundConnection,
+	RpcBindingAttempt,
+} from "@/impls/protocol/rpc-binding-attempt.impl";
+import { RpcSessionImpl } from "@/impls/session/rpc-session.impl";
+import type { IRpcCodec } from "@/interfaces/protocol/rpc-codec.interface";
+import type {
+	IRpcProtocolConnector,
+	IRpcProtocolConnectorHost,
+} from "@/interfaces/protocol/rpc-protocol.interface";
+import type {
+	IRpcSession,
+	RpcInitiatorResume,
+} from "@/interfaces/session/rpc-session.interface";
+import type { IRpcConnection } from "@/interfaces/transport/rpc-connection.interface";
+import type {
+	RpcFreshRequest,
+	RpcResumeRequest,
+} from "@/types/protocol/rpc-wire-record.type";
+
+export type CreateRpcProtocolConnectorOptions = Readonly<{
+	readonly host: IRpcProtocolConnectorHost;
+	readonly codec: IRpcCodec;
+	readonly counterExhausted?: boolean;
+}>;
+
+type RpcFreshSession = Readonly<{
+	readonly session: IRpcSession;
+	retain(): void;
+}>;
+
+/** Owns one Connector's Default Protocol Session and binding attempts. */
+export class RpcProtocolConnectorImpl implements IRpcProtocolConnector {
+	readonly _host: IRpcProtocolConnectorHost;
+	readonly _codec: IRpcCodec;
+	readonly _counterExhausted: boolean;
+	_attempt: RpcBindingAttempt | undefined;
+	_session: IRpcSession | undefined;
+	_handshakeSlotsInUse = 0;
+	_closing = false;
+	_forceClosing = false;
+	_shutdownTask: Promise<void> | undefined;
+	_cleanupTask: Promise<void> | undefined;
+
+	public constructor(options: CreateRpcProtocolConnectorOptions) {
+		this._host = options.host;
+		this._codec = options.codec;
+		this._counterExhausted = options.counterExhausted ?? false;
+	}
+
+	bind(connection: IRpcConnection, signal: AbortSignal): Promise<void> {
+		let task: Promise<void>;
+		try {
+			task = this._bind(connection, signal);
+		} catch (error) {
+			return Promise.reject(error);
+		}
+		// A Transport or Codec failure may embed token-bearing bootstrap bytes.
+		// Keep the raw failure inside the built-in Protocol boundary.
+		return task.catch(() => {
+			throw new Error("Default RPC Connector binding attempt failed.");
+		});
+	}
+
+	shutdown(): Promise<void> {
+		if (this._shutdownTask !== undefined) {
+			return this._shutdownTask;
+		}
+		const { promise, reject, resolve } = Promise.withResolvers<void>();
+		this._shutdownTask = promise;
+		this._closing = true;
+		try {
+			const attempt = this._attempt;
+			attempt?.fail(new Error("Default RPC Connector is shutting down."));
+			const session = this._session;
+			const sessionShutdown = session?.shutdown() ?? Promise.resolve();
+			const attemptSettlement = attempt?.task.catch(() => {});
+			const settlement = Promise.all([
+				Promise.resolve(attemptSettlement),
+				sessionShutdown,
+			]).then(() => {
+				const retainedSession = this._session;
+				return retainedSession === undefined || retainedSession === session
+					? undefined
+					: retainedSession.shutdown();
+			});
+			void settlement.then(resolve, reject);
+		} catch (error) {
+			reject(error);
+		}
+		return promise;
+	}
+
+	close(): void {
+		this._closing = true;
+		this._forceClosing = true;
+		this._attempt?.fail(new Error("Default RPC Connector was closed."));
+		this._session?.forceClose();
+	}
+
+	cleanup(): Promise<void> {
+		this._cleanupTask ??= Promise.resolve();
+		return this._cleanupTask;
+	}
+
+	_bind(connection: IRpcConnection, signal: AbortSignal): Promise<void> {
+		if (this._closing || this._attempt !== undefined) {
+			throw new Error("Default RPC Connector is unavailable.");
+		}
+		if (this._handshakeSlotsInUse >= this._host.policy.maxHandshakes) {
+			closeUnboundConnection(connection);
+			throw new Error("Default RPC handshake capacity is full.");
+		}
+		const session = this._session;
+		if (session !== undefined && session.recovery === undefined) {
+			throw new Error("Default RPC Connector Session is not recovering.");
+		}
+
+		this._handshakeSlotsInUse += 1;
+		let attempt!: RpcBindingAttempt;
+		try {
+			attempt = new RpcBindingAttempt({
+				connection,
+				signal,
+				timeoutMs: this._host.policy.bindingAttemptTimeoutMs,
+				timeoutError: "Default RPC fresh binding attempt timed out.",
+				abortError: "Default RPC fresh binding was aborted.",
+				reserveRetainedBytes: (bytes) => this._host.reserveRetainedBytes(bytes),
+				isCurrent: () => this._attempt === attempt && !this._closing,
+				onSettled: () => {
+					this._handshakeSlotsInUse -= 1;
+					if (this._attempt === attempt) {
+						this._attempt = undefined;
+					}
+				},
+			});
+		} catch (error) {
+			this._handshakeSlotsInUse -= 1;
+			closeUnboundConnection(connection);
+			throw error;
+		}
+		this._attempt = attempt;
+		queueMicrotask(() => {
+			void this._start(attempt, session);
+		});
+		return attempt.task;
+	}
+
+	async _start(
+		attempt: RpcBindingAttempt,
+		session: IRpcSession | undefined,
+	): Promise<void> {
+		try {
+			if (session === undefined) {
+				await this._bindFresh(attempt);
+			} else {
+				await this._resume(attempt, session);
+			}
+		} catch (error) {
+			attempt.fail(error);
+		}
+	}
+
+	async _bindFresh(attempt: RpcBindingAttempt): Promise<void> {
+		const request = Object.freeze({
+			kind: RpcWireRecordKindEnum.fresh,
+			profiles: Object.freeze([RPC_PROFILE]),
+		}) as RpcFreshRequest;
+		const response = attempt.read();
+		await attempt.send(this._codec.encode(request));
+		const accept = this._codec.decode(
+			await response,
+			RpcDecodePhaseEnum.freshAccept,
+		);
+		if (!attempt.isCurrent) {
+			return;
+		}
+		const prepared = this._newSession(
+			attempt,
+			accept.sessionId,
+			accept.resumeToken,
+		);
+		if (prepared === undefined) {
+			attempt.fail(
+				new Error(
+					"Default RPC owner retained-byte allowance cannot protect a Session.",
+				),
+			);
+			return;
+		}
+		const sessionHost = this._host.attachSession(prepared.session);
+		if (sessionHost === undefined) {
+			attempt.fail(
+				new Error("Framework rejected the Default RPC Connector Session."),
+			);
+			return;
+		}
+		const candidate = prepared.session.prepareFreshBinding(sessionHost);
+		await attempt.bind(prepared.session, candidate, () => {
+			if (this._session !== undefined) {
+				return false;
+			}
+			this._session = prepared.session;
+			prepared.retain();
+			if (this._forceClosing) {
+				prepared.session.forceClose();
+			}
+			return true;
+		});
+	}
+
+	async _resume(
+		attempt: RpcBindingAttempt,
+		session: IRpcSession,
+	): Promise<void> {
+		const resume = session.beginInitiatorResume();
+		const request = Object.freeze({
+			kind: RpcWireRecordKindEnum.resume,
+			profile: RPC_PROFILE,
+			sessionId: resume.sessionId,
+			resumeToken: resume.resumeToken,
+			receivedThrough: resume.receivedThrough,
+			resumeAttempt: resume.resumeAttempt,
+		}) as RpcResumeRequest;
+		const response = attempt.read();
+		await attempt.send(this._codec.encode(request));
+		const outcome = this._codec.decode(
+			await response,
+			RpcDecodePhaseEnum.resumeOutcome,
+		);
+		if (!attempt.isCurrent) {
+			return;
+		}
+		if (outcome.kind === RpcWireRecordKindEnum.reject) {
+			this._handleResumeReject(attempt, session, resume, outcome.code);
+			return;
+		}
+
+		const preparation = session.prepareInitiatorBinding(resume, {
+			profile: outcome.profile,
+			sessionId: outcome.sessionId,
+			bindingEpoch: outcome.bindingEpoch,
+			peerReceivedThrough: outcome.receivedThrough,
+		});
+		if (preparation.kind === "stale") {
+			attempt.fail(preparation.error);
+			return;
+		}
+		if (preparation.kind === "contradiction") {
+			this._terminateContinuity(
+				attempt,
+				session,
+				() => session.commitContinuityFailure(preparation),
+				new Error("Default RPC resume accept contradicts retained state."),
+			);
+			return;
+		}
+		await attempt.bind(session, preparation, () => this._session === session);
+	}
+
+	_handleResumeReject(
+		attempt: RpcBindingAttempt,
+		session: IRpcSession,
+		resume: RpcInitiatorResume,
+		code: RpcResumeRejectCodeEnum,
+	): void {
+		if (code === RpcResumeRejectCodeEnum.resumeRejected) {
+			attempt.fail(new Error("Default RPC resume was generically rejected."));
+			return;
+		}
+		const error = new Error(`Default RPC resume ended with ${code}.`);
+		this._terminateContinuity(
+			attempt,
+			session,
+			() =>
+				code === RpcResumeRejectCodeEnum.continuityFailure
+					? session.commitContinuityFailure(resume)
+					: session.terminateRemoteResume(resume),
+			error,
+		);
+	}
+
+	_terminateContinuity(
+		attempt: RpcBindingAttempt,
+		session: IRpcSession,
+		commit: () => ReturnType<IRpcSession["commitContinuityFailure"]>,
+		error: Error,
+	): void {
+		if (!attempt.isCurrent || this._session !== session) {
+			attempt.fail(new Error("Default RPC Connector Session owner changed."));
+			return;
+		}
+		const authority = commit();
+		if (authority.kind === "discarded") {
+			attempt.fail(authority.error);
+			return;
+		}
+		attempt.fail(error);
+	}
+
+	_newSession(
+		attempt: RpcBindingAttempt,
+		sessionId: string,
+		resumeToken: string,
+	): RpcFreshSession | undefined {
+		const reservation = this._host.reserveRetainedBytes(
+			RPC_PROTECTED_SESSION_BYTES,
+		);
+		if (reservation === undefined) {
+			return undefined;
+		}
+		const reservationLease = attempt.own(() => reservation.release());
+		let session: IRpcSession | undefined;
+		const onTerminal = (): void => {
+			reservation.release();
+			if (session !== undefined && this._session === session) {
+				this._session = undefined;
+			}
+		};
+		try {
+			session = new RpcSessionImpl(
+				{ host: this._host, sessionId, resumeToken, onTerminal },
+				{
+					codec: this._codec,
+					counterExhausted: this._counterExhausted,
+					retainedBytesLedger: new RpcRetainedBytesLedgerImpl(
+						this._host.policy.maxRetainedBytesPerSession,
+					),
+				},
+			);
+		} catch (error) {
+			reservationLease.release();
+			throw error;
+		}
+		const created = session;
+		const sessionLease = attempt.own(() => created.terminateForced());
+		reservationLease.transfer();
+		return Object.freeze({
+			session: created,
+			retain: () => sessionLease.transfer(),
+		});
+	}
+}

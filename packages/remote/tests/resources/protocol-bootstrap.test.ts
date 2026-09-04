@@ -45,6 +45,10 @@ interface IBootstrapConnectionHarness {
 	complete(): void;
 }
 
+type RpcSynchronousMessageTerminal =
+	| Readonly<{ readonly kind: "complete" }>
+	| Readonly<{ readonly kind: "error"; readonly error: Error }>;
+
 const codec = new RpcCodecImpl();
 const canonicalSessionId = "A".repeat(43);
 const canonicalResumeToken = `${"B".repeat(42)}E`;
@@ -154,6 +158,7 @@ function createConnectorRuntime(policy: IRpcProtocolRuntimePolicy): {
 
 function createBootstrapConnection(
 	sendSettlement: Promise<void> = Promise.resolve(),
+	synchronousTerminal?: RpcSynchronousMessageTerminal,
 ): IBootstrapConnectionHarness {
 	const source = new Subject<Uint8Array>();
 	const responses: Readonly<Record<string, unknown>>[] = [];
@@ -161,7 +166,13 @@ function createBootstrapConnection(
 	let closeCount = 0;
 	const message$ = new Observable<Uint8Array>((subscriber) => {
 		subscriptionCount += 1;
-		return source.subscribe(subscriber);
+		const subscription = source.subscribe(subscriber);
+		if (synchronousTerminal?.kind === "error") {
+			source.error(synchronousTerminal.error);
+		} else if (synchronousTerminal?.kind === "complete") {
+			source.complete();
+		}
+		return subscription;
 	});
 	return {
 		connection: {
@@ -277,6 +288,232 @@ describe("Default RPC Protocol bootstrap resources", () => {
 		for (const bytes of generatedBytes) {
 			expect(bytes).toEqual(new Uint8Array(32));
 		}
+	});
+
+	it("RPC-SPI-008 RPC-TRANSPORT-005 RPC-WIRE-009 RPC-SESSION-011 holds FreshAccept until FreshRequest Local Admission", async () => {
+		const requestAdmission = Promise.withResolvers<void>();
+		const { runtime, ownerFaults, attachedSessions } = createConnectorRuntime(
+			createPolicy({ bindingAttemptTimeoutMs: 1_000 }),
+		);
+		const connection = createBootstrapConnection(requestAdmission.promise);
+		let settled = false;
+		const task = runtime.bind(
+			connection.connection,
+			new AbortController().signal,
+		);
+		void task.then(
+			() => {
+				settled = true;
+			},
+			() => {},
+		);
+		await vi.waitFor(() => expect(connection.responses).toHaveLength(1));
+
+		connection.emit(createFreshAccept(connection.responses[0] ?? {}));
+		await Promise.resolve();
+		await Promise.resolve();
+
+		expect(attachedSessions).toEqual([]);
+		expect(settled).toBe(false);
+
+		requestAdmission.resolve();
+		await expect(task).resolves.toBeUndefined();
+		expect(attachedSessions).toEqual([1]);
+		expect(settled).toBe(true);
+		expect(ownerFaults).toEqual([]);
+
+		runtime.close();
+		await expect(runtime.cleanup()).resolves.toBeUndefined();
+	});
+
+	it("RPC-START-005 RPC-SPI-008 RPC-WIRE-009 RPC-SESSION-003 RPC-SESSION-011 retains Fresh before reply Local Admission, activates afterward, and ignores late abort", async () => {
+		const replyAdmission = Promise.withResolvers<void>();
+		const transitions: RpcProtocolSessionTransition[] = [];
+		const { runtime, ownerFaults, admittedSessions } = createAcceptorRuntime(
+			createPolicy({ bindingAttemptTimeoutMs: 1_000 }),
+			(transition) => transitions.push(transition),
+		);
+		const controller = new AbortController();
+		const connection = createBootstrapConnection(replyAdmission.promise);
+		let settled = false;
+		const task = runtime.accept(connection.connection, controller.signal);
+		void task.then(
+			() => {
+				settled = true;
+			},
+			() => {},
+		);
+
+		connection.emit(createFreshRequest());
+		await vi.waitFor(() =>
+			expect(connection.responses.at(-1)).toMatchObject({ kind: "accept" }),
+		);
+
+		expect(admittedSessions).toEqual([1]);
+		expect(settled).toBe(false);
+		expect(transitions).toEqual([]);
+
+		replyAdmission.resolve();
+		await expect(task).resolves.toBeUndefined();
+		expect(settled).toBe(true);
+
+		controller.abort();
+		await Promise.resolve();
+		expect(connection.closeCount).toBe(0);
+		expect(transitions).toEqual([]);
+
+		connection.complete();
+		await vi.waitFor(() =>
+			expect(transitions.at(-1)).toMatchObject({ type: "recovering" }),
+		);
+		expect(ownerFaults).toEqual([]);
+
+		runtime.close();
+		await expect(runtime.cleanup()).resolves.toBeUndefined();
+	});
+
+	it("RPC-START-005 RPC-SESSION-011 lets Resume Binding Activation defeat a reentrant abort", async () => {
+		const replacementController = new AbortController();
+		const transitions: RpcProtocolSessionTransition[] = [];
+		const { runtime, ownerFaults } = createAcceptorRuntime(
+			createPolicy({ bindingAttemptTimeoutMs: 1_000 }),
+			(transition) => {
+				transitions.push(transition);
+				if (transition.type === "recovered") {
+					replacementController.abort();
+				}
+			},
+		);
+		const fresh = createBootstrapConnection();
+		const freshTask = accept(runtime, fresh);
+		fresh.emit(createFreshRequest());
+		await expect(freshTask).resolves.toBeUndefined();
+		const freshAccept = fresh.responses.at(-1) as RpcFreshAccept;
+		fresh.complete();
+		await vi.waitFor(() =>
+			expect(transitions.at(-1)).toMatchObject({ type: "recovering" }),
+		);
+
+		const replacement = createBootstrapConnection();
+		const replacementTask = runtime.accept(
+			replacement.connection,
+			replacementController.signal,
+		);
+		replacement.emit(
+			createResumeRequest(freshAccept.sessionId, freshAccept.resumeToken, 1),
+		);
+
+		await expect(replacementTask).resolves.toBeUndefined();
+		expect(transitions.map((transition) => transition.type)).toEqual([
+			"recovering",
+			"recovered",
+		]);
+		expect(replacement.closeCount).toBe(0);
+		expect(ownerFaults).toEqual([]);
+
+		runtime.close();
+		await expect(runtime.cleanup()).resolves.toBeUndefined();
+	});
+
+	it.each([
+		"shutdown",
+		"close",
+	] as const)("RPC-SPI-012 RPC-SESSION-011 %s fences a pre-activation Resume and prevents late activation", async (mode) => {
+		const transitions: RpcProtocolSessionTransition[] = [];
+		const { runtime, ownerFaults } = createAcceptorRuntime(
+			createPolicy({ bindingAttemptTimeoutMs: 1_000 }),
+			(transition) => transitions.push(transition),
+		);
+		const fresh = createBootstrapConnection();
+		const freshTask = accept(runtime, fresh);
+		fresh.emit(createFreshRequest());
+		await expect(freshTask).resolves.toBeUndefined();
+		const freshAccept = fresh.responses.at(-1) as RpcFreshAccept;
+		fresh.complete();
+		await vi.waitFor(() =>
+			expect(transitions.at(-1)).toMatchObject({ type: "recovering" }),
+		);
+
+		const replyAdmission = Promise.withResolvers<void>();
+		const replacement = createBootstrapConnection(replyAdmission.promise);
+		const replacementTask = runtime.accept(
+			replacement.connection,
+			new AbortController().signal,
+		);
+		void replacementTask.catch(() => {});
+		replacement.emit(
+			createResumeRequest(freshAccept.sessionId, freshAccept.resumeToken, 1),
+		);
+		await vi.waitFor(() =>
+			expect(replacement.responses.at(-1)).toMatchObject({
+				kind: "accept",
+				bindingEpoch: 2,
+			}),
+		);
+		expect(
+			transitions.filter((transition) => transition.type === "recovered"),
+		).toEqual([]);
+
+		let termination: Promise<void>;
+		if (mode === "shutdown") {
+			termination = runtime.shutdown();
+		} else {
+			runtime.close();
+			termination = Promise.resolve();
+		}
+
+		await expect(replacementTask).rejects.toThrow();
+		await expect(termination).resolves.toBeUndefined();
+		await vi.waitFor(() => expect(replacement.closeCount).toBe(1));
+
+		replyAdmission.resolve();
+		await Promise.resolve();
+		await Promise.resolve();
+
+		expect(
+			transitions.filter((transition) => transition.type === "recovered"),
+		).toEqual([]);
+		expect(ownerFaults).toEqual([]);
+		await expect(runtime.cleanup()).resolves.toBeUndefined();
+	});
+
+	it.each([
+		"error",
+		"complete",
+	] as const)("RPC-SPI-008 RPC-TRANSPORT-001 RPC-TRANSPORT-003 RPC-SESSION-011 RPC-RESOURCE-004 releases the handshake slot after synchronous message$ %s", async (terminalKind) => {
+		const terminalError = new Error("Synchronous message source failed.");
+		const synchronousTerminal: RpcSynchronousMessageTerminal =
+			terminalKind === "error"
+				? { kind: "error", error: terminalError }
+				: { kind: "complete" };
+		const { runtime, ownerFaults, admittedSessions } = createAcceptorRuntime(
+			createPolicy({ bindingAttemptTimeoutMs: 1_000 }),
+		);
+		const terminal = createBootstrapConnection(
+			Promise.resolve(),
+			synchronousTerminal,
+		);
+		const terminalTask = runtime.accept(
+			terminal.connection,
+			new AbortController().signal,
+		);
+		void terminalTask.catch(() => {});
+
+		await expect(terminalTask).rejects.toThrow();
+		await vi.waitFor(() => expect(terminal.closeCount).toBe(1));
+
+		const replacement = createBootstrapConnection();
+		const replacementTask = accept(runtime, replacement);
+		expect(replacement.subscriptionCount).toBe(1);
+		replacement.emit(createResumeRequest());
+		await expect(replacementTask).rejects.toThrow(
+			"Default RPC resume was generically rejected.",
+		);
+
+		expect(admittedSessions).toEqual([]);
+		expect(ownerFaults).toEqual([]);
+		runtime.close();
+		await expect(runtime.cleanup()).resolves.toBeUndefined();
 	});
 
 	it("RPC-SPI-008 RPC-SPI-012 RPC-RESOURCE-004 RPC-SEC-009 retains the shared handshake permit until a Resume reject send settles", async () => {
