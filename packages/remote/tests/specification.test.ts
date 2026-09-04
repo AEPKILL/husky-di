@@ -412,8 +412,6 @@ describe("cold Topology Owner factories", () => {
 			publishConfig: { access: "public" },
 			files: [
 				"dist",
-				"docs/ARCHITECTURE.drawio",
-				"docs/ARCHITECTURE.png",
 				"docs/PROTOCOL.md",
 				"docs/REQUIREMENTS.md",
 				"docs/SPECIFICATION.md",

@@ -162,8 +162,6 @@ describe("installed @husky-di/remote package", () => {
 			"package.json",
 		]);
 		expect(readdirSync(resolve(installedRoot, "docs")).sort()).toEqual([
-			"ARCHITECTURE.drawio",
-			"ARCHITECTURE.png",
 			"PROTOCOL.md",
 			"REQUIREMENTS.md",
 			"SPECIFICATION.md",

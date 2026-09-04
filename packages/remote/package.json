@@ -32,8 +32,6 @@
 	"types": "./dist/index.d.ts",
 	"files": [
 		"dist",
-		"docs/ARCHITECTURE.drawio",
-		"docs/ARCHITECTURE.png",
 		"docs/PROTOCOL.md",
 		"docs/REQUIREMENTS.md",
 		"docs/SPECIFICATION.md",
