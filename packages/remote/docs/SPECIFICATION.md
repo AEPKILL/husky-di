@@ -149,7 +149,10 @@ issue-17 SPI vocabulary:
 `IRpcApplicationArgumentsSnapshot`, `RpcCallFailure`, `RpcUnknownCallFailure`, `RpcIncomingFailure`,
 `RpcCallOutcome`, `RpcHandlerOutcome`, `RpcIncomingTerminal`, `IRpcProtocolRuntimePolicy`,
 `IRpcRetainedBytesReservation`, `IRpcProtocolHost`, all outgoing invocation
-request/sink/reservation/invocation/session types, all incoming request/call/handler/reservation types,
+request/invocation/session types (`IRpcProtocolCallRequest`, `IRpcProtocolInvocation`, and
+`IRpcProtocolSession`), incoming call/handler and flattened tagged reservation types
+(`IRpcProtocolIncomingCall`, `IRpcProtocolIncomingHandlerCall`, and
+`RpcProtocolIncomingCallReservation`),
 `RpcCloseReasonEnum`, `RpcProtocolFaultReason`, `RpcSessionCloseReason`,
 `RpcProtocolSessionTransitionCloseReason`, `RpcProtocolSessionTransition`, all Session/role host and role
 interfaces, and `RpcProtocolConnectorFactory` and `RpcProtocolAcceptorFactory`.
@@ -1111,7 +1114,7 @@ perform I/O, or queue asynchronous work.
 snapshots with deterministic weight and semantic-equality/normalization ports. Only Framework **MUST** create
 their brand. Protocol **MUST NOT** retain the original caller value or make Codec-specific values public.
 
-**RPC-SPI-003 — Port atomicity.** Framework-owned host, incoming-reservation/call, and outgoing-sink ports
+**RPC-SPI-003 — Port atomicity.** Framework-owned host, incoming-call, invocation-control, and outgoing-finish ports
 **MUST** be synchronous, total, and non-throwing for contract-valid calls except the specified normalization
 `TypeError`. They **MUST** stage durable state without directly reentering user code. Duplicate, late, or invalid
 Protocol calls and unexpected Protocol-owned member throws/rejections **MUST** fault the smallest known scope and
@@ -1122,36 +1125,23 @@ ledger or return `undefined`; its successful frozen reservation **MUST** release
 ### 8.2 Outgoing and incoming calls
 
 ```typescript
-export interface IRpcProtocolInvocationRequest {
+export interface IRpcProtocolCallRequest {
   readonly service: string;
   readonly method: string;
   readonly args: IRpcApplicationArgumentsSnapshot;
 }
 
 export interface IRpcProtocolSession {
-  reserveInvocation(request: IRpcProtocolInvocationRequest):
-    IRpcProtocolInvocationReservation | undefined;
+  prepareInvocation(
+    request: IRpcProtocolCallRequest,
+    finish: (outcome: RpcCallOutcome) => void,
+  ): IRpcProtocolInvocation | undefined;
   forceClose(): void;
-}
-
-export interface IRpcProtocolInvocationReservation {
-  commit(sink: IRpcProtocolInvocationSink): IRpcProtocolInvocation;
-  release(): void;
 }
 
 export interface IRpcProtocolInvocation {
   start(): void;
   cancel(): void;
-}
-
-export interface IRpcProtocolInvocationSink {
-  finish(outcome: RpcCallOutcome): void;
-}
-
-export interface IRpcProtocolIncomingCallRequest {
-  readonly service: string;
-  readonly method: string;
-  readonly args: IRpcApplicationArgumentsSnapshot;
 }
 
 export interface IRpcProtocolIncomingCall {
@@ -1163,52 +1153,60 @@ export interface IRpcProtocolIncomingHandlerCall
   readonly handlerOutcome: Promise<RpcHandlerOutcome>;
 }
 
-export interface IRpcProtocolIncomingCallReservation<
-  TCall extends IRpcProtocolIncomingCall = IRpcProtocolIncomingCall,
-> {
-  commit(): TCall;
-  release(): void;
-}
-
 export enum RpcIncomingCallKindEnum {
   handler = "handler",
   unknown = "unknown",
 }
 
 export type RpcProtocolIncomingCallReservation =
-  | {
+  | Readonly<{
       readonly kind: RpcIncomingCallKindEnum.handler;
-      readonly reservation: IRpcProtocolIncomingCallReservation<
-        IRpcProtocolIncomingHandlerCall
-      >;
-    }
-  | {
+      commit(): IRpcProtocolIncomingHandlerCall;
+    }>
+  | Readonly<{
       readonly kind: RpcIncomingCallKindEnum.unknown;
       readonly code: RpcUnknownCallFailure;
-      readonly reservation: IRpcProtocolIncomingCallReservation<
-        IRpcProtocolIncomingCall
-      >;
-    };
+      commit(): IRpcProtocolIncomingCall;
+    }>;
 ```
 
-**RPC-SPI-004 — Outgoing reservation.** `reserveInvocation()` **MUST** reserve ordinary Protocol/Session
-capacity without assigning call/sequence identity. `undefined` **MUST** preserve Definite Non-Execution.
-Reservation `commit()` and `release()` **MUST** be single-winner. Commit **MUST** create observable Pending work
-but **MUST NOT** send, notify, or settle; `start()` alone makes it eligible for Protocol Admission.
+**RPC-SPI-004 — Outgoing preparation.** `prepareInvocation(request, finish)` **MUST** atomically reserve ordinary
+Protocol/Session capacity and create only a Pending Invocation. Successful preparation **MUST NOT** assign a
+call/sequence identity, enter the call or replay ledger, or send; `start()` alone makes the Pending Invocation
+eligible for Protocol Admission. Framework **MUST NOT** make a preparation-time `finish` caller-visible until
+the returned control is validated and the paired `call-started` observation is published. `undefined` **MUST**
+preserve Definite Non-Execution permanently: it **MUST NOT** invoke `finish`, assign identity, retain call-ledger
+state, or send. Pre-start `cancel()` **MUST** synchronously select exactly one `failed` / `canceled` outcome,
+restore Pending capacity without assigning identity or sending, and make every later `start()` inert. Framework
+**MUST** fault and clean up the bound Session if preparation throws, returns a malformed control, invokes
+`finish` more than once, or invokes `finish` before or after returning `undefined`; it **MUST NOT** invoke an
+unvalidated cleanup member on a malformed object.
 
-**RPC-SPI-005 — Synchronous outcome.** Protocol **MUST** finish every affected Framework-owned sink
-synchronously before requesting or causing Session closed projection. An outcome Promise owned by Protocol
-**MUST NOT** replace this sink, because Promise reactions cannot preserve terminal event ordering.
+**RPC-SPI-005 — Synchronous outcome.** Protocol **MUST** invoke every affected Framework-owned `finish`
+callback synchronously before requesting or causing Session closed projection. Framework **MUST** hold a
+synchronous preparation-time outcome until the returned invocation control is validated and the paired
+`call-started` observation is published. A duplicate or invalid outcome during that publication **MUST** suppress
+`start()`, preserve an already selected valid terminal observation, synchronously terminalize any otherwise-open
+published call during the bound-Session fault, and **MUST NOT** recursively fault on that cleanup terminal.
+Duplicate or invalid outcomes at any other time **MUST** fault the bound Session. An outcome Promise owned by
+Protocol **MUST NOT** replace the callback, because Promise reactions cannot preserve terminal event ordering.
 
-**RPC-SPI-006 — Incoming reservation.** After fixed/security/sequence validation and its own ledger/replay/
-protected-terminal reservation, Protocol **MUST** call `reserveIncomingCall()` before exposure lookup. An
-`undefined` result **MUST** cause a protected Remote Resource Rejection, receipt advancement, no args retention,
-and no incoming event. A handler or unknown tagged reservation **MUST** be committed only after Protocol durably
-records Remote Request Admission or Remote Semantic Rejection; pre-disposition failure **MUST** release it.
+**RPC-SPI-006 — Incoming reservation scope.** After fixed/security/sequence validation and its own ledger/replay/
+protected-terminal reservation, Protocol **MUST** call `reserveIncomingCall(request, consume)` before exposure
+lookup. `false` **MUST** call `consume` zero times and cause a protected Remote Resource Rejection, receipt
+advancement, no args retention, and no incoming event. `true` **MUST** call `consume` exactly once and
+synchronously. Before calling the offered `commit()`, Protocol **MUST** durably record Remote Request Admission
+or Remote Semantic Rejection. The callback **MUST** call `commit()` exactly once and return exactly `undefined`;
+it **MUST NOT** be asynchronous, and Framework **MUST** compare the returned value without reading or
+assimilating a `then` member. The commit capability **MUST** be revoked when the callback returns.
 
-**RPC-SPI-007 — Incoming commit.** A handler reservation commit **MUST** capture and publish an eligible queued
-job but **MUST NOT** dispatch inline. Unknown commit **MUST** produce its safe started/finished pair without a
-handler permit. Incoming terminal **MUST** be limited to returned/void,
+**RPC-SPI-007 — Incoming commit.** A handler commit **MUST** capture and publish an eligible queued job but
+**MUST NOT** dispatch inline. Unknown commit **MUST** expose only its selected safe failure. A zero, duplicate,
+or escaped commit, a callback throw, or a non-`undefined` callback result **MUST** be a synchronous Session
+fault even when Protocol catches the first capability error. Framework **MUST** release uncommitted work before
+faulting. After commit it **MUST** instead synchronously terminalize the private call exactly once before faulting,
+canceling a queued handler and releasing capacity while preserving the first durable winner and its paired
+started/finished observations. Incoming terminal **MUST** be limited to returned/void,
 `canceled | handler-failed | unknown-service | unknown-method`, or private `session-terminated`; it **MUST NOT**
 report `unavailable` or `outcome-unknown` through a created incoming handle.
 
@@ -1243,8 +1241,9 @@ export type RpcProtocolSessionTransition =
 
 export interface IRpcProtocolSessionHost {
   reserveIncomingCall(
-    request: IRpcProtocolIncomingCallRequest,
-  ): RpcProtocolIncomingCallReservation | undefined;
+    request: IRpcProtocolCallRequest,
+    consume: (reservation: RpcProtocolIncomingCallReservation) => undefined,
+  ): boolean;
   transition(transition: RpcProtocolSessionTransition): void;
   fault(reason: RpcProtocolFaultReason, error: Error): void;
 }
@@ -2323,15 +2322,18 @@ Case IDs **MUST** be documented by the conformance entry point, remain stable af
 **MUST NOT** expose Default-Protocol private module or decoded-record types through its fixture contract.
 
 **RPC-CONFORMANCE-002 — Protocol suite.** Protocol runner **MUST** cover role-factory construction
-non-reentrancy, handoff, normalized snapshots, outgoing reserve/commit/sink, incoming
+non-reentrancy, handoff, normalized snapshots, outgoing prepare/start/finish and pre-start cancellation, incoming
 resource/semantic/handler dispositions, handler permit ownership, fault scope, counter drain, and
-shutdown/close/cleanup phases. Each `RpcProtocolConformanceCandidate` **MUST** pair compatible Connector and
-Acceptor factories. The package-private default and an independent minimal custom Protocol **MUST** both pass;
-the default **MUST** additionally pass its runtime validation and security suites. `counterExhaustionProtocol`
-**MUST** be the same candidate under test-only configuration such that the first otherwise admissible call on a
-fresh Session reaches counter drain. `createActiveProtocolFaultMessage()` **MUST** return one candidate-grammar
-byte message that faults an active Session; neither hook changes the production SPI or exposes the built-in
-grammar.
+shutdown/close/cleanup phases. It **MUST** verify that pre-start cancellation synchronously finishes exactly once
+as `failed` / `canceled` and cannot be revived by `start()`; Resource Rejection contributes no incoming finish;
+every normal semantic or handler disposition contributes exactly one matching incoming finish; and close
+synchronously terminalizes each active incoming call exactly once as `sessionTerminated`, with no later handler
+send or finish. Each `RpcProtocolConformanceCandidate` **MUST** pair compatible Connector and Acceptor factories.
+The package-private default and an independent minimal custom Protocol **MUST** both pass; the default **MUST**
+additionally pass its runtime validation and security suites. `counterExhaustionProtocol` **MUST** be the same
+candidate under test-only configuration such that the first otherwise admissible call on a fresh Session reaches
+counter drain. `createActiveProtocolFaultMessage()` **MUST** return one candidate-grammar byte message that faults
+an active Session; neither hook changes the production SPI or exposes the built-in grammar.
 
 **RPC-CONFORMANCE-003 — Adapter suite.** Both Adapter runners **MUST** cover subscribe-before-start, handoff and
 ownership, source/message identity/order/hot terminal behavior, Local Admission/single send/backpressure,

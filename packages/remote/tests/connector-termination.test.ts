@@ -91,7 +91,7 @@ describe("Connector termination cleanup", () => {
 		const forceCalls = [0, 0];
 		const closeCalls = [0, 0];
 		const sessions: IRpcProtocolSession[] = forceCalls.map((_, index) => ({
-			reserveInvocation: () => undefined,
+			prepareInvocation: () => undefined,
 			forceClose() {
 				forceCalls[index] += 1;
 			},
@@ -163,7 +163,7 @@ describe("Connector termination cleanup", () => {
 		let forceCalls = 0;
 		const fault = new Error("fresh Session token invariant failed");
 		const session: IRpcProtocolSession = {
-			reserveInvocation: () => undefined,
+			prepareInvocation: () => undefined,
 			forceClose() {
 				forceCalls += 1;
 				sessionHost?.transition({
@@ -227,7 +227,7 @@ describe("Connector termination cleanup", () => {
 		let runtimeCloseCalls = 0;
 		const fault = new Error("Session resource fault");
 		const session: IRpcProtocolSession = {
-			reserveInvocation: () => undefined,
+			prepareInvocation: () => undefined,
 			forceClose() {
 				forceCalls += 1;
 				if (terminalKind === "Session fault") {
@@ -393,7 +393,7 @@ describe("Connector termination cleanup", () => {
 			},
 		};
 		const session: IRpcProtocolSession = {
-			reserveInvocation() {
+			prepareInvocation() {
 				return undefined;
 			},
 			forceClose() {},
@@ -474,7 +474,7 @@ describe("Connector termination cleanup", () => {
 		let sessionHost: IRpcProtocolSessionHost | undefined;
 		let bindCalls = 0;
 		const session: IRpcProtocolSession = {
-			reserveInvocation: () => undefined,
+			prepareInvocation: () => undefined,
 			forceClose() {},
 		};
 		const protocolFactory: RpcProtocolConnectorFactory = (host) => {
@@ -645,7 +645,7 @@ describe("Connector termination cleanup", () => {
 			const closeError = new Error("Connection cleanup failed first");
 			const connectionSource = new Subject<IRpcConnection>();
 			const session: IRpcProtocolSession = {
-				reserveInvocation: () => undefined,
+				prepareInvocation: () => undefined,
 				forceClose() {},
 			};
 			const connector = createRpcConnector({
@@ -701,7 +701,7 @@ describe("Connector termination cleanup", () => {
 		const connectionSource = new Subject<IRpcConnection>();
 		let sessionHost: IRpcProtocolSessionHost | undefined;
 		const session: IRpcProtocolSession = {
-			reserveInvocation: () => undefined,
+			prepareInvocation: () => undefined,
 			forceClose() {},
 		};
 		const connector = createRpcConnector({
@@ -757,7 +757,7 @@ describe("Connector termination cleanup", () => {
 		const connectionSource = new Subject<IRpcConnection>();
 		let sessionHost: IRpcProtocolSessionHost | undefined;
 		const session: IRpcProtocolSession = {
-			reserveInvocation: () => undefined,
+			prepareInvocation: () => undefined,
 			forceClose() {},
 		};
 		const connector = createRpcConnector({
@@ -816,7 +816,7 @@ describe("Connector termination cleanup", () => {
 		let forceCalls = 0;
 		let runtimeCloseCalls = 0;
 		const session: IRpcProtocolSession = {
-			reserveInvocation: () => undefined,
+			prepareInvocation: () => undefined,
 			forceClose() {
 				forceCalls += 1;
 			},
@@ -876,7 +876,7 @@ describe("Connector termination cleanup", () => {
 		let forceCalls = 0;
 		let runtimeShutdownCalls = 0;
 		const session: IRpcProtocolSession = {
-			reserveInvocation: () => undefined,
+			prepareInvocation: () => undefined,
 			forceClose() {
 				forceCalls += 1;
 			},

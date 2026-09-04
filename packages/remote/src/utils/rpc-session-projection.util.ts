@@ -1,5 +1,5 @@
 /**
- * @overview Projects Logical Session intents into matching Peer state and lifecycle facts.
+ * @overview Resolves Logical Session transitions into pure Peer lifecycle changes.
  * @author AEPKILL
  * @created 2026-08-31 01:46:19
  */
@@ -11,128 +11,87 @@ import { RpcEventTypeEnum } from "@/enums/rpc-event-type.enum";
 import { RpcExceptionCodeEnum } from "@/enums/rpc-exception-code.enum";
 import { RpcStateStatusEnum } from "@/enums/rpc-state-status.enum";
 import { createRpcException } from "@/factories/rpc-exception.factory";
-import type { IRpcPeerRuntime } from "@/interfaces/peer/rpc-peer-runtime.interface";
 import type {
 	RpcProtocolSessionTransition,
 	RpcSessionCloseReason,
 } from "@/interfaces/protocol/rpc-protocol.interface";
 import type { RpcPeerState } from "@/types/common/rpc-caller.type";
 import type {
-	RpcSessionClosureProjectionIntent,
+	RpcSessionChange,
 	RpcSessionOwnerStatus,
-	RpcSessionProjection,
-	RpcSessionProjectionIntent,
-	RpcSessionTerminalProjection,
-	RpcSessionTransitionProjectionIntent,
+	RpcSessionTerminalChange,
+	RpcSessionTransitionDecision,
 } from "@/types/owner/rpc-session-projection.type";
 
-/** Projects one exact owned Session intent without applying role-specific ownership. */
-export function projectRpcSession(
-	peer: IRpcPeerRuntime,
-	intent: RpcSessionClosureProjectionIntent,
-): RpcSessionTerminalProjection;
-export function projectRpcSession(
-	peer: IRpcPeerRuntime,
-	intent: RpcSessionTransitionProjectionIntent,
-): RpcSessionProjection;
-export function projectRpcSession(
-	peer: IRpcPeerRuntime,
-	intent: RpcSessionProjectionIntent,
-): RpcSessionProjection {
-	if (intent.kind === "closure") {
-		return createSessionClosureProjection(peer, intent.reason, intent.cause);
-	}
-
-	const { ownerStatus, transition } = intent;
-	if (!canProjectRpcSessionTransition(ownerStatus, peer.state, transition)) {
+/** Resolves one Protocol transition against current Owner and Peer snapshots. */
+export function resolveRpcSessionTransition(
+	ownerStatus: RpcSessionOwnerStatus,
+	peerState: RpcPeerState,
+	transition: RpcProtocolSessionTransition,
+): RpcSessionTransitionDecision {
+	if (!canTransitionRpcSession(ownerStatus, peerState, transition)) {
 		return {
-			kind: "invalid",
-			fault: {
-				reason: RpcCloseReasonEnum.protocolFault,
-				error: new Error("Protocol requested an invalid Session transition."),
-			},
+			kind: "fault",
+			reason: RpcCloseReasonEnum.protocolFault,
+			error: new Error("Protocol requested an invalid Session transition."),
 		};
 	}
 	if (transition.type === RpcProtocolSessionTransitionTypeEnum.recovering) {
 		return {
-			kind: "commit",
-			peerMutation: {
-				peer,
-				state: { status: RpcStateStatusEnum.recovering },
-			},
-			event: { type: RpcEventTypeEnum.peerRecovering, peer },
+			kind: "change",
+			state: { status: RpcStateStatusEnum.recovering },
+			lifecycle: { type: RpcEventTypeEnum.peerRecovering },
+			terminal: false,
 		};
 	}
 	if (transition.type === RpcProtocolSessionTransitionTypeEnum.recovered) {
 		return {
-			kind: "commit",
-			peerMutation: {
-				peer,
-				state: { status: RpcStateStatusEnum.connected },
-			},
-			event: { type: RpcEventTypeEnum.peerRecovered, peer },
+			kind: "change",
+			state: { status: RpcStateStatusEnum.connected },
+			lifecycle: { type: RpcEventTypeEnum.peerRecovered },
+			terminal: false,
 		};
 	}
 	if (transition.type === RpcProtocolSessionTransitionTypeEnum.draining) {
 		return {
-			kind: "commit",
-			peerMutation: {
-				peer,
-				state: {
-					status: RpcStateStatusEnum.draining,
-					reason: RpcCloseReasonEnum.counterExhaustion,
-				},
-			},
-			event: {
-				type: RpcEventTypeEnum.peerDraining,
-				peer,
+			kind: "change",
+			state: {
+				status: RpcStateStatusEnum.draining,
 				reason: RpcCloseReasonEnum.counterExhaustion,
 			},
+			lifecycle: {
+				type: RpcEventTypeEnum.peerDraining,
+				reason: RpcCloseReasonEnum.counterExhaustion,
+			},
+			terminal: false,
 		};
 	}
-	return createSessionClosureProjection(
-		peer,
-		transition.reason,
-		transition.cause,
-	);
+	return resolveRpcSessionClosure(transition.reason, transition.cause);
 }
 
-/** Narrows a committed projection to its correlated terminal state and event. */
-export function isRpcSessionTerminalProjection(
-	projection: RpcSessionProjection,
-): projection is RpcSessionTerminalProjection {
-	return (
-		projection.kind === "commit" && projection.peerMutation.terminal === true
-	);
-}
-
-function createSessionClosureProjection(
-	peer: IRpcPeerRuntime,
+/** Resolves one Session closure without retaining or mutating a Peer. */
+export function resolveRpcSessionClosure(
 	reason: RpcSessionCloseReason,
 	cause?: Error,
-): RpcSessionTerminalProjection {
+): RpcSessionTerminalChange {
 	switch (reason) {
 		case RpcCloseReasonEnum.recoveryExpired:
 		case RpcCloseReasonEnum.counterExhaustion: {
 			const error = createRpcException(RpcExceptionCodeEnum.unavailable, cause);
 			return {
-				kind: "commit",
-				peerMutation: {
-					peer,
-					state: {
-						status: RpcStateStatusEnum.closed,
-						outcome: RpcCloseOutcomeEnum.failed,
-						reason,
-						error,
-					},
-					terminal: true,
+				kind: "change",
+				state: {
+					status: RpcStateStatusEnum.closed,
+					outcome: RpcCloseOutcomeEnum.failed,
+					reason,
+					error,
 				},
-				event: {
+				lifecycle: {
 					type: RpcEventTypeEnum.peerClosed,
-					peer,
 					outcome: RpcCloseOutcomeEnum.failed,
 					reason,
 				},
+				terminal: true,
 			};
 		}
 		case RpcCloseReasonEnum.continuityFailure:
@@ -140,23 +99,19 @@ function createSessionClosureProjection(
 		case RpcCloseReasonEnum.resourceFault: {
 			const error = createRpcException(RpcExceptionCodeEnum.protocol, cause);
 			return {
-				kind: "commit",
-				peerMutation: {
-					peer,
-					state: {
-						status: RpcStateStatusEnum.closed,
-						outcome: RpcCloseOutcomeEnum.failed,
-						reason,
-						error,
-					},
-					terminal: true,
+				kind: "change",
+				state: {
+					status: RpcStateStatusEnum.closed,
+					outcome: RpcCloseOutcomeEnum.failed,
+					reason,
+					error,
 				},
-				event: {
+				lifecycle: {
 					type: RpcEventTypeEnum.peerClosed,
-					peer,
 					outcome: RpcCloseOutcomeEnum.failed,
 					reason,
 				},
+				terminal: true,
 			};
 		}
 		case RpcCloseReasonEnum.gracefulShutdown:
@@ -164,29 +119,32 @@ function createSessionClosureProjection(
 		case RpcCloseReasonEnum.shutdownDeadline:
 		case RpcCloseReasonEnum.remoteTerminated:
 			return {
-				kind: "commit",
-				peerMutation: {
-					peer,
-					state: {
-						status: RpcStateStatusEnum.closed,
-						outcome: RpcCloseOutcomeEnum.normal,
-						reason,
-					},
-					terminal: true,
-				},
-				event: {
-					type: RpcEventTypeEnum.peerClosed,
-					peer,
+				kind: "change",
+				state: {
+					status: RpcStateStatusEnum.closed,
 					outcome: RpcCloseOutcomeEnum.normal,
 					reason,
 				},
+				lifecycle: {
+					type: RpcEventTypeEnum.peerClosed,
+					outcome: RpcCloseOutcomeEnum.normal,
+					reason,
+				},
+				terminal: true,
 			};
 		default:
 			return assertNeverSessionCloseReason(reason);
 	}
 }
 
-function canProjectRpcSessionTransition(
+/** Narrows a Session change to its correlated terminal state and fact. */
+export function isRpcSessionTerminalChange(
+	change: RpcSessionChange,
+): change is RpcSessionTerminalChange {
+	return change.terminal;
+}
+
+function canTransitionRpcSession(
 	ownerStatus: RpcSessionOwnerStatus,
 	peerState: RpcPeerState,
 	transition: RpcProtocolSessionTransition,

@@ -52,12 +52,33 @@ During Adapter handoff, subscribe to the hot `message$` immediately, but defer
 active send/close/state effects until the handoff callback returns. The Framework
 owns Connection and listener cleanup.
 
-## Call transactions
+## Call admission
 
-Outgoing calls use reserve → commit → start. Incoming calls reserve Framework
-capacity before Protocol admission, then commit either a known handler or a safe
-unknown-service/method disposition. Commit and finish ports are synchronous,
-total for contract-valid input, and must not re-enter user code.
+Outgoing calls use `prepareInvocation(request, finish)` → `start()`. Successful
+preparation creates only Pending Invocation capacity; it assigns no Call Identity,
+enters no call/replay ledger, and sends nothing. A synchronous preparation-time
+`finish` cannot become caller-visible until the Framework has validated the
+returned control and published `call-started`. `undefined` is permanent Definite
+Non-Execution and must never be paired with an immediate or late `finish`.
+Pre-start `cancel()` synchronously finishes exactly once as `failed` / `canceled`,
+restores Pending capacity without assigning identity or sending, and makes a later
+`start()` inert. A duplicate or invalid `finish` during `call-started` publication
+suppresses `start()`; Session fault cleanup preserves the first valid terminal or
+terminalizes the otherwise-open published call without recursive faulting.
+
+Incoming calls use the asymmetric scoped form
+`reserveIncomingCall(request, consume)`. `false` means capacity was unavailable
+and `consume` was not called. On `true`, the Framework calls `consume` once and
+synchronously with a flattened handler or unknown-call reservation. Record the
+durable Protocol disposition first, call `commit()` exactly once, and return
+exactly `undefined`. Do not make the callback asynchronous or retain its commit
+capability. The committed call handle may be retained for its later synchronous
+`finish()` and, for handlers, `handlerOutcome`.
+
+Commit and finish ports are synchronous, total for contract-valid input, and
+must not re-enter user code. A scope failure before commit releases the offered
+capacity; a failure after commit terminalizes the private call before the bound
+Session is faulted, so queued application work cannot become orphaned.
 
 Only snapshots returned by the host normalization methods may cross the SPI.
 Forged snapshots, impossible terminal outcomes, double winners, or unexpected

@@ -23,9 +23,9 @@ import {
 } from "../../src/index";
 import type {
 	IRpcProtocolAcceptorHost,
+	IRpcProtocolCallRequest,
 	IRpcProtocolConnectorHost,
-	IRpcProtocolInvocationRequest,
-	IRpcProtocolInvocationSink,
+	IRpcProtocolIncomingHandlerCall,
 	IRpcProtocolSession,
 	IRpcProtocolSessionHost,
 } from "../../src/protocol";
@@ -62,9 +62,30 @@ const requirementDescriptor = createRemoteServiceDescriptor(
 
 function createEmptySession(): IRpcProtocolSession {
 	return {
-		reserveInvocation: () => undefined,
+		prepareInvocation: () => undefined,
 		forceClose() {},
 	};
+}
+
+function consumeIncomingKind(
+	host: IRpcProtocolSessionHost | undefined,
+	request: IRpcProtocolCallRequest,
+): "handler" | "unknown" | undefined {
+	let kind: "handler" | "unknown" | undefined;
+	host?.reserveIncomingCall(request, (reservation) => {
+		kind = reservation.kind;
+		const call = reservation.commit();
+		call.finish(
+			reservation.kind === "unknown"
+				? {
+						type: RpcCallTerminalTypeEnum.failed,
+						code: reservation.code,
+					}
+				: { type: RpcCallTerminalTypeEnum.sessionTerminated },
+		);
+		return undefined;
+	});
+	return kind;
 }
 
 function createConnectorHarness(options: ConnectorHarnessOptions = {}): {
@@ -296,23 +317,18 @@ describe("Framework requirement evidence", () => {
 		).toEqual([]);
 	});
 
-	it("RPC-VALUE-003 enforces the common Application Value profile before a custom Protocol reservation", async () => {
+	it("RPC-VALUE-003 enforces the common Application Value profile before custom Protocol preparation", async () => {
 		let reservationCalls = 0;
-		let capturedRequest: IRpcProtocolInvocationRequest | undefined;
+		let capturedRequest: IRpcProtocolCallRequest | undefined;
 		const session: IRpcProtocolSession = {
-			reserveInvocation(request) {
+			prepareInvocation(request, finish) {
 				reservationCalls += 1;
 				capturedRequest = request;
 				return {
-					commit(sink) {
-						return {
-							start() {
-								sink.finish({ type: RpcCallTerminalTypeEnum.returnedVoid });
-							},
-							cancel() {},
-						};
+					start() {
+						finish({ type: RpcCallTerminalTypeEnum.returnedVoid });
 					},
-					release() {},
+					cancel() {},
 				};
 			},
 			forceClose() {},
@@ -349,19 +365,28 @@ describe("Framework requirement evidence", () => {
 				return "done";
 			},
 		});
-		const reservation = sessionHost.reserveIncomingCall({
-			service: "example.requirements.v1",
-			method: "echo",
-			args: harness.host.normalizeApplicationArguments([{ secret: "value" }]),
-		});
-		expect(reservation?.kind).toBe("handler");
+		let call: IRpcProtocolIncomingHandlerCall | undefined;
+		const reserved = sessionHost.reserveIncomingCall(
+			{
+				service: "example.requirements.v1",
+				method: "echo",
+				args: harness.host.normalizeApplicationArguments([{ secret: "value" }]),
+			},
+			(reservation) => {
+				if (reservation.kind !== "handler") {
+					throw new Error("Expected a captured handler reservation.");
+				}
+				call = reservation.commit();
+				return undefined;
+			},
+		);
+		expect(reserved).toBe(true);
 
 		expect(cleanup()).toBeUndefined();
 		expect(() => cleanup()).not.toThrow();
-		if (reservation?.kind !== "handler") {
+		if (call === undefined) {
 			throw new Error("Expected a captured handler reservation.");
 		}
-		const call = reservation.reservation.commit();
 		await expect(call.handlerOutcome).resolves.toMatchObject({
 			type: "returned",
 			value: { value: { secret: "captured:value" } },
@@ -444,11 +469,11 @@ describe("Framework requirement evidence", () => {
 		const ownerCleanup = acceptor.expose(requirementDescriptor, implementation);
 		const futureSessionHost = host.admitSession(createEmptySession());
 		expect(
-			futureSessionHost?.reserveIncomingCall({
+			consumeIncomingKind(futureSessionHost, {
 				service: "example.requirements.v1",
 				method: "wait",
 				args: host.normalizeApplicationArguments([]),
-			})?.kind,
+			}),
 		).toBe("handler");
 		ownerCleanup();
 		const currentSessionHost = host.admitSession(createEmptySession());
@@ -457,11 +482,11 @@ describe("Framework requirement evidence", () => {
 			implementation,
 		);
 		expect(
-			currentSessionHost?.reserveIncomingCall({
+			consumeIncomingKind(currentSessionHost, {
 				service: "example.requirements.v1",
 				method: "wait",
 				args: host.normalizeApplicationArguments([]),
-			})?.kind,
+			}),
 		).toBe("handler");
 		currentCleanup();
 		const gatedPeer = acceptor.peers[0];
@@ -492,7 +517,7 @@ describe("Framework requirement evidence", () => {
 
 		let reservationCalls = 0;
 		const session: IRpcProtocolSession = {
-			reserveInvocation() {
+			prepareInvocation() {
 				reservationCalls += 1;
 				return undefined;
 			},
@@ -615,25 +640,20 @@ describe("Framework requirement evidence", () => {
 	});
 
 	it("RPC-EVENT-004 RPC-EVENT-007 keeps call observations safe, saturated, local, and pair-stable", async () => {
-		const requests: IRpcProtocolInvocationRequest[] = [];
+		const requests: IRpcProtocolCallRequest[] = [];
 		const session: IRpcProtocolSession = {
-			reserveInvocation(request) {
+			prepareInvocation(request, finish) {
 				requests.push(request);
 				return {
-					commit(sink: IRpcProtocolInvocationSink) {
-						return {
-							start() {
-								sink.finish({
-									type: RpcCallTerminalTypeEnum.returned,
-									value: harness.host.normalizeApplicationValue({
-										secret: "result-secret",
-									}),
-								});
-							},
-							cancel() {},
-						};
+					start() {
+						finish({
+							type: RpcCallTerminalTypeEnum.returned,
+							value: harness.host.normalizeApplicationValue({
+								secret: "result-secret",
+							}),
+						});
 					},
-					release() {},
+					cancel() {},
 				};
 			},
 			forceClose() {},

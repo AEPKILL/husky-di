@@ -21,12 +21,10 @@ import type { IRpcRetainedBytesLedger } from "@/interfaces/common/rpc-retained-b
 import type { IRpcEndpoint } from "@/interfaces/endpoint/rpc-endpoint.interface";
 import type { IRpcCodec } from "@/interfaces/protocol/rpc-codec.interface";
 import type {
+	IRpcProtocolCallRequest,
 	IRpcProtocolHost,
 	IRpcProtocolIncomingCall,
 	IRpcProtocolInvocation,
-	IRpcProtocolInvocationRequest,
-	IRpcProtocolInvocationReservation,
-	IRpcProtocolInvocationSink,
 	IRpcProtocolSessionHost,
 	IRpcRetainedBytesReservation,
 	RpcCallOutcome,
@@ -34,18 +32,15 @@ import type {
 	RpcIncomingTerminal,
 } from "@/interfaces/protocol/rpc-protocol.interface";
 import type {
+	IRpcBindingPlan,
+	IRpcResumeAttempt,
 	IRpcSession,
-	RpcBindingCandidate,
-	RpcBindingCommit,
-	RpcBindingEpoch,
-	RpcContinuityCandidate,
-	RpcInitiatorBindingPreparation,
-	RpcInitiatorResume,
-	RpcInitiatorResumeAccept,
-	RpcResponderResumeRequest,
-	RpcResponderResumeReview,
-	RpcSessionAuthorityCommit,
-	RpcSessionRecovery,
+	IRpcSessionBinding,
+	IRpcSessionTerminationPlan,
+	RpcResumeClaim,
+	RpcResumeDecision,
+	RpcResumeOutcome,
+	RpcSessionFactory,
 } from "@/interfaces/session/rpc-session.interface";
 import type {
 	RpcActiveRecord,
@@ -63,12 +58,7 @@ import {
 	unregisterRpcSessionRetainedBytes,
 } from "@/utils/rpc-session-retained-bytes.util";
 
-export type CreateRpcSessionOptions = Readonly<{
-	readonly host: IRpcProtocolHost;
-	readonly sessionId: string;
-	readonly resumeToken: string;
-	readonly onTerminal: () => void;
-}>;
+export type CreateRpcSessionOptions = Parameters<RpcSessionFactory>[0];
 
 /** Retains one Session Incarnation independently from its current Connection. */
 export class RpcSessionImpl implements IRpcSession {
@@ -78,18 +68,9 @@ export class RpcSessionImpl implements IRpcSession {
 	readonly _onTerminal: () => void;
 	readonly _retainedBytesLedger: IRpcRetainedBytesLedger;
 	readonly _protectedRetainedBytesReservation: IRpcRetainedBytesReservation;
-	readonly _bindingCandidates = new WeakMap<object, RpcBindingCandidateFacts>();
-	readonly _continuityCandidates = new WeakMap<
-		object,
-		RpcContinuityCandidateFacts
-	>();
-	readonly _initiatorResumeCandidates = new WeakMap<
-		object,
-		RpcInitiatorResumeFacts
-	>();
 	_resumeToken: string | undefined;
 	_sessionHost: IRpcProtocolSessionHost | undefined;
-	_binding: RpcBindingEpochImpl | undefined;
+	_binding: RpcSessionBindingImpl | undefined;
 	_bindingEpoch = 0;
 	_resumeAttempt = 0;
 	_highestAcceptedResumeAttempt = 0;
@@ -176,14 +157,10 @@ export class RpcSessionImpl implements IRpcSession {
 		return this._sessionId;
 	}
 
-	get recovery(): RpcSessionRecovery | undefined {
-		const reclaimDeadline =
-			this._recovering && !this._closed && this._binding === undefined
-				? this._recoveryDeadline
-				: undefined;
-		return reclaimDeadline === undefined
-			? undefined
-			: Object.freeze({ reclaimDeadline });
+	get reclaimDeadline(): number | undefined {
+		return this._recovering && !this._closed && this._binding === undefined
+			? this._recoveryDeadline
+			: undefined;
 	}
 
 	reserveRetainedBytes(
@@ -221,33 +198,31 @@ export class RpcSessionImpl implements IRpcSession {
 		});
 	}
 
-	prepareFreshBinding(host: IRpcProtocolSessionHost): RpcBindingCandidate {
+	prepareFresh(host: IRpcProtocolSessionHost): IRpcBindingPlan {
 		const resumeToken = this._resumeToken;
 		// Fresh binding is legal only for an open, unbound, never-recovered Session.
-		const cannotPrepareFreshBinding =
+		const cannotPrepareFresh =
 			this._closed ||
 			resumeToken === undefined ||
 			this._sessionHost !== undefined ||
 			this._binding !== undefined ||
 			this._bindingEpoch !== 0 ||
 			this._recovering;
-		if (cannotPrepareFreshBinding) {
-			throw new Error("Default RPC fresh binding candidate is invalid.");
+		if (cannotPrepareFresh) {
+			throw new Error("Default RPC fresh binding plan is invalid.");
 		}
 		// Preserve provisional Topology admission so failed preparation can close it.
 		this._sessionHost = host;
-		const candidate = Object.freeze({}) as RpcBindingCandidate;
-		this._bindingCandidates.set(candidate, {
+		return this._createBindingPlan({
 			facts: this._snapshotCandidateFacts(),
 			host,
 			kind: "fresh",
 			nextBindingEpoch: 1,
 			peerReceivedThrough: 0,
 		});
-		return candidate;
 	}
 
-	beginInitiatorResume(): RpcInitiatorResume {
+	beginResume(): IRpcResumeAttempt {
 		const resumeToken = this._resumeToken;
 		const recoveryDeadline = this._recoveryDeadline;
 		// Resume requires live retained authority within the active recovery window.
@@ -265,203 +240,198 @@ export class RpcSessionImpl implements IRpcSession {
 			throw new Error("Default RPC resumeAttempt counter is exhausted.");
 		}
 		this._resumeAttempt += 1;
-		const resume = Object.freeze({
-			sessionId: this._sessionId,
-			resumeToken,
-			resumeAttempt: this._resumeAttempt,
-			receivedThrough: this._receivedThrough,
-		}) as RpcInitiatorResume;
-		this._initiatorResumeCandidates.set(resume, {
+		const resumeAttempt = this._resumeAttempt;
+		const facts: RpcResumeAttemptFacts = Object.freeze({
 			facts: this._snapshotCandidateFacts(),
-			resumeAttempt: this._resumeAttempt,
+			resumeAttempt,
 		});
-		return resume;
+		let reviewed = false;
+		return Object.freeze<IRpcResumeAttempt>({
+			sessionId: this._sessionId,
+			token: resumeToken,
+			attempt: resumeAttempt,
+			cursor: this._receivedThrough,
+			review: (outcome: RpcResumeOutcome): RpcResumeDecision => {
+				if (reviewed) {
+					return this._rejectResumeDecision(
+						"Default RPC resume attempt is unknown or already consumed.",
+					);
+				}
+				reviewed = true;
+				return this._reviewResumeOutcome(facts, outcome);
+			},
+		});
 	}
 
-	prepareInitiatorBinding(
-		resume: RpcInitiatorResume,
-		accept: RpcInitiatorResumeAccept,
-	): RpcInitiatorBindingPreparation {
-		const candidate = this._initiatorResumeCandidates.get(resume);
-		this._initiatorResumeCandidates.delete(resume);
-		if (candidate === undefined || !this._initiatorResumeCurrent(candidate)) {
-			return Object.freeze({
-				kind: "stale",
-				error: new Error(
-					"Default RPC initiator resume candidate became stale.",
-				),
-			});
-		}
-		const contradictory =
-			accept.profile !== RPC_PROFILE ||
-			accept.sessionId !== this._sessionId ||
-			!Number.isSafeInteger(accept.bindingEpoch) ||
-			accept.bindingEpoch <= this._bindingEpoch ||
-			this._classifyPeerCursor(accept.peerReceivedThrough) !==
-				RpcPeerCursorClassificationEnum.valid;
-		if (contradictory) {
-			const contradiction = Object.freeze({
-				kind: "contradiction",
-			}) as RpcInitiatorBindingPreparation & object;
-			this._continuityCandidates.set(contradiction, {
-				facts: candidate.facts,
-				resumeAttempt: candidate.resumeAttempt,
-				source: "initiator",
-			});
-			return contradiction;
-		}
-		const ready = Object.freeze({
-			kind: "ready",
-		}) as RpcInitiatorBindingPreparation & object;
-		this._bindingCandidates.set(ready, {
-			facts: candidate.facts,
-			kind: "initiator-resume",
-			nextBindingEpoch: accept.bindingEpoch,
-			peerReceivedThrough: accept.peerReceivedThrough,
-			resumeAttempt: candidate.resumeAttempt,
-		});
-		return ready;
-	}
-
-	reviewResponderResume(
-		request: RpcResponderResumeRequest,
-	): RpcResponderResumeReview {
+	reviewResume(claim: RpcResumeClaim): RpcResumeDecision {
 		const resumeToken = this._resumeToken;
 		// A responder resume must present current Session authority and a newer attempt.
 		const responderAuthorityIsInvalid =
 			resumeToken === undefined ||
 			this._closed ||
-			!rpcSecurityCarriersEqual(request.resumeToken, resumeToken) ||
-			!this._canAcceptResumeAttempt(request.resumeAttempt);
+			!rpcSecurityCarriersEqual(claim.token, resumeToken) ||
+			!this._canAcceptResumeAttempt(claim.attempt);
 		if (responderAuthorityIsInvalid) {
-			return Object.freeze({ kind: "generic-reject" });
+			return this._rejectResumeDecision(
+				"Default RPC resume was generically rejected.",
+			);
 		}
 		const facts = this._snapshotCandidateFacts();
 		if (
-			this._classifyPeerCursor(request.peerReceivedThrough) !==
+			this._classifyPeerCursor(claim.cursor) !==
 			RpcPeerCursorClassificationEnum.valid
 		) {
-			const continuity = Object.freeze({
-				kind: "continuity-reject",
-			}) as RpcResponderResumeReview & object;
-			this._continuityCandidates.set(continuity, {
-				facts,
-				peerReceivedThrough: request.peerReceivedThrough,
-				resumeAttempt: request.resumeAttempt,
-				source: "responder",
-			});
-			return continuity;
-		}
-		const accept = Object.freeze({
-			kind: "accept",
-			bindingEpoch: this._bindingEpoch + 1,
-			receivedThrough: this._receivedThrough,
-		}) as RpcResponderResumeReview & object;
-		this._bindingCandidates.set(accept, {
-			facts,
-			kind: "responder-resume",
-			nextBindingEpoch: this._bindingEpoch + 1,
-			peerReceivedThrough: request.peerReceivedThrough,
-			resumeAttempt: request.resumeAttempt,
-		});
-		return accept;
-	}
-
-	commitContinuityFailure(
-		candidate: RpcContinuityCandidate | RpcInitiatorResume,
-		cause?: Error,
-	): RpcSessionAuthorityCommit {
-		const continuity = this._continuityCandidates.get(candidate);
-		this._continuityCandidates.delete(candidate);
-		if (continuity !== undefined) {
-			const current =
-				this._candidateFactsCurrent(continuity.facts) &&
-				(continuity.source === "initiator"
-					? continuity.resumeAttempt === this._resumeAttempt &&
-						this._initiatorRecoveryCurrent(continuity.facts)
-					: continuity.resumeAttempt !== undefined &&
-						continuity.peerReceivedThrough !== undefined &&
-						this._canAcceptResumeAttempt(continuity.resumeAttempt) &&
-						this._classifyPeerCursor(continuity.peerReceivedThrough) !==
-							RpcPeerCursorClassificationEnum.valid);
-			if (current) {
-				this._terminateRetainedSession(
-					RpcCloseReasonEnum.continuityFailure,
-					cause,
-				);
-				return Object.freeze({ kind: "committed" });
-			}
-		}
-
-		const resume = this._initiatorResumeCandidates.get(candidate);
-		this._initiatorResumeCandidates.delete(candidate);
-		if (resume !== undefined && this._initiatorResumeCurrent(resume)) {
-			this._terminateRetainedSession(
-				RpcCloseReasonEnum.continuityFailure,
-				cause,
-			);
-			return Object.freeze({ kind: "committed" });
-		}
-		return Object.freeze({
-			kind: "discarded",
-			error: new Error("Default RPC continuity candidate became stale."),
-		});
-	}
-
-	terminateRemoteResume(
-		resume: RpcInitiatorResume,
-		cause?: Error,
-	): RpcSessionAuthorityCommit {
-		const candidate = this._initiatorResumeCandidates.get(resume);
-		this._initiatorResumeCandidates.delete(resume);
-		if (candidate === undefined || !this._initiatorResumeCurrent(candidate)) {
 			return Object.freeze({
-				kind: "discarded",
-				error: new Error("Default RPC remote terminal candidate became stale."),
+				kind: "terminate",
+				plan: this._createTerminationPlan(
+					RpcCloseReasonEnum.continuityFailure,
+					() =>
+						this._candidateFactsCurrent(facts) &&
+						this._canAcceptResumeAttempt(claim.attempt) &&
+						this._classifyPeerCursor(claim.cursor) !==
+							RpcPeerCursorClassificationEnum.valid,
+				),
 			});
 		}
-		this._terminateRetainedSession(RpcCloseReasonEnum.remoteTerminated, cause);
-		return Object.freeze({ kind: "committed" });
+		const bindingEpoch = this._bindingEpoch + 1;
+		return Object.freeze({
+			kind: "bind",
+			bindingEpoch,
+			cursor: this._receivedThrough,
+			plan: this._createBindingPlan({
+				facts,
+				kind: "responder-resume",
+				nextBindingEpoch: bindingEpoch,
+				peerReceivedThrough: claim.cursor,
+				resumeAttempt: claim.attempt,
+			}),
+		});
 	}
 
 	terminateForced(): void {
 		this._terminateRetainedSession(RpcCloseReasonEnum.forcedClose);
 	}
 
-	commitBinding(
-		candidate: RpcBindingCandidate,
-		endpoint: IRpcEndpoint,
-	): RpcBindingCommit {
-		const prepared = this._bindingCandidates.get(candidate);
-		this._bindingCandidates.delete(candidate);
-		const stale =
-			prepared === undefined
-				? "Default RPC binding candidate is unknown or already consumed."
-				: this._validateBindingCandidate(prepared, endpoint);
-		if (prepared === undefined || stale !== undefined) {
+	_reviewResumeOutcome(
+		resume: RpcResumeAttemptFacts,
+		outcome: RpcResumeOutcome,
+	): RpcResumeDecision {
+		if (!this._initiatorResumeCurrent(resume)) {
+			return this._rejectResumeDecision(
+				"Default RPC initiator resume attempt became stale.",
+			);
+		}
+		if (outcome.kind === "rejected") {
+			return this._rejectResumeDecision(
+				"Default RPC resume was generically rejected.",
+			);
+		}
+		if (
+			outcome.kind === "continuity-failure" ||
+			outcome.kind === "terminated"
+		) {
+			const reason =
+				outcome.kind === "continuity-failure"
+					? RpcCloseReasonEnum.continuityFailure
+					: RpcCloseReasonEnum.remoteTerminated;
 			return Object.freeze({
-				kind: "discarded",
-				error: new Error(
-					stale ??
-						"Default RPC binding candidate is unknown or already consumed.",
+				kind: "terminate",
+				plan: this._createTerminationPlan(reason, () =>
+					this._initiatorResumeCurrent(resume),
 				),
 			});
 		}
+		const contradictory =
+			outcome.profile !== RPC_PROFILE ||
+			outcome.sessionId !== this._sessionId ||
+			!Number.isSafeInteger(outcome.bindingEpoch) ||
+			outcome.bindingEpoch <= this._bindingEpoch ||
+			this._classifyPeerCursor(outcome.cursor) !==
+				RpcPeerCursorClassificationEnum.valid;
+		if (contradictory) {
+			return Object.freeze({
+				kind: "terminate",
+				plan: this._createTerminationPlan(
+					RpcCloseReasonEnum.continuityFailure,
+					() => this._initiatorResumeCurrent(resume),
+				),
+			});
+		}
+		return Object.freeze({
+			kind: "bind",
+			bindingEpoch: outcome.bindingEpoch,
+			cursor: outcome.cursor,
+			plan: this._createBindingPlan({
+				facts: resume.facts,
+				kind: "initiator-resume",
+				nextBindingEpoch: outcome.bindingEpoch,
+				peerReceivedThrough: outcome.cursor,
+				resumeAttempt: resume.resumeAttempt,
+			}),
+		});
+	}
 
-		const binding = new RpcBindingEpochImpl(this, endpoint);
+	_rejectResumeDecision(message: string): RpcResumeDecision {
+		return Object.freeze({ kind: "reject", error: new Error(message) });
+	}
+
+	_createBindingPlan(candidate: RpcBindingPlanFacts): IRpcBindingPlan {
+		let consumed = false;
+		return Object.freeze<IRpcBindingPlan>({
+			install: (endpoint: IRpcEndpoint): IRpcSessionBinding => {
+				if (consumed) {
+					throw new Error(
+						"Default RPC binding plan is unknown or already consumed.",
+					);
+				}
+				consumed = true;
+				return this._installBinding(candidate, endpoint);
+			},
+		});
+	}
+
+	_createTerminationPlan(
+		reason:
+			| RpcCloseReasonEnum.continuityFailure
+			| RpcCloseReasonEnum.remoteTerminated,
+		isCurrent: () => boolean,
+	): IRpcSessionTerminationPlan {
+		let consumed = false;
+		return Object.freeze<IRpcSessionTerminationPlan>({
+			commit: (cause?: Error): void => {
+				if (consumed) {
+					throw new Error(
+						"Default RPC Session termination plan is unknown or already consumed.",
+					);
+				}
+				consumed = true;
+				if (!isCurrent()) {
+					throw new Error("Default RPC Session termination plan became stale.");
+				}
+				this._terminateRetainedSession(reason, cause);
+			},
+		});
+	}
+
+	_installBinding(
+		prepared: RpcBindingPlanFacts,
+		endpoint: IRpcEndpoint,
+	): IRpcSessionBinding {
+		const stale = this._validateBindingPlan(prepared, endpoint);
+		if (stale !== undefined) {
+			throw new Error(stale);
+		}
+
+		const binding = new RpcSessionBindingImpl(this, endpoint);
 		try {
 			endpoint.configureSendProgressTimeout(
 				this._host.policy.sendProgressTimeoutMs,
 			);
 			endpoint.observeIngressIdle(() => this._bindingIngressIdle(binding));
 		} catch (error) {
-			return Object.freeze({
-				kind: "discarded",
-				error:
-					error instanceof Error
-						? error
-						: new Error("Default RPC binding Endpoint setup failed."),
-			});
+			throw error instanceof Error
+				? error
+				: new Error("Default RPC binding Endpoint setup failed.");
 		}
 
 		this._stopHealthTimer();
@@ -486,14 +456,11 @@ export class RpcSessionImpl implements IRpcSession {
 		}
 		this._checkGracefulShutdown();
 		this._deferDirectClose(previousBinding?._endpoint);
-		return Object.freeze({
-			kind: "installed",
-			binding: binding as unknown as RpcBindingEpoch,
-		});
+		return binding;
 	}
 
 	_reserveBindingRetainedBytes(
-		binding: RpcBindingEpochImpl,
+		binding: RpcSessionBindingImpl,
 		bytes: number,
 	): IRpcRetainedBytesReservation | undefined {
 		return this._binding === binding && !this._closed
@@ -501,7 +468,7 @@ export class RpcSessionImpl implements IRpcSession {
 			: undefined;
 	}
 
-	_activateBinding(binding: RpcBindingEpochImpl): boolean {
+	_activateBinding(binding: RpcSessionBindingImpl): boolean {
 		// Activation applies once to the current binding of an open Session.
 		const cannotActivateBinding =
 			this._binding !== binding || binding._active || this._closed;
@@ -529,7 +496,7 @@ export class RpcSessionImpl implements IRpcSession {
 		return this._binding === binding && !this._closed;
 	}
 
-	_receiveBinding(binding: RpcBindingEpochImpl, bytes: Uint8Array): void {
+	_receiveBinding(binding: RpcSessionBindingImpl, bytes: Uint8Array): void {
 		// Ingress is accepted only from the active current binding of an open Session.
 		const bindingCannotReceive =
 			this._closed || this._binding !== binding || !binding._active;
@@ -584,7 +551,7 @@ export class RpcSessionImpl implements IRpcSession {
 	}
 
 	_bindingFailed(
-		binding: RpcBindingEpochImpl,
+		binding: RpcSessionBindingImpl,
 		reason: RpcEndpointFailureEnum,
 		error?: Error,
 	): void {
@@ -607,7 +574,7 @@ export class RpcSessionImpl implements IRpcSession {
 		this._enterRecovery(error);
 	}
 
-	_bindingIngressIdle(binding: RpcBindingEpochImpl): void {
+	_bindingIngressIdle(binding: RpcSessionBindingImpl): void {
 		if (this._binding !== binding || this._closed) {
 			return;
 		}
@@ -650,7 +617,7 @@ export class RpcSessionImpl implements IRpcSession {
 		);
 	}
 
-	_initiatorResumeCurrent(candidate: RpcInitiatorResumeFacts): boolean {
+	_initiatorResumeCurrent(candidate: RpcResumeAttemptFacts): boolean {
 		return (
 			candidate.resumeAttempt === this._resumeAttempt &&
 			this._candidateFactsCurrent(candidate.facts) &&
@@ -658,15 +625,15 @@ export class RpcSessionImpl implements IRpcSession {
 		);
 	}
 
-	_validateBindingCandidate(
-		candidate: RpcBindingCandidateFacts,
+	_validateBindingPlan(
+		candidate: RpcBindingPlanFacts,
 		endpoint: IRpcEndpoint,
 	): string | undefined {
 		if (!this._candidateFactsCurrent(candidate.facts)) {
-			return "Default RPC binding candidate became stale.";
+			return "Default RPC binding plan became stale.";
 		}
 		if (this._binding?._endpoint === endpoint) {
-			return "Default RPC binding candidate reused its current Endpoint.";
+			return "Default RPC binding plan reused its current Endpoint.";
 		}
 		// Binding continuity requires a safe newer epoch and a valid peer cursor.
 		const continuityIsInvalid =
@@ -675,7 +642,7 @@ export class RpcSessionImpl implements IRpcSession {
 			this._classifyPeerCursor(candidate.peerReceivedThrough) !==
 				RpcPeerCursorClassificationEnum.valid;
 		if (continuityIsInvalid) {
-			return "Default RPC binding candidate contradicts retained continuity.";
+			return "Default RPC binding plan contradicts retained continuity.";
 		}
 		if (candidate.kind === "fresh") {
 			return this._sessionHost === candidate.host &&
@@ -686,19 +653,19 @@ export class RpcSessionImpl implements IRpcSession {
 				this._binding === undefined &&
 				!this._recovering
 				? undefined
-				: "Default RPC fresh binding candidate became stale.";
+				: "Default RPC fresh binding plan became stale.";
 		}
 		if (candidate.kind === "initiator-resume") {
 			return candidate.resumeAttempt === this._resumeAttempt &&
 				this._initiatorRecoveryCurrent(candidate.facts)
 				? undefined
-				: "Default RPC initiator binding candidate became stale.";
+				: "Default RPC initiator binding plan became stale.";
 		}
 		return candidate.resumeAttempt !== undefined &&
 			this._canAcceptResumeAttempt(candidate.resumeAttempt) &&
 			candidate.nextBindingEpoch === this._bindingEpoch + 1
 			? undefined
-			: "Default RPC responder binding candidate became stale.";
+			: "Default RPC responder binding plan became stale.";
 	}
 
 	_classifyPeerCursor(cursor: number): RpcPeerCursorClassificationEnum {
@@ -726,9 +693,10 @@ export class RpcSessionImpl implements IRpcSession {
 		);
 	}
 
-	reserveInvocation(
-		request: IRpcProtocolInvocationRequest,
-	): IRpcProtocolInvocationReservation | undefined {
+	prepareInvocation(
+		request: IRpcProtocolCallRequest,
+		finish: (outcome: RpcCallOutcome) => void,
+	): IRpcProtocolInvocation | undefined {
 		const pendingCharge = request.args.weight + 256;
 		const maximumPendingBytes = Math.floor(
 			this._host.policy.maxRetainedBytesPerSession / 4,
@@ -750,52 +718,21 @@ export class RpcSessionImpl implements IRpcSession {
 		}
 		this._invocationCount += 1;
 		this._pendingInvocationBytes += pendingCharge;
-		let reservationState: "reserved" | "committed" | "released" = "reserved";
-		let entry: IRpcInvocationEntry | undefined;
+		const entry: IRpcInvocationEntry = {
+			request,
+			finish,
+			pendingCharge,
+			retainedBytesReservation,
+			pendingCharged: true,
+			started: false,
+			admitted: false,
+			publicFinished: false,
+			retired: false,
+		};
+		this._invocations.add(entry);
 		return Object.freeze({
-			commit: (sink: IRpcProtocolInvocationSink): IRpcProtocolInvocation => {
-				if (reservationState !== "reserved") {
-					this._fault(
-						RpcCloseReasonEnum.protocolFault,
-						new Error(
-							"Default RPC invocation reservation had multiple winners.",
-						),
-					);
-					return Object.freeze({ start() {}, cancel() {} });
-				}
-				reservationState = "committed";
-				entry = {
-					request,
-					sink,
-					pendingCharge,
-					retainedBytesReservation,
-					pendingCharged: true,
-					started: false,
-					admitted: false,
-					publicFinished: false,
-					retired: false,
-				};
-				this._invocations.add(entry);
-				return Object.freeze({
-					start: () => this._startInvocation(entry as IRpcInvocationEntry),
-					cancel: () => this._cancelInvocation(entry as IRpcInvocationEntry),
-				});
-			},
-			release: (): void => {
-				if (reservationState !== "reserved") {
-					this._fault(
-						RpcCloseReasonEnum.protocolFault,
-						new Error(
-							"Default RPC invocation reservation had multiple winners.",
-						),
-					);
-					return;
-				}
-				reservationState = "released";
-				this._invocationCount -= 1;
-				this._pendingInvocationBytes -= pendingCharge;
-				retainedBytesReservation.release();
-			},
+			start: () => this._startInvocation(entry),
+			cancel: () => this._cancelInvocation(entry),
 		});
 	}
 
@@ -894,65 +831,70 @@ export class RpcSessionImpl implements IRpcSession {
 			this._queueError(message.callId, RpcExceptionCodeEnum.unavailable);
 			return;
 		}
-		const reservation = sessionHost.reserveIncomingCall({
-			service: message.service,
-			method: message.method,
-			args,
-		});
 		this._highestIncomingCallOrdinal = ordinal;
-		if (reservation === undefined) {
+		const reserved = sessionHost.reserveIncomingCall(
+			{
+				service: message.service,
+				method: message.method,
+				args,
+			},
+			(reservation) => {
+				if (reservation.kind === RpcIncomingCallKindEnum.unknown) {
+					const entry: IRpcIncomingEntry = {
+						callId: message.callId,
+						terminalSelected: true,
+					};
+					// The Session placeholder precedes Framework commit and its observable event.
+					this._incomingCalls.set(message.callId, entry);
+					const incoming = reservation.commit();
+					entry.call = incoming;
+					if (this._closed) {
+						incoming.finish({
+							type: RpcCallTerminalTypeEnum.failed,
+							code: reservation.code,
+						});
+						return undefined;
+					}
+					this._finishIncomingCall(entry, {
+						type: RpcCallTerminalTypeEnum.failed,
+						code: reservation.code,
+					});
+					this._queueError(message.callId, reservation.code);
+					return undefined;
+				}
+
+				const entry: IRpcIncomingEntry = {
+					callId: message.callId,
+					terminalSelected: false,
+				};
+				// The Session placeholder precedes Framework commit and Handler scheduling.
+				this._incomingCalls.set(message.callId, entry);
+				const incoming = reservation.commit();
+				entry.call = incoming;
+				if (this._closed) {
+					incoming.finish({
+						type: RpcCallTerminalTypeEnum.sessionTerminated,
+					});
+					return undefined;
+				}
+				void incoming.handlerOutcome.then(
+					(outcome) => this._finishIncomingHandler(entry, outcome),
+					() =>
+						this._finishIncomingHandler(entry, {
+							type: RpcCallTerminalTypeEnum.failed,
+							code: RpcExceptionCodeEnum.handlerFailed,
+						}),
+				);
+				return undefined;
+			},
+		);
+		if (!reserved) {
 			this._incomingCalls.set(message.callId, {
 				callId: message.callId,
 				terminalSelected: true,
 			});
 			this._queueError(message.callId, RpcExceptionCodeEnum.unavailable);
-			return;
 		}
-
-		if (reservation.kind === RpcIncomingCallKindEnum.unknown) {
-			const incoming = reservation.reservation.commit();
-			if (this._closed) {
-				incoming.finish({
-					type: RpcCallTerminalTypeEnum.failed,
-					code: reservation.code,
-				});
-				return;
-			}
-			const entry: IRpcIncomingEntry = {
-				callId: message.callId,
-				call: incoming,
-				terminalSelected: true,
-			};
-			this._incomingCalls.set(message.callId, entry);
-			this._finishIncomingCall(entry, {
-				type: RpcCallTerminalTypeEnum.failed,
-				code: reservation.code,
-			});
-			this._queueError(message.callId, reservation.code);
-			return;
-		}
-
-		const incoming = reservation.reservation.commit();
-		if (this._closed) {
-			incoming.finish({
-				type: RpcCallTerminalTypeEnum.sessionTerminated,
-			});
-			return;
-		}
-		const entry: IRpcIncomingEntry = {
-			callId: message.callId,
-			call: incoming,
-			terminalSelected: false,
-		};
-		this._incomingCalls.set(message.callId, entry);
-		void incoming.handlerOutcome.then(
-			(outcome) => this._finishIncomingHandler(entry, outcome),
-			() =>
-				this._finishIncomingHandler(entry, {
-					type: RpcCallTerminalTypeEnum.failed,
-					code: RpcExceptionCodeEnum.handlerFailed,
-				}),
-		);
 	}
 
 	_receiveCancel(callId: string): void {
@@ -1105,11 +1047,14 @@ export class RpcSessionImpl implements IRpcSession {
 	}
 
 	_startInvocation(entry: IRpcInvocationEntry): void {
-		if (entry.started || entry.retired) {
+		if (entry.started) {
 			this._fault(
 				RpcCloseReasonEnum.protocolFault,
 				new Error("Default RPC invocation start was called more than once."),
 			);
+			return;
+		}
+		if (entry.retired) {
 			return;
 		}
 		entry.started = true;
@@ -1232,7 +1177,7 @@ export class RpcSessionImpl implements IRpcSession {
 	}
 
 	_admitInvocation(
-		binding: RpcBindingEpochImpl,
+		binding: RpcSessionBindingImpl,
 		entry: IRpcInvocationEntry,
 	): void {
 		// Admission stops before either call or delivery sequencing can overflow.
@@ -1348,7 +1293,7 @@ export class RpcSessionImpl implements IRpcSession {
 	}
 
 	_admitSemantic(
-		binding: RpcBindingEpochImpl,
+		binding: RpcSessionBindingImpl,
 		queued: IRpcQueuedSemantic,
 	): void {
 		const { message, replay } = queued;
@@ -1400,7 +1345,7 @@ export class RpcSessionImpl implements IRpcSession {
 	}
 
 	_sendEnvelope(
-		binding: RpcBindingEpochImpl,
+		binding: RpcSessionBindingImpl,
 		sequence: number,
 		message: RpcSemanticMessage,
 	): void {
@@ -1547,7 +1492,10 @@ export class RpcSessionImpl implements IRpcSession {
 		}
 	}
 
-	_sendUnsequenced(binding: RpcBindingEpochImpl, record: RpcJsonRecord): void {
+	_sendUnsequenced(
+		binding: RpcSessionBindingImpl,
+		record: RpcJsonRecord,
+	): void {
 		let encoded: Uint8Array;
 		try {
 			encoded = this._codec.encode(record);
@@ -1563,7 +1511,7 @@ export class RpcSessionImpl implements IRpcSession {
 		this._sendEncoded(binding, encoded);
 	}
 
-	_sendEncoded(binding: RpcBindingEpochImpl, encoded: Uint8Array): void {
+	_sendEncoded(binding: RpcSessionBindingImpl, encoded: Uint8Array): void {
 		void binding._endpoint.sendNow(encoded).then(
 			() => {
 				if (this._binding === binding) {
@@ -1638,7 +1586,7 @@ export class RpcSessionImpl implements IRpcSession {
 			return;
 		}
 		entry.publicFinished = true;
-		entry.sink.finish(outcome);
+		entry.finish(outcome);
 	}
 
 	_terminateOpenCalls(): void {
@@ -1904,7 +1852,7 @@ export class RpcSessionImpl implements IRpcSession {
 		this._recoveryDeadline = undefined;
 	}
 
-	_startHealthTimer(binding: RpcBindingEpochImpl): void {
+	_startHealthTimer(binding: RpcSessionBindingImpl): void {
 		this._stopHealthTimer();
 		const now = Date.now();
 		this._healthStallGraceUntil = 0;
@@ -1913,7 +1861,7 @@ export class RpcSessionImpl implements IRpcSession {
 		this._scheduleHealthTimer(binding);
 	}
 
-	_recordInboundActivity(binding: RpcBindingEpochImpl): void {
+	_recordInboundActivity(binding: RpcSessionBindingImpl): void {
 		// Activity belongs only to the active current binding of an open Session.
 		const bindingIsStale =
 			this._binding !== binding || !binding._active || this._closed;
@@ -1928,7 +1876,7 @@ export class RpcSessionImpl implements IRpcSession {
 		this._scheduleHealthTimer(binding);
 	}
 
-	_scheduleHealthTimer(binding: RpcBindingEpochImpl): void {
+	_scheduleHealthTimer(binding: RpcSessionBindingImpl): void {
 		this._stopHealthTimer();
 		// Health checks run only for the active current binding of an open Session.
 		const bindingIsStale =
@@ -1947,7 +1895,7 @@ export class RpcSessionImpl implements IRpcSession {
 		);
 	}
 
-	_healthTimerFired(binding: RpcBindingEpochImpl): void {
+	_healthTimerFired(binding: RpcSessionBindingImpl): void {
 		this._healthTimer = undefined;
 		// A timer firing from any replaced or inactive binding has no authority.
 		const timerIsStale =
@@ -2065,7 +2013,7 @@ type RpcSessionImplDependencies = Readonly<{
 }>;
 
 type RpcSessionCandidateFacts = Readonly<{
-	readonly binding: RpcBindingEpochImpl | undefined;
+	readonly binding: RpcSessionBindingImpl | undefined;
 	readonly bindingEpoch: number;
 	readonly highestSentSequence: number;
 	readonly peerReceivedThrough: number;
@@ -2074,7 +2022,7 @@ type RpcSessionCandidateFacts = Readonly<{
 	readonly recoveryDeadline: number | undefined;
 }>;
 
-type RpcBindingCandidateFacts = Readonly<{
+type RpcBindingPlanFacts = Readonly<{
 	readonly facts: RpcSessionCandidateFacts;
 	readonly host?: IRpcProtocolSessionHost;
 	readonly kind: "fresh" | "initiator-resume" | "responder-resume";
@@ -2083,21 +2031,14 @@ type RpcBindingCandidateFacts = Readonly<{
 	readonly resumeAttempt?: number;
 }>;
 
-type RpcContinuityCandidateFacts = Readonly<{
-	readonly facts: RpcSessionCandidateFacts;
-	readonly peerReceivedThrough?: number;
-	readonly resumeAttempt?: number;
-	readonly source: "initiator" | "responder";
-}>;
-
-type RpcInitiatorResumeFacts = Readonly<{
+type RpcResumeAttemptFacts = Readonly<{
 	readonly facts: RpcSessionCandidateFacts;
 	readonly resumeAttempt: number;
 }>;
 
 interface IRpcInvocationEntry {
-	request?: IRpcProtocolInvocationRequest;
-	readonly sink: IRpcProtocolInvocationSink;
+	request?: IRpcProtocolCallRequest;
+	readonly finish: (outcome: RpcCallOutcome) => void;
 	readonly pendingCharge: number;
 	retainedBytesReservation?: IRpcRetainedBytesReservation;
 	pendingCharged: boolean;
@@ -2133,7 +2074,7 @@ const RPC_LAST_ORDINARY_SEQUENCE =
 	Number.MAX_SAFE_INTEGER - RPC_SEQUENCE_RESERVE;
 
 /** Exact authority for one installed Physical Connection Binding Epoch. */
-class RpcBindingEpochImpl {
+class RpcSessionBindingImpl implements IRpcSessionBinding {
 	readonly _session: RpcSessionImpl;
 	readonly _endpoint: IRpcEndpoint;
 	_active = false;
@@ -2154,7 +2095,7 @@ class RpcBindingEpochImpl {
 		this._session._receiveBinding(this, bytes);
 	}
 
-	failed(reason: RpcEndpointFailureEnum, error?: Error): void {
+	fail(reason: RpcEndpointFailureEnum, error?: Error): void {
 		this._session._bindingFailed(this, reason, error);
 	}
 

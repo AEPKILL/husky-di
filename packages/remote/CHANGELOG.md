@@ -6,6 +6,11 @@
 - Use the breaking `connector.connect({ adapter, signal? })` options record for extensible, cancellable Connector attempts.
 - Add the opt-in `createRpcConnectorReconnection()` supervisor with configurable finite retries, fresh Adapter creation, orchestration state, and payload-free failure telemetry.
 - Add the semantic third-party Protocol SPI and Transport Adapter seams.
+- Shape Protocol call admission around its real ordering boundaries: atomic
+  outgoing `prepareInvocation()` with `start()` as the identity gate, and a
+  synchronous scoped incoming reservation whose commit capability cannot escape.
+  Pre-start cancellation finishes exactly once as `canceled`, while synchronous
+  preparation outcomes remain gated behind validated `call-started` publication.
 - Add the resumable, resource-bounded `husky-di-rpc/1` Protocol and its built-in
   `createRpcProtocolConnector` and `createRpcProtocolAcceptor` role factories.
 - Establish Session continuity with one independent stable 256-bit opaque

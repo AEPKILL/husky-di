@@ -9,9 +9,9 @@ import { RpcEndpointImpl } from "@/impls/endpoint/rpc-endpoint.impl";
 import type { IRpcEndpoint } from "@/interfaces/endpoint/rpc-endpoint.interface";
 import type { IRpcRetainedBytesReservation } from "@/interfaces/protocol/rpc-protocol.interface";
 import type {
-	IRpcSession,
-	RpcBindingCandidate,
-	RpcBindingEpoch,
+	IRpcBindingPlan,
+	IRpcSessionBinding,
+	IRpcSessionTerminationPlan,
 } from "@/interfaces/session/rpc-session.interface";
 import type { IRpcConnection } from "@/interfaces/transport/rpc-connection.interface";
 
@@ -27,8 +27,6 @@ export type CreateRpcBindingAttemptOptions = Readonly<{
 	readonly isCurrent: () => boolean;
 	readonly onSettled: () => void;
 }>;
-
-type RpcBindingSession = Pick<IRpcSession, "commitBinding">;
 
 type RpcPendingBindingFailure = Readonly<{
 	readonly error: Error;
@@ -52,7 +50,7 @@ export class RpcBindingAttempt {
 	readonly _rejectFirstMessage: (error: Error) => void;
 	readonly _options: CreateRpcBindingAttemptOptions;
 	readonly _temporaryReleases = new Set<() => void>();
-	_binding: RpcBindingEpoch | undefined;
+	_binding: IRpcSessionBinding | undefined;
 	_pendingLinearizationFailure: RpcPendingBindingFailure | undefined;
 	_pendingActivationFailure: RpcPendingBindingFailure | undefined;
 	_timer: ReturnType<typeof setTimeout> | undefined;
@@ -159,18 +157,17 @@ export class RpcBindingAttempt {
 	}
 
 	async bind(
-		session: RpcBindingSession,
-		candidate: RpcBindingCandidate,
-		retain: () => boolean,
-		reply?: Uint8Array,
+		plan: IRpcBindingPlan,
+		retainSession: () => boolean,
+		encodedReply?: Uint8Array,
 	): Promise<void> {
 		if (!this.isCurrent) {
 			return;
 		}
 		this._linearizing = true;
-		let commit: ReturnType<RpcBindingSession["commitBinding"]>;
+		let binding: IRpcSessionBinding;
 		try {
-			commit = session.commitBinding(candidate, this._endpoint);
+			binding = plan.install(this._endpoint);
 		} catch (error) {
 			this._linearizing = false;
 			if (!this._settlePendingLinearizationFailure()) {
@@ -179,17 +176,11 @@ export class RpcBindingAttempt {
 			return;
 		}
 		this._linearizing = false;
-		if (commit.kind === "discarded") {
-			if (!this._settlePendingLinearizationFailure()) {
-				this.fail(commit.error);
-			}
-			return;
-		}
-		this._binding = commit.binding;
+		this._binding = binding;
 
 		let retained = false;
 		try {
-			retained = retain();
+			retained = retainSession();
 		} catch (error) {
 			if (!this._settlePendingLinearizationFailure()) {
 				this.fail(error);
@@ -217,15 +208,36 @@ export class RpcBindingAttempt {
 			);
 			return;
 		}
-		if (reply !== undefined) {
+		if (encodedReply !== undefined) {
 			try {
-				await this._endpoint.sendNow(reply);
+				await this._endpoint.sendNow(encodedReply);
 			} catch (error) {
 				this.fail(error);
 				return;
 			}
 		}
-		this._activate(commit.binding);
+		this._activate(binding);
+	}
+
+	async terminate(
+		plan: IRpcSessionTerminationPlan,
+		error: Error,
+		encodedReply?: Uint8Array,
+	): Promise<void> {
+		if (!this.isCurrent) {
+			return;
+		}
+		try {
+			plan.commit(error);
+		} catch (commitError) {
+			this.fail(commitError);
+			return;
+		}
+		if (encodedReply === undefined) {
+			this.fail(error);
+			return;
+		}
+		await this.reject(encodedReply, error);
 	}
 
 	async reject(reply: Uint8Array, error: Error): Promise<void> {
@@ -297,7 +309,7 @@ export class RpcBindingAttempt {
 	_endpointFailed(reason: RpcEndpointFailureEnum, error?: Error): void {
 		const binding = this._binding;
 		if (binding !== undefined) {
-			binding.failed(reason, error);
+			binding.fail(reason, error);
 			if (this._terminal) {
 				return;
 			}
@@ -352,7 +364,7 @@ export class RpcBindingAttempt {
 		if (this._binding === undefined) {
 			this._endpoint.fenceAndClose();
 		} else if (notifyBinding) {
-			this._binding.failed(reason, failure);
+			this._binding.fail(reason, failure);
 		}
 		this._finishResources();
 		this._options.onSettled();
@@ -369,7 +381,7 @@ export class RpcBindingAttempt {
 		return true;
 	}
 
-	_activate(binding: RpcBindingEpoch): void {
+	_activate(binding: IRpcSessionBinding): void {
 		if (this._terminal) {
 			return;
 		}
@@ -387,7 +399,7 @@ export class RpcBindingAttempt {
 		this._activating = false;
 		if (!activated) {
 			if (!this._settlePendingActivationFailure()) {
-				this.fail(new Error("Default RPC Binding Epoch did not activate."));
+				this.fail(new Error("Default RPC Session Binding did not activate."));
 			}
 			return;
 		}

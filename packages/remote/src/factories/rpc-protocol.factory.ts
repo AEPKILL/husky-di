@@ -4,15 +4,18 @@
  * @created 2026-08-19 00:00:00
  */
 
+import { RpcRetainedBytesLedgerImpl } from "@/impls/common/rpc-retained-bytes-ledger.impl";
 import { RpcCodecImpl } from "@/impls/protocol/rpc-codec.impl";
 import { RpcProtocolAcceptorImpl } from "@/impls/protocol/rpc-protocol-acceptor.impl";
 import { RpcProtocolConnectorImpl } from "@/impls/protocol/rpc-protocol-connector.impl";
+import { RpcSessionImpl } from "@/impls/session/rpc-session.impl";
 import type {
 	IRpcProtocolAcceptor,
 	IRpcProtocolAcceptorHost,
 	IRpcProtocolConnector,
 	IRpcProtocolConnectorHost,
 } from "@/interfaces/protocol/rpc-protocol.interface";
+import type { RpcSessionFactory } from "@/interfaces/session/rpc-session.interface";
 import { createRpcSecurityCarrier } from "@/utils/protocol/rpc-base64-url-32-schema.util";
 
 /** Creates a fresh built-in Connector Protocol role for one owner. */
@@ -52,7 +55,7 @@ function createBuiltInRpcProtocolConnector(
 	return new RpcProtocolConnectorImpl({
 		host,
 		codec,
-		counterExhausted,
+		createSession: createBuiltInRpcSessionFactory(counterExhausted),
 	});
 }
 
@@ -64,6 +67,19 @@ function createBuiltInRpcProtocolAcceptor(
 		host,
 		codec,
 		createSecurityCarrier: createRpcSecurityCarrier,
-		counterExhausted,
+		createSession: createBuiltInRpcSessionFactory(counterExhausted),
 	});
+}
+
+function createBuiltInRpcSessionFactory(
+	counterExhausted: boolean,
+): RpcSessionFactory {
+	return (options) =>
+		new RpcSessionImpl(options, {
+			codec,
+			counterExhausted,
+			retainedBytesLedger: new RpcRetainedBytesLedgerImpl(
+				options.host.policy.maxRetainedBytesPerSession,
+			),
+		});
 }

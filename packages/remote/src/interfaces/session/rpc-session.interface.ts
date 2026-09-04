@@ -1,5 +1,5 @@
 /**
- * @overview Private retained Logical Session seam, creation inputs, and capabilities.
+ * @overview Private retained Logical Session seam and one-shot authority plans.
  * @author AEPKILL
  * @created 2026-08-22 17:54:40
  */
@@ -7,6 +7,7 @@
 import type { RpcEndpointFailureEnum } from "@/enums/protocol/rpc-endpoint-failure.enum";
 import type { IRpcEndpoint } from "@/interfaces/endpoint/rpc-endpoint.interface";
 import type {
+	IRpcProtocolHost,
 	IRpcProtocolSession,
 	IRpcProtocolSessionHost,
 	IRpcRetainedBytesReservation,
@@ -14,112 +15,76 @@ import type {
 
 export interface IRpcSession extends IRpcProtocolSession {
 	readonly sessionId: string;
-	readonly recovery: RpcSessionRecovery | undefined;
-	prepareFreshBinding(host: IRpcProtocolSessionHost): RpcBindingCandidate;
-	beginInitiatorResume(): RpcInitiatorResume;
-	prepareInitiatorBinding(
-		resume: RpcInitiatorResume,
-		accept: RpcInitiatorResumeAccept,
-	): RpcInitiatorBindingPreparation;
-	reviewResponderResume(
-		request: RpcResponderResumeRequest,
-	): RpcResponderResumeReview;
-	commitContinuityFailure(
-		candidate: RpcContinuityCandidate | RpcInitiatorResume,
-		cause?: Error,
-	): RpcSessionAuthorityCommit;
-	terminateRemoteResume(
-		resume: RpcInitiatorResume,
-		cause?: Error,
-	): RpcSessionAuthorityCommit;
+	readonly reclaimDeadline: number | undefined;
+	prepareFresh(host: IRpcProtocolSessionHost): IRpcBindingPlan;
+	beginResume(): IRpcResumeAttempt;
+	reviewResume(claim: RpcResumeClaim): RpcResumeDecision;
 	terminateForced(): void;
-	commitBinding(
-		candidate: RpcBindingCandidate,
-		endpoint: IRpcEndpoint,
-	): RpcBindingCommit;
 	shutdown(): Promise<void>;
 }
 
-export type RpcSessionRecovery = Readonly<{
-	readonly reclaimDeadline: number;
-}>;
+export interface IRpcBindingPlan {
+	install(endpoint: IRpcEndpoint): IRpcSessionBinding;
+}
 
-export type RpcBindingCandidate = Readonly<{
-	readonly rpcBindingCandidateType: unique symbol;
-}>;
-
-export type RpcInitiatorResume = Readonly<{
+export interface IRpcResumeAttempt {
 	readonly sessionId: string;
-	readonly resumeToken: string;
-	readonly resumeAttempt: number;
-	readonly receivedThrough: number;
-	readonly rpcInitiatorResumeType: unique symbol;
-}>;
+	readonly token: string;
+	readonly attempt: number;
+	readonly cursor: number;
+	review(outcome: RpcResumeOutcome): RpcResumeDecision;
+}
 
-export type RpcInitiatorResumeAccept = Readonly<{
-	readonly profile: string;
-	readonly sessionId: string;
-	readonly bindingEpoch: number;
-	readonly peerReceivedThrough: number;
-}>;
-
-export type RpcContinuityCandidate = Readonly<{
-	readonly rpcContinuityCandidateType: unique symbol;
-}>;
-
-export type RpcInitiatorBindingPreparation =
-	| (RpcBindingCandidate &
-			Readonly<{
-				readonly kind: "ready";
-			}>)
-	| (RpcContinuityCandidate &
-			Readonly<{
-				readonly kind: "contradiction";
-			}>)
-	| Readonly<{
-			readonly kind: "stale";
-			readonly error: Error;
-	  }>;
-export type RpcResponderResumeRequest = Readonly<{
-	readonly resumeToken: string;
-	readonly resumeAttempt: number;
-	readonly peerReceivedThrough: number;
-}>;
-
-export type RpcResponderResumeReview =
-	| Readonly<{ readonly kind: "generic-reject" }>
-	| (RpcContinuityCandidate &
-			Readonly<{
-				readonly kind: "continuity-reject";
-			}>)
-	| (RpcBindingCandidate &
-			Readonly<{
-				readonly kind: "accept";
-				readonly bindingEpoch: number;
-				readonly receivedThrough: number;
-			}>);
-
-export type RpcSessionAuthorityCommit =
-	| Readonly<{ readonly kind: "committed" }>
-	| Readonly<{
-			readonly kind: "discarded";
-			readonly error: Error;
-	  }>;
-
-export type RpcBindingEpoch = Readonly<{
+export interface IRpcSessionBinding {
 	reserveRetainedBytes(bytes: number): IRpcRetainedBytesReservation | undefined;
 	receive(bytes: Uint8Array): void;
-	failed(reason: RpcEndpointFailureEnum, error?: Error): void;
+	fail(reason: RpcEndpointFailureEnum, error?: Error): void;
 	activate(): boolean;
-	readonly rpcBindingEpochType: unique symbol;
+}
+
+export interface IRpcSessionTerminationPlan {
+	commit(cause?: Error): void;
+}
+
+export type RpcSessionFactory = (
+	options: Readonly<{
+		readonly host: IRpcProtocolHost;
+		readonly sessionId: string;
+		readonly resumeToken: string;
+		readonly onTerminal: () => void;
+	}>,
+) => IRpcSession;
+
+export type RpcResumeClaim = Readonly<{
+	readonly token: string;
+	readonly attempt: number;
+	readonly cursor: number;
 }>;
 
-export type RpcBindingCommit =
+export type RpcResumeOutcome =
 	| Readonly<{
-			readonly kind: "installed";
-			readonly binding: RpcBindingEpoch;
+			readonly kind: "accepted";
+			readonly profile: string;
+			readonly sessionId: string;
+			readonly bindingEpoch: number;
+			readonly cursor: number;
+	  }>
+	| Readonly<{ readonly kind: "rejected" }>
+	| Readonly<{ readonly kind: "continuity-failure" }>
+	| Readonly<{ readonly kind: "terminated" }>;
+
+export type RpcResumeDecision =
+	| Readonly<{
+			readonly kind: "bind";
+			readonly plan: IRpcBindingPlan;
+			readonly bindingEpoch: number;
+			readonly cursor: number;
 	  }>
 	| Readonly<{
-			readonly kind: "discarded";
+			readonly kind: "terminate";
+			readonly plan: IRpcSessionTerminationPlan;
+	  }>
+	| Readonly<{
+			readonly kind: "reject";
 			readonly error: Error;
 	  }>;

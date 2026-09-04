@@ -13,18 +13,19 @@ import { RpcProtocolSessionTransitionTypeEnum } from "@/enums/protocol/rpc-proto
 import { RpcResumeRejectCodeEnum } from "@/enums/protocol/rpc-resume-reject-code.enum";
 import { RpcWireRecordKindEnum } from "@/enums/protocol/rpc-wire-record-kind.enum";
 import { RpcCloseReasonEnum } from "@/enums/rpc-close-reason.enum";
-import { RpcRetainedBytesLedgerImpl } from "@/impls/common/rpc-retained-bytes-ledger.impl";
 import {
 	closeUnboundConnection,
 	RpcBindingAttempt,
 } from "@/impls/protocol/rpc-binding-attempt.impl";
-import { RpcSessionImpl } from "@/impls/session/rpc-session.impl";
 import type { IRpcCodec } from "@/interfaces/protocol/rpc-codec.interface";
 import type {
 	IRpcProtocolAcceptor,
 	IRpcProtocolAcceptorHost,
 } from "@/interfaces/protocol/rpc-protocol.interface";
-import type { IRpcSession } from "@/interfaces/session/rpc-session.interface";
+import type {
+	IRpcSession,
+	RpcSessionFactory,
+} from "@/interfaces/session/rpc-session.interface";
 import type { IRpcConnection } from "@/interfaces/transport/rpc-connection.interface";
 import type {
 	RpcFreshAccept,
@@ -38,7 +39,7 @@ export type CreateRpcProtocolAcceptorOptions = Readonly<{
 	readonly host: IRpcProtocolAcceptorHost;
 	readonly codec: IRpcCodec;
 	readonly createSecurityCarrier: () => string;
-	readonly counterExhausted?: boolean;
+	readonly createSession: RpcSessionFactory;
 }>;
 
 type RpcFreshSession = Readonly<{
@@ -53,7 +54,7 @@ export class RpcProtocolAcceptorImpl implements IRpcProtocolAcceptor {
 	readonly _host: IRpcProtocolAcceptorHost;
 	readonly _codec: IRpcCodec;
 	readonly _createSecurityCarrier: () => string;
-	readonly _counterExhausted: boolean;
+	readonly _createSession: RpcSessionFactory;
 	readonly _attempts = new Set<RpcBindingAttempt>();
 	readonly _sessions = new Map<string, IRpcSession>();
 	readonly _provisionalSessionIds = new Set<string>();
@@ -68,7 +69,7 @@ export class RpcProtocolAcceptorImpl implements IRpcProtocolAcceptor {
 		this._host = options.host;
 		this._codec = options.codec;
 		this._createSecurityCarrier = options.createSecurityCarrier;
-		this._counterExhausted = options.counterExhausted ?? false;
+		this._createSession = options.createSession;
 	}
 
 	accept(connection: IRpcConnection, signal: AbortSignal): Promise<void> {
@@ -203,11 +204,11 @@ export class RpcProtocolAcceptorImpl implements IRpcProtocolAcceptor {
 			return;
 		}
 
-		let candidate: ReturnType<IRpcSession["prepareFreshBinding"]>;
+		let plan: ReturnType<IRpcSession["prepareFresh"]>;
 		try {
-			candidate = prepared.session.prepareFreshBinding(sessionHost);
+			plan = prepared.session.prepareFresh(sessionHost);
 		} catch (error) {
-			// Topology admission preceded candidate preparation, so unwind its Peer.
+			// Topology admission preceded binding preparation, so unwind its Peer.
 			sessionHost.transition({
 				type: RpcProtocolSessionTransitionTypeEnum.closed,
 				reason: RpcCloseReasonEnum.forcedClose,
@@ -222,8 +223,7 @@ export class RpcProtocolAcceptorImpl implements IRpcProtocolAcceptor {
 			resumeToken: prepared.resumeToken,
 		}) as RpcFreshAccept;
 		await attempt.bind(
-			prepared.session,
-			candidate,
+			plan,
 			() => this._retainFresh(prepared),
 			this._codec.encode(accept),
 		);
@@ -238,26 +238,28 @@ export class RpcProtocolAcceptorImpl implements IRpcProtocolAcceptor {
 			await this._rejectResume(attempt);
 			return;
 		}
-		const review = session.reviewResponderResume({
-			resumeToken: request.resumeToken,
-			resumeAttempt: request.resumeAttempt,
-			peerReceivedThrough: request.receivedThrough,
+		const decision = session.reviewResume({
+			token: request.resumeToken,
+			attempt: request.resumeAttempt,
+			cursor: request.receivedThrough,
 		});
-		if (review.kind === "generic-reject") {
+		if (decision.kind === "reject") {
 			await this._rejectResume(attempt);
 			return;
 		}
-		if (review.kind === "continuity-reject") {
+		if (decision.kind === "terminate") {
+			if (this._sessions.get(session.sessionId) !== session) {
+				attempt.fail(new Error("Default RPC Acceptor Session owner changed."));
+				return;
+			}
 			const reject = Object.freeze({
 				kind: RpcWireRecordKindEnum.reject,
 				code: RpcResumeRejectCodeEnum.continuityFailure,
 			}) as RpcResumeReject;
-			await this._terminateContinuity(
-				attempt,
-				session,
-				() => session.commitContinuityFailure(review),
-				this._codec.encode(reject),
+			await attempt.terminate(
+				decision.plan,
 				new Error("Default RPC resume cursor violated continuity."),
+				this._codec.encode(reject),
 			);
 			return;
 		}
@@ -265,12 +267,11 @@ export class RpcProtocolAcceptorImpl implements IRpcProtocolAcceptor {
 			kind: RpcWireRecordKindEnum.accept,
 			profile: RPC_PROFILE,
 			sessionId: request.sessionId,
-			bindingEpoch: review.bindingEpoch,
-			receivedThrough: review.receivedThrough,
+			bindingEpoch: decision.bindingEpoch,
+			receivedThrough: decision.cursor,
 		}) as RpcResumeAccept;
 		await attempt.bind(
-			session,
-			review,
+			decision.plan,
 			() => this._sessions.get(session.sessionId) === session,
 			this._codec.encode(accept),
 		);
@@ -291,7 +292,7 @@ export class RpcProtocolAcceptorImpl implements IRpcProtocolAcceptor {
 		}
 		if (retainedAndReserved === this._host.policy.maxSessions) {
 			for (const [sessionId, session] of this._sessions) {
-				const recoveryDeadline = session.recovery?.reclaimDeadline;
+				const recoveryDeadline = session.reclaimDeadline;
 				const isEarlierReclaimCandidate =
 					recoveryDeadline !== undefined &&
 					recoveryDeadline > reclaimAt &&
@@ -370,16 +371,12 @@ export class RpcProtocolAcceptorImpl implements IRpcProtocolAcceptor {
 		};
 		try {
 			const resumeToken = this._createSecurityCarrier();
-			session = new RpcSessionImpl(
-				{ host: this._host, sessionId, resumeToken, onTerminal },
-				{
-					codec: this._codec,
-					counterExhausted: this._counterExhausted,
-					retainedBytesLedger: new RpcRetainedBytesLedgerImpl(
-						this._host.policy.maxRetainedBytesPerSession,
-					),
-				},
-			);
+			session = this._createSession({
+				host: this._host,
+				sessionId,
+				resumeToken,
+				onTerminal,
+			});
 			const created = session;
 			const sessionLease = attempt.own(() => created.terminateForced());
 			reservationLease.transfer();
@@ -421,28 +418,6 @@ export class RpcProtocolAcceptorImpl implements IRpcProtocolAcceptor {
 			this._sessions.delete(sessionId);
 		}
 		session.terminateForced();
-	}
-
-	async _terminateContinuity(
-		attempt: RpcBindingAttempt,
-		session: IRpcSession,
-		commit: () => ReturnType<IRpcSession["commitContinuityFailure"]>,
-		reply: Uint8Array,
-		error: Error,
-	): Promise<void> {
-		if (
-			!attempt.isCurrent ||
-			this._sessions.get(session.sessionId) !== session
-		) {
-			attempt.fail(new Error("Default RPC Acceptor Session owner changed."));
-			return;
-		}
-		const authority = commit();
-		if (authority.kind === "discarded") {
-			attempt.fail(authority.error);
-			return;
-		}
-		await attempt.reject(reply, error);
 	}
 
 	_rejectResume(attempt: RpcBindingAttempt): Promise<void> {

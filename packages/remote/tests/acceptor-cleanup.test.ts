@@ -46,7 +46,7 @@ describe("Acceptor termination cleanup", () => {
 		};
 		const acceptor = createRpcAcceptor({ protocolFactory });
 		sessionHost = protocolHost?.admitSession({
-			reserveInvocation: () => undefined,
+			prepareInvocation: () => undefined,
 			forceClose() {
 				sessionHost?.transition({
 					type: RpcProtocolSessionTransitionTypeEnum.closed,
@@ -88,7 +88,7 @@ describe("Acceptor termination cleanup", () => {
 		};
 		const acceptor = createRpcAcceptor({ protocolFactory });
 		protocolHost?.admitSession({
-			reserveInvocation() {
+			prepareInvocation() {
 				throw fault;
 			},
 			forceClose() {
@@ -96,7 +96,7 @@ describe("Acceptor termination cleanup", () => {
 			},
 		});
 		protocolHost?.admitSession({
-			reserveInvocation: () => undefined,
+			prepareInvocation: () => undefined,
 			forceClose() {},
 		});
 		const [faultingPeer, healthyPeer] = acceptor.peers;
@@ -144,13 +144,13 @@ describe("Acceptor termination cleanup", () => {
 		};
 		const acceptor = createRpcAcceptor({ protocolFactory });
 		const firstHost = protocolHost?.admitSession({
-			reserveInvocation: () => undefined,
+			prepareInvocation: () => undefined,
 			forceClose() {
 				forced[0] += 1;
 			},
 		});
 		const secondHost = protocolHost?.admitSession({
-			reserveInvocation: () => undefined,
+			prepareInvocation: () => undefined,
 			forceClose() {
 				forced[1] += 1;
 			},
@@ -473,7 +473,7 @@ describe("Acceptor termination cleanup", () => {
 			},
 		};
 		const session: IRpcProtocolSession = {
-			reserveInvocation: () => undefined,
+			prepareInvocation: () => undefined,
 			forceClose() {},
 		};
 		const protocolFactory: RpcProtocolAcceptorFactory = (host) => {

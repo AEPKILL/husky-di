@@ -11,12 +11,10 @@ import {
 import { RpcDecodePhaseEnum } from "@/enums/protocol/rpc-decode-phase.enum";
 import { RpcResumeRejectCodeEnum } from "@/enums/protocol/rpc-resume-reject-code.enum";
 import { RpcWireRecordKindEnum } from "@/enums/protocol/rpc-wire-record-kind.enum";
-import { RpcRetainedBytesLedgerImpl } from "@/impls/common/rpc-retained-bytes-ledger.impl";
 import {
 	closeUnboundConnection,
 	RpcBindingAttempt,
 } from "@/impls/protocol/rpc-binding-attempt.impl";
-import { RpcSessionImpl } from "@/impls/session/rpc-session.impl";
 import type { IRpcCodec } from "@/interfaces/protocol/rpc-codec.interface";
 import type {
 	IRpcProtocolConnector,
@@ -24,7 +22,8 @@ import type {
 } from "@/interfaces/protocol/rpc-protocol.interface";
 import type {
 	IRpcSession,
-	RpcInitiatorResume,
+	RpcResumeOutcome,
+	RpcSessionFactory,
 } from "@/interfaces/session/rpc-session.interface";
 import type { IRpcConnection } from "@/interfaces/transport/rpc-connection.interface";
 import type {
@@ -35,7 +34,7 @@ import type {
 export type CreateRpcProtocolConnectorOptions = Readonly<{
 	readonly host: IRpcProtocolConnectorHost;
 	readonly codec: IRpcCodec;
-	readonly counterExhausted?: boolean;
+	readonly createSession: RpcSessionFactory;
 }>;
 
 type RpcFreshSession = Readonly<{
@@ -47,7 +46,7 @@ type RpcFreshSession = Readonly<{
 export class RpcProtocolConnectorImpl implements IRpcProtocolConnector {
 	readonly _host: IRpcProtocolConnectorHost;
 	readonly _codec: IRpcCodec;
-	readonly _counterExhausted: boolean;
+	readonly _createSession: RpcSessionFactory;
 	_attempt: RpcBindingAttempt | undefined;
 	_session: IRpcSession | undefined;
 	_handshakeSlotsInUse = 0;
@@ -59,7 +58,7 @@ export class RpcProtocolConnectorImpl implements IRpcProtocolConnector {
 	public constructor(options: CreateRpcProtocolConnectorOptions) {
 		this._host = options.host;
 		this._codec = options.codec;
-		this._counterExhausted = options.counterExhausted ?? false;
+		this._createSession = options.createSession;
 	}
 
 	bind(connection: IRpcConnection, signal: AbortSignal): Promise<void> {
@@ -126,7 +125,7 @@ export class RpcProtocolConnectorImpl implements IRpcProtocolConnector {
 			throw new Error("Default RPC handshake capacity is full.");
 		}
 		const session = this._session;
-		if (session !== undefined && session.recovery === undefined) {
+		if (session !== undefined && session.reclaimDeadline === undefined) {
 			throw new Error("Default RPC Connector Session is not recovering.");
 		}
 
@@ -209,8 +208,8 @@ export class RpcProtocolConnectorImpl implements IRpcProtocolConnector {
 			);
 			return;
 		}
-		const candidate = prepared.session.prepareFreshBinding(sessionHost);
-		await attempt.bind(prepared.session, candidate, () => {
+		const plan = prepared.session.prepareFresh(sessionHost);
+		await attempt.bind(plan, () => {
 			if (this._session !== undefined) {
 				return false;
 			}
@@ -227,14 +226,14 @@ export class RpcProtocolConnectorImpl implements IRpcProtocolConnector {
 		attempt: RpcBindingAttempt,
 		session: IRpcSession,
 	): Promise<void> {
-		const resume = session.beginInitiatorResume();
+		const resume = session.beginResume();
 		const request = Object.freeze({
 			kind: RpcWireRecordKindEnum.resume,
 			profile: RPC_PROFILE,
 			sessionId: resume.sessionId,
-			resumeToken: resume.resumeToken,
-			receivedThrough: resume.receivedThrough,
-			resumeAttempt: resume.resumeAttempt,
+			resumeToken: resume.token,
+			receivedThrough: resume.cursor,
+			resumeAttempt: resume.attempt,
 		}) as RpcResumeRequest;
 		const response = attempt.read();
 		await attempt.send(this._codec.encode(request));
@@ -245,71 +244,38 @@ export class RpcProtocolConnectorImpl implements IRpcProtocolConnector {
 		if (!attempt.isCurrent) {
 			return;
 		}
-		if (outcome.kind === RpcWireRecordKindEnum.reject) {
-			this._handleResumeReject(attempt, session, resume, outcome.code);
+		const reviewed: RpcResumeOutcome =
+			outcome.kind === RpcWireRecordKindEnum.accept
+				? {
+						kind: "accepted",
+						profile: outcome.profile,
+						sessionId: outcome.sessionId,
+						bindingEpoch: outcome.bindingEpoch,
+						cursor: outcome.receivedThrough,
+					}
+				: outcome.code === RpcResumeRejectCodeEnum.resumeRejected
+					? { kind: "rejected" }
+					: outcome.code === RpcResumeRejectCodeEnum.continuityFailure
+						? { kind: "continuity-failure" }
+						: { kind: "terminated" };
+		const decision = resume.review(reviewed);
+		if (decision.kind === "reject") {
+			attempt.fail(decision.error);
 			return;
 		}
-
-		const preparation = session.prepareInitiatorBinding(resume, {
-			profile: outcome.profile,
-			sessionId: outcome.sessionId,
-			bindingEpoch: outcome.bindingEpoch,
-			peerReceivedThrough: outcome.receivedThrough,
-		});
-		if (preparation.kind === "stale") {
-			attempt.fail(preparation.error);
+		if (decision.kind === "terminate") {
+			if (this._session !== session) {
+				attempt.fail(new Error("Default RPC Connector Session owner changed."));
+				return;
+			}
+			const error =
+				outcome.kind === RpcWireRecordKindEnum.accept
+					? new Error("Default RPC resume accept contradicts retained state.")
+					: new Error(`Default RPC resume ended with ${outcome.code}.`);
+			await attempt.terminate(decision.plan, error);
 			return;
 		}
-		if (preparation.kind === "contradiction") {
-			this._terminateContinuity(
-				attempt,
-				session,
-				() => session.commitContinuityFailure(preparation),
-				new Error("Default RPC resume accept contradicts retained state."),
-			);
-			return;
-		}
-		await attempt.bind(session, preparation, () => this._session === session);
-	}
-
-	_handleResumeReject(
-		attempt: RpcBindingAttempt,
-		session: IRpcSession,
-		resume: RpcInitiatorResume,
-		code: RpcResumeRejectCodeEnum,
-	): void {
-		if (code === RpcResumeRejectCodeEnum.resumeRejected) {
-			attempt.fail(new Error("Default RPC resume was generically rejected."));
-			return;
-		}
-		const error = new Error(`Default RPC resume ended with ${code}.`);
-		this._terminateContinuity(
-			attempt,
-			session,
-			() =>
-				code === RpcResumeRejectCodeEnum.continuityFailure
-					? session.commitContinuityFailure(resume)
-					: session.terminateRemoteResume(resume),
-			error,
-		);
-	}
-
-	_terminateContinuity(
-		attempt: RpcBindingAttempt,
-		session: IRpcSession,
-		commit: () => ReturnType<IRpcSession["commitContinuityFailure"]>,
-		error: Error,
-	): void {
-		if (!attempt.isCurrent || this._session !== session) {
-			attempt.fail(new Error("Default RPC Connector Session owner changed."));
-			return;
-		}
-		const authority = commit();
-		if (authority.kind === "discarded") {
-			attempt.fail(authority.error);
-			return;
-		}
-		attempt.fail(error);
+		await attempt.bind(decision.plan, () => this._session === session);
 	}
 
 	_newSession(
@@ -332,16 +298,12 @@ export class RpcProtocolConnectorImpl implements IRpcProtocolConnector {
 			}
 		};
 		try {
-			session = new RpcSessionImpl(
-				{ host: this._host, sessionId, resumeToken, onTerminal },
-				{
-					codec: this._codec,
-					counterExhausted: this._counterExhausted,
-					retainedBytesLedger: new RpcRetainedBytesLedgerImpl(
-						this._host.policy.maxRetainedBytesPerSession,
-					),
-				},
-			);
+			session = this._createSession({
+				host: this._host,
+				sessionId,
+				resumeToken,
+				onTerminal,
+			});
 		} catch (error) {
 			reservationLease.release();
 			throw error;

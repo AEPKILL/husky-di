@@ -303,10 +303,8 @@ import type {
   IRpcProtocolAcceptor, IRpcProtocolAcceptorHost,
   IRpcProtocolConnector, IRpcProtocolConnectorHost,
   IRpcProtocolHost, IRpcProtocolIncomingCall,
-  IRpcProtocolIncomingCallRequest, IRpcProtocolIncomingCallReservation,
+  IRpcProtocolCallRequest,
   IRpcProtocolIncomingHandlerCall, IRpcProtocolInvocation,
-  IRpcProtocolInvocationRequest, IRpcProtocolInvocationReservation,
-  IRpcProtocolInvocationSink,
   IRpcProtocolRuntimePolicy as ProtocolRuntimePolicy, IRpcProtocolSession,
   IRpcProtocolSessionHost, IRpcRetainedBytesReservation, RpcCallOutcome, RpcHandlerOutcome,
   RpcApplicationValue as ProtocolApplicationValue,
@@ -409,10 +407,9 @@ type Inventory = [
   IRpcApplicationArgumentsSnapshot, IRpcApplicationSnapshot,
   IRpcProtocolAcceptor, IRpcProtocolAcceptorHost, IRpcProtocolConnector,
   IRpcProtocolConnectorHost, IRpcProtocolHost, IRpcProtocolIncomingCall,
-  IRpcProtocolIncomingCallRequest, IRpcProtocolIncomingCallReservation,
+  IRpcProtocolCallRequest,
   IRpcProtocolIncomingHandlerCall, IRpcProtocolInvocation,
-  IRpcProtocolInvocationRequest, IRpcProtocolInvocationReservation,
-  IRpcProtocolInvocationSink, IRpcProtocolSession,
+  IRpcProtocolSession,
   IRpcProtocolSessionHost, IRpcRetainedBytesReservation, RpcCallOutcome,
   RpcHandlerOutcome, RpcIncomingFailure,
   RpcIncomingTerminal, RpcProtocolIncomingCallReservation,
@@ -427,6 +424,21 @@ type Inventory = [
 ];
 declare const inventory: Inventory;
 void inventory;
+declare const protocolRequest: IRpcProtocolCallRequest;
+declare const protocolSession: IRpcProtocolSession;
+declare const protocolSessionHost: IRpcProtocolSessionHost;
+declare const incomingReservation: RpcProtocolIncomingCallReservation;
+void protocolSession.prepareInvocation(protocolRequest, () => undefined);
+void protocolSessionHost.reserveIncomingCall(protocolRequest, (reservation) => {
+  void reservation.commit();
+  return undefined;
+});
+// @ts-expect-error Outgoing reservation was replaced by atomic preparation.
+void protocolSession.reserveInvocation(protocolRequest);
+// @ts-expect-error Incoming reservations are a flattened tagged union.
+void incomingReservation.reservation;
+// @ts-expect-error Incoming reservation release is Framework-owned.
+void incomingReservation.release();
 // @ts-expect-error The built-in Protocol is private.
 import { defaultRpcProtocol } from "@husky-di/remote";
 // @ts-expect-error The aggregate Protocol seam was removed in favor of role factories.
@@ -439,6 +451,16 @@ import type { IRpcProtocolConnectorRuntime } from "@husky-di/remote/protocol";
 import type { IRpcProtocolAcceptorRuntime } from "@husky-di/remote/protocol";
 // @ts-expect-error The aggregate factory was replaced by reusable role factories.
 import { createRpcProtocol } from "@husky-di/remote/protocol";
+// @ts-expect-error Outgoing request roles were merged into IRpcProtocolCallRequest.
+import type { IRpcProtocolInvocationRequest } from "@husky-di/remote/protocol";
+// @ts-expect-error Incoming request roles were merged into IRpcProtocolCallRequest.
+import type { IRpcProtocolIncomingCallRequest } from "@husky-di/remote/protocol";
+// @ts-expect-error Finish is passed directly to prepareInvocation().
+import type { IRpcProtocolInvocationSink } from "@husky-di/remote/protocol";
+// @ts-expect-error Outgoing reservation is folded into preparation.
+import type { IRpcProtocolInvocationReservation } from "@husky-di/remote/protocol";
+// @ts-expect-error Incoming reservation is the flattened tagged union.
+import type { IRpcProtocolIncomingCallReservation } from "@husky-di/remote/protocol";
 // @ts-expect-error Descriptor mapped helpers are private.
 import type { RemoteService, RpcMethodDefinitions } from "@husky-di/remote";
 // @ts-expect-error The legacy interface-prefixed Descriptor name is not exported.

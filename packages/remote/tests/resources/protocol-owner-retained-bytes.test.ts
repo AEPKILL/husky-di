@@ -44,7 +44,7 @@ describe("Default RPC Protocol owner retained bytes", () => {
 		const ledger = new RpcRetainedBytesLedgerImpl(1);
 		let propertyReads = 0;
 		const session = {
-			reserveInvocation: () => undefined,
+			prepareInvocation: () => undefined,
 			forceClose() {},
 		} as IRpcProtocolSession;
 		Object.defineProperty(session, "reserveRetainedBytes", {

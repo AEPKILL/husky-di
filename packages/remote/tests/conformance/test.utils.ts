@@ -17,16 +17,20 @@ import { RpcCloseReasonEnum, RpcExceptionCodeEnum } from "../../src/index";
 import type {
 	IRpcProtocolAcceptor,
 	IRpcProtocolAcceptorHost,
+	IRpcProtocolCallRequest,
 	IRpcProtocolConnector,
 	IRpcProtocolConnectorHost,
-	IRpcProtocolInvocationRequest,
-	IRpcProtocolInvocationReservation,
-	IRpcProtocolInvocationSink,
+	IRpcProtocolIncomingCall,
+	IRpcProtocolIncomingHandlerCall,
+	IRpcProtocolInvocation,
 	IRpcProtocolSession,
 	IRpcProtocolSessionHost,
 	RpcApplicationValue,
 	RpcCallFailure,
+	RpcCallOutcome,
 	RpcHandlerOutcome,
+	RpcIncomingTerminal,
+	RpcUnknownCallFailure,
 } from "../../src/interfaces/protocol/rpc-protocol.interface";
 import type {
 	IRpcAcceptorAdapter,
@@ -256,16 +260,9 @@ class MemoryProtocolRuntime
 	readonly #host: IRpcProtocolConnectorHost | IRpcProtocolAcceptorHost;
 	readonly #counterExhaustion: boolean;
 	readonly #binding = Promise.withResolvers<void>();
-	readonly #outgoing = new Map<number, IRpcProtocolInvocationSink>();
-	readonly #incoming = new Map<
-		number,
-		{
-			finish(outcome: {
-				readonly type: RpcCallTerminalTypeEnum.failed;
-				readonly code: RpcExceptionCodeEnum.canceled;
-			}): void;
-		}
-	>();
+	readonly #prepared = new Set<(outcome: RpcCallOutcome) => void>();
+	readonly #outgoing = new Map<number, (outcome: RpcCallOutcome) => void>();
+	readonly #incoming = new Map<number, IRpcProtocolIncomingCall>();
 	#connection: IRpcConnection | undefined;
 	#session: MemoryProtocolSession | undefined;
 	#sessionHost: IRpcProtocolSessionHost | undefined;
@@ -313,13 +310,22 @@ class MemoryProtocolRuntime
 
 	public close(): void {
 		this.#closing = true;
-		for (const sink of this.#outgoing.values()) {
-			sink.finish({
+		for (const finish of [...this.#prepared]) {
+			finish({
+				type: RpcCallTerminalTypeEnum.failed,
+				code: RpcExceptionCodeEnum.unavailable,
+			});
+		}
+		for (const finish of [...this.#outgoing.values()]) {
+			finish({
 				type: RpcCallTerminalTypeEnum.failed,
 				code: RpcExceptionCodeEnum.outcomeUnknown,
 			});
 		}
-		this.#outgoing.clear();
+		for (const call of this.#incoming.values()) {
+			call.finish({ type: RpcCallTerminalTypeEnum.sessionTerminated });
+		}
+		this.#incoming.clear();
 		void this.#connection?.close();
 	}
 
@@ -328,9 +334,10 @@ class MemoryProtocolRuntime
 		return this.#cleanupTask;
 	}
 
-	public reserveInvocation(
-		request: IRpcProtocolInvocationRequest,
-	): IRpcProtocolInvocationReservation | undefined {
+	public prepareInvocation(
+		request: IRpcProtocolCallRequest,
+		finish: (outcome: RpcCallOutcome) => void,
+	): IRpcProtocolInvocation | undefined {
 		if (this.#closing || this.#sessionHost === undefined) {
 			return undefined;
 		}
@@ -341,34 +348,50 @@ class MemoryProtocolRuntime
 			});
 			return undefined;
 		}
-		let settled = false;
+		let phase: "pending" | "started" | "settled" = "pending";
+		let id: number | undefined;
+		const settle = (outcome: RpcCallOutcome): void => {
+			if (phase === "settled") {
+				return;
+			}
+			phase = "settled";
+			this.#prepared.delete(settle);
+			if (id !== undefined) {
+				this.#outgoing.delete(id);
+			}
+			finish(outcome);
+		};
+		this.#prepared.add(settle);
 		return {
-			commit: (sink) => {
-				if (settled) {
-					throw new Error("Invocation reservation already settled.");
+			start: () => {
+				if (phase !== "pending") {
+					return;
 				}
-				settled = true;
-				const id = this.#nextCallId;
+				phase = "started";
+				this.#prepared.delete(settle);
+				id = this.#nextCallId;
 				this.#nextCallId += 1;
-				return {
-					start: () => {
-						this.#outgoing.set(id, sink);
-						void this.#send({
-							kind: "call",
-							id,
-							service: request.service,
-							method: request.method,
-							args: request.args.value,
-						});
-					},
-					cancel: () => void this.#send({ kind: "cancel", id }),
-				};
+				this.#outgoing.set(id, settle);
+				void this.#send({
+					kind: "call",
+					id,
+					service: request.service,
+					method: request.method,
+					args: request.args.value,
+				});
 			},
-			release() {
-				if (settled) {
-					throw new Error("Invocation reservation already settled.");
+			cancel: () => {
+				if (phase === "settled") {
+					return;
 				}
-				settled = true;
+				const startedId = phase === "started" ? id : undefined;
+				settle({
+					type: RpcCallTerminalTypeEnum.failed,
+					code: RpcExceptionCodeEnum.canceled,
+				});
+				if (startedId !== undefined) {
+					void this.#send({ kind: "cancel", id: startedId });
+				}
 			},
 		};
 	}
@@ -464,12 +487,36 @@ class MemoryProtocolRuntime
 		record: Extract<MemoryProtocolRecord, { readonly kind: "call" }>,
 	): Promise<void> {
 		const args = this.#host.normalizeApplicationArguments(record.args);
-		const reserved = this.#sessionHost?.reserveIncomingCall({
-			service: record.service,
-			method: record.method,
-			args,
-		});
-		if (reserved === undefined) {
+		const sessionHost = this.#sessionHost;
+		if (sessionHost === undefined) {
+			throw new Error("Memory Protocol has no Session host.");
+		}
+		let incoming:
+			| {
+					readonly kind: "unknown";
+					readonly code: RpcUnknownCallFailure;
+					readonly call: IRpcProtocolIncomingCall;
+			  }
+			| {
+					readonly kind: "handler";
+					readonly call: IRpcProtocolIncomingHandlerCall;
+			  }
+			| undefined;
+		const reserved = sessionHost.reserveIncomingCall(
+			{ service: record.service, method: record.method, args },
+			(reservation) => {
+				incoming =
+					reservation.kind === "unknown"
+						? {
+								kind: "unknown",
+								code: reservation.code,
+								call: reservation.commit(),
+							}
+						: { kind: "handler", call: reservation.commit() };
+				return undefined;
+			},
+		);
+		if (!reserved) {
 			await this.#send({
 				kind: "result",
 				id: record.id,
@@ -478,40 +525,48 @@ class MemoryProtocolRuntime
 			});
 			return;
 		}
-		if (reserved.kind === "unknown") {
-			reserved.reservation.commit();
+		if (incoming === undefined) {
+			throw new Error("Memory Protocol host did not consume its reservation.");
+		}
+		if (incoming.kind === "unknown") {
+			incoming.call.finish({
+				type: RpcCallTerminalTypeEnum.failed,
+				code: incoming.code,
+			});
 			await this.#send({
 				kind: "result",
 				id: record.id,
 				outcome: "failed",
-				code: reserved.code,
+				code: incoming.code,
 			});
 			return;
 		}
-		const call = reserved.reservation.commit();
+		const call = incoming.call;
 		this.#incoming.set(record.id, call);
 		const outcome = await call.handlerOutcome;
-		this.#incoming.delete(record.id);
+		if (!this.#incoming.delete(record.id)) {
+			return;
+		}
+		call.finish(handlerOutcomeTerminal(outcome));
 		await this.#send(handlerOutcomeRecord(record.id, outcome));
 	}
 
 	#receiveResult(
 		record: Extract<MemoryProtocolRecord, { readonly kind: "result" }>,
 	): void {
-		const sink = this.#outgoing.get(record.id);
-		if (sink === undefined) {
+		const settle = this.#outgoing.get(record.id);
+		if (settle === undefined) {
 			return;
 		}
-		this.#outgoing.delete(record.id);
 		if (record.outcome === "void") {
-			sink.finish({ type: RpcCallTerminalTypeEnum.returnedVoid });
+			settle({ type: RpcCallTerminalTypeEnum.returnedVoid });
 		} else if (record.outcome === "returned" && record.value !== undefined) {
-			sink.finish({
+			settle({
 				type: RpcCallTerminalTypeEnum.returned,
 				value: this.#host.normalizeApplicationValue(record.value),
 			});
 		} else {
-			sink.finish({
+			settle({
 				type: RpcCallTerminalTypeEnum.failed,
 				code: record.code ?? RpcExceptionCodeEnum.handlerFailed,
 			});
@@ -533,15 +588,28 @@ class MemoryProtocolSession implements IRpcProtocolSession {
 		this.#runtime = runtime;
 	}
 
-	public reserveInvocation(
-		request: IRpcProtocolInvocationRequest,
-	): IRpcProtocolInvocationReservation | undefined {
-		return this.#runtime.reserveInvocation(request);
+	public prepareInvocation(
+		request: IRpcProtocolCallRequest,
+		finish: (outcome: RpcCallOutcome) => void,
+	): IRpcProtocolInvocation | undefined {
+		return this.#runtime.prepareInvocation(request, finish);
 	}
 
 	public forceClose(): void {
 		this.#runtime.forceSession();
 	}
+}
+
+function handlerOutcomeTerminal(
+	outcome: RpcHandlerOutcome,
+): RpcIncomingTerminal {
+	if (outcome.type === RpcCallTerminalTypeEnum.notStarted) {
+		return {
+			type: RpcCallTerminalTypeEnum.failed,
+			code: RpcExceptionCodeEnum.canceled,
+		};
+	}
+	return outcome;
 }
 
 function handlerOutcomeRecord(

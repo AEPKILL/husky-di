@@ -1,5 +1,5 @@
 /**
- * @overview Private Logical Session projection intents and results.
+ * @overview Pure Logical Session transition decisions and lifecycle facts.
  * @author AEPKILL
  * @created 2026-08-31 01:46:19
  */
@@ -7,11 +7,6 @@
 import type { RpcCloseReasonEnum } from "@/enums/rpc-close-reason.enum";
 import type { RpcEventTypeEnum } from "@/enums/rpc-event-type.enum";
 import type { RpcStateStatusEnum } from "@/enums/rpc-state-status.enum";
-import type { IRpcPeerRuntime } from "@/interfaces/peer/rpc-peer-runtime.interface";
-import type {
-	RpcProtocolSessionTransition,
-	RpcSessionCloseReason,
-} from "@/interfaces/protocol/rpc-protocol.interface";
 import type { RpcPeerState } from "@/types/common/rpc-caller.type";
 import type { RpcEvent } from "@/types/owner/rpc-event.type";
 
@@ -23,72 +18,85 @@ export type RpcSessionOwnerStatus = Extract<
 	| RpcStateStatusEnum.closed
 >;
 
-export type RpcSessionTransitionProjectionIntent = Readonly<{
-	readonly kind: "transition";
-	readonly ownerStatus: RpcSessionOwnerStatus;
-	readonly transition: RpcProtocolSessionTransition;
+export type RpcPeerLifecycleFact = WithoutPeer<RpcPeerLifecycleEvent>;
+
+export type RpcSessionFault = Readonly<{
+	readonly kind: "fault";
+	readonly reason: RpcCloseReasonEnum.protocolFault;
+	readonly error: Error;
 }>;
 
-export type RpcSessionClosureProjectionIntent = Readonly<{
-	readonly kind: "closure";
-	readonly reason: RpcSessionCloseReason;
-	readonly cause?: Error;
+export type RpcSessionTerminalChange = Readonly<{
+	readonly kind: "change";
+	readonly state: Extract<
+		RpcPeerState,
+		{ readonly status: RpcStateStatusEnum.closed }
+	>;
+	readonly lifecycle: Extract<
+		RpcPeerLifecycleFact,
+		{ readonly type: RpcEventTypeEnum.peerClosed }
+	>;
+	readonly terminal: true;
 }>;
 
-export type RpcSessionProjectionIntent =
-	| RpcSessionTransitionProjectionIntent
-	| RpcSessionClosureProjectionIntent;
+export type RpcSessionChange =
+	| RpcSessionContinuingChange
+	| RpcSessionTerminalChange;
 
-export type RpcSessionTerminalProjection = Readonly<{
-	readonly kind: "commit";
-	readonly peerMutation: Readonly<{
-		readonly peer: IRpcPeerRuntime;
-		readonly state: Extract<
-			RpcPeerState,
-			{ readonly status: RpcStateStatusEnum.closed }
-		>;
-		readonly terminal: true;
-	}>;
-	readonly event: RpcSessionProjectionEvent<RpcEventTypeEnum.peerClosed>;
-}>;
+export type RpcSessionTransitionDecision = RpcSessionFault | RpcSessionChange;
 
-export type RpcSessionProjection =
-	| Readonly<{
-			readonly kind: "invalid";
-			readonly fault: Readonly<{
-				readonly reason: RpcCloseReasonEnum.protocolFault;
-				readonly error: Error;
-			}>;
-	  }>
-	| RpcSessionContinuingProjection
-	| RpcSessionTerminalProjection;
+type RpcPeerLifecycleEvent = Extract<
+	DistributeEventTypes<RpcEvent>,
+	{
+		readonly type:
+			| RpcEventTypeEnum.peerRecovering
+			| RpcEventTypeEnum.peerRecovered
+			| RpcEventTypeEnum.peerDraining
+			| RpcEventTypeEnum.peerClosed;
+	}
+>;
 
-type RpcSessionProjectionEvent<TType extends RpcEventTypeEnum> = RpcEvent &
-	Readonly<{ readonly type: TType }>;
+type DistributeEventTypes<TEvent> = TEvent extends {
+	readonly type: infer TType;
+}
+	? TType extends RpcEventTypeEnum
+		? Omit<TEvent, "type"> & Readonly<{ readonly type: TType }>
+		: never
+	: never;
 
-type RpcSessionContinuingProjection =
-	| RpcSessionContinuingProjectionOf<
+type WithoutPeer<TEvent> = TEvent extends RpcPeerLifecycleEvent
+	? Omit<TEvent, "peer">
+	: never;
+
+type RpcSessionContinuingChange =
+	| RpcSessionContinuingChangeOf<
 			Extract<RpcPeerState, { readonly status: RpcStateStatusEnum.recovering }>,
-			RpcSessionProjectionEvent<RpcEventTypeEnum.peerRecovering>
+			Extract<
+				RpcPeerLifecycleFact,
+				{ readonly type: RpcEventTypeEnum.peerRecovering }
+			>
 	  >
-	| RpcSessionContinuingProjectionOf<
+	| RpcSessionContinuingChangeOf<
 			Extract<RpcPeerState, { readonly status: RpcStateStatusEnum.connected }>,
-			RpcSessionProjectionEvent<RpcEventTypeEnum.peerRecovered>
+			Extract<
+				RpcPeerLifecycleFact,
+				{ readonly type: RpcEventTypeEnum.peerRecovered }
+			>
 	  >
-	| RpcSessionContinuingProjectionOf<
+	| RpcSessionContinuingChangeOf<
 			Extract<RpcPeerState, { readonly status: RpcStateStatusEnum.draining }>,
-			RpcSessionProjectionEvent<RpcEventTypeEnum.peerDraining>
+			Extract<
+				RpcPeerLifecycleFact,
+				{ readonly type: RpcEventTypeEnum.peerDraining }
+			>
 	  >;
 
-type RpcSessionContinuingProjectionOf<
+type RpcSessionContinuingChangeOf<
 	TState extends RpcPeerState,
-	TEvent extends RpcEvent,
+	TLifecycle extends RpcPeerLifecycleFact,
 > = Readonly<{
-	readonly kind: "commit";
-	readonly peerMutation: Readonly<{
-		readonly peer: IRpcPeerRuntime;
-		readonly state: TState;
-		readonly terminal?: never;
-	}>;
-	readonly event: TEvent;
+	readonly kind: "change";
+	readonly state: TState;
+	readonly lifecycle: TLifecycle;
+	readonly terminal: false;
 }>;

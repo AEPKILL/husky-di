@@ -41,10 +41,15 @@ import {
 import type {
 	IRpcConnection,
 	IRpcProtocolAcceptorHost,
+	IRpcProtocolCallRequest,
 	IRpcProtocolConnectorHost,
-	IRpcProtocolInvocationSink,
+	IRpcProtocolIncomingCall,
+	IRpcProtocolIncomingHandlerCall,
 	IRpcProtocolSession,
 	IRpcProtocolSessionHost,
+	RpcCallOutcome,
+	RpcProtocolIncomingCallReservation,
+	RpcUnknownCallFailure,
 } from "../src/protocol";
 import {
 	createRpcProtocolAcceptor,
@@ -213,12 +218,42 @@ async function connectProtocolSession(
 	return { connector, host: connectorHost, sessionHost, events };
 }
 
+type ConsumedIncomingCall =
+	| Readonly<{
+			readonly kind: "handler";
+			readonly call: IRpcProtocolIncomingHandlerCall;
+	  }>
+	| Readonly<{
+			readonly kind: "unknown";
+			readonly code: RpcUnknownCallFailure;
+			readonly call: IRpcProtocolIncomingCall;
+	  }>;
+
+function consumeIncomingCall(
+	host: IRpcProtocolSessionHost,
+	request: IRpcProtocolCallRequest,
+): ConsumedIncomingCall | undefined {
+	let consumed: ConsumedIncomingCall | undefined;
+	const reserved = host.reserveIncomingCall(request, (reservation) => {
+		consumed =
+			reservation.kind === RpcIncomingCallKindEnum.handler
+				? { kind: "handler", call: reservation.commit() }
+				: {
+						kind: "unknown",
+						code: reservation.code,
+						call: reservation.commit(),
+					};
+		return undefined;
+	});
+	return reserved ? consumed : undefined;
+}
+
 function createReconnectionProtocolHarness(): {
 	readonly protocolFactory: RpcProtocolConnectorFactory;
 	readonly sessionHost: () => IRpcProtocolSessionHost;
 } {
 	const session: IRpcProtocolSession = {
-		reserveInvocation: () => undefined,
+		prepareInvocation: () => undefined,
 		forceClose() {},
 	};
 	let retainedSessionHost: IRpcProtocolSessionHost | undefined;
@@ -1590,7 +1625,7 @@ describe("exposure registries and remote facades", () => {
 	});
 
 	it("RPC-DESC-004 RPC-DESC-005 applies the same duplicate and cleanup rules to Acceptor owner exposure", () => {
-		const { acceptorFactory } = createProtocolHarness();
+		const { acceptorFactory, acceptorHosts } = createProtocolHarness();
 		const acceptor = createRpcAcceptor({ protocolFactory: acceptorFactory });
 		const descriptor = createRemoteServiceDescriptor(ICalculatorService, {
 			wireName: "example.calculator.v1",
@@ -1604,9 +1639,25 @@ describe("exposure registries and remote facades", () => {
 		expect(() => acceptor.expose(descriptor, implementation)).toThrow(
 			TypeError,
 		);
+		const session: IRpcProtocolSession = {
+			prepareInvocation: () => undefined,
+			forceClose() {},
+		};
+		expect(acceptorHosts[0]?.admitSession(session)).toBeDefined();
+		const peer = acceptor.peers[0];
+		if (peer === undefined) {
+			throw new Error("Expected an admitted Peer.");
+		}
+		expect(() => peer.expose(descriptor, implementation)).toThrow(TypeError);
 		cleanup();
 		cleanup();
-		expect(() => acceptor.expose(descriptor, implementation)).not.toThrow();
+		const peerCleanup = peer.expose(descriptor, implementation);
+		expect(() => acceptor.expose(descriptor, implementation)).toThrow(
+			TypeError,
+		);
+		peerCleanup();
+		const replacementCleanup = acceptor.expose(descriptor, implementation);
+		replacementCleanup();
 	});
 
 	it("RPC-CALL-002 validates the dedicated cancellation slot before peer availability", async () => {
@@ -1747,7 +1798,7 @@ describe("Adapter startup and Protocol handoff", () => {
 
 	it("RPC-START-005 ignores a reentrant abort after binding success", async () => {
 		const session: IRpcProtocolSession = {
-			reserveInvocation: () => undefined,
+			prepareInvocation: () => undefined,
 			forceClose() {},
 		};
 		const protocolFactory: RpcProtocolConnectorFactory = (host) => {
@@ -1828,7 +1879,7 @@ describe("Adapter startup and Protocol handoff", () => {
 
 	it("RPC-START-005 lets reentrant Owner termination win before startup settles", async () => {
 		const session: IRpcProtocolSession = {
-			reserveInvocation: () => undefined,
+			prepareInvocation: () => undefined,
 			forceClose() {},
 		};
 		const protocolFactory: RpcProtocolConnectorFactory = (host) => {
@@ -1887,7 +1938,7 @@ describe("Adapter startup and Protocol handoff", () => {
 		let releaseBinding: (() => void) | undefined;
 		let connectorHost: IRpcProtocolConnectorHost | undefined;
 		const session: IRpcProtocolSession = {
-			reserveInvocation: () => undefined,
+			prepareInvocation: () => undefined,
 			forceClose() {},
 		};
 		const connection: IRpcConnection = {
@@ -2021,7 +2072,7 @@ describe("Adapter startup and Protocol handoff", () => {
 		let releaseReady: (() => void) | undefined;
 		let releaseAcceptance: (() => void) | undefined;
 		const session: IRpcProtocolSession = {
-			reserveInvocation: () => undefined,
+			prepareInvocation: () => undefined,
 			forceClose() {},
 		};
 		const connection: IRpcConnection = {
@@ -2276,23 +2327,18 @@ describe("custom Protocol outgoing invocations", () => {
 	});
 
 	it("RPC-BASE-001 RPC-CALL-007 does not retry an admitted identity after its evidence is lost", async () => {
-		let sink: IRpcProtocolInvocationSink | undefined;
+		let finishInvocation: ((outcome: RpcCallOutcome) => void) | undefined;
 		let reserveCalls = 0;
 		let startCalls = 0;
 		const session: IRpcProtocolSession = {
-			reserveInvocation() {
+			prepareInvocation(_request, finish) {
 				reserveCalls += 1;
+				finishInvocation = finish;
 				return {
-					commit(nextSink) {
-						sink = nextSink;
-						return {
-							start() {
-								startCalls += 1;
-							},
-							cancel() {},
-						};
+					start() {
+						startCalls += 1;
 					},
-					release() {},
+					cancel() {},
 				};
 			},
 			forceClose() {},
@@ -2306,7 +2352,7 @@ describe("custom Protocol outgoing invocations", () => {
 		const remote = connector.peer.resolve(descriptor);
 		const admitted = remote.add(1, 2);
 
-		sink?.finish({
+		finishInvocation?.({
 			type: RpcCallTerminalTypeEnum.failed,
 			code: RpcExceptionCodeEnum.outcomeUnknown,
 		});
@@ -2363,13 +2409,13 @@ describe("custom Protocol outgoing invocations", () => {
 		const events: RpcEvent[] = [];
 		acceptor.event$.subscribe((event) => events.push(event));
 		const first = protocolHost?.admitSession({
-			reserveInvocation: () => undefined,
+			prepareInvocation: () => undefined,
 			forceClose() {
 				operations.push("first-force");
 			},
 		});
 		const second = protocolHost?.admitSession({
-			reserveInvocation: () => undefined,
+			prepareInvocation: () => undefined,
 			forceClose() {
 				operations.push("second-force");
 			},
@@ -2420,10 +2466,9 @@ describe("custom Protocol outgoing invocations", () => {
 		expect(operations).toContain("runtime-cleanup");
 	});
 
-	it("RPC-SPI-004 RPC-SPI-005 RPC-CALL-005 RPC-CALL-006 drive reservation, sink, observations, and result", async () => {
-		let sink: IRpcProtocolInvocationSink | undefined;
+	it("RPC-SPI-004 RPC-SPI-005 RPC-CALL-005 RPC-CALL-006 drives preparation, finish, observations, and result", async () => {
+		let finishInvocation: ((outcome: RpcCallOutcome) => void) | undefined;
 		let startCalls = 0;
-		let releaseCalls = 0;
 		let request:
 			| {
 					readonly service: string;
@@ -2432,21 +2477,14 @@ describe("custom Protocol outgoing invocations", () => {
 			  }
 			| undefined;
 		const session: IRpcProtocolSession = {
-			reserveInvocation(nextRequest) {
+			prepareInvocation(nextRequest, finish) {
 				request = nextRequest;
+				finishInvocation = finish;
 				return {
-					commit(nextSink) {
-						sink = nextSink;
-						return {
-							start() {
-								startCalls += 1;
-							},
-							cancel() {},
-						};
+					start() {
+						startCalls += 1;
 					},
-					release() {
-						releaseCalls += 1;
-					},
+					cancel() {},
 				};
 			},
 			forceClose() {},
@@ -2462,7 +2500,6 @@ describe("custom Protocol outgoing invocations", () => {
 		expect(request?.method).toBe("add");
 		expect(request?.args.value).toEqual([1, 2]);
 		expect(startCalls).toBe(1);
-		expect(releaseCalls).toBe(0);
 		const callEvents = events.filter(
 			(event) =>
 				event.type === "call-started" || event.type === "call-finished",
@@ -2476,7 +2513,7 @@ describe("custom Protocol outgoing invocations", () => {
 			},
 		]);
 
-		sink?.finish({
+		finishInvocation?.({
 			type: RpcCallTerminalTypeEnum.returned,
 			value: host.normalizeApplicationValue(3),
 		});
@@ -2499,31 +2536,26 @@ describe("custom Protocol outgoing invocations", () => {
 	});
 
 	it("RPC-CALL-003 RPC-CALL-006 uses trusted AbortSignal intrinsics and preserves canceled settlement", async () => {
-		let sink: IRpcProtocolInvocationSink | undefined;
+		let finishInvocation: ((outcome: RpcCallOutcome) => void) | undefined;
 		let cancelCalls = 0;
 		let startCalls = 0;
 		let shadowMethodCalls = 0;
 		let requestArguments: readonly unknown[] | undefined;
 		const session: IRpcProtocolSession = {
-			reserveInvocation(request) {
+			prepareInvocation(request, finish) {
 				requestArguments = request.args.value;
+				finishInvocation = finish;
 				return {
-					commit(nextSink) {
-						sink = nextSink;
-						return {
-							start() {
-								startCalls += 1;
-							},
-							cancel() {
-								cancelCalls += 1;
-								sink?.finish({
-									type: RpcCallTerminalTypeEnum.failed,
-									code: RpcExceptionCodeEnum.canceled,
-								});
-							},
-						};
+					start() {
+						startCalls += 1;
 					},
-					release() {},
+					cancel() {
+						cancelCalls += 1;
+						finishInvocation?.({
+							type: RpcCallTerminalTypeEnum.failed,
+							code: RpcExceptionCodeEnum.canceled,
+						});
+					},
 				};
 			},
 			forceClose() {},
@@ -2563,9 +2595,9 @@ describe("custom Protocol outgoing invocations", () => {
 		});
 	});
 
-	it("RPC-SPI-004 maps reservation capacity failure to unavailable without call events", async () => {
+	it("RPC-SPI-004 maps preparation capacity failure to unavailable without call events", async () => {
 		const session: IRpcProtocolSession = {
-			reserveInvocation: () => undefined,
+			prepareInvocation: () => undefined,
 			forceClose() {},
 		};
 		const { connector, events } = await connectProtocolSession(session);
@@ -2584,13 +2616,423 @@ describe("custom Protocol outgoing invocations", () => {
 			),
 		).toEqual([]);
 	});
+
+	it("RPC-SPI-004 faults a late finish after definite non-execution without recursion", async () => {
+		let finishInvocation: ((outcome: RpcCallOutcome) => void) | undefined;
+		let forceCalls = 0;
+		const session: IRpcProtocolSession = {
+			prepareInvocation(_request, finish) {
+				finishInvocation = finish;
+				return undefined;
+			},
+			forceClose() {
+				forceCalls += 1;
+				finishInvocation?.({ type: RpcCallTerminalTypeEnum.returnedVoid });
+			},
+		};
+		const { connector, events } = await connectProtocolSession(session);
+		const descriptor = createRemoteServiceDescriptor(ICalculatorService, {
+			wireName: "example.late-dne.v1",
+			methods: { add: true },
+		});
+
+		await expect(
+			connector.peer.resolve(descriptor).add(1, 2),
+		).rejects.toMatchObject({ code: "unavailable" });
+		expect(forceCalls).toBe(0);
+		finishInvocation?.({ type: RpcCallTerminalTypeEnum.returnedVoid });
+		expect(forceCalls).toBe(1);
+		expect(
+			events.filter(
+				(event) =>
+					event.type === "call-started" || event.type === "call-finished",
+			),
+		).toEqual([]);
+		await connector.close();
+	});
+
+	it("RPC-SPI-004 RPC-SPI-005 gates synchronous finish until preparation and call-start publication", async () => {
+		let startCalls = 0;
+		const session: IRpcProtocolSession = {
+			prepareInvocation(_request, finish) {
+				finish({ type: RpcCallTerminalTypeEnum.returnedVoid });
+				return {
+					start() {
+						startCalls += 1;
+					},
+					cancel() {},
+				};
+			},
+			forceClose() {},
+		};
+		const { connector, events } = await connectProtocolSession(session);
+		const descriptor = createRemoteServiceDescriptor(ICalculatorService, {
+			wireName: "example.sync-finish.v1",
+			methods: { add: true },
+		});
+
+		await expect(connector.peer.resolve(descriptor).add(1, 2)).resolves.toBe(
+			undefined,
+		);
+		expect(startCalls).toBe(0);
+		expect(
+			events
+				.filter(
+					(event) =>
+						event.type === "call-started" || event.type === "call-finished",
+				)
+				.map((event) => event.type),
+		).toEqual(["call-started", "call-finished"]);
+		await connector.close();
+	});
+
+	it("RPC-SPI-004 RPC-SPI-005 preserves the first terminal before faulting a publication-time duplicate", async () => {
+		let finishInvocation: ((outcome: RpcCallOutcome) => void) | undefined;
+		let startCalls = 0;
+		let forceCalls = 0;
+		const session: IRpcProtocolSession = {
+			prepareInvocation(_request, finish) {
+				finishInvocation = finish;
+				return {
+					start() {
+						startCalls += 1;
+					},
+					cancel() {},
+				};
+			},
+			forceClose() {
+				forceCalls += 1;
+				finishInvocation?.({
+					type: RpcCallTerminalTypeEnum.failed,
+					code: RpcExceptionCodeEnum.outcomeUnknown,
+				});
+			},
+		};
+		const { connector, events } = await connectProtocolSession(session);
+		const descriptor = createRemoteServiceDescriptor(ICalculatorService, {
+			wireName: "example.reentrant-duplicate.v1",
+			methods: { add: true },
+		});
+		const subscription = connector.event$.subscribe((event) => {
+			if (event.type === RpcEventTypeEnum.callStarted) {
+				finishInvocation?.({ type: RpcCallTerminalTypeEnum.returnedVoid });
+				finishInvocation?.({ type: RpcCallTerminalTypeEnum.returnedVoid });
+			}
+		});
+
+		await expect(
+			Promise.resolve().then(() =>
+				connector.peer.resolve(descriptor).add(1, 2),
+			),
+		).rejects.toMatchObject({ code: RpcExceptionCodeEnum.protocol });
+		expect({ forceCalls, startCalls }).toEqual({
+			forceCalls: 1,
+			startCalls: 0,
+		});
+		expect(
+			events
+				.filter(
+					(event) =>
+						event.type === "call-started" || event.type === "call-finished",
+				)
+				.map((event) =>
+					event.type === RpcEventTypeEnum.callFinished
+						? [event.type, event.outcome]
+						: [event.type],
+				),
+		).toEqual([
+			[RpcEventTypeEnum.callStarted],
+			[RpcEventTypeEnum.callFinished, "fulfilled"],
+		]);
+		subscription.unsubscribe();
+		await connector.close();
+	});
+
+	it("RPC-SPI-004 RPC-SPI-005 terminalizes a publication-time invalid finish before faulting", async () => {
+		let finishInvocation: ((outcome: RpcCallOutcome) => void) | undefined;
+		let startCalls = 0;
+		let forceCalls = 0;
+		const session: IRpcProtocolSession = {
+			prepareInvocation(_request, finish) {
+				finishInvocation = finish;
+				return {
+					start() {
+						startCalls += 1;
+					},
+					cancel() {},
+				};
+			},
+			forceClose() {
+				forceCalls += 1;
+				finishInvocation?.({
+					type: RpcCallTerminalTypeEnum.failed,
+					code: RpcExceptionCodeEnum.outcomeUnknown,
+				});
+			},
+		};
+		const { connector, events } = await connectProtocolSession(session);
+		const descriptor = createRemoteServiceDescriptor(ICalculatorService, {
+			wireName: "example.reentrant-invalid.v1",
+			methods: { add: true },
+		});
+		const subscription = connector.event$.subscribe((event) => {
+			if (event.type === RpcEventTypeEnum.callStarted) {
+				finishInvocation?.({ type: "invalid" } as never);
+			}
+		});
+
+		await expect(
+			Promise.resolve().then(() =>
+				connector.peer.resolve(descriptor).add(1, 2),
+			),
+		).rejects.toMatchObject({ code: RpcExceptionCodeEnum.protocol });
+		expect({ forceCalls, startCalls }).toEqual({
+			forceCalls: 1,
+			startCalls: 0,
+		});
+		expect(
+			events
+				.filter(
+					(event) =>
+						event.type === "call-started" || event.type === "call-finished",
+				)
+				.map((event) =>
+					event.type === RpcEventTypeEnum.callFinished &&
+					event.outcome === RpcCallStatusEnum.rejected
+						? [event.type, event.outcome, event.code]
+						: [event.type],
+				),
+		).toEqual([
+			[RpcEventTypeEnum.callStarted],
+			[
+				RpcEventTypeEnum.callFinished,
+				"rejected",
+				RpcExceptionCodeEnum.outcomeUnknown,
+			],
+		]);
+		subscription.unsubscribe();
+		await connector.close();
+	});
+
+	it("RPC-SPI-004 faults finish paired with definite non-execution", async () => {
+		let forceCalls = 0;
+		const session: IRpcProtocolSession = {
+			prepareInvocation(_request, finish) {
+				finish({ type: RpcCallTerminalTypeEnum.returnedVoid });
+				return undefined;
+			},
+			forceClose() {
+				forceCalls += 1;
+			},
+		};
+		const { connector, events } = await connectProtocolSession(session);
+		const descriptor = createRemoteServiceDescriptor(ICalculatorService, {
+			wireName: "example.invalid-dne.v1",
+			methods: { add: true },
+		});
+
+		await expect(
+			Promise.resolve().then(() =>
+				connector.peer.resolve(descriptor).add(1, 2),
+			),
+		).rejects.toMatchObject({ code: "protocol" });
+		expect(forceCalls).toBe(1);
+		expect(
+			events.filter(
+				(event) =>
+					event.type === "call-started" || event.type === "call-finished",
+			),
+		).toEqual([]);
+		await connector.close();
+	});
+
+	it("RPC-SPI-003 RPC-SPI-004 faults duplicate finish, thrown preparation, and malformed prepared controls", async () => {
+		let duplicateForceCalls = 0;
+		const duplicateSession: IRpcProtocolSession = {
+			prepareInvocation(_request, finish) {
+				finish({ type: RpcCallTerminalTypeEnum.returnedVoid });
+				finish({ type: RpcCallTerminalTypeEnum.returnedVoid });
+				return { start() {}, cancel() {} };
+			},
+			forceClose() {
+				duplicateForceCalls += 1;
+			},
+		};
+		const duplicate = await connectProtocolSession(duplicateSession);
+		const descriptor = createRemoteServiceDescriptor(ICalculatorService, {
+			wireName: "example.invalid-prepare.v1",
+			methods: { add: true },
+		});
+		await expect(
+			Promise.resolve().then(() =>
+				duplicate.connector.peer.resolve(descriptor).add(1, 2),
+			),
+		).rejects.toMatchObject({ code: "protocol" });
+		expect(duplicateForceCalls).toBe(1);
+		await duplicate.connector.close();
+
+		const preparationFailure = new Error("preparation failure");
+		let throwingForceCalls = 0;
+		const throwingSession: IRpcProtocolSession = {
+			prepareInvocation() {
+				throw preparationFailure;
+			},
+			forceClose() {
+				throwingForceCalls += 1;
+			},
+		};
+		const throwing = await connectProtocolSession(throwingSession);
+		await expect(
+			Promise.resolve().then(() =>
+				throwing.connector.peer.resolve(descriptor).add(1, 2),
+			),
+		).rejects.toMatchObject({
+			code: RpcExceptionCodeEnum.protocol,
+			cause: preparationFailure,
+		});
+		expect(throwingForceCalls).toBe(1);
+		await throwing.connector.close();
+
+		let malformedForceCalls = 0;
+		const malformedSession: IRpcProtocolSession = {
+			prepareInvocation: () => ({ start() {} }) as never,
+			forceClose() {
+				malformedForceCalls += 1;
+			},
+		};
+		const malformed = await connectProtocolSession(malformedSession);
+		await expect(
+			Promise.resolve().then(() =>
+				malformed.connector.peer.resolve(descriptor).add(1, 2),
+			),
+		).rejects.toMatchObject({ code: "protocol" });
+		expect(malformedForceCalls).toBe(1);
+		await malformed.connector.close();
+
+		const getterFailure = new Error("prepared control getter failure");
+		let getterForceCalls = 0;
+		const throwingControl = Object.defineProperty({ cancel() {} }, "start", {
+			get() {
+				throw getterFailure;
+			},
+		});
+		const getterSession: IRpcProtocolSession = {
+			prepareInvocation: () => throwingControl as never,
+			forceClose() {
+				getterForceCalls += 1;
+			},
+		};
+		const getter = await connectProtocolSession(getterSession);
+		await expect(
+			Promise.resolve().then(() =>
+				getter.connector.peer.resolve(descriptor).add(1, 2),
+			),
+		).rejects.toMatchObject({
+			code: RpcExceptionCodeEnum.protocol,
+			cause: getterFailure,
+		});
+		expect(getterForceCalls).toBe(1);
+		await getter.connector.close();
+	});
+
+	it("RPC-SPI-003 RPC-SPI-004 faults a validation-time duplicate before call-start publication", async () => {
+		let finishInvocation: ((outcome: RpcCallOutcome) => void) | undefined;
+		let forceCalls = 0;
+		let startCalls = 0;
+		const control = Object.defineProperty({ cancel() {} }, "start", {
+			get() {
+				finishInvocation?.({ type: RpcCallTerminalTypeEnum.returnedVoid });
+				finishInvocation?.({ type: RpcCallTerminalTypeEnum.returnedVoid });
+				return () => {
+					startCalls += 1;
+				};
+			},
+		});
+		const session: IRpcProtocolSession = {
+			prepareInvocation(_request, finish) {
+				finishInvocation = finish;
+				return control as never;
+			},
+			forceClose() {
+				forceCalls += 1;
+				finishInvocation?.({ type: RpcCallTerminalTypeEnum.returnedVoid });
+			},
+		};
+		const { connector, events } = await connectProtocolSession(session);
+		const descriptor = createRemoteServiceDescriptor(ICalculatorService, {
+			wireName: "example.validation-reentrancy.v1",
+			methods: { add: true },
+		});
+
+		await expect(
+			Promise.resolve().then(() =>
+				connector.peer.resolve(descriptor).add(1, 2),
+			),
+		).rejects.toMatchObject({ code: RpcExceptionCodeEnum.protocol });
+		expect({ forceCalls, startCalls }).toEqual({
+			forceCalls: 1,
+			startCalls: 0,
+		});
+		expect(
+			events.filter(
+				(event) =>
+					event.type === "call-started" || event.type === "call-finished",
+			),
+		).toEqual([]);
+		await connector.close();
+	});
+
+	it("RPC-SPI-004 lets reentrant abort cancel a prepared call before start", async () => {
+		let finishInvocation: ((outcome: RpcCallOutcome) => void) | undefined;
+		let startCalls = 0;
+		let cancelCalls = 0;
+		const session: IRpcProtocolSession = {
+			prepareInvocation(_request, finish) {
+				finishInvocation = finish;
+				return {
+					start() {
+						startCalls += 1;
+					},
+					cancel() {
+						cancelCalls += 1;
+						finishInvocation?.({
+							type: RpcCallTerminalTypeEnum.failed,
+							code: RpcExceptionCodeEnum.canceled,
+						});
+					},
+				};
+			},
+			forceClose() {},
+		};
+		const { connector } = await connectProtocolSession(session);
+		const descriptor = createRemoteServiceDescriptor(ICalculatorService, {
+			wireName: "example.reentrant-abort.v1",
+			methods: { cancel: { cancelable: true } },
+		});
+		const controller = new AbortController();
+		const subscription = connector.event$.subscribe((event) => {
+			if (event.type === RpcEventTypeEnum.callStarted) {
+				controller.abort();
+			}
+		});
+
+		await expect(
+			connector.peer.resolve(descriptor).cancel("value", controller.signal),
+		).rejects.toMatchObject({ code: "canceled" });
+		expect({ startCalls, cancelCalls }).toEqual({
+			startCalls: 0,
+			cancelCalls: 1,
+		});
+		subscription.unsubscribe();
+		await connector.close();
+	});
 });
 
 describe("custom Protocol incoming calls", () => {
 	it("RPC-SPI-002 RPC-SPI-003 RPC-SPI-005 rejects forged snapshots passed to semantic equality", async () => {
 		let forceCalls = 0;
 		const session: IRpcProtocolSession = {
-			reserveInvocation: () => undefined,
+			prepareInvocation: () => undefined,
 			forceClose() {
 				forceCalls += 1;
 			},
@@ -2614,21 +3056,16 @@ describe("custom Protocol incoming calls", () => {
 	});
 
 	it("RPC-SPI-002 RPC-SPI-003 RPC-SPI-005 rejects a forged outgoing Application snapshot", async () => {
-		let sink: IRpcProtocolInvocationSink | undefined;
+		let finishInvocation: ((outcome: RpcCallOutcome) => void) | undefined;
 		let forceCalls = 0;
 		const session: IRpcProtocolSession = {
-			reserveInvocation() {
-				return {
-					commit(nextSink) {
-						sink = nextSink;
-						return { start() {}, cancel() {} };
-					},
-					release() {},
-				};
+			prepareInvocation(_request, finish) {
+				finishInvocation = finish;
+				return { start() {}, cancel() {} };
 			},
 			forceClose() {
 				forceCalls += 1;
-				sink?.finish({
+				finishInvocation?.({
 					type: RpcCallTerminalTypeEnum.failed,
 					code: RpcExceptionCodeEnum.outcomeUnknown,
 				});
@@ -2641,7 +3078,7 @@ describe("custom Protocol incoming calls", () => {
 		});
 		const result = connector.peer.resolve(descriptor).add(20, 21);
 
-		sink?.finish({
+		finishInvocation?.({
 			type: RpcCallTerminalTypeEnum.returned,
 			value: { value: 41, weight: 2 } as never,
 		});
@@ -2657,21 +3094,16 @@ describe("custom Protocol incoming calls", () => {
 	});
 
 	it("RPC-SPI-003 rejects extra own fields in an outgoing terminal", async () => {
-		let sink: IRpcProtocolInvocationSink | undefined;
+		let finishInvocation: ((outcome: RpcCallOutcome) => void) | undefined;
 		let forceCalls = 0;
 		const session: IRpcProtocolSession = {
-			reserveInvocation() {
-				return {
-					commit(nextSink) {
-						sink = nextSink;
-						return { start() {}, cancel() {} };
-					},
-					release() {},
-				};
+			prepareInvocation(_request, finish) {
+				finishInvocation = finish;
+				return { start() {}, cancel() {} };
 			},
 			forceClose() {
 				forceCalls += 1;
-				sink?.finish({
+				finishInvocation?.({
 					type: RpcCallTerminalTypeEnum.failed,
 					code: RpcExceptionCodeEnum.outcomeUnknown,
 				});
@@ -2688,7 +3120,7 @@ describe("custom Protocol incoming calls", () => {
 		}) as Record<string, unknown>;
 		terminal.__proto__ = 0;
 
-		sink?.finish(terminal as never);
+		finishInvocation?.(terminal as never);
 
 		await expect(result).rejects.toMatchObject({ code: "outcome-unknown" });
 		expect(forceCalls).toBe(1);
@@ -2703,14 +3135,14 @@ describe("custom Protocol incoming calls", () => {
 	it("RPC-SPI-003 RPC-SPI-006 rejects a mismatched unknown-call terminal", async () => {
 		let forceCalls = 0;
 		const session: IRpcProtocolSession = {
-			reserveInvocation: () => undefined,
+			prepareInvocation: () => undefined,
 			forceClose() {
 				forceCalls += 1;
 			},
 		};
 		const { connector, host, sessionHost } =
 			await connectProtocolSession(session);
-		const reserved = sessionHost.reserveIncomingCall({
+		const reserved = consumeIncomingCall(sessionHost, {
 			service: "unknown.service",
 			method: "unknownMethod",
 			args: host.normalizeApplicationArguments([]),
@@ -2718,7 +3150,7 @@ describe("custom Protocol incoming calls", () => {
 		if (reserved?.kind !== "unknown") {
 			throw new Error("Expected an unknown-call reservation.");
 		}
-		const call = reserved.reservation.commit();
+		const call = reserved.call;
 
 		call.finish({
 			type: RpcCallTerminalTypeEnum.failed,
@@ -2737,7 +3169,7 @@ describe("custom Protocol incoming calls", () => {
 	it("RPC-SPI-003 RPC-SPI-006 rejects an impossible handler terminal", async () => {
 		let forceCalls = 0;
 		const session: IRpcProtocolSession = {
-			reserveInvocation: () => undefined,
+			prepareInvocation: () => undefined,
 			forceClose() {
 				forceCalls += 1;
 			},
@@ -2751,7 +3183,7 @@ describe("custom Protocol incoming calls", () => {
 		connector.peer.expose(descriptor, {
 			run: () => new Promise<number>(() => {}),
 		});
-		const reserved = sessionHost.reserveIncomingCall({
+		const reserved = consumeIncomingCall(sessionHost, {
 			service: "example.deferred.v1",
 			method: "run",
 			args: host.normalizeApplicationArguments([1]),
@@ -2759,7 +3191,7 @@ describe("custom Protocol incoming calls", () => {
 		if (reserved?.kind !== "handler") {
 			throw new Error("Expected a handler reservation.");
 		}
-		const call = reserved.reservation.commit();
+		const call = reserved.call;
 
 		call.finish({
 			type: RpcCallTerminalTypeEnum.failed,
@@ -2778,7 +3210,7 @@ describe("custom Protocol incoming calls", () => {
 	it("RPC-SPI-002 RPC-SPI-003 RPC-SPI-006 rejects forged incoming arguments before lookup", async () => {
 		let forceCalls = 0;
 		const session: IRpcProtocolSession = {
-			reserveInvocation: () => undefined,
+			prepareInvocation: () => undefined,
 			forceClose() {
 				forceCalls += 1;
 			},
@@ -2786,13 +3218,16 @@ describe("custom Protocol incoming calls", () => {
 		const { connector, sessionHost, events } =
 			await connectProtocolSession(session);
 
-		const reservation = sessionHost.reserveIncomingCall({
-			service: "attacker.service",
-			method: "attackerMethod",
-			args: { value: [], weight: 2 } as never,
-		});
-
-		expect(reservation).toBeUndefined();
+		expect(() =>
+			sessionHost.reserveIncomingCall(
+				{
+					service: "attacker.service",
+					method: "attackerMethod",
+					args: { value: [], weight: 2 } as never,
+				},
+				() => undefined,
+			),
+		).toThrow("invalid incoming call request");
 		expect(forceCalls).toBe(1);
 		expect(connector.peer.state).toMatchObject({
 			status: "closed",
@@ -2811,7 +3246,7 @@ describe("custom Protocol incoming calls", () => {
 	it("RPC-SPI-003 RPC-SPI-006 rejects extra own fields before incoming lookup", async () => {
 		let forceCalls = 0;
 		const session: IRpcProtocolSession = {
-			reserveInvocation: () => undefined,
+			prepareInvocation: () => undefined,
 			forceClose() {
 				forceCalls += 1;
 			},
@@ -2825,9 +3260,9 @@ describe("custom Protocol incoming calls", () => {
 		}) as Record<string, unknown>;
 		request.__proto__ = 0;
 
-		const reservation = sessionHost.reserveIncomingCall(request as never);
-
-		expect(reservation).toBeUndefined();
+		expect(() =>
+			sessionHost.reserveIncomingCall(request as never, () => undefined),
+		).toThrow("invalid incoming call request");
 		expect(forceCalls).toBe(1);
 		expect(connector.peer.state).toMatchObject({
 			status: "closed",
@@ -2843,9 +3278,70 @@ describe("custom Protocol incoming calls", () => {
 		await connector.close();
 	});
 
+	it.each([
+		[
+			"a synchronous handler throw",
+			() => {
+				throw new Error("application handler threw");
+			},
+		],
+		[
+			"a throwing then getter",
+			() => {
+				const result = Promise.resolve(1);
+				// biome-ignore lint/suspicious/noThenProperty: Exercises hostile application thenable assimilation.
+				Object.defineProperty(result, "then", {
+					configurable: true,
+					get() {
+						throw new Error("application then getter failed");
+					},
+				});
+				return result;
+			},
+		],
+		[
+			"a rejected handler Promise",
+			() => Promise.reject(new Error("application handler rejected")),
+		],
+		["a normalization failure", () => Promise.resolve(new Map())],
+	] as const)("RPC-CALL-007 RPC-CALL-008 maps %s to a consumed handler failure", async (_case, createResult) => {
+		const session: IRpcProtocolSession = {
+			prepareInvocation: () => undefined,
+			forceClose() {},
+		};
+		const { connector, host, sessionHost } =
+			await connectProtocolSession(session);
+		const descriptor = createRemoteServiceDescriptor(IDeferredService, {
+			wireName: "example.handler-failure.v1",
+			methods: { run: true },
+		});
+		connector.peer.expose(descriptor, {
+			run: () => createResult() as Promise<number>,
+		});
+		const reserved = consumeIncomingCall(sessionHost, {
+			service: "example.handler-failure.v1",
+			method: "run",
+			args: host.normalizeApplicationArguments([1]),
+		});
+		if (reserved?.kind !== "handler") {
+			throw new Error("Expected a known handler reservation.");
+		}
+		const call = reserved.call;
+
+		await expect(call.handlerOutcome).resolves.toEqual({
+			type: RpcCallTerminalTypeEnum.failed,
+			code: RpcExceptionCodeEnum.handlerFailed,
+		});
+		call.finish({
+			type: RpcCallTerminalTypeEnum.failed,
+			code: RpcExceptionCodeEnum.handlerFailed,
+		});
+		await connector.close();
+	});
+
 	it("RPC-SPI-006 RPC-SPI-007 RPC-EVENT-001 RPC-EVENT-002 RPC-EVENT-003 captures a known route, defers dispatch, and publishes a paired observation", async () => {
 		const session: IRpcProtocolSession = {
-			reserveInvocation: () => undefined,
+			prepareInvocation: () => undefined,
 			forceClose() {},
 		};
 		const { connector, host, sessionHost, events } =
@@ -2864,7 +3360,7 @@ describe("custom Protocol incoming calls", () => {
 		};
 		connector.peer.expose(descriptor, implementation);
 
-		const reserved = sessionHost.reserveIncomingCall({
+		const reserved = consumeIncomingCall(sessionHost, {
 			service: "example.calculator.v1",
 			method: "add",
 			args: host.normalizeApplicationArguments([2, 3]),
@@ -2873,7 +3369,7 @@ describe("custom Protocol incoming calls", () => {
 		if (reserved?.kind !== "handler") {
 			throw new Error("Expected a known handler reservation.");
 		}
-		const call = reserved.reservation.commit();
+		const call = reserved.call;
 		expect(handlerCalls).toBe(0);
 		const handlerOutcome = await call.handlerOutcome;
 		expect(handlerCalls).toBe(1);
@@ -2913,7 +3409,7 @@ describe("custom Protocol incoming calls", () => {
 
 	it("RPC-SPI-006 RPC-SPI-007 RPC-EVENT-001 RPC-EVENT-002 RPC-EVENT-003 emits safe correlated unknown-service and unknown-method pairs", async () => {
 		const session: IRpcProtocolSession = {
-			reserveInvocation: () => undefined,
+			prepareInvocation: () => undefined,
 			forceClose() {},
 		};
 		const { connector, host, sessionHost, events } =
@@ -2925,7 +3421,7 @@ describe("custom Protocol incoming calls", () => {
 		connector.peer.expose(descriptor, { add: (left, right) => left + right });
 		const args = host.normalizeApplicationArguments([]);
 
-		const unknownService = sessionHost.reserveIncomingCall({
+		const unknownService = consumeIncomingCall(sessionHost, {
 			service: "attacker.supplied.service",
 			method: "attackerMethod",
 			args,
@@ -2937,12 +3433,12 @@ describe("custom Protocol incoming calls", () => {
 		if (unknownService?.kind !== "unknown") {
 			throw new Error("Expected unknown-service reservation.");
 		}
-		unknownService.reservation.commit().finish({
+		unknownService.call.finish({
 			type: RpcCallTerminalTypeEnum.failed,
 			code: RpcExceptionCodeEnum.unknownService,
 		});
 
-		const unknownMethod = sessionHost.reserveIncomingCall({
+		const unknownMethod = consumeIncomingCall(sessionHost, {
 			service: "example.calculator.v1",
 			method: "attackerMethod",
 			args,
@@ -2954,7 +3450,7 @@ describe("custom Protocol incoming calls", () => {
 		if (unknownMethod?.kind !== "unknown") {
 			throw new Error("Expected unknown-method reservation.");
 		}
-		unknownMethod.reservation.commit().finish({
+		unknownMethod.call.finish({
 			type: RpcCallTerminalTypeEnum.failed,
 			code: RpcExceptionCodeEnum.unknownMethod,
 		});
@@ -2978,9 +3474,45 @@ describe("custom Protocol incoming calls", () => {
 		await connector.close();
 	});
 
+	it("RPC-SPI-003 RPC-SPI-007 enforces exact-once incoming finish", async () => {
+		let forceCalls = 0;
+		const session: IRpcProtocolSession = {
+			prepareInvocation: () => undefined,
+			forceClose() {
+				forceCalls += 1;
+			},
+		};
+		const { connector, host, sessionHost, events } =
+			await connectProtocolSession(session);
+		const reserved = consumeIncomingCall(sessionHost, {
+			service: "unknown.finish-once",
+			method: "missing",
+			args: host.normalizeApplicationArguments([]),
+		});
+		if (reserved?.kind !== "unknown") {
+			throw new Error("Expected an unknown-call reservation.");
+		}
+		const terminal = {
+			type: RpcCallTerminalTypeEnum.failed,
+			code: reserved.code,
+		} as const;
+
+		reserved.call.finish(terminal);
+		reserved.call.finish(terminal);
+
+		expect(forceCalls).toBe(1);
+		expect(
+			events.filter(
+				(event) =>
+					event.type === "call-started" || event.type === "call-finished",
+			),
+		).toHaveLength(2);
+		await connector.close();
+	});
+
 	it("RPC-CALL-008 holds the Session and Owner permits until real handler settlement", async () => {
 		const session: IRpcProtocolSession = {
-			reserveInvocation: () => undefined,
+			prepareInvocation: () => undefined,
 			forceClose() {},
 		};
 		const { connector, host, sessionHost } = await connectProtocolSession(
@@ -3003,7 +3535,7 @@ describe("custom Protocol incoming calls", () => {
 		});
 
 		const reserve = (value: number) => {
-			const reservation = sessionHost.reserveIncomingCall({
+			const reservation = consumeIncomingCall(sessionHost, {
 				service: "example.deferred.v1",
 				method: "run",
 				args: host.normalizeApplicationArguments([value]),
@@ -3011,7 +3543,7 @@ describe("custom Protocol incoming calls", () => {
 			if (reservation?.kind !== "handler") {
 				throw new Error("Expected a handler reservation.");
 			}
-			return reservation.reservation.commit();
+			return reservation.call;
 		};
 		const first = reserve(3);
 		const second = reserve(7);
@@ -3027,8 +3559,7 @@ describe("custom Protocol incoming calls", () => {
 			type: RpcCallTerminalTypeEnum.returned,
 			value: firstOutcome.value,
 		});
-		await Promise.resolve();
-		expect(handlerCalls).toBe(2);
+		await expect.poll(() => handlerCalls).toBe(2);
 
 		handlerResolvers[1]?.(7);
 		const secondOutcome = await second.handlerOutcome;
@@ -3041,9 +3572,9 @@ describe("custom Protocol incoming calls", () => {
 		});
 	});
 
-	it("RPC-RESOURCE-001 rejects incoming work before route lookup when the args subcap is reserved", async () => {
+	it("RPC-SPI-006 RPC-RESOURCE-001 rejects incoming work before route lookup when the args subcap is reserved", async () => {
 		const session: IRpcProtocolSession = {
-			reserveInvocation: () => undefined,
+			prepareInvocation: () => undefined,
 			forceClose() {},
 		};
 		const { host, sessionHost, events } = await connectProtocolSession(
@@ -3063,25 +3594,43 @@ describe("custom Protocol incoming calls", () => {
 			method: "unknownMethod",
 			args,
 		};
-		const first = sessionHost.reserveIncomingCall(request);
+		const first = consumeIncomingCall(sessionHost, request);
 		expect(first?.kind).toBe("unknown");
-		expect(sessionHost.reserveIncomingCall(request)).toBeUndefined();
+		let secondConsumeCalls = 0;
+		expect(
+			sessionHost.reserveIncomingCall(request, () => {
+				secondConsumeCalls += 1;
+				return undefined;
+			}),
+		).toBe(false);
+		expect(secondConsumeCalls).toBe(0);
 		expect(
 			events.filter(
 				(event) =>
 					event.type === "call-started" || event.type === "call-finished",
 			),
-		).toEqual([]);
+		).toEqual([expect.objectContaining({ type: "call-started" })]);
 
-		first?.reservation.release();
-		const afterRelease = sessionHost.reserveIncomingCall(request);
+		if (first?.kind !== "unknown") {
+			throw new Error("Expected the first unknown-call reservation.");
+		}
+		first.call.finish({
+			type: RpcCallTerminalTypeEnum.failed,
+			code: first.code,
+		});
+		const afterRelease = consumeIncomingCall(sessionHost, request);
 		expect(afterRelease?.kind).toBe("unknown");
-		afterRelease?.reservation.release();
+		if (afterRelease?.kind === "unknown") {
+			afterRelease.call.finish({
+				type: RpcCallTerminalTypeEnum.failed,
+				code: afterRelease.code,
+			});
+		}
 	});
 
 	it("RPC-CLOSE-001 consumes a terminal handler result without normalizing it", async () => {
 		const session: IRpcProtocolSession = {
-			reserveInvocation: () => undefined,
+			prepareInvocation: () => undefined,
 			forceClose() {},
 		};
 		const { connector, host, sessionHost } =
@@ -3099,7 +3648,7 @@ describe("custom Protocol incoming calls", () => {
 				});
 			},
 		});
-		const reserved = sessionHost.reserveIncomingCall({
+		const reserved = consumeIncomingCall(sessionHost, {
 			service: "example.deferred.v1",
 			method: "run",
 			args: host.normalizeApplicationArguments([1]),
@@ -3107,7 +3656,7 @@ describe("custom Protocol incoming calls", () => {
 		if (reserved?.kind !== "handler") {
 			throw new Error("Expected a known handler reservation.");
 		}
-		const call = reserved.reservation.commit();
+		const call = reserved.call;
 		await Promise.resolve();
 		call.finish({ type: RpcCallTerminalTypeEnum.sessionTerminated });
 
@@ -3127,6 +3676,323 @@ describe("custom Protocol incoming calls", () => {
 
 		expect(inspectionCalls).toBe(0);
 		await connector.close();
+	});
+
+	it("RPC-SPI-006 releases and faults a synchronous incoming scope that does not commit", async () => {
+		let forceCalls = 0;
+		let consumeCalls = 0;
+		let insideReservationCall = false;
+		const session: IRpcProtocolSession = {
+			prepareInvocation: () => undefined,
+			forceClose() {
+				forceCalls += 1;
+			},
+		};
+		const { connector, host, sessionHost, events } =
+			await connectProtocolSession(session);
+		const request = {
+			service: "unknown.scope",
+			method: "missing",
+			args: host.normalizeApplicationArguments([]),
+		};
+
+		insideReservationCall = true;
+		expect(() =>
+			sessionHost.reserveIncomingCall(request, () => {
+				consumeCalls += 1;
+				expect(insideReservationCall).toBe(true);
+				return undefined;
+			}),
+		).toThrow("without committing");
+		insideReservationCall = false;
+		expect(consumeCalls).toBe(1);
+		expect(forceCalls).toBe(1);
+		expect(
+			events.filter(
+				(event) =>
+					event.type === "call-started" || event.type === "call-finished",
+			),
+		).toEqual([]);
+		await connector.close();
+	});
+
+	it("RPC-SPI-006 preserves a pre-commit throw and never inspects a non-undefined thenable return", async () => {
+		const preCommitFailure = new Error("pre-commit failure");
+		let firstForceCalls = 0;
+		const firstSession: IRpcProtocolSession = {
+			prepareInvocation: () => undefined,
+			forceClose() {
+				firstForceCalls += 1;
+			},
+		};
+		const first = await connectProtocolSession(firstSession);
+		const firstRequest = {
+			service: "unknown.pre-throw",
+			method: "missing",
+			args: first.host.normalizeApplicationArguments([]),
+		};
+		let caught: unknown;
+		try {
+			first.sessionHost.reserveIncomingCall(firstRequest, () => {
+				throw preCommitFailure;
+			});
+		} catch (error) {
+			caught = error;
+		}
+		expect(caught).toBe(preCommitFailure);
+		expect(firstForceCalls).toBe(1);
+		await first.connector.close();
+
+		let thenReads = 0;
+		let secondForceCalls = 0;
+		const secondSession: IRpcProtocolSession = {
+			prepareInvocation: () => undefined,
+			forceClose() {
+				secondForceCalls += 1;
+			},
+		};
+		const second = await connectProtocolSession(secondSession);
+		// biome-ignore lint/suspicious/noThenProperty: Verifies that the Protocol callback result is compared without thenable assimilation.
+		const maliciousThenable = Object.defineProperty({}, "then", {
+			get() {
+				thenReads += 1;
+				throw new Error("then must not be read");
+			},
+		});
+		expect(() =>
+			second.sessionHost.reserveIncomingCall(
+				{
+					service: "unknown.non-undefined",
+					method: "missing",
+					args: second.host.normalizeApplicationArguments([]),
+				},
+				(() => maliciousThenable) as never,
+			),
+		).toThrow("must return undefined synchronously");
+		expect({ thenReads, secondForceCalls }).toEqual({
+			thenReads: 0,
+			secondForceCalls: 1,
+		});
+		await second.connector.close();
+	});
+
+	it("RPC-SPI-006 RPC-SPI-007 terminalizes committed incoming work before propagating a scope failure", async () => {
+		const postCommitFailure = new Error("post-commit failure");
+		let forceCalls = 0;
+		const session: IRpcProtocolSession = {
+			prepareInvocation: () => undefined,
+			forceClose() {
+				forceCalls += 1;
+			},
+		};
+		const { connector, host, sessionHost, events } =
+			await connectProtocolSession(session);
+		const descriptor = createRemoteServiceDescriptor(IDeferredService, {
+			wireName: "example.post-commit.v1",
+			methods: { run: true },
+		});
+		const handler = vi.fn(() => Promise.resolve(1));
+		connector.peer.expose(descriptor, { run: handler });
+		let call: IRpcProtocolIncomingHandlerCall | undefined;
+		let caught: unknown;
+		try {
+			sessionHost.reserveIncomingCall(
+				{
+					service: "example.post-commit.v1",
+					method: "run",
+					args: host.normalizeApplicationArguments([1]),
+				},
+				(reservation) => {
+					if (reservation.kind !== RpcIncomingCallKindEnum.handler) {
+						throw new Error("Expected a handler reservation.");
+					}
+					call = reservation.commit();
+					throw postCommitFailure;
+				},
+			);
+		} catch (error) {
+			caught = error;
+		}
+		expect(caught).toBe(postCommitFailure);
+		await expect(call?.handlerOutcome).resolves.toEqual({
+			type: RpcCallTerminalTypeEnum.notStarted,
+		});
+		await Promise.resolve();
+		expect(handler).not.toHaveBeenCalled();
+		expect(forceCalls).toBe(1);
+		expect(
+			events
+				.filter(
+					(event) =>
+						event.type === "call-started" || event.type === "call-finished",
+				)
+				.map((event) => event.type),
+		).toEqual(["call-started", "call-finished"]);
+		await connector.close();
+	});
+
+	it("RPC-SPI-006 RPC-SPI-007 terminalizes committed incoming work before rejecting a non-undefined result", async () => {
+		let forceCalls = 0;
+		let thenReads = 0;
+		const session: IRpcProtocolSession = {
+			prepareInvocation: () => undefined,
+			forceClose() {
+				forceCalls += 1;
+			},
+		};
+		const { connector, host, sessionHost, events } =
+			await connectProtocolSession(session);
+		// biome-ignore lint/suspicious/noThenProperty: Verifies post-commit contract handling without thenable assimilation.
+		const maliciousThenable = Object.defineProperty({}, "then", {
+			get() {
+				thenReads += 1;
+				throw new Error("then must not be read");
+			},
+		});
+
+		expect(() =>
+			sessionHost.reserveIncomingCall(
+				{
+					service: "unknown.post-commit-result",
+					method: "missing",
+					args: host.normalizeApplicationArguments([]),
+				},
+				((reservation: RpcProtocolIncomingCallReservation) => {
+					if (reservation.kind !== RpcIncomingCallKindEnum.unknown) {
+						throw new Error("Expected an unknown reservation.");
+					}
+					reservation.commit();
+					return maliciousThenable;
+				}) as never,
+			),
+		).toThrow("must return undefined synchronously");
+		expect({ forceCalls, thenReads }).toEqual({ forceCalls: 1, thenReads: 0 });
+		expect(
+			events
+				.filter(
+					(event) =>
+						event.type === "call-started" || event.type === "call-finished",
+				)
+				.map((event) => ({
+					type: event.type,
+					code: Reflect.get(event, "code"),
+				})),
+		).toEqual([
+			{ type: "call-started", code: undefined },
+			{ type: "call-finished", code: "unknown-service" },
+		]);
+		await connector.close();
+	});
+
+	it("RPC-SPI-006 makes double and escaped commit capabilities sticky", async () => {
+		let forceCalls = 0;
+		const session: IRpcProtocolSession = {
+			prepareInvocation: () => undefined,
+			forceClose() {
+				forceCalls += 1;
+			},
+		};
+		const first = await connectProtocolSession(session);
+		const request = {
+			service: "unknown.double-commit",
+			method: "missing",
+			args: first.host.normalizeApplicationArguments([]),
+		};
+		expect(() =>
+			first.sessionHost.reserveIncomingCall(request, (reservation) => {
+				reservation.commit();
+				try {
+					reservation.commit();
+				} catch {}
+				return undefined;
+			}),
+		).toThrow("more than once");
+		expect(forceCalls).toBe(1);
+		await first.connector.close();
+
+		let escapedCommit: (() => IRpcProtocolIncomingCall) | undefined;
+		let secondForceCalls = 0;
+		const secondSession: IRpcProtocolSession = {
+			prepareInvocation: () => undefined,
+			forceClose() {
+				secondForceCalls += 1;
+			},
+		};
+		const second = await connectProtocolSession(secondSession);
+		const reserved = second.sessionHost.reserveIncomingCall(
+			{
+				service: "unknown.escaped-commit",
+				method: "missing",
+				args: second.host.normalizeApplicationArguments([]),
+			},
+			(reservation) => {
+				if (reservation.kind !== RpcIncomingCallKindEnum.unknown) {
+					throw new Error("Expected an unknown reservation.");
+				}
+				escapedCommit = reservation.commit;
+				reservation.commit();
+				return undefined;
+			},
+		);
+		expect(reserved).toBe(true);
+		expect(() => escapedCommit?.()).toThrow("escaped its synchronous scope");
+		expect(secondForceCalls).toBe(1);
+		await second.connector.close();
+	});
+
+	it("RPC-SPI-003 RPC-SPI-006 faults only the violating Acceptor Session", async () => {
+		const harness = createProtocolHarness();
+		const acceptor = createRpcAcceptor({
+			protocolFactory: harness.acceptorFactory,
+		});
+		const host = harness.acceptorHosts[0];
+		if (host === undefined) {
+			throw new Error("Expected an Acceptor Protocol host.");
+		}
+		let violatingForceCalls = 0;
+		let siblingForceCalls = 0;
+		const violatingHost = host.admitSession({
+			prepareInvocation: () => undefined,
+			forceClose() {
+				violatingForceCalls += 1;
+			},
+		});
+		const siblingHost = host.admitSession({
+			prepareInvocation: () => undefined,
+			forceClose() {
+				siblingForceCalls += 1;
+			},
+		});
+		const [violatingPeer, siblingPeer] = acceptor.peers;
+		if (
+			violatingHost === undefined ||
+			siblingHost === undefined ||
+			violatingPeer === undefined ||
+			siblingPeer === undefined
+		) {
+			throw new Error("Expected two admitted Acceptor Sessions.");
+		}
+
+		expect(() =>
+			violatingHost.reserveIncomingCall(
+				{
+					service: "unknown.acceptor-scope",
+					method: "missing",
+					args: host.normalizeApplicationArguments([]),
+				},
+				() => undefined,
+			),
+		).toThrow("without committing");
+		expect(violatingForceCalls).toBe(1);
+		expect(siblingForceCalls).toBe(0);
+		expect(acceptor.state.status).toBe(RpcStateStatusEnum.active);
+		expect(violatingPeer.state).toMatchObject({
+			status: RpcStateStatusEnum.closed,
+			reason: RpcCloseReasonEnum.protocolFault,
+		});
+		expect(siblingPeer.state.status).toBe(RpcStateStatusEnum.connected);
+		expect(acceptor.peers).toEqual([siblingPeer]);
+		await acceptor.close();
 	});
 });
 
@@ -3206,7 +4072,7 @@ describe("Protocol Session state projection", () => {
 
 	it("RPC-API-005 commits related Connector graceful snapshots before draining notifications and settles last", async () => {
 		const session: IRpcProtocolSession = {
-			reserveInvocation: () => undefined,
+			prepareInvocation: () => undefined,
 			forceClose() {},
 		};
 		const { connector } = await connectProtocolSession(session);
@@ -3350,7 +4216,7 @@ describe("Protocol Session state projection", () => {
 	it("RPC-API-005 runs the graceful continuation when shutdown reenters a peer notification", async () => {
 		let forceCloseCalls = 0;
 		const session: IRpcProtocolSession = {
-			reserveInvocation: () => undefined,
+			prepareInvocation: () => undefined,
 			forceClose() {
 				forceCloseCalls += 1;
 			},
@@ -3387,7 +4253,7 @@ describe("Protocol Session state projection", () => {
 
 	it("RPC-STATE-001 RPC-SPI-010 projects Connector recovery and terminal ordering on stable streams", async () => {
 		const session: IRpcProtocolSession = {
-			reserveInvocation: () => undefined,
+			prepareInvocation: () => undefined,
 			forceClose() {},
 		};
 		const { connector, sessionHost, events } =
@@ -3520,7 +4386,7 @@ describe("Connector Reconnection", () => {
 
 	it("RPC-RECONNECT-001 owns one initial connection and publishes its orchestration state", async () => {
 		const session: IRpcProtocolSession = {
-			reserveInvocation: () => undefined,
+			prepareInvocation: () => undefined,
 			forceClose() {},
 		};
 		const protocolFactory: RpcProtocolConnectorFactory = (host) => {
@@ -3709,7 +4575,7 @@ describe("Connector Reconnection", () => {
 
 	it("RPC-RECONNECT-002 immediately reconnects a recovering Peer with a fresh Adapter", async () => {
 		const session: IRpcProtocolSession = {
-			reserveInvocation: () => undefined,
+			prepareInvocation: () => undefined,
 			forceClose() {},
 		};
 		let sessionHost: IRpcProtocolSessionHost | undefined;
@@ -3844,7 +4710,7 @@ describe("Connector Reconnection", () => {
 		vi.useFakeTimers();
 		try {
 			const session: IRpcProtocolSession = {
-				reserveInvocation: () => undefined,
+				prepareInvocation: () => undefined,
 				forceClose() {},
 			};
 			let sessionHost: IRpcProtocolSessionHost | undefined;
@@ -4706,11 +5572,11 @@ describe("Acceptor Topology Owner termination", () => {
 		};
 		const acceptor = createRpcAcceptor({ protocolFactory });
 		const connectedSession: IRpcProtocolSession = {
-			reserveInvocation: () => undefined,
+			prepareInvocation: () => undefined,
 			forceClose() {},
 		};
 		const recoveringSession: IRpcProtocolSession = {
-			reserveInvocation: () => undefined,
+			prepareInvocation: () => undefined,
 			forceClose() {
 				recoveringForceCalls += 1;
 			},
@@ -4805,7 +5671,7 @@ describe("Acceptor Topology Owner termination", () => {
 		};
 		const acceptor = createRpcAcceptor({ protocolFactory });
 		const session: IRpcProtocolSession = {
-			reserveInvocation: () => undefined,
+			prepareInvocation: () => undefined,
 			forceClose() {},
 		};
 		if (acceptorHost?.admitSession(session) === undefined) {

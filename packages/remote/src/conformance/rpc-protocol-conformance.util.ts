@@ -178,7 +178,7 @@ export function runRpcProtocolConformance(
 				},
 			},
 			{
-				caseId: "protocol.outgoing.reserve-commit-start-sink",
+				caseId: "protocol.outgoing.prepare-start-finish",
 				run: async () => {
 					const pair = await openProtocolPair(fixture.protocol);
 					try {
@@ -189,33 +189,71 @@ export function runRpcProtocolConformance(
 						const args = pair.connectorProbe.host.normalizeApplicationArguments(
 							[],
 						);
-						const reservation = pair.connectorSession.reserveInvocation({
-							service: "service",
-							method: "method",
-							args,
-						});
-						assertRpcConformance(
-							reservation !== undefined,
-							"Invocation was not reserved.",
+						const outcomes: RpcCallOutcome[] = [];
+						const sendsBeforePrepare = pair.transport.connectorSends;
+						const invocation = pair.connectorSession.prepareInvocation(
+							{
+								service: "service",
+								method: "method",
+								args,
+							},
+							(value) => outcomes.push(value),
 						);
-						const beforeCommit = pair.transport.connectorSends;
-						const outcome: { value?: RpcCallOutcome } = {};
-						const invocation = reservation.commit({
-							finish: (value) => (outcome.value = value),
-						});
 						assertRpcConformance(
-							pair.transport.connectorSends === beforeCommit &&
-								Reflect.get(outcome, "value") === undefined,
-							"Reservation commit sent or settled before start().",
+							invocation !== undefined,
+							"Invocation was not prepared.",
 						);
+						assertRpcConformance(
+							pair.transport.connectorSends === sendsBeforePrepare &&
+								outcomes.length <= 1,
+							"Preparation sent or finished more than once before start().",
+						);
+						if (outcomes.length === 0) {
+							invocation.start();
+						}
+						await waitFor(() => outcomes.length > 0, "Invocation outcome");
+						assertRpcConformance(
+							outcomes.length === 1 &&
+								outcomes[0]?.type === RpcCallTerminalTypeEnum.returnedVoid,
+							"Finish callback did not receive the handler outcome.",
+						);
+					} finally {
+						await closeProtocolPair(pair);
+					}
+				},
+			},
+			{
+				caseId: "protocol.outgoing.cancel-before-start-definite-non-execution",
+				run: async () => {
+					const pair = await openProtocolPair(fixture.protocol);
+					try {
+						const args = pair.connectorProbe.host.normalizeApplicationArguments(
+							[],
+						);
+						const outcomes: RpcCallOutcome[] = [];
+						const ownerFaultsBefore = pair.connectorProbe.ownerFaults.length;
+						const sessionFaultsBefore =
+							pair.connectorProbe.sessionFaults.length;
+						const sendsBeforePrepare = pair.transport.connectorSends;
+						const invocation = pair.connectorSession.prepareInvocation(
+							{ service: "service", method: "method", args },
+							(outcome) => outcomes.push(outcome),
+						);
+						assertRpcConformance(
+							invocation !== undefined,
+							"Invocation was not prepared for cancellation.",
+						);
+						invocation.cancel();
 						invocation.start();
-						await waitFor(
-							() => outcome.value !== undefined,
-							"Invocation outcome",
-						);
 						assertRpcConformance(
-							outcome.value?.type === RpcCallTerminalTypeEnum.returnedVoid,
-							"Sink did not receive the handler outcome.",
+							pair.transport.connectorSends === sendsBeforePrepare &&
+								outcomes.length === 1 &&
+								outcomes[0]?.type === RpcCallTerminalTypeEnum.failed &&
+								outcomes[0].code === RpcExceptionCodeEnum.canceled &&
+								pair.connectorProbe.ownerFaults.length === ownerFaultsBefore &&
+								pair.connectorProbe.sessionFaults.length ===
+									sessionFaultsBefore,
+							"Pre-start cancellation did not synchronously win canceled and remain inert without a send or fault.",
 						);
 					} finally {
 						await closeProtocolPair(pair);
@@ -259,18 +297,26 @@ export function runRpcProtocolConformance(
 						const args = pair.connectorProbe.host.normalizeApplicationArguments(
 							[],
 						);
-						const reservation = pair.connectorSession.reserveInvocation({
-							service: "service",
-							method: "method",
-							args,
-						});
-						if (reservation !== undefined) {
-							reservation.commit({ finish: () => undefined }).start();
+						let finishCalls = 0;
+						const invocation = pair.connectorSession.prepareInvocation(
+							{ service: "service", method: "method", args },
+							() => {
+								finishCalls += 1;
+							},
+						);
+						if (invocation !== undefined) {
+							invocation.start();
 						}
 						await waitFor(
 							() => pair.connectorProbe.transitions.some(isCounterDrain),
 							"Counter drain",
 						);
+						if (invocation === undefined) {
+							assertRpcConformance(
+								finishCalls === 0,
+								"Definite Non-Execution finished a call.",
+							);
+						}
 					} finally {
 						await closeProtocolPair(pair);
 					}
@@ -296,16 +342,87 @@ export function runRpcProtocolConformance(
 				caseId: "protocol.termination.close-phase",
 				run: async () => {
 					const pair = await openProtocolPair(fixture.protocol);
-					pair.connector.close();
-					assertRpcConformance(
-						pair.transport.closeCount > 0,
-						"close() did not synchronously invoke Direct Close.",
-					);
-					pair.acceptor.close();
-					await Promise.all([
-						pair.connector.cleanup(),
-						pair.acceptor.cleanup(),
-					]);
+					const handlerOutcome = Promise.withResolvers<RpcHandlerOutcome>();
+					try {
+						pair.acceptorProbe.disposition = {
+							kind: RpcIncomingCallKindEnum.handler,
+							outcome: handlerOutcome.promise,
+						};
+						const args = pair.connectorProbe.host.normalizeApplicationArguments(
+							[],
+						);
+						const activeOutcomes: RpcCallOutcome[] = [];
+						const active = pair.connectorSession.prepareInvocation(
+							{ service: "service", method: "method", args },
+							(outcome) => activeOutcomes.push(outcome),
+						);
+						assertRpcConformance(
+							active !== undefined,
+							"Active close-phase invocation was not prepared.",
+						);
+						active.start();
+						await waitFor(
+							() => pair.acceptorProbe.commitCount === 1,
+							"Active close-phase incoming call",
+						);
+
+						const pendingOutcomes: RpcCallOutcome[] = [];
+						const pending = pair.connectorSession.prepareInvocation(
+							{ service: "service", method: "method", args },
+							(outcome) => pendingOutcomes.push(outcome),
+						);
+						assertRpcConformance(
+							pending !== undefined,
+							"Pending close-phase invocation was not prepared.",
+						);
+
+						pair.acceptor.close();
+						assertRpcConformance(
+							pair.transport.closeCount > 0,
+							"close() did not synchronously invoke Direct Close.",
+						);
+						assertRpcConformance(
+							pair.acceptorProbe.incomingFinishes.length === 1 &&
+								pair.acceptorProbe.incomingFinishes[0]?.type ===
+									RpcCallTerminalTypeEnum.sessionTerminated,
+							"Acceptor close did not terminalize its active incoming call exactly once.",
+						);
+
+						pair.connector.close();
+						assertRpcConformance(
+							activeOutcomes.length === 1 &&
+								activeOutcomes[0]?.type === RpcCallTerminalTypeEnum.failed &&
+								activeOutcomes[0].code === RpcExceptionCodeEnum.outcomeUnknown,
+							"Connector close did not finish its admitted outgoing call exactly once.",
+						);
+						assertRpcConformance(
+							pendingOutcomes.length === 1 &&
+								pendingOutcomes[0]?.type === RpcCallTerminalTypeEnum.failed &&
+								pendingOutcomes[0].code === RpcExceptionCodeEnum.unavailable,
+							"Connector close did not finish its Pending Invocation exactly once.",
+						);
+
+						const acceptorSendsAfterClose = pair.transport.acceptorSends;
+						handlerOutcome.resolve({
+							type: RpcCallTerminalTypeEnum.returnedVoid,
+						});
+						await Promise.resolve();
+						await Promise.resolve();
+						assertRpcConformance(
+							pair.acceptorProbe.incomingFinishes.length === 1 &&
+								pair.transport.acceptorSends === acceptorSendsAfterClose,
+							"A completed handler sent or finished again after close().",
+						);
+						await Promise.all([
+							pair.connector.cleanup(),
+							pair.acceptor.cleanup(),
+						]);
+					} finally {
+						handlerOutcome.resolve({
+							type: RpcCallTerminalTypeEnum.returnedVoid,
+						});
+						await closeProtocolPair(pair);
+					}
 				},
 			},
 			{
@@ -337,7 +454,7 @@ type IncomingDisposition =
 	  }
 	| {
 			readonly kind: RpcIncomingCallKindEnum.handler;
-			readonly outcome: RpcHandlerOutcome;
+			readonly outcome: RpcHandlerOutcome | Promise<RpcHandlerOutcome>;
 	  };
 
 interface ProtocolHostProbe<
@@ -349,7 +466,6 @@ interface ProtocolHostProbe<
 	attachCount: number;
 	reservationCount: number;
 	commitCount: number;
-	releaseCount: number;
 	handlerOutcomeReadCount: number;
 	lastRequest:
 		| {
@@ -499,6 +615,7 @@ function createIncomingDispositionCases(
 				const pair = await openProtocolPair(protocol);
 				try {
 					pair.acceptorProbe.disposition = { kind: "resource" };
+					const finishesBefore = pair.acceptorProbe.incomingFinishes.length;
 					const outcome = await invokeWithValues(pair, []);
 					assertRpcConformance(
 						outcome.type === RpcCallTerminalTypeEnum.failed &&
@@ -508,7 +625,8 @@ function createIncomingDispositionCases(
 					assertRpcConformance(
 						pair.acceptorProbe.reservationCount === 1 &&
 							pair.acceptorProbe.commitCount === 0 &&
-							pair.acceptorProbe.handlerOutcomeReadCount === 0,
+							pair.acceptorProbe.handlerOutcomeReadCount === 0 &&
+							pair.acceptorProbe.incomingFinishes.length === finishesBefore,
 						"Resource rejection retained or committed incoming work.",
 					);
 				} finally {
@@ -531,7 +649,10 @@ function createIncomingDispositionCases(
 							kind: RpcIncomingCallKindEnum.unknown,
 							code,
 						};
+						const finishesBefore = pair.acceptorProbe.incomingFinishes.length;
 						const outcome = await invokeWithValues(pair, []);
+						const incomingTerminal =
+							pair.acceptorProbe.incomingFinishes[finishesBefore];
 						assertRpcConformance(
 							outcome.type === RpcCallTerminalTypeEnum.failed &&
 								outcome.code === code,
@@ -539,7 +660,14 @@ function createIncomingDispositionCases(
 						);
 						assertRpcConformance(
 							pair.acceptorProbe.commitCount === 1 &&
-								pair.acceptorProbe.handlerOutcomeReadCount === 0,
+								pair.acceptorProbe.handlerOutcomeReadCount === 0 &&
+								pair.acceptorProbe.incomingFinishes.length ===
+									finishesBefore + 1 &&
+								incomingTerminal !== undefined &&
+								outcomesEqual(incomingTerminal, {
+									type: RpcCallTerminalTypeEnum.failed,
+									code,
+								}),
 							"Semantic rejection acquired a handler outcome.",
 						);
 					} finally {
@@ -588,9 +716,16 @@ function createIncomingDispositionCases(
 							kind: RpcIncomingCallKindEnum.handler,
 							outcome: expectation.handler,
 						};
+						const finishesBefore = pair.acceptorProbe.incomingFinishes.length;
 						const outcome = await invokeWithValues(pair, []);
+						const incomingTerminal =
+							pair.acceptorProbe.incomingFinishes[finishesBefore];
 						assertRpcConformance(
-							outcomesEqual(outcome, expectation.caller),
+							outcomesEqual(outcome, expectation.caller) &&
+								pair.acceptorProbe.incomingFinishes.length ===
+									finishesBefore + 1 &&
+								incomingTerminal !== undefined &&
+								outcomesEqual(incomingTerminal, expectation.caller),
 							"Handler disposition changed at the outgoing sink.",
 						);
 					}
@@ -691,7 +826,6 @@ function createSessionHostProbe(
 		attachCount: 0,
 		reservationCount: 0,
 		commitCount: 0,
-		releaseCount: 0,
 		handlerOutcomeReadCount: 0,
 		lastRequest: undefined,
 		incomingFinishes,
@@ -703,12 +837,12 @@ function createSessionHostProbe(
 		"host"
 	>;
 	const sessionHost: IRpcProtocolSessionHost = {
-		reserveIncomingCall(request) {
+		reserveIncomingCall(request, consume) {
 			probe.reservationCount += 1;
 			probe.lastRequest = request;
 			const disposition = probe.disposition;
 			if (disposition.kind === "resource") {
-				return undefined;
+				return false;
 			}
 			let committed = false;
 			const call: IRpcProtocolIncomingCall = {
@@ -716,22 +850,18 @@ function createSessionHostProbe(
 					incomingFinishes.push(outcome);
 				},
 			};
-			const reservation = {
-				commit() {
-					committed = true;
-					probe.commitCount += 1;
-					return call;
-				},
-				release() {
-					probe.releaseCount += 1;
-				},
+			const commit = () => {
+				committed = true;
+				probe.commitCount += 1;
+				return call;
 			};
 			if (disposition.kind === RpcIncomingCallKindEnum.unknown) {
-				return {
+				consume({
 					kind: RpcIncomingCallKindEnum.unknown,
 					code: disposition.code,
-					reservation,
-				};
+					commit,
+				});
+				return true;
 			}
 			const handlerCall = Object.create(call, {
 				handlerOutcome: {
@@ -746,16 +876,15 @@ function createSessionHostProbe(
 					},
 				},
 			}) as IRpcProtocolIncomingHandlerCall;
-			return {
+			consume({
 				kind: RpcIncomingCallKindEnum.handler,
-				reservation: {
-					...reservation,
-					commit() {
-						reservation.commit();
-						return handlerCall;
-					},
+				commit() {
+					committed = true;
+					probe.commitCount += 1;
+					return handlerCall;
 				},
-			};
+			});
+			return true;
 		},
 		transition: (transition) => transitions.push(transition),
 		fault(reason, error) {
@@ -864,23 +993,24 @@ async function invoke(
 	session: IRpcProtocolSession,
 	args: IRpcApplicationArgumentsSnapshot,
 ): Promise<RpcCallOutcome> {
-	const reservation = session.reserveInvocation({
-		service: "service",
-		method: "method",
-		args,
-	});
-	assertRpcConformance(
-		reservation !== undefined,
-		"Invocation capacity was unavailable.",
-	);
 	const { promise: outcome, resolve: finish } =
 		Promise.withResolvers<RpcCallOutcome>();
-	const invocation = reservation.commit({ finish });
+	const invocation = session.prepareInvocation(
+		{ service: "service", method: "method", args },
+		finish,
+	);
+	assertRpcConformance(
+		invocation !== undefined,
+		"Invocation capacity was unavailable.",
+	);
 	invocation.start();
 	return within(outcome, "Invocation sink");
 }
 
-function outcomesEqual(left: RpcCallOutcome, right: RpcCallOutcome): boolean {
+function outcomesEqual(
+	left: RpcCallOutcome | RpcIncomingTerminal,
+	right: RpcCallOutcome | RpcIncomingTerminal,
+): boolean {
 	if (left.type !== right.type) {
 		return false;
 	}

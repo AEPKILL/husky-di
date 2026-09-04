@@ -16,7 +16,7 @@ import type {
 	RpcProtocolFaultReason,
 	RpcProtocolSessionTransition,
 } from "../../src/interfaces/protocol/rpc-protocol.interface";
-import type { RpcBindingEpoch } from "../../src/interfaces/session/rpc-session.interface";
+import type { IRpcSessionBinding } from "../../src/interfaces/session/rpc-session.interface";
 import type {
 	IRpcAcceptorAdapter,
 	IRpcConnectorAdapter,
@@ -80,7 +80,7 @@ export function createRpcDirectSessionHarness(
 	const faults: RpcProtocolFaultReason[] = [];
 	const decoder = new TextDecoder();
 	let sendSettlement: Promise<void> | undefined;
-	let activeBinding: RpcBindingEpoch | undefined;
+	let activeBinding: IRpcSessionBinding | undefined;
 	let bindingEpoch = 1;
 	const policy: IRpcProtocolRuntimePolicy = {
 		maxSessions: 1,
@@ -112,9 +112,9 @@ export function createRpcDirectSessionHarness(
 	};
 	const createEndpoint = (): Readonly<{
 		endpoint: RpcEndpointImpl;
-		install(binding: RpcBindingEpoch): void;
+		install(binding: IRpcSessionBinding): void;
 	}> => {
-		let binding: RpcBindingEpoch | undefined;
+		let binding: IRpcSessionBinding | undefined;
 		const endpoint = new RpcEndpointImpl({
 			connection: {
 				message$: new Subject<Uint8Array>().asObservable(),
@@ -129,7 +129,7 @@ export function createRpcDirectSessionHarness(
 				async close() {},
 			},
 			onMessage: (bytes) => binding?.receive(bytes),
-			onFailure: (reason, error) => binding?.failed(reason, error),
+			onFailure: (reason, error) => binding?.fail(reason, error),
 		});
 		return {
 			endpoint,
@@ -153,21 +153,17 @@ export function createRpcDirectSessionHarness(
 		},
 	);
 	const sessionHost: IRpcProtocolSessionHost = {
-		reserveIncomingCall: () => undefined,
+		reserveIncomingCall: () => false,
 		transition: (transition) => transitions.push(transition),
 		fault: (reason) => faults.push(reason),
 	};
 	const initialEndpoint = createEndpoint();
-	const initialCommit = created.commitBinding(
-		created.prepareFreshBinding(sessionHost),
-		initialEndpoint.endpoint,
-	);
-	if (initialCommit.kind !== "installed") {
-		throw initialCommit.error;
-	}
-	initialEndpoint.install(initialCommit.binding);
-	activeBinding = initialCommit.binding;
-	if (!initialCommit.binding.activate()) {
+	const initialBinding = created
+		.prepareFresh(sessionHost)
+		.install(initialEndpoint.endpoint);
+	initialEndpoint.install(initialBinding);
+	activeBinding = initialBinding;
+	if (!initialBinding.activate()) {
 		throw new Error("Expected the direct Session binding to activate.");
 	}
 	return {
@@ -185,25 +181,23 @@ export function createRpcDirectSessionHarness(
 			activeBinding.receive(message);
 		},
 		installReplacement(peerReceivedThrough = 0) {
-			const resume = created.beginInitiatorResume();
+			const resume = created.beginResume();
 			bindingEpoch += 1;
-			const candidate = created.prepareInitiatorBinding(resume, {
+			const decision = resume.review({
+				kind: "accepted",
 				profile: "husky-di-rpc/1",
 				sessionId: "direct-session",
 				bindingEpoch,
-				peerReceivedThrough,
+				cursor: peerReceivedThrough,
 			});
-			if (candidate.kind !== "ready") {
-				throw new Error("Expected a ready replacement binding candidate.");
+			if (decision.kind !== "bind") {
+				throw new Error("Expected a replacement binding plan.");
 			}
 			const endpoint = createEndpoint();
-			const commit = created.commitBinding(candidate, endpoint.endpoint);
-			if (commit.kind !== "installed") {
-				throw commit.error;
-			}
-			endpoint.install(commit.binding);
-			activeBinding = commit.binding;
-			if (!commit.binding.activate()) {
+			const binding = decision.plan.install(endpoint.endpoint);
+			endpoint.install(binding);
+			activeBinding = binding;
+			if (!binding.activate()) {
 				throw new Error("Expected the replacement binding to activate.");
 			}
 		},

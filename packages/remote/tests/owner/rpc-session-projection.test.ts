@@ -12,8 +12,6 @@ import { RpcCloseReasonEnum } from "../../src/enums/rpc-close-reason.enum";
 import { RpcEventTypeEnum } from "../../src/enums/rpc-event-type.enum";
 import { RpcExceptionCodeEnum } from "../../src/enums/rpc-exception-code.enum";
 import { RpcStateStatusEnum } from "../../src/enums/rpc-state-status.enum";
-import { RpcPeerImpl } from "../../src/impls/peer/rpc-peer.impl";
-import type { IRpcPeerRuntime } from "../../src/interfaces/peer/rpc-peer-runtime.interface";
 import type {
 	RpcProtocolSessionTransition,
 	RpcSessionCloseReason,
@@ -21,8 +19,9 @@ import type {
 import type { RpcPeerState } from "../../src/types/common/rpc-caller.type";
 import type { RpcSessionOwnerStatus } from "../../src/types/owner/rpc-session-projection.type";
 import {
-	isRpcSessionTerminalProjection,
-	projectRpcSession,
+	isRpcSessionTerminalChange,
+	resolveRpcSessionClosure,
+	resolveRpcSessionTransition,
 } from "../../src/utils/rpc-session-projection.util";
 
 type TransitionCase = Readonly<{
@@ -342,35 +341,19 @@ const closureClassificationCases = [
 	},
 ] satisfies readonly ClosureClassificationCase[];
 
-function createPeer(initialState: RpcPeerState): IRpcPeerRuntime {
-	return new RpcPeerImpl({
-		initialState,
-		ownerExposureRegistry: new Map(),
-		isOwnerActive: () => true,
-		emitEvent() {},
-		onProtocolFault() {},
-		handlerScheduler: { enqueue: () => () => {} },
-		maximumIncomingBytes: 1,
-		reserveRetainedBytes: () => undefined,
-	});
-}
-
 describe("RPC Session projection", () => {
 	it.each(validTransitionCases)("accepts $name", ({
 		ownerStatus,
 		peerState,
 		transition,
 	}) => {
-		const peer = createPeer(peerState);
-
-		const projection = projectRpcSession(peer, {
-			kind: "transition",
+		const decision = resolveRpcSessionTransition(
 			ownerStatus,
+			peerState,
 			transition,
-		});
+		);
 
-		expect(projection.kind).toBe("commit");
-		expect(peer.state).toEqual(peerState);
+		expect(decision.kind).toBe("change");
 	});
 
 	it.each(invalidTransitionCases)("rejects $name", ({
@@ -378,24 +361,20 @@ describe("RPC Session projection", () => {
 		peerState,
 		transition,
 	}) => {
-		const peer = createPeer(peerState);
-
-		const projection = projectRpcSession(peer, {
-			kind: "transition",
+		const decision = resolveRpcSessionTransition(
 			ownerStatus,
+			peerState,
 			transition,
-		});
+		);
 
-		if (projection.kind !== "invalid") {
-			throw new Error("Expected an invalid Session projection.");
+		if (decision.kind !== "fault") {
+			throw new Error("Expected a Session transition fault.");
 		}
-		expect(projection.fault).toMatchObject({
+		expect(decision).toMatchObject({
+			kind: "fault",
 			reason: RpcCloseReasonEnum.protocolFault,
-			error: {
-				message: "Protocol requested an invalid Session transition.",
-			},
+			error: { message: "Protocol requested an invalid Session transition." },
 		});
-		expect(peer.state).toEqual(peerState);
 	});
 
 	it.each(nonterminalProjectionCases)("$name with matching state and event", ({
@@ -405,54 +384,39 @@ describe("RPC Session projection", () => {
 		expectedState,
 		expectedEvent,
 	}) => {
-		const peer = createPeer(peerState);
-
-		const projection = projectRpcSession(peer, {
-			kind: "transition",
+		const decision = resolveRpcSessionTransition(
 			ownerStatus,
+			peerState,
 			transition,
-		});
+		);
 
-		if (projection.kind !== "commit") {
-			throw new Error("Expected a committed Session projection.");
+		if (decision.kind !== "change") {
+			throw new Error("Expected a Session change.");
 		}
-		expect(projection.peerMutation).toEqual({
-			peer,
-			state: expectedState,
-		});
-		expect(projection.event).toEqual({ peer, ...expectedEvent });
-		expect(projection.peerMutation.terminal).toBeUndefined();
-		expect(isRpcSessionTerminalProjection(projection)).toBe(false);
-		expect(peer.state).toEqual(peerState);
+		expect(decision.state).toEqual(expectedState);
+		expect(decision.lifecycle).toEqual(expectedEvent);
+		expect(decision.terminal).toBe(false);
+		expect(isRpcSessionTerminalChange(decision)).toBe(false);
 	});
 
 	it.each(
 		closureClassificationCases,
 	)("classifies $reason closure as $outcome", ({ reason, outcome, code }) => {
 		const cause = new Error(`cause:${reason}`);
-		const peerState = { status: RpcStateStatusEnum.connected } as const;
-		const peer = createPeer(peerState);
+		const change = resolveRpcSessionClosure(reason, cause);
 
-		const projection = projectRpcSession(peer, {
-			kind: "closure",
-			reason,
-			cause,
-		});
-
-		if (!isRpcSessionTerminalProjection(projection)) {
-			throw new Error("Expected a committed Session closure projection.");
+		if (!isRpcSessionTerminalChange(change)) {
+			throw new Error("Expected a terminal Session change.");
 		}
-		const state = projection.peerMutation.state;
-		expect(projection.peerMutation.peer).toBe(peer);
-		expect(projection.peerMutation.terminal).toBe(true);
+		const state = change.state;
+		expect(change.terminal).toBe(true);
 		expect(state).toMatchObject({
 			status: RpcStateStatusEnum.closed,
 			outcome,
 			reason,
 		});
-		expect(projection.event).toEqual({
+		expect(change.lifecycle).toEqual({
 			type: RpcEventTypeEnum.peerClosed,
-			peer,
 			outcome,
 			reason,
 		});
@@ -465,7 +429,6 @@ describe("RPC Session projection", () => {
 			expect(state.error.code).toBe(code);
 			expect(state.error.cause).toBe(cause);
 		}
-		expect(peer.state).toEqual(peerState);
 	});
 
 	it.each([
@@ -506,21 +469,19 @@ describe("RPC Session projection", () => {
 		code,
 	}) => {
 		const cause = new Error(`transition:${transition.reason}`);
-		const peer = createPeer(peerState);
+		const decision = resolveRpcSessionTransition(
+			RpcStateStatusEnum.active,
+			peerState,
+			{ ...transition, cause },
+		);
 
-		const projection = projectRpcSession(peer, {
-			kind: "transition",
-			ownerStatus: RpcStateStatusEnum.active,
-			transition: { ...transition, cause },
-		});
-
-		if (!isRpcSessionTerminalProjection(projection)) {
-			throw new Error("Expected a committed terminal transition projection.");
+		if (decision.kind !== "change" || !isRpcSessionTerminalChange(decision)) {
+			throw new Error("Expected a terminal Session change.");
 		}
-		const state = projection.peerMutation.state;
-		expect(projection.peerMutation.terminal).toBe(true);
+		const state = decision.state;
+		expect(decision.terminal).toBe(true);
 		expect(state.outcome).toBe(outcome);
-		expect(projection.event).toMatchObject({
+		expect(decision.lifecycle).toMatchObject({
 			type: RpcEventTypeEnum.peerClosed,
 			outcome,
 			reason: transition.reason,

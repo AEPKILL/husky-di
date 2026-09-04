@@ -49,15 +49,17 @@ describe("Default RPC Protocol retained ledger", () => {
 		});
 		const { session } = harness;
 		for (let ordinal = 1; ordinal <= 4; ordinal += 1) {
-			const reservation = session.reserveInvocation({
-				service: "example.replay-guard.v1",
-				method: "run",
-				args: normalizeRpcApplicationArguments([ordinal]),
-			});
-			if (reservation === undefined) {
+			const invocation = session.prepareInvocation(
+				{
+					service: "example.replay-guard.v1",
+					method: "run",
+					args: normalizeRpcApplicationArguments([ordinal]),
+				},
+				() => undefined,
+			);
+			if (invocation === undefined) {
 				throw new Error("Expected replay-filling Invocation capacity.");
 			}
-			const invocation = reservation.commit({ finish() {} });
 			invocation.start();
 			await vi.waitFor(() => expect(harness.sent).toHaveLength(ordinal));
 			session._receiveResult({
@@ -79,25 +81,21 @@ describe("Default RPC Protocol retained ledger", () => {
 		if (occupied === undefined) {
 			throw new Error("Expected capacity beside the replay-filled Session.");
 		}
-		const reservation = session.reserveInvocation({
-			service: "example.replay-guard.v1",
-			method: "run",
-			args,
-		});
-		if (reservation === undefined) {
-			throw new Error("Expected the final Pending Invocation capacity.");
-		}
 		let reentrantOwnerReservation:
 			| ReturnType<typeof session._host.reserveRetainedBytes>
 			| undefined;
-		const invocation = reservation.commit({
-			finish: () => {
+		const invocation = session.prepareInvocation(
+			{ service: "example.replay-guard.v1", method: "run", args },
+			() => {
 				session.forceClose();
 				reentrantOwnerReservation = session._host.reserveRetainedBytes(
 					retainedBeforePending + 1,
 				);
 			},
-		});
+		);
+		if (invocation === undefined) {
+			throw new Error("Expected the final Pending Invocation capacity.");
+		}
 
 		invocation.start();
 
@@ -175,15 +173,17 @@ describe("Default RPC Protocol retained ledger", () => {
 
 	it("RPC-LEDGER-005 RPC-RESOURCE-003 releases an admitted outgoing request payload from the call ledger", async () => {
 		const harness = createRpcDirectSessionHarness();
-		const reservation = harness.session.reserveInvocation({
-			service: "example.outgoing-ledger.v1",
-			method: "run",
-			args: normalizeRpcApplicationArguments(["x".repeat(512 * 1024)]),
-		});
-		if (reservation === undefined) {
+		const invocation = harness.session.prepareInvocation(
+			{
+				service: "example.outgoing-ledger.v1",
+				method: "run",
+				args: normalizeRpcApplicationArguments(["x".repeat(512 * 1024)]),
+			},
+			() => undefined,
+		);
+		if (invocation === undefined) {
 			throw new Error("Expected outgoing Invocation capacity.");
 		}
-		const invocation = reservation.commit({ finish() {} });
 
 		invocation.start();
 		await vi.waitFor(() => expect(harness.sent).toHaveLength(1));
@@ -206,18 +206,18 @@ describe("Default RPC Protocol retained ledger", () => {
 		const harness = createRpcDirectSessionHarness();
 		const finishes: unknown[] = [];
 		harness.session._sessionHost = {
-			reserveIncomingCall: () => ({
-				kind: RpcIncomingCallKindEnum.handler,
-				reservation: {
+			reserveIncomingCall: (_request, consume) => {
+				consume({
+					kind: RpcIncomingCallKindEnum.handler,
 					commit: () => ({
 						handlerOutcome: Promise.resolve({
 							type: RpcCallTerminalTypeEnum.returnedVoid,
 						}),
 						finish: (outcome) => finishes.push(outcome),
 					}),
-					release() {},
-				},
-			}),
+				});
+				return true;
+			},
 			transition() {},
 			fault() {},
 		};

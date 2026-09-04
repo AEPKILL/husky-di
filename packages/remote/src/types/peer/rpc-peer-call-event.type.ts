@@ -13,6 +13,8 @@ import type { RpcCallFailure } from "@/interfaces/protocol/rpc-protocol.interfac
 
 export type RpcPeerCallEvent = RpcCallStartedEvent | RpcCallFinishedEvent;
 
+export type RpcCallEventSink = (event: RpcPeerCallEvent) => void;
+
 type RpcCallObservationBase = {
 	readonly observationId: string;
 	readonly peer: IRpcPeer;

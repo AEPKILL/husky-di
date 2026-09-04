@@ -89,15 +89,17 @@ describe("Default RPC Protocol counter drain", () => {
 	it("RPC-COUNTER-001 RPC-COUNTER-003 drains after allocating the last safe Call Ordinal RPC-CORPUS-004", async () => {
 		const { session, sent, transitions } = createRpcDirectSessionHarness();
 		session._nextOutgoingCallOrdinal = Number.MAX_SAFE_INTEGER;
-		const reservation = session.reserveInvocation({
-			service: "example.counter.v1",
-			method: "run",
-			args: normalizeRpcApplicationArguments([]),
-		});
-		if (reservation === undefined) {
+		const invocation = session.prepareInvocation(
+			{
+				service: "example.counter.v1",
+				method: "run",
+				args: normalizeRpcApplicationArguments([]),
+			},
+			() => undefined,
+		);
+		if (invocation === undefined) {
 			throw new Error("Expected the last Call Ordinal reservation.");
 		}
-		const invocation = reservation.commit({ finish() {} });
 
 		invocation.start();
 		await vi.waitFor(() => expect(sent).toHaveLength(1));

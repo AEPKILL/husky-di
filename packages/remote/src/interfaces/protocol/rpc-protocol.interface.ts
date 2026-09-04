@@ -125,19 +125,10 @@ export interface IRpcProtocolHost {
 	fault(reason: RpcProtocolFaultReason, error: Error): void;
 }
 
-export interface IRpcProtocolInvocationRequest {
+export interface IRpcProtocolCallRequest {
 	readonly service: string;
 	readonly method: string;
 	readonly args: IRpcApplicationArgumentsSnapshot;
-}
-
-export interface IRpcProtocolInvocationSink {
-	finish(outcome: RpcCallOutcome): void;
-}
-
-export interface IRpcProtocolInvocationReservation {
-	commit(sink: IRpcProtocolInvocationSink): IRpcProtocolInvocation;
-	release(): void;
 }
 
 export interface IRpcProtocolInvocation {
@@ -146,16 +137,11 @@ export interface IRpcProtocolInvocation {
 }
 
 export interface IRpcProtocolSession {
-	reserveInvocation(
-		request: IRpcProtocolInvocationRequest,
-	): IRpcProtocolInvocationReservation | undefined;
+	prepareInvocation(
+		request: IRpcProtocolCallRequest,
+		finish: (outcome: RpcCallOutcome) => void,
+	): IRpcProtocolInvocation | undefined;
 	forceClose(): void;
-}
-
-export interface IRpcProtocolIncomingCallRequest {
-	readonly service: string;
-	readonly method: string;
-	readonly args: IRpcApplicationArgumentsSnapshot;
 }
 
 export interface IRpcProtocolIncomingCall {
@@ -167,23 +153,16 @@ export interface IRpcProtocolIncomingHandlerCall
 	readonly handlerOutcome: Promise<RpcHandlerOutcome>;
 }
 
-export interface IRpcProtocolIncomingCallReservation<
-	TCall extends IRpcProtocolIncomingCall = IRpcProtocolIncomingCall,
-> {
-	commit(): TCall;
-	release(): void;
-}
-
 export type RpcProtocolIncomingCallReservation =
-	| {
+	| Readonly<{
 			readonly kind: RpcIncomingCallKindEnum.handler;
-			readonly reservation: IRpcProtocolIncomingCallReservation<IRpcProtocolIncomingHandlerCall>;
-	  }
-	| {
+			commit(): IRpcProtocolIncomingHandlerCall;
+	  }>
+	| Readonly<{
 			readonly kind: RpcIncomingCallKindEnum.unknown;
 			readonly code: RpcUnknownCallFailure;
-			readonly reservation: IRpcProtocolIncomingCallReservation<IRpcProtocolIncomingCall>;
-	  };
+			commit(): IRpcProtocolIncomingCall;
+	  }>;
 
 export type RpcSessionCloseReason = Exclude<
 	RpcCloseReasonEnum,
@@ -213,8 +192,9 @@ export type RpcProtocolSessionTransition =
 
 export interface IRpcProtocolSessionHost {
 	reserveIncomingCall(
-		request: IRpcProtocolIncomingCallRequest,
-	): RpcProtocolIncomingCallReservation | undefined;
+		request: IRpcProtocolCallRequest,
+		consume: (reservation: RpcProtocolIncomingCallReservation) => undefined,
+	): boolean;
 	transition(transition: RpcProtocolSessionTransition): void;
 	fault(reason: RpcProtocolFaultReason, error: Error): void;
 }

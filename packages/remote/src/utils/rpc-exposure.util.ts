@@ -9,7 +9,6 @@ import type { Cleanup } from "@husky-di/core";
 import { getRemoteServiceDescriptorData } from "@/factories/remote-service-descriptor.factory";
 import type {
 	RpcExposure,
-	RpcExposureRegistry,
 	RpcHandlerRoute,
 } from "@/types/common/rpc-exposure.type";
 import { isCallable, isObjectOrFunction } from "@/utils/type-guard.util";
@@ -18,22 +17,14 @@ import { isCallable, isObjectOrFunction } from "@/utils/type-guard.util";
 export function installRpcExposure(
 	descriptor: unknown,
 	implementation: unknown,
-	registry: RpcExposureRegistry,
-	conflictingRegistries: readonly RpcExposureRegistry[] = [],
+	hasConflict: (wireName: string) => boolean,
+	commit: (exposure: RpcExposure) => Cleanup,
 ): Cleanup {
 	const data = getRemoteServiceDescriptorData(descriptor);
-	assertNameAvailable(data.wireName, registry, conflictingRegistries);
+	assertNameAvailable(data.wireName, hasConflict);
 	const exposure = prepareExposure(descriptor, implementation);
-	assertNameAvailable(exposure.wireName, registry, conflictingRegistries);
-	registry.set(exposure.wireName, exposure);
-
-	let active = true;
-	return () => {
-		if (active && registry.get(exposure.wireName) === exposure) {
-			registry.delete(exposure.wireName);
-		}
-		active = false;
-	};
+	assertNameAvailable(exposure.wireName, hasConflict);
+	return commit(exposure);
 }
 
 function findHandler(
@@ -101,14 +92,9 @@ function prepareExposure(
 
 function assertNameAvailable(
 	wireName: string,
-	registry: RpcExposureRegistry,
-	conflictingRegistries: readonly RpcExposureRegistry[],
+	hasConflict: (wireName: string) => boolean,
 ): void {
-	// A wire name must be absent from both the target and every conflicting registry.
-	const wireNameIsTaken =
-		registry.has(wireName) ||
-		conflictingRegistries.some((candidate) => candidate.has(wireName));
-	if (wireNameIsTaken) {
+	if (hasConflict(wireName)) {
 		throw new TypeError(`RPC wire service ${wireName} is already exposed.`);
 	}
 }

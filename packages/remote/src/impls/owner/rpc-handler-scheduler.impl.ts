@@ -110,13 +110,11 @@ export class RpcHandlerSchedulerImpl implements IRpcHandlerScheduler {
 				this.#scheduleDrain();
 			};
 
-			let started = false;
 			try {
-				started = job(release);
+				const settlement = job();
+				void settlement.then(release, release);
 			} catch {
-				// The job owns normalization of handler failure; release its permits here.
-			}
-			if (!started) {
+				// A malformed job cannot retain either permit indefinitely.
 				release();
 			}
 			this.#markReady(session, queue);

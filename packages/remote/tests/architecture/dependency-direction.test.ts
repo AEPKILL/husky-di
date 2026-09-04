@@ -16,19 +16,11 @@ const implementationRoot = resolve(sourceRoot, "impls");
 const allowedImplementationEdges = new Map<string, ReadonlySet<string>>([
 	[
 		"src/impls/protocol/rpc-protocol-connector.impl.ts",
-		new Set([
-			"src/impls/common/rpc-retained-bytes-ledger.impl.ts",
-			"src/impls/protocol/rpc-binding-attempt.impl.ts",
-			"src/impls/session/rpc-session.impl.ts",
-		]),
+		new Set(["src/impls/protocol/rpc-binding-attempt.impl.ts"]),
 	],
 	[
 		"src/impls/protocol/rpc-protocol-acceptor.impl.ts",
-		new Set([
-			"src/impls/common/rpc-retained-bytes-ledger.impl.ts",
-			"src/impls/protocol/rpc-binding-attempt.impl.ts",
-			"src/impls/session/rpc-session.impl.ts",
-		]),
+		new Set(["src/impls/protocol/rpc-binding-attempt.impl.ts"]),
 	],
 	[
 		"src/impls/protocol/rpc-binding-attempt.impl.ts",
@@ -112,5 +104,64 @@ describe("Remote package dependency direction", () => {
 		);
 
 		expect(violations).toEqual([]);
+	});
+
+	it("keeps Session decisions pure and the Peer Host focused on Owner behavior", () => {
+		const projectionSources = [
+			resolve(sourceRoot, "types/owner/rpc-session-projection.type.ts"),
+			resolve(sourceRoot, "utils/rpc-session-projection.util.ts"),
+		];
+		const projectionDependencies = projectionSources.flatMap((path) =>
+			listImportSpecifiers(readFileSync(path, "utf8")),
+		);
+		const peerHostPath = resolve(
+			sourceRoot,
+			"interfaces/peer/rpc-peer-host.interface.ts",
+		);
+		const peerHostSource = readFileSync(peerHostPath, "utf8");
+		const peerHostDependencies = listImportSpecifiers(peerHostSource);
+
+		expect(projectionDependencies).not.toContain(
+			"@/interfaces/peer/rpc-peer-host.interface",
+		);
+		expect(projectionDependencies).not.toContain("@/impls/peer/rpc-peer.impl");
+		expect(peerHostDependencies).not.toContain(
+			"@/interfaces/owner/rpc-owner-publisher.interface",
+		);
+		expect(peerHostDependencies).toContain(
+			"@/types/peer/rpc-peer-call-event.type",
+		);
+		for (const forbiddenMember of [
+			"stageState",
+			"flushState",
+			"completeState",
+			"attachProtocolSession",
+			"localExposureRegistry",
+			"reserveOutgoingProtocolInvocation",
+		]) {
+			expect(peerHostSource).not.toContain(forbiddenMember);
+		}
+		expect(
+			existsSync(
+				resolve(sourceRoot, "interfaces/peer/rpc-peer-runtime.interface.ts"),
+			),
+		).toBe(false);
+	});
+
+	it("assembles the concrete Peer only through its dedicated factory", () => {
+		const peerImplementation = resolve(
+			implementationRoot,
+			"peer/rpc-peer.impl.ts",
+		);
+		const importers = listTypeScriptFiles(sourceRoot).flatMap((importer) =>
+			listImportSpecifiers(readFileSync(importer, "utf8")).some(
+				(specifier) =>
+					resolveSourceImport(importer, specifier) === peerImplementation,
+			)
+				? [packagePath(importer)]
+				: [],
+		);
+
+		expect(importers).toEqual(["src/factories/rpc-peer.factory.ts"]);
 	});
 });

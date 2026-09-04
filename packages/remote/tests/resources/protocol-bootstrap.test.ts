@@ -108,7 +108,7 @@ function createAcceptorRuntime(
 			sessionImpls.push(session as RpcSessionImpl);
 			onAdmitSession();
 			return {
-				reserveIncomingCall: () => undefined,
+				reserveIncomingCall: () => false,
 				transition: onTransition,
 				fault: (reason) => ownerFaults.push(reason),
 			};
@@ -143,7 +143,7 @@ function createConnectorRuntime(policy: IRpcProtocolRuntimePolicy): {
 		attachSession: () => {
 			attachedSessions.push(1);
 			return {
-				reserveIncomingCall: () => undefined,
+				reserveIncomingCall: () => false,
 				transition() {},
 				fault: (reason) => ownerFaults.push(reason),
 			};

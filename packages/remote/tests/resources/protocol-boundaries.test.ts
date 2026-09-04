@@ -422,11 +422,14 @@ describe("Default RPC Protocol resource boundaries", () => {
 				maxRetainedBytesTotal: 4 * mebibyte,
 			});
 			const reserve = (stringBytes: number) =>
-				session.reserveInvocation({
-					service: "example.boundary.v1",
-					method: "run",
-					args: normalizeRpcApplicationArguments(["x".repeat(stringBytes)]),
-				});
+				session.prepareInvocation(
+					{
+						service: "example.boundary.v1",
+						method: "run",
+						args: normalizeRpcApplicationArguments(["x".repeat(stringBytes)]),
+					},
+					() => undefined,
+				);
 			const first = reserve(524_028);
 			const second = reserve(524_028 + delta);
 			expect(
@@ -437,26 +440,29 @@ describe("Default RPC Protocol resource boundaries", () => {
 				second,
 				`Pending bytes ${delta === -1 ? "limit-1" : delta === 0 ? "limit" : "limit+1"}`,
 			).toEqual(delta <= 0 ? expect.any(Object) : undefined);
-			first?.release();
-			second?.release();
+			first?.cancel();
+			second?.cancel();
 			session.forceClose();
 		}
 
 		const session = createSession({ maxPendingInvocationsPerSession: 2 });
 		const reserve = () =>
-			session.reserveInvocation({
-				service: "example.boundary.v1",
-				method: "run",
-				args: normalizeRpcApplicationArguments([]),
-			});
+			session.prepareInvocation(
+				{
+					service: "example.boundary.v1",
+					method: "run",
+					args: normalizeRpcApplicationArguments([]),
+				},
+				() => undefined,
+			);
 		const limitMinusOne = reserve();
 		const limit = reserve();
 		const limitPlusOne = reserve();
 		expect(limitMinusOne, "Pending entries limit-1").toBeDefined();
 		expect(limit, "Pending entries limit").toBeDefined();
 		expect(limitPlusOne, "Pending entries limit+1").toBeUndefined();
-		limitMinusOne?.release();
-		limit?.release();
+		limitMinusOne?.cancel();
+		limit?.cancel();
 		session.forceClose();
 	});
 
@@ -464,29 +470,30 @@ describe("Default RPC Protocol resource boundaries", () => {
 		const session = createSession({ maxPendingInvocationsPerSession: 1 });
 		const finishes: unknown[] = [];
 		for (let index = 0; index < 3; index += 1) {
-			const reservation = session.reserveInvocation({
-				service: "example.pending-cancel.v1",
-				method: "run",
-				args: normalizeRpcApplicationArguments(["x".repeat(1024)]),
-			});
-			if (reservation === undefined) {
+			const invocation = session.prepareInvocation(
+				{
+					service: "example.pending-cancel.v1",
+					method: "run",
+					args: normalizeRpcApplicationArguments(["x".repeat(1024)]),
+				},
+				(outcome) => finishes.push(outcome),
+			);
+			if (invocation === undefined) {
 				throw new Error(
 					"Expected Pending Invocation capacity after cancellation.",
 				);
 			}
-			const invocation = reservation.commit({
-				finish: (outcome) => finishes.push(outcome),
-			});
 			const [entry] = session._invocations;
 			if (entry === undefined) {
 				throw new Error("Expected the committed Pending Invocation entry.");
 			}
 
-			invocation.start();
 			invocation.cancel();
 
 			expect(session._pendingInvocations).toHaveLength(0);
 			expect(entry.request).toBeUndefined();
+			expect(entry.callId).toBeUndefined();
+			expect(entry.admitted).toBe(false);
 		}
 		expect(finishes).toEqual([
 			{ type: "failed", code: "canceled" },

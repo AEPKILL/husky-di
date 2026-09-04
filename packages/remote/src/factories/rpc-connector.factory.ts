@@ -7,19 +7,16 @@
 import { RpcExceptionCodeEnum } from "@/enums/rpc-exception-code.enum";
 import { RpcStateStatusEnum } from "@/enums/rpc-state-status.enum";
 import { createRpcException } from "@/factories/rpc-exception.factory";
+import { createRpcPeer } from "@/factories/rpc-peer.factory";
 import { createRpcProtocolConnector } from "@/factories/rpc-protocol.factory";
 import { RpcRetainedBytesLedgerImpl } from "@/impls/common/rpc-retained-bytes-ledger.impl";
 import { RpcConnectorImpl } from "@/impls/owner/rpc-connector.impl";
 import { RpcHandlerSchedulerImpl } from "@/impls/owner/rpc-handler-scheduler.impl";
 import { RpcOwnerCustodyImpl } from "@/impls/owner/rpc-owner-custody.impl";
-import { RpcOwnerMutationBatchImpl } from "@/impls/owner/rpc-owner-mutation-batch.impl";
-import { RpcPeerImpl } from "@/impls/peer/rpc-peer.impl";
+import { RpcConnectorPublisherImpl } from "@/impls/owner/rpc-owner-publisher.impl";
 import type { IRpcConnector } from "@/interfaces/owner/rpc-connector.interface";
 import type { IRpcProtocolConnector } from "@/interfaces/protocol/rpc-protocol.interface";
-import type {
-	RpcConnectorOptions,
-	RpcConnectorState,
-} from "@/types/common/rpc-caller.type";
+import type { RpcConnectorOptions } from "@/types/common/rpc-caller.type";
 import { createRpcProtocolConnectorForOwner } from "@/utils/rpc-protocol-role.util";
 import {
 	createRpcConnectorRuntimePolicy,
@@ -40,7 +37,7 @@ export function createRpcConnector(
 			policy,
 			{
 				reserveRetainedBytes: (bytes) => connector?.reserveRetainedBytes(bytes),
-				attachSession: (session) => connector?.attachProtocolSession(session),
+				attachSession: (session) => connector?.attachSession(session),
 				fault: (reason, error) => connector?.protocolFault(reason, error),
 			},
 		);
@@ -55,7 +52,7 @@ export function createRpcConnector(
 	connector = new RpcConnectorImpl({
 		protocol,
 		policy,
-		mutationBatch: new RpcOwnerMutationBatchImpl<RpcConnectorState>({
+		publisher: new RpcConnectorPublisherImpl({
 			initialState: Object.freeze({ status: RpcStateStatusEnum.active }),
 		}),
 		retainedBytesLedger: new RpcRetainedBytesLedgerImpl(
@@ -68,7 +65,7 @@ export function createRpcConnector(
 			policy.maxHandlersTotal,
 			policy.maxHandlersPerSession,
 		),
-		createPeer: (peerOptions) => new RpcPeerImpl(peerOptions),
+		createPeer: createRpcPeer,
 	});
 	return connector;
 }

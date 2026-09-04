@@ -20,9 +20,9 @@ import {
 import type {
 	IRpcConnection,
 	IRpcProtocolAcceptorHost,
-	IRpcProtocolInvocationSink,
 	IRpcProtocolSession,
 	IRpcProtocolSessionHost,
+	RpcCallOutcome,
 } from "../../src/protocol";
 import {
 	RpcCallTerminalTypeEnum,
@@ -71,7 +71,7 @@ function admitEmptySession(
 	host: IRpcProtocolAcceptorHost,
 ): IRpcProtocolSessionHost {
 	const session: IRpcProtocolSession = {
-		reserveInvocation: () => undefined,
+		prepareInvocation: () => undefined,
 		forceClose() {},
 	};
 	const sessionHost = host.admitSession(session);
@@ -161,19 +161,14 @@ describe("Acceptor mutation batches", () => {
 				}),
 		});
 		admitEmptySession(host);
-		let invocationSink: IRpcProtocolInvocationSink | undefined;
+		let finishInvocation: ((outcome: RpcCallOutcome) => void) | undefined;
 		const recoveringSession: IRpcProtocolSession = {
-			reserveInvocation() {
-				return {
-					commit(sink) {
-						invocationSink = sink;
-						return { start() {}, cancel() {} };
-					},
-					release() {},
-				};
+			prepareInvocation(_request, finish) {
+				finishInvocation = finish;
+				return { start() {}, cancel() {} };
 			},
 			forceClose() {
-				invocationSink?.finish({
+				finishInvocation?.({
 					type: RpcCallTerminalTypeEnum.failed,
 					code: RpcExceptionCodeEnum.outcomeUnknown,
 				});
@@ -398,24 +393,19 @@ describe("Acceptor mutation batches", () => {
 	});
 
 	it("RPC-API-005 commits the full F snapshot before notifications and settles the close task last", async () => {
-		let invocationSink: IRpcProtocolInvocationSink | undefined;
+		let finishInvocation: ((outcome: RpcCallOutcome) => void) | undefined;
 		const { acceptor, host } = createAcceptorHarness({
 			close: () => {
-				invocationSink?.finish({
+				finishInvocation?.({
 					type: RpcCallTerminalTypeEnum.failed,
 					code: RpcExceptionCodeEnum.outcomeUnknown,
 				});
 			},
 		});
 		const session: IRpcProtocolSession = {
-			reserveInvocation() {
-				return {
-					commit(sink) {
-						invocationSink = sink;
-						return { start() {}, cancel() {} };
-					},
-					release() {},
-				};
+			prepareInvocation(_request, finish) {
+				finishInvocation = finish;
+				return { start() {}, cancel() {} };
 			},
 			forceClose() {},
 		};
@@ -568,7 +558,7 @@ describe("Acceptor mutation batches", () => {
 	});
 
 	it("RPC-API-005 RPC-SPI-011 batches a shared owner fault after closing the runtime", async () => {
-		let invocationSink: IRpcProtocolInvocationSink | undefined;
+		let finishInvocation: ((outcome: RpcCallOutcome) => void) | undefined;
 		let acceptorDuringRuntimeClose:
 			| {
 					readonly ownerStatus: string;
@@ -582,7 +572,7 @@ describe("Acceptor mutation batches", () => {
 					ownerStatus: acceptor?.state.status ?? "missing",
 					memberCount: acceptor?.peers.length ?? -1,
 				};
-				invocationSink?.finish({
+				finishInvocation?.({
 					type: RpcCallTerminalTypeEnum.failed,
 					code: RpcExceptionCodeEnum.outcomeUnknown,
 				});
@@ -590,14 +580,9 @@ describe("Acceptor mutation batches", () => {
 		});
 		acceptor = harness.acceptor;
 		const firstSession: IRpcProtocolSession = {
-			reserveInvocation() {
-				return {
-					commit(sink) {
-						invocationSink = sink;
-						return { start() {}, cancel() {} };
-					},
-					release() {},
-				};
+			prepareInvocation(_request, finish) {
+				finishInvocation = finish;
+				return { start() {}, cancel() {} };
 			},
 			forceClose() {},
 		};

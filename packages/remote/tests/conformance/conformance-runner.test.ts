@@ -56,7 +56,7 @@ describe("RPC conformance runner", () => {
 			(result) => result.status === "failed",
 		);
 		expect(failures.length).toBeGreaterThanOrEqual(2);
-		expect(reports).toHaveLength(14);
+		expect(reports).toHaveLength(15);
 		expect(failedReports).toHaveLength(failures.length);
 		expect(failedReports.map((result) => result.caseId)).toEqual(
 			failures.map((failure) => Reflect.get(failure, "caseId")),
@@ -109,7 +109,7 @@ describe("RPC conformance runner", () => {
 			report: (result) => reports.push(result),
 		});
 
-		expect(reports).toHaveLength(14);
+		expect(reports).toHaveLength(15);
 		expect(reports.every((result) => result.status === "passed")).toBe(true);
 	});
 
@@ -133,7 +133,7 @@ describe("RPC conformance runner", () => {
 			{ report: (result) => reports.push(result) },
 		);
 
-		expect(reports).toHaveLength(14);
+		expect(reports).toHaveLength(15);
 		expect(reports.every((result) => result.status === "passed")).toBe(true);
 	});
 
