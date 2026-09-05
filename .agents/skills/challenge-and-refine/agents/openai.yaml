@@ -1,0 +1,5 @@
+interface:
+  display_name: "Challenge and Refine"
+  short_description: "Finish work through an adversarial two-agent loop"
+policy:
+  allow_implicit_invocation: false

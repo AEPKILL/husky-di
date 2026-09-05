@@ -4,14 +4,12 @@
  * @created 2026-08-19 00:00:00
  */
 
+import type { RpcSessionFactory } from "@/factories/rpc-session.factory";
 import { RpcRetainedBytesLedgerImpl } from "@/impls/common/rpc-retained-bytes-ledger.impl";
 import { RpcCodecImpl } from "@/impls/protocol/rpc-codec.impl";
 import { RpcProtocolAcceptorImpl } from "@/impls/protocol/rpc-protocol-acceptor.impl";
 import { RpcProtocolConnectorImpl } from "@/impls/protocol/rpc-protocol-connector.impl";
-import {
-	type CreateRpcSessionOptions,
-	RpcSessionImpl,
-} from "@/impls/session/rpc-session.impl";
+import { RpcSessionImpl } from "@/impls/session/rpc-session.impl";
 import type {
 	IRpcProtocolAcceptor,
 	IRpcProtocolAcceptorHost,
@@ -20,8 +18,6 @@ import type {
 } from "@/interfaces/protocol/rpc-protocol.interface";
 import type { IRpcSession } from "@/interfaces/session/rpc-session.interface";
 import { createRpcSecurityCarrier } from "@/utils/protocol/rpc-base64-url-32-schema.util";
-
-export type { CreateRpcSessionOptions } from "@/impls/session/rpc-session.impl";
 
 /** Creates a fresh built-in Connector Protocol role for one owner. */
 export function createRpcProtocolConnector(
@@ -52,8 +48,10 @@ export function createRpcCounterExhaustionProtocolAcceptorForTest(
 }
 
 /** Binds built-in Session dependencies for one Protocol role. */
-export function createBuiltInRpcSessionFactory(counterExhausted: boolean) {
-	return (options: CreateRpcSessionOptions): IRpcSession =>
+export function createBuiltInRpcSessionFactory(
+	counterExhausted: boolean,
+): RpcSessionFactory {
+	return (options): IRpcSession =>
 		new RpcSessionImpl(options, {
 			codec,
 			counterExhausted,

@@ -9,11 +9,10 @@ import type { Observable, Subscription } from "rxjs";
 import { RpcAcceptorListenerStopReasonEnum } from "@/enums/rpc-acceptor-listener-stop-reason.enum";
 import { RpcCloseOutcomeEnum } from "@/enums/rpc-close-outcome.enum";
 import { RpcCloseReasonEnum } from "@/enums/rpc-close-reason.enum";
-import { RpcEventTypeEnum } from "@/enums/rpc-event-type.enum";
 import { RpcExceptionCodeEnum } from "@/enums/rpc-exception-code.enum";
 import { RpcStateStatusEnum } from "@/enums/rpc-state-status.enum";
 import { createRpcException } from "@/factories/rpc-exception.factory";
-import type { CreateRpcPeerOptions } from "@/factories/rpc-peer.factory";
+import type { RpcAcceptorSessionOwnershipFactory } from "@/factories/rpc-session-ownership.factory";
 import type { IRpcRetainedBytesLedger } from "@/interfaces/common/rpc-retained-bytes-ledger.interface";
 import type { IRpcAcceptor } from "@/interfaces/owner/rpc-acceptor.interface";
 import type { IRpcHandlerScheduler } from "@/interfaces/owner/rpc-handler-scheduler.interface";
@@ -23,8 +22,8 @@ import type {
 	RpcOwnedConnection,
 } from "@/interfaces/owner/rpc-owner-custody.interface";
 import type { IRpcAcceptorPublisher } from "@/interfaces/owner/rpc-owner-publisher.interface";
+import type { IRpcAcceptorSessionOwnership } from "@/interfaces/owner/rpc-session-ownership.interface";
 import type { IRpcPeer } from "@/interfaces/peer/rpc-peer.interface";
-import type { IRpcPeerHost } from "@/interfaces/peer/rpc-peer-host.interface";
 import type {
 	IRpcProtocolAcceptor,
 	IRpcProtocolRuntimePolicy,
@@ -32,7 +31,6 @@ import type {
 	IRpcProtocolSessionHost,
 	IRpcRetainedBytesReservation,
 	RpcProtocolFaultReason,
-	RpcProtocolSessionTransition,
 } from "@/interfaces/protocol/rpc-protocol.interface";
 import type { IRpcAcceptorAdapter } from "@/interfaces/transport/rpc-adapter.interface";
 import type { IRpcConnection } from "@/interfaces/transport/rpc-connection.interface";
@@ -42,23 +40,12 @@ import type {
 } from "@/types/common/rpc-caller.type";
 import type { RpcExposureRegistry } from "@/types/common/rpc-exposure.type";
 import type { RpcEvent } from "@/types/owner/rpc-event.type";
-import type { RpcPeerStatePublication } from "@/types/owner/rpc-owner-publication.type";
-import type {
-	RpcPeerLifecycleFact,
-	RpcSessionTerminalChange,
-} from "@/types/owner/rpc-session-projection.type";
 import type {
 	RemoteServiceDescriptor,
 	RemoteServiceImplementation,
 	RpcMethodDefinitions,
 } from "@/types/peer/remote-service-descriptor.type";
 import { installRpcExposure } from "@/utils/rpc-exposure.util";
-import {
-	isRpcSessionTerminalChange,
-	resolveRpcSessionClosure,
-	resolveRpcSessionTransition,
-} from "@/utils/rpc-session-projection.util";
-import { reserveRpcSessionRetainedBytes } from "@/utils/rpc-session-retained-bytes.util";
 import {
 	isCallable,
 	isNonNullObject,
@@ -70,7 +57,7 @@ export type CreateRpcAcceptorImplOptions = Readonly<{
 	readonly retainedBytesLedger: IRpcRetainedBytesLedger;
 	readonly custody: IRpcOwnerCustody;
 	readonly handlerScheduler: IRpcHandlerScheduler;
-	readonly createPeer: (options: CreateRpcPeerOptions) => IRpcPeerHost;
+	readonly createSessionOwnership: RpcAcceptorSessionOwnershipFactory;
 	readonly publisher: IRpcAcceptorPublisher;
 	readonly protocol: IRpcProtocolAcceptor;
 }>;
@@ -81,21 +68,14 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 	readonly #policy: IRpcProtocolRuntimePolicy;
 	readonly #retainedBytesLedger: IRpcRetainedBytesLedger;
 	readonly #ownerExposures: RpcExposureRegistry = new Map();
-	readonly #sessions = new Map<
-		IRpcProtocolSession,
-		RpcAcceptorPeerAssociation
-	>();
-	readonly #faultingSessions = new Set<IRpcProtocolSession>();
-	readonly #handlerScheduler: IRpcHandlerScheduler;
+	readonly #sessionOwnership: IRpcAcceptorSessionOwnership;
 	readonly #custody: IRpcOwnerCustody;
 	readonly #publisher: IRpcAcceptorPublisher;
-	readonly #createPeer: (options: CreateRpcPeerOptions) => IRpcPeerHost;
 	readonly #ordinaryConnectionLimit: number;
 	#overflowConnection: RpcOwnedConnection | undefined;
 	#listenerCleanupBarrier: Promise<void> | undefined;
 	#listenerAttempt: RpcAcceptorListenerAttempt | undefined;
 	#insideConnectionHandoff = false;
-	#insideOwnerFault = false;
 	#terminationTask: Promise<void> | undefined;
 	#resolveTermination: (() => void) | undefined;
 	#rejectTermination: ((error: unknown) => void) | undefined;
@@ -106,7 +86,7 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 
 	constructor(options: CreateRpcAcceptorImplOptions) {
 		const {
-			createPeer,
+			createSessionOwnership,
 			custody,
 			handlerScheduler,
 			publisher,
@@ -118,9 +98,34 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 		this.#policy = policy;
 		this.#custody = custody;
 		this.#retainedBytesLedger = retainedBytesLedger;
-		this.#handlerScheduler = handlerScheduler;
 		this.#publisher = publisher;
-		this.#createPeer = createPeer;
+		this.#sessionOwnership = createSessionOwnership({
+			publisher,
+			protocol,
+			maximumSessions: policy.maxSessions,
+			peerEnvironment: {
+				findOwnerExposure: (wireName) => this.#ownerExposures.get(wireName),
+				isOwnerActive: () =>
+					this.#terminationTask === undefined &&
+					this.state.status === RpcStateStatusEnum.active,
+				handlerScheduler,
+				maximumIncomingBytes: Math.floor(policy.maxRetainedBytesPerSession / 4),
+				reserveOwnerRetainedBytes: (bytes) => this.reserveRetainedBytes(bytes),
+			},
+			lifecycle: {
+				canAdmitSession: () =>
+					this.#terminationTask === undefined && !this.#insideConnectionHandoff,
+				ensureTermination: () => {
+					if (this.#terminationTask === undefined) {
+						this.#createTerminationTask();
+					}
+				},
+				clearGraceTimer: () => this.#clearGraceTimer(),
+				abortListener: () => this.#abortListener(),
+				continueGracefulShutdown: () => this.#continueGracefulShutdown(),
+				startCleanup: (finalState) => this.#startCleanup(finalState),
+			},
+		});
 		this.#ordinaryConnectionLimit =
 			policy.maxSessions + 2 * policy.maxHandshakes;
 		this.state$ = publisher.state$;
@@ -162,9 +167,7 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 			implementation,
 			(wireName) =>
 				this.#ownerExposures.has(wireName) ||
-				[...this.#sessions.values()].some(({ host }) =>
-					host.hasLocalExposure(wireName),
-				),
+				this.#sessionOwnership.hasLocalExposure(wireName),
 			(exposure) => {
 				this.#ownerExposures.set(exposure.wireName, exposure);
 				let active = true;
@@ -476,83 +479,7 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 	}
 
 	#beginGracefulShutdown(): void {
-		this.#publisher.enqueue(() => {
-			if (this.state.status !== RpcStateStatusEnum.active) {
-				return undefined;
-			}
-			const peerEvents: RpcEvent[] = [];
-			const peerStates: RpcPeerStatePublication[] = [];
-			const terminalPeers: IRpcPeer[] = [];
-			const terminalSessions: IRpcProtocolSession[] = [];
-			const terminalAssociations: RpcAcceptorPeerAssociation[] = [];
-			for (const [session, association] of this.#sessions) {
-				const peer = association.host.peer;
-				if (peer.state.status === RpcStateStatusEnum.connected) {
-					peerStates.push({
-						peer,
-						state: {
-							status: RpcStateStatusEnum.draining,
-							reason: RpcCloseReasonEnum.gracefulShutdown,
-						},
-					});
-					peerEvents.push({
-						type: RpcEventTypeEnum.peerDraining,
-						peer,
-						reason: RpcCloseReasonEnum.gracefulShutdown,
-					});
-				} else if (peer.state.status === RpcStateStatusEnum.recovering) {
-					peerStates.push({
-						peer,
-						state: {
-							status: RpcStateStatusEnum.closed,
-							outcome: RpcCloseOutcomeEnum.normal,
-							reason: RpcCloseReasonEnum.forcedClose,
-						},
-						terminal: true,
-					});
-					terminalSessions.push(session);
-					terminalAssociations.push(association);
-					terminalPeers.push(peer);
-					peerEvents.push({
-						type: RpcEventTypeEnum.peerClosed,
-						peer,
-						outcome: RpcCloseOutcomeEnum.normal,
-						reason: RpcCloseReasonEnum.forcedClose,
-					});
-				}
-			}
-			const terminalSet = new Set<IRpcPeer>(terminalPeers);
-			const peers =
-				terminalPeers.length === 0
-					? undefined
-					: this.#publisher.peers.filter((peer) => !terminalSet.has(peer));
-			return {
-				publication: {
-					state: { status: RpcStateStatusEnum.draining },
-					peers,
-					peerStates,
-					events: [{ type: RpcEventTypeEnum.ownerDraining }, ...peerEvents],
-				},
-				apply: (commitSnapshots) => {
-					for (const session of terminalSessions) {
-						this.#faultingSessions.add(session);
-						try {
-							session.forceClose();
-						} catch {
-							// Graceful cutoff still locally forces a recovering Session.
-						} finally {
-							this.#faultingSessions.delete(session);
-						}
-					}
-					for (const association of terminalAssociations) {
-						this.#releaseSession(association);
-					}
-					commitSnapshots();
-					this.#abortListener();
-					return () => this.#continueGracefulShutdown();
-				},
-			};
-		});
+		this.#sessionOwnership.beginGracefulShutdown();
 	}
 
 	#continueGracefulShutdown(): void {
@@ -581,6 +508,14 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 		);
 	}
 
+	#clearGraceTimer(): void {
+		if (this.#graceTimer === undefined) {
+			return;
+		}
+		clearTimeout(this.#graceTimer);
+		this.#graceTimer = undefined;
+	}
+
 	#beginClosing(
 		reason:
 			| RpcCloseReasonEnum.gracefulShutdown
@@ -588,120 +523,7 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 			| RpcCloseReasonEnum.shutdownDeadline,
 		forced: boolean,
 	): void {
-		this.#publisher.enqueue(() => {
-			// Closing is idempotent once the owner is closing or closed.
-			const terminationAlreadyStarted =
-				this.state.status === RpcStateStatusEnum.closing ||
-				this.state.status === RpcStateStatusEnum.closed;
-			if (terminationAlreadyStarted) {
-				return undefined;
-			}
-			const terminalAssociations = [...this.#sessions.values()];
-			const terminalSessions = terminalAssociations.flatMap(({ sessionRef }) =>
-				sessionRef.current === undefined ? [] : [sessionRef.current],
-			);
-			const peerClosures = this.#createRemainingPeerMutations(reason);
-			const finalState = Object.freeze({
-				status: RpcStateStatusEnum.closed as const,
-				outcome: RpcCloseOutcomeEnum.normal as const,
-				reason,
-			});
-			return {
-				publication: {
-					state: { status: RpcStateStatusEnum.closing },
-					peers: peerClosures.peersChanged ? [] : undefined,
-					peerStates: peerClosures.peerStates,
-					events: [
-						...peerClosures.events,
-						{ type: RpcEventTypeEnum.ownerClosing },
-					],
-				},
-				apply: (commitSnapshots) => {
-					if (this.#graceTimer !== undefined) {
-						clearTimeout(this.#graceTimer);
-						this.#graceTimer = undefined;
-					}
-					for (const association of terminalAssociations) {
-						this.#releaseSession(association);
-					}
-					commitSnapshots();
-					this.#abortListener();
-					if (forced) {
-						for (const session of terminalSessions) {
-							this.#faultingSessions.add(session);
-						}
-						try {
-							this.#protocol.close();
-						} catch {
-							// Only cleanup failure rejects the shared termination task.
-						} finally {
-							for (const session of terminalSessions) {
-								this.#faultingSessions.delete(session);
-							}
-						}
-					}
-					return () => this.#startCleanup(finalState);
-				},
-			};
-		});
-	}
-
-	#createRemainingPeerMutations(
-		reason:
-			| RpcCloseReasonEnum.gracefulShutdown
-			| RpcCloseReasonEnum.forcedClose
-			| RpcCloseReasonEnum.shutdownDeadline,
-	): {
-		readonly events: readonly RpcEvent[];
-		readonly peerStates: readonly RpcPeerStatePublication[];
-		readonly peersChanged: boolean;
-	} {
-		const closeEvents: RpcEvent[] = [];
-		const peerStates: RpcPeerStatePublication[] = [];
-		const peersChanged = this.#publisher.peers.length > 0;
-		for (const { host } of this.#sessions.values()) {
-			const peer = host.peer;
-			// Counter-draining peers remain failed when graceful owner shutdown wins.
-			const counterDrainFailedDuringShutdown =
-				reason === RpcCloseReasonEnum.gracefulShutdown &&
-				peer.state.status === RpcStateStatusEnum.draining &&
-				peer.state.reason === RpcCloseReasonEnum.counterExhaustion;
-			if (counterDrainFailedDuringShutdown) {
-				peerStates.push({
-					peer,
-					state: {
-						status: RpcStateStatusEnum.closed,
-						outcome: RpcCloseOutcomeEnum.failed,
-						reason: RpcCloseReasonEnum.counterExhaustion,
-						error: createRpcException(RpcExceptionCodeEnum.unavailable),
-					},
-					terminal: true,
-				});
-				closeEvents.push({
-					type: RpcEventTypeEnum.peerClosed,
-					peer,
-					outcome: RpcCloseOutcomeEnum.failed,
-					reason: RpcCloseReasonEnum.counterExhaustion,
-				});
-			} else {
-				peerStates.push({
-					peer,
-					state: {
-						status: RpcStateStatusEnum.closed,
-						outcome: RpcCloseOutcomeEnum.normal,
-						reason,
-					},
-					terminal: true,
-				});
-				closeEvents.push({
-					type: RpcEventTypeEnum.peerClosed,
-					peer,
-					outcome: RpcCloseOutcomeEnum.normal,
-					reason,
-				});
-			}
-		}
-		return { events: closeEvents, peerStates, peersChanged };
+		this.#sessionOwnership.beginClosing(reason, forced);
 	}
 
 	#abortListener(): void {
@@ -787,323 +609,12 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 	admitProtocolSession(
 		session: IRpcProtocolSession,
 	): IRpcProtocolSessionHost | undefined {
-		// Session admission requires active ownership, capacity, uniqueness, and a valid SPI object.
-		const cannotAdmitSession =
-			this.state.status !== RpcStateStatusEnum.active ||
-			this.#terminationTask !== undefined ||
-			this.#publisher.processing ||
-			this.#insideConnectionHandoff ||
-			this.#insideOwnerFault ||
-			this.#sessions.size >= this.#policy.maxSessions ||
-			this.#sessions.has(session) ||
-			!isProtocolSession(session);
-		if (cannotAdmitSession) {
-			return undefined;
-		}
-
-		let admitted: RpcAcceptorPeerAssociation | undefined;
-		this.#publisher.enqueue(() => {
-			const admissionBecameStale =
-				this.state.status !== RpcStateStatusEnum.active ||
-				this.#terminationTask !== undefined ||
-				this.#insideOwnerFault ||
-				this.#sessions.size >= this.#policy.maxSessions ||
-				this.#sessions.has(session);
-			if (admissionBecameStale) {
-				return undefined;
-			}
-			const sessionRef: RpcAcceptorSessionRef = { current: undefined };
-			const host = this.#publisher.registerPeer(
-				{ status: RpcStateStatusEnum.connected },
-				({ readState, state$ }) =>
-					this.#createPeer({
-						readState,
-						state$,
-						getSession: () => sessionRef.current,
-						findOwnerExposure: (wireName) => this.#ownerExposures.get(wireName),
-						isOwnerActive: () =>
-							this.#terminationTask === undefined &&
-							this.state.status === RpcStateStatusEnum.active,
-						callEventSink: this.#publisher.callEventSink,
-						onProtocolFault: (error) => {
-							const retainedSession = sessionRef.current;
-							if (retainedSession !== undefined) {
-								this.#faultSession(
-									retainedSession,
-									RpcCloseReasonEnum.protocolFault,
-									error,
-								);
-							}
-						},
-						handlerScheduler: this.#handlerScheduler,
-						maximumIncomingBytes: Math.floor(
-							this.#policy.maxRetainedBytesPerSession / 4,
-						),
-						reserveRetainedBytes: (bytes) =>
-							reserveRpcSessionRetainedBytes(
-								sessionRef.current,
-								(ownerBytes) => this.reserveRetainedBytes(ownerBytes),
-								bytes,
-							),
-					}),
-			);
-			const association: RpcAcceptorPeerAssociation = { host, sessionRef };
-			const peer = host.peer;
-			return {
-				publication: {
-					peers: [...this.#publisher.peers, peer],
-					events: [{ type: RpcEventTypeEnum.peerOpened, peer }],
-				},
-				apply: (commitSnapshots) => {
-					sessionRef.current = session;
-					this.#sessions.set(session, association);
-					admitted = association;
-					commitSnapshots();
-					return undefined;
-				},
-			};
-		});
-		if (admitted === undefined) {
-			return undefined;
-		}
-		const association = admitted;
-		return Object.freeze<IRpcProtocolSessionHost>({
-			reserveIncomingCall: (request, consume) =>
-				association.host.reserveIncomingCall(request, consume),
-			transition: (transition) => this.#transitionSession(session, transition),
-			fault: (reason, error) => this.#faultSession(session, reason, error),
-		});
-	}
-
-	#faultSession(
-		session: IRpcProtocolSession,
-		reason: RpcProtocolFaultReason,
-		error: Error,
-	): void {
-		if (this.#faultingSessions.has(session)) {
-			return;
-		}
-		this.#faultingSessions.add(session);
-		const releaseFaultFence = (): void => {
-			this.#faultingSessions.delete(session);
-		};
-		const forceSessionClosed = (): void => {
-			try {
-				session.forceClose();
-			} catch {
-				// The original Session fault remains authoritative.
-			}
-		};
-		this.#closePeerFromSession(
-			session,
-			resolveRpcSessionClosure(reason, error),
-			forceSessionClosed,
-			releaseFaultFence,
-		);
-	}
-
-	#transitionSession(
-		session: IRpcProtocolSession,
-		transition: RpcProtocolSessionTransition,
-	): void {
-		this.#publisher.enqueue(() => {
-			if (this.#insideOwnerFault || this.#faultingSessions.has(session)) {
-				return undefined;
-			}
-			// Terminal owners ignore all later Session transitions.
-			const ownerIsTerminal =
-				this.state.status === RpcStateStatusEnum.closing ||
-				this.state.status === RpcStateStatusEnum.closed;
-			if (ownerIsTerminal) {
-				return undefined;
-			}
-			const association = this.#sessions.get(session);
-			if (association === undefined) {
-				this.#faultSession(
-					session,
-					RpcCloseReasonEnum.protocolFault,
-					new Error("Protocol repeated a terminal Session transition."),
-				);
-				return undefined;
-			}
-			const peer = association.host.peer;
-			const decision = resolveRpcSessionTransition(
-				this.state.status,
-				peer.state,
-				transition,
-			);
-			if (decision.kind === "fault") {
-				this.#faultSession(session, decision.reason, decision.error);
-				return undefined;
-			}
-			if (isRpcSessionTerminalChange(decision)) {
-				this.#closePeerFromSession(session, decision);
-				return undefined;
-			}
-			return {
-				publication: {
-					peerStates: [{ peer, state: decision.state }],
-					events: [this.#createPeerLifecycleEvent(peer, decision.lifecycle)],
-				},
-			};
-		});
-	}
-
-	#closePeerFromSession(
-		session: IRpcProtocolSession,
-		change: RpcSessionTerminalChange,
-		beforeSnapshots?: () => void,
-		continueAfterClose?: () => void,
-	): void {
-		this.#publisher.enqueue(() => {
-			const association = this.#sessions.get(session);
-			if (
-				association === undefined ||
-				association.host.peer.state.status === RpcStateStatusEnum.closed
-			) {
-				if (beforeSnapshots === undefined && continueAfterClose === undefined) {
-					return undefined;
-				}
-				return {
-					publication: {},
-					apply: (commitSnapshots) => {
-						beforeSnapshots?.();
-						commitSnapshots();
-						return continueAfterClose;
-					},
-				};
-			}
-			const peer = association.host.peer;
-			return {
-				publication: {
-					peers: this.#publisher.peers.filter(
-						(candidate) => candidate !== peer,
-					),
-					peerStates: [{ peer, state: change.state, terminal: true }],
-					events: [this.#createPeerLifecycleEvent(peer, change.lifecycle)],
-				},
-				apply: (commitSnapshots) => {
-					beforeSnapshots?.();
-					this.#releaseSession(association);
-					commitSnapshots();
-					return continueAfterClose;
-				},
-			};
-		});
-	}
-
-	#createPeerLifecycleEvent(
-		peer: IRpcPeer,
-		lifecycle: RpcPeerLifecycleFact,
-	): RpcEvent {
-		return { ...lifecycle, peer };
+		return this.#sessionOwnership.admit(session);
 	}
 
 	/** Package-private shared Protocol fault port. */
 	protocolFault(reason: RpcProtocolFaultReason, error: Error): void {
-		// Terminal owners ignore faults that can no longer affect live state.
-		const ownerIsTerminal =
-			this.#insideOwnerFault ||
-			this.state.status === RpcStateStatusEnum.closing ||
-			this.state.status === RpcStateStatusEnum.closed;
-		if (ownerIsTerminal) {
-			return;
-		}
-		if (this.#terminationTask === undefined) {
-			this.#createTerminationTask();
-		}
-		const faultError = createRpcException(RpcExceptionCodeEnum.protocol, error);
-		const fencedSessions = new Set(this.#sessions.keys());
-		for (const session of fencedSessions) {
-			this.#faultingSessions.add(session);
-		}
-		this.#insideOwnerFault = true;
-		const releaseFaultFence = (): void => {
-			this.#insideOwnerFault = false;
-			for (const session of fencedSessions) {
-				this.#faultingSessions.delete(session);
-			}
-		};
-		this.#publisher.enqueue(() => {
-			const faultBecameStale =
-				this.state.status === RpcStateStatusEnum.closing ||
-				this.state.status === RpcStateStatusEnum.closed;
-			if (faultBecameStale) {
-				releaseFaultFence();
-				return undefined;
-			}
-			const terminalAssociations = [...this.#sessions.values()];
-			const terminalSessions = terminalAssociations.flatMap(({ sessionRef }) =>
-				sessionRef.current === undefined ? [] : [sessionRef.current],
-			);
-			const terminalPeers = terminalAssociations.map(({ host }) => host.peer);
-			for (const session of terminalSessions) {
-				fencedSessions.add(session);
-				this.#faultingSessions.add(session);
-			}
-			const finalState = Object.freeze<RpcAcceptorClosedState>({
-				status: RpcStateStatusEnum.closed,
-				outcome: RpcCloseOutcomeEnum.failed,
-				reason,
-				error: faultError,
-			});
-			return {
-				publication: {
-					state: { status: RpcStateStatusEnum.closing },
-					peers: this.#publisher.peers.length > 0 ? [] : undefined,
-					peerStates: terminalPeers.map((peer) => ({
-						peer,
-						state: {
-							status: RpcStateStatusEnum.closed,
-							outcome: RpcCloseOutcomeEnum.failed,
-							reason,
-							error: faultError,
-						},
-						terminal: true,
-					})),
-					events: [
-						...terminalPeers.map((peer) => ({
-							type: RpcEventTypeEnum.peerClosed as const,
-							peer,
-							outcome: RpcCloseOutcomeEnum.failed as const,
-							reason,
-						})),
-						{ type: RpcEventTypeEnum.ownerClosing },
-					],
-				},
-				apply: (commitSnapshots) => {
-					if (this.#graceTimer !== undefined) {
-						clearTimeout(this.#graceTimer);
-						this.#graceTimer = undefined;
-					}
-					this.#abortListener();
-					try {
-						this.#protocol.close();
-					} catch {
-						// The original shared Protocol fault remains authoritative.
-					}
-					for (const association of terminalAssociations) {
-						this.#releaseSession(association);
-					}
-					commitSnapshots();
-					return () => {
-						try {
-							this.#startCleanup(finalState);
-						} finally {
-							releaseFaultFence();
-						}
-					};
-				},
-			};
-		});
-	}
-
-	#releaseSession(association: RpcAcceptorPeerAssociation): void {
-		const session = association.sessionRef.current;
-		if (session !== undefined && this.#sessions.get(session) === association) {
-			this.#sessions.delete(session);
-		}
-		association.sessionRef.current = undefined;
+		this.#sessionOwnership.protocolFault(reason, error);
 	}
 }
 
@@ -1120,27 +631,7 @@ interface RpcAcceptorListenerAttempt {
 	cleanupBarrier?: Promise<void>;
 }
 
-interface RpcAcceptorPeerAssociation {
-	readonly host: IRpcPeerHost;
-	readonly sessionRef: RpcAcceptorSessionRef;
-}
-
-interface RpcAcceptorSessionRef {
-	current: IRpcProtocolSession | undefined;
-}
-
 type RpcAcceptorClosedState = Extract<
 	RpcAcceptorState,
 	{ readonly status: RpcStateStatusEnum.closed }
 >;
-
-function isProtocolSession(value: unknown): value is IRpcProtocolSession {
-	if (!isNonNullObject(value)) {
-		return false;
-	}
-	const session = value as object;
-	return (
-		isCallable(Reflect.get(session, "prepareInvocation")) &&
-		isCallable(Reflect.get(session, "forceClose"))
-	);
-}

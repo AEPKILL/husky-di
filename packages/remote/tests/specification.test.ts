@@ -1111,6 +1111,38 @@ describe("cold Topology Owner factories", () => {
 			expect.objectContaining({ code: "protocol" }),
 		);
 	});
+
+	it("RPC-API-001 keeps Protocol construction violations sticky through role validation", () => {
+		let connectorCaughtHostFailure = false;
+		const catchingConnectorFactory: RpcProtocolConnectorFactory = (host) => {
+			try {
+				host.reserveRetainedBytes(1);
+			} catch {
+				connectorCaughtHostFailure = true;
+			}
+			return createRpcProtocolConnector(host);
+		};
+		expect(() =>
+			createRpcConnector({ protocolFactory: catchingConnectorFactory }),
+		).toThrow(expect.objectContaining({ code: RpcExceptionCodeEnum.protocol }));
+		expect(connectorCaughtHostFailure).toBe(true);
+
+		let acceptorValidationRead = false;
+		const proxyAcceptorFactory: RpcProtocolAcceptorFactory = (host) =>
+			new Proxy(createRpcProtocolAcceptor(host), {
+				get(target, property, receiver) {
+					if (property === "accept") {
+						acceptorValidationRead = true;
+						host.admitSession({} as IRpcProtocolSession);
+					}
+					return Reflect.get(target, property, receiver);
+				},
+			});
+		expect(() =>
+			createRpcAcceptor({ protocolFactory: proxyAcceptorFactory }),
+		).toThrow(expect.objectContaining({ code: RpcExceptionCodeEnum.protocol }));
+		expect(acceptorValidationRead).toBe(true);
+	});
 });
 
 describe("Default Protocol aggregate retained capacity", () => {

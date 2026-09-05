@@ -57,12 +57,12 @@ import {
 	unregisterRpcSessionRetainedBytes,
 } from "@/utils/rpc-session-retained-bytes.util";
 
-export type CreateRpcSessionOptions = Readonly<{
+export type CreateRpcSessionOptions = {
 	readonly host: IRpcProtocolHost;
 	readonly sessionId: string;
 	readonly resumeToken: string;
 	readonly onTerminal: () => void;
-}>;
+};
 
 /** Retains one Session Incarnation independently from its current Connection. */
 export class RpcSessionImpl implements IRpcSession {
