@@ -25,6 +25,32 @@ test("RPC-PKG-003 keeps the built-in Protocol private", () => {
 	// @ts-expect-error RPC-PKG-003 keeps the built-in Acceptor role private.
 	type MissingAcceptorRole = PublicRemote.RpcProtocolAcceptorImpl;
 	void (null as unknown as MissingAcceptorRole);
+
+	// @ts-expect-error Framework call lifecycle is a private collaborator.
+	type MissingCallLifecycle = PublicRemote.IRpcPeerCallLifecycle;
+	void (null as unknown as MissingCallLifecycle);
+
+	type MissingCallLifecycleFactory =
+		// @ts-expect-error The Protocol extension surface does not expose Framework assembly.
+		import("../../src/protocol").RpcPeerCallLifecycleFactory;
+	void (null as unknown as MissingCallLifecycleFactory);
+
+	// @ts-expect-error Framework call implementation remains private.
+	type MissingCallLifecycleImpl = PublicRemote.RpcPeerCallLifecycleImpl;
+	void (null as unknown as MissingCallLifecycleImpl);
+
+	// @ts-expect-error Session retention is a private collaborator.
+	type MissingCallRetention = PublicRemote.IRpcSessionCallRetention;
+	void (null as unknown as MissingCallRetention);
+
+	type MissingCallRetentionFactory =
+		// @ts-expect-error Protocol extensions do not expose Default Protocol retention assembly.
+		import("../../src/protocol").RpcSessionCallRetentionFactory;
+	void (null as unknown as MissingCallRetentionFactory);
+
+	// @ts-expect-error Default Protocol retention implementation remains private.
+	type MissingCallRetentionImpl = PublicRemote.RpcSessionCallRetentionImpl;
+	void (null as unknown as MissingCallRetentionImpl);
 });
 
 test("RPC-PKG-008 RPC-SPI-006 exposes only atomic prepare and scoped incoming call phases", () => {

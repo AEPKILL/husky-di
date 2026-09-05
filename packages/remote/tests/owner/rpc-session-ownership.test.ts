@@ -11,7 +11,10 @@ import { RpcCloseReasonEnum } from "../../src/enums/rpc-close-reason.enum";
 import { RpcEventTypeEnum } from "../../src/enums/rpc-event-type.enum";
 import { RpcExceptionCodeEnum } from "../../src/enums/rpc-exception-code.enum";
 import { RpcStateStatusEnum } from "../../src/enums/rpc-state-status.enum";
-import type { RpcPeerFactory } from "../../src/factories/rpc-peer.factory";
+import {
+	createRpcPeer,
+	type RpcPeerFactory,
+} from "../../src/factories/rpc-peer.factory";
 import {
 	RpcAcceptorPublisherImpl,
 	RpcConnectorPublisherImpl,
@@ -20,7 +23,6 @@ import {
 	RpcAcceptorSessionOwnershipImpl,
 	RpcConnectorSessionOwnershipImpl,
 } from "../../src/impls/owner/rpc-session-ownership.impl";
-import { RpcPeerImpl } from "../../src/impls/peer/rpc-peer.impl";
 import type {
 	IRpcAcceptorSessionOwnership,
 	IRpcConnectorSessionOwnership,
@@ -70,15 +72,7 @@ function createPeerFactory(
 ): RpcPeerFactory {
 	return (options): IRpcPeerHost => {
 		constructions.push(options);
-		const peer = new RpcPeerImpl(options);
-		return Object.freeze({
-			peer,
-			reserveIncomingCall: (
-				request: Parameters<IRpcPeerHost["reserveIncomingCall"]>[0],
-				consume: Parameters<IRpcPeerHost["reserveIncomingCall"]>[1],
-			) => peer.reserveIncomingCall(request, consume),
-			hasLocalExposure: (wireName: string) => peer.hasLocalExposure(wireName),
-		});
+		return createRpcPeer(options);
 	};
 }
 

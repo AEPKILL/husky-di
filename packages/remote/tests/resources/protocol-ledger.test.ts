@@ -6,6 +6,7 @@
 
 import { createServiceIdentifier } from "@husky-di/core";
 import { describe, expect, it, vi } from "vitest";
+import { RPC_PROTECTED_SESSION_BYTES } from "../../src/constants/protocol/rpc-profile.const";
 import { RpcCallTerminalTypeEnum } from "../../src/enums/protocol/rpc-call-terminal-type.enum";
 import { RpcIncomingCallKindEnum } from "../../src/enums/protocol/rpc-incoming-call-kind.enum";
 import { RpcWireRecordKindEnum } from "../../src/enums/protocol/rpc-wire-record-kind.enum";
@@ -191,18 +192,25 @@ describe("Default RPC Protocol retained ledger", () => {
 		const entry = harness.session._outgoingCalls.get("1");
 		expect(entry).toBeDefined();
 		expect(entry?.request).toBeUndefined();
-		expect(harness.session._replay.has(1)).toBe(true);
+		const remainingCapacity =
+			harness.session._host.policy.maxRetainedBytesPerSession -
+			RPC_PROTECTED_SESSION_BYTES;
+		expect(
+			harness.session.reserveRetainedBytes(remainingCapacity),
+		).toBeUndefined();
 		harness.receive(
 			codec.encode({ kind: RpcWireRecordKindEnum.ack, ackThrough: 1 }),
 		);
-		expect(harness.session._replay.has(1)).toBe(false);
+		const reclaimed = harness.session.reserveRetainedBytes(remainingCapacity);
+		expect(reclaimed).toBeDefined();
+		reclaimed?.release();
 		expect(harness.session._outgoingCalls.get("1")).toBe(entry);
 		expect(entry?.request).toBeUndefined();
 
 		harness.session.forceClose();
 	});
 
-	it("RPC-LEDGER-005 retains terminal identity without the finished Framework call handle", async () => {
+	it("RPC-LEDGER-005 terminal ACK and Session teardown cannot finish Framework work again", async () => {
 		const harness = createRpcDirectSessionHarness();
 		const finishes: unknown[] = [];
 		harness.session._sessionHost = {
@@ -231,16 +239,12 @@ describe("Default RPC Protocol retained ledger", () => {
 		});
 		await vi.waitFor(() => expect(harness.sent).toHaveLength(1));
 
-		const entry = harness.session._incomingCalls.get("1");
-		expect(entry).toMatchObject({
-			callId: "1",
-			terminalSelected: true,
-			terminalSequence: 1,
-			call: undefined,
-		});
-		expect(entry).not.toHaveProperty("handlerCall");
 		expect(finishes).toEqual([{ type: RpcCallTerminalTypeEnum.returnedVoid }]);
+		harness.receive(
+			codec.encode({ kind: RpcWireRecordKindEnum.ack, ackThrough: 1 }),
+		);
 		harness.session.forceClose();
+		expect(finishes).toEqual([{ type: RpcCallTerminalTypeEnum.returnedVoid }]);
 	});
 
 	it("RPC-ACK-007 removes newly acknowledged entries from an in-progress replay barrier", async () => {
@@ -268,7 +272,18 @@ describe("Default RPC Protocol retained ledger", () => {
 		await Promise.resolve();
 		await Promise.resolve();
 
-		expect(session._replayBarrier).toEqual([]);
+		const next = session.prepareInvocation(
+			{
+				service: "example.after-replay.v1",
+				method: "run",
+				args: normalizeRpcApplicationArguments([]),
+			},
+			() => undefined,
+		);
+		expect(next).toBeDefined();
+		next?.start();
+		await vi.waitFor(() => expect(harness.sent).toHaveLength(5));
+		expect(harness.sent.slice(3).map((record) => record.seq)).toEqual([1, 4]);
 		expect(harness.faults).toEqual([]);
 
 		session.forceClose();

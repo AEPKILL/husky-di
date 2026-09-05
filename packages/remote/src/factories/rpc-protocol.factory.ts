@@ -5,6 +5,7 @@
  */
 
 import type { RpcSessionFactory } from "@/factories/rpc-session.factory";
+import { createRpcSessionCallRetention } from "@/factories/rpc-session-call-retention.factory";
 import { RpcRetainedBytesLedgerImpl } from "@/impls/common/rpc-retained-bytes-ledger.impl";
 import { RpcCodecImpl } from "@/impls/protocol/rpc-codec.impl";
 import { RpcProtocolAcceptorImpl } from "@/impls/protocol/rpc-protocol-acceptor.impl";
@@ -54,6 +55,7 @@ export function createBuiltInRpcSessionFactory(
 	return (options): IRpcSession =>
 		new RpcSessionImpl(options, {
 			codec,
+			createCallRetention: createRpcSessionCallRetention,
 			counterExhausted,
 			retainedBytesLedger: new RpcRetainedBytesLedgerImpl(
 				options.host.policy.maxRetainedBytesPerSession,

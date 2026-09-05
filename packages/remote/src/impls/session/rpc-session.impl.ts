@@ -23,13 +23,11 @@ import type { IRpcCodec } from "@/interfaces/protocol/rpc-codec.interface";
 import type {
 	IRpcProtocolCallRequest,
 	IRpcProtocolHost,
-	IRpcProtocolIncomingCall,
 	IRpcProtocolInvocation,
 	IRpcProtocolSessionHost,
 	IRpcRetainedBytesReservation,
 	RpcCallOutcome,
 	RpcHandlerOutcome,
-	RpcIncomingTerminal,
 } from "@/interfaces/protocol/rpc-protocol.interface";
 import type {
 	IRpcBindingPlan,
@@ -41,6 +39,13 @@ import type {
 	RpcResumeDecision,
 	RpcResumeOutcome,
 } from "@/interfaces/session/rpc-session.interface";
+import type {
+	IRpcReplayReservation,
+	IRpcRetainedIncomingCall,
+	IRpcRetainedTerminal,
+	IRpcSessionCallRetention,
+	RpcSessionCallRetentionFactory,
+} from "@/interfaces/session/rpc-session-call-retention.interface";
 import type {
 	RpcActiveRecord,
 	RpcCallMessage,
@@ -92,15 +97,7 @@ export class RpcSessionImpl implements IRpcSession {
 	readonly _invocations = new Set<IRpcInvocationEntry>();
 	readonly _pendingInvocations: IRpcInvocationEntry[] = [];
 	readonly _outgoingCalls = new Map<string, IRpcInvocationEntry>();
-	readonly _incomingCalls = new Map<string, IRpcIncomingEntry>();
-	readonly _replay = new Map<number, IRpcReplayEntry>();
-	_replayBytes = 0;
-	_ordinaryReplayCount = 0;
-	_terminalReplayCount = 0;
-	_terminalPayloadCount = 0;
-	_terminalReplayBytes = 0;
-	_cancelReplayCount = 0;
-	_replayBarrier: number[] = [];
+	readonly _callRetention: IRpcSessionCallRetention;
 	readonly _controlQueue: IRpcQueuedSemantic[] = [];
 	_nextSequencedLane: "control" | "data" = "control";
 	_ackDirty = false;
@@ -131,6 +128,7 @@ export class RpcSessionImpl implements IRpcSession {
 		const { host, onTerminal, resumeToken, sessionId } = options;
 		const {
 			codec,
+			createCallRetention,
 			counterExhausted = false,
 			retainedBytesLedger,
 		} = dependencies;
@@ -150,6 +148,11 @@ export class RpcSessionImpl implements IRpcSession {
 		);
 		this._sessionId = sessionId;
 		this._codec = codec;
+		this._callRetention = createCallRetention({
+			codec,
+			policy: host.policy,
+			reserveRetainedBytes: (bytes) => this.reserveRetainedBytes(bytes),
+		});
 		this._resumeToken = resumeToken;
 		this._onTerminal = onTerminal;
 		if (counterExhausted) {
@@ -450,10 +453,8 @@ export class RpcSessionImpl implements IRpcSession {
 			this._highestAcceptedResumeAttempt = prepared.resumeAttempt as number;
 		}
 		this._bindingEpoch = prepared.nextBindingEpoch;
-		this._applyAck(prepared.peerReceivedThrough, false);
-		this._replayBarrier = [...this._replay.keys()].filter(
-			(sequence) => sequence > prepared.peerReceivedThrough,
-		);
+		this._peerReceivedThrough = prepared.peerReceivedThrough;
+		this._callRetention.resumeReplay(prepared.peerReceivedThrough);
 		this._binding = binding;
 		if (prepared.kind === "responder-resume") {
 			this._cancelRecoveryDeadline();
@@ -830,7 +831,7 @@ export class RpcSessionImpl implements IRpcSession {
 		if (sessionHost === undefined) {
 			throw new Error("Default RPC Session has no Framework host.");
 		}
-		if (this._draining || this._incomingCalls.size >= 256) {
+		if (this._draining || this._callRetention.incomingCount >= 256) {
 			this._highestIncomingCallOrdinal = ordinal;
 			this._queueError(message.callId, RpcExceptionCodeEnum.unavailable);
 			return;
@@ -844,41 +845,31 @@ export class RpcSessionImpl implements IRpcSession {
 			},
 			(reservation) => {
 				if (reservation.kind === RpcIncomingCallKindEnum.unknown) {
-					const entry: IRpcIncomingEntry = {
-						callId: message.callId,
-						terminalSelected: true,
-					};
-					// The Session placeholder precedes Framework commit and its observable event.
-					this._incomingCalls.set(message.callId, entry);
-					const incoming = reservation.commit();
-					entry.call = incoming;
-					if (this._closed) {
-						incoming.finish({
-							type: RpcCallTerminalTypeEnum.failed,
-							code: reservation.code,
-						});
-						return undefined;
-					}
-					this._finishIncomingCall(entry, {
+					const terminal = {
 						type: RpcCallTerminalTypeEnum.failed,
 						code: reservation.code,
-					});
-					this._queueError(message.callId, reservation.code);
+					} as const;
+					const entry = this._callRetention.retainIncoming(
+						message.callId,
+						terminal,
+					);
+					// The retained identity precedes Framework commit and its observable event.
+					entry.attach(reservation.commit());
+					const completion = entry.selectCompletion(terminal);
+					if (completion !== undefined) {
+						completion.publish();
+						this._queueRetainedTerminal(completion);
+					}
 					return undefined;
 				}
 
-				const entry: IRpcIncomingEntry = {
-					callId: message.callId,
-					terminalSelected: false,
-				};
-				// The Session placeholder precedes Framework commit and Handler scheduling.
-				this._incomingCalls.set(message.callId, entry);
+				const entry = this._callRetention.retainIncoming(message.callId, {
+					type: RpcCallTerminalTypeEnum.sessionTerminated,
+				});
+				// The retained identity precedes Framework commit and Handler scheduling.
 				const incoming = reservation.commit();
-				entry.call = incoming;
+				entry.attach(incoming);
 				if (this._closed) {
-					incoming.finish({
-						type: RpcCallTerminalTypeEnum.sessionTerminated,
-					});
 					return undefined;
 				}
 				void incoming.handlerOutcome.then(
@@ -893,31 +884,21 @@ export class RpcSessionImpl implements IRpcSession {
 			},
 		);
 		if (!reserved) {
-			this._incomingCalls.set(message.callId, {
-				callId: message.callId,
-				terminalSelected: true,
-			});
-			this._queueError(message.callId, RpcExceptionCodeEnum.unavailable);
+			this._queueRetainedTerminal(
+				this._callRetention.rejectIncoming(message.callId),
+			);
 		}
 	}
 
 	_receiveCancel(callId: string): void {
-		const incoming = this._incomingCalls.get(callId);
-		if (incoming === undefined) {
-			if (Number(callId) > this._highestIncomingCallOrdinal) {
-				throw new Error("Default RPC cancel refers to a future Call Ordinal.");
-			}
-			return;
+		if (Number(callId) > this._highestIncomingCallOrdinal) {
+			throw new Error("Default RPC cancel refers to a future Call Ordinal.");
 		}
-		if (incoming.terminalSelected || incoming.call === undefined) {
-			return;
+		const completion = this._callRetention.cancelIncoming(callId);
+		if (completion !== undefined) {
+			completion.publish();
+			this._queueRetainedTerminal(completion);
 		}
-		incoming.terminalSelected = true;
-		this._finishIncomingCall(incoming, {
-			type: RpcCallTerminalTypeEnum.failed,
-			code: RpcExceptionCodeEnum.canceled,
-		});
-		this._queueError(callId, RpcExceptionCodeEnum.canceled);
 	}
 
 	_receiveResult(message: RpcResultMessage): void {
@@ -954,67 +935,31 @@ export class RpcSessionImpl implements IRpcSession {
 	}
 
 	_finishIncomingHandler(
-		entry: IRpcIncomingEntry,
+		entry: IRpcRetainedIncomingCall,
 		outcome: RpcHandlerOutcome,
 	): void {
-		// Handler completion applies once while its admitted call remains live.
-		const handlerOutcomeIsStale =
-			this._closed || entry.terminalSelected || entry.call === undefined;
-		if (handlerOutcomeIsStale) {
-			return;
+		const completion = entry.selectCompletion(outcome);
+		if (completion !== undefined) {
+			this._queueRetainedTerminal(completion);
+			completion.publish();
 		}
-		entry.terminalSelected = true;
-		let terminal: RpcIncomingTerminal;
-		if (outcome.type === RpcCallTerminalTypeEnum.returned) {
-			const queued = this._queueSemantic(
-				Object.freeze({
-					kind: RpcWireRecordKindEnum.result,
-					callId: entry.callId,
-					value: outcome.value.value,
-				}) as RpcResultMessage,
-			);
-			terminal = queued
-				? { type: RpcCallTerminalTypeEnum.returned, value: outcome.value }
-				: {
-						type: RpcCallTerminalTypeEnum.failed,
-						code: RpcExceptionCodeEnum.handlerFailed,
-					};
-			if (!queued) {
-				this._queueError(entry.callId, RpcExceptionCodeEnum.handlerFailed);
-			}
-		} else if (outcome.type === RpcCallTerminalTypeEnum.returnedVoid) {
-			const queued = this._queueSemantic(
-				Object.freeze({
-					kind: RpcWireRecordKindEnum.result,
-					callId: entry.callId,
-				}) as RpcResultMessage,
-			);
-			terminal = queued
-				? { type: RpcCallTerminalTypeEnum.returnedVoid }
-				: {
-						type: RpcCallTerminalTypeEnum.failed,
-						code: RpcExceptionCodeEnum.handlerFailed,
-					};
-			if (!queued) {
-				this._queueError(entry.callId, RpcExceptionCodeEnum.handlerFailed);
-			}
-		} else {
-			terminal = {
-				type: RpcCallTerminalTypeEnum.failed,
-				code: RpcExceptionCodeEnum.handlerFailed,
-			};
-			this._queueError(entry.callId, RpcExceptionCodeEnum.handlerFailed);
-		}
-		this._finishIncomingCall(entry, terminal);
 	}
 
-	_finishIncomingCall(
-		entry: IRpcIncomingEntry,
-		terminal: RpcIncomingTerminal,
-	): void {
-		const call = entry.call;
-		entry.call = undefined;
-		call?.finish(terminal);
+	_queueRetainedTerminal(completion: IRpcRetainedTerminal): void {
+		const replay = completion.replay;
+		if (this._closed) {
+			replay?.release();
+			return;
+		}
+		if (replay === undefined) {
+			this._fault(
+				RpcCloseReasonEnum.resourceFault,
+				new Error("Default RPC protected terminal reserve is exhausted."),
+			);
+			return;
+		}
+		this._controlQueue.push({ message: replay.message, replay });
+		this._pump();
 	}
 
 	_queueError(callId: string, code: RpcWireErrorCode): boolean {
@@ -1041,7 +986,7 @@ export class RpcSessionImpl implements IRpcSession {
 		if (this._closed) {
 			return false;
 		}
-		const replay = this._reserveReplayEntry(message);
+		const replay = this._callRetention.reserveReplay(message);
 		if (replay === undefined) {
 			return false;
 		}
@@ -1109,16 +1054,13 @@ export class RpcSessionImpl implements IRpcSession {
 		while (this._pendingInvocations[0]?.retired) {
 			this._pendingInvocations.shift();
 		}
-		const replaySequence = this._replayBarrier[0];
+		const hasReplay = this._callRetention.hasReplayBarrier;
 		const control = this._controlQueue[0];
 		const pending = this._pendingInvocations[0];
 		const probeDue = this._pongDue || this._pingDue;
 		const ackDue = this._ackDue && this._ackDirty;
 		const nonProbeDue =
-			replaySequence !== undefined ||
-			control !== undefined ||
-			pending !== undefined ||
-			ackDue;
+			hasReplay || control !== undefined || pending !== undefined || ackDue;
 		if (probeDue && (!this._probeSentLast || !nonProbeDue)) {
 			this._probeSentLast = true;
 			if (this._pongDue) {
@@ -1135,18 +1077,12 @@ export class RpcSessionImpl implements IRpcSession {
 			return;
 		}
 
-		if (replaySequence !== undefined) {
-			this._replayBarrier.shift();
-			const replay = this._replay.get(replaySequence);
-			if (replay === undefined) {
-				this._fault(
-					RpcCloseReasonEnum.resourceFault,
-					new Error("Default RPC replay barrier lost a retained message."),
-				);
-				return;
+		if (hasReplay) {
+			const replay = this._callRetention.takeReplay();
+			if (replay !== undefined) {
+				this._probeSentLast = false;
+				this._sendEnvelope(binding, replay.sequence, replay.message);
 			}
-			this._probeSentLast = false;
-			this._sendEnvelope(binding, replaySequence, replay.message);
 			return;
 		}
 
@@ -1211,7 +1147,7 @@ export class RpcSessionImpl implements IRpcSession {
 		}) as RpcCallMessage;
 		const sequence = this._nextOutgoingSequence;
 		this._releasePendingRetainedBytes(entry);
-		let replay = this._reserveReplayEntry(message);
+		let replay = this._callRetention.reserveReplay(message);
 		if (replay === undefined) {
 			// Keep the payload charged outside the entry so reentrant terminal cleanup
 			// cannot release its guard before this admission frame returns.
@@ -1251,7 +1187,7 @@ export class RpcSessionImpl implements IRpcSession {
 		try {
 			encoded = this._codec.encode(this._createEnvelope(sequence, message));
 		} catch {
-			let guardedReplay: IRpcReplayEntry | undefined = replay;
+			let guardedReplay: IRpcReplayReservation | undefined = replay;
 			replay = undefined;
 			entry.request = undefined;
 			request = undefined;
@@ -1267,7 +1203,7 @@ export class RpcSessionImpl implements IRpcSession {
 				try {
 					this._retireInvocation(entry);
 				} finally {
-					this._releaseReplayEntry(guardedReplay);
+					guardedReplay.release();
 					guardedReplay = undefined;
 				}
 			}
@@ -1287,7 +1223,7 @@ export class RpcSessionImpl implements IRpcSession {
 		entry.callId = callId;
 		this._releasePendingInvocationCharge(entry);
 		this._outgoingCalls.set(callId, entry);
-		this._replay.set(sequence, replay);
+		this._callRetention.commitReplay(sequence, replay);
 		entry.request = undefined;
 		this._consumePiggybackAck();
 		this._sendEncoded(binding, encoded);
@@ -1306,7 +1242,7 @@ export class RpcSessionImpl implements IRpcSession {
 			this._outgoingSequenceExhausted ||
 			!Number.isSafeInteger(this._nextOutgoingSequence);
 		if (outgoingSequenceIsExhausted) {
-			this._releaseReplayEntry(replay);
+			replay.release();
 			this._terminateRetainedSession(
 				RpcCloseReasonEnum.counterExhaustion,
 				new Error("Default RPC sequence counter is exhausted."),
@@ -1318,7 +1254,7 @@ export class RpcSessionImpl implements IRpcSession {
 		try {
 			encoded = this._codec.encode(this._createEnvelope(sequence, message));
 		} catch (error) {
-			this._releaseReplayEntry(replay);
+			replay.release();
 			this._fault(
 				RpcCloseReasonEnum.resourceFault,
 				error instanceof Error
@@ -1333,17 +1269,7 @@ export class RpcSessionImpl implements IRpcSession {
 			this._nextOutgoingSequence += 1;
 		}
 		this._highestSentSequence = sequence;
-		this._replay.set(sequence, replay);
-		// Result and error records both carry retained terminal payload evidence.
-		const isTerminalPayload =
-			message.kind === RpcWireRecordKindEnum.result ||
-			message.kind === RpcWireRecordKindEnum.error;
-		if (isTerminalPayload) {
-			const incoming = this._incomingCalls.get(message.callId);
-			if (incoming?.terminalSelected) {
-				incoming.terminalSequence = sequence;
-			}
-		}
+		this._callRetention.commitReplay(sequence, replay);
 		this._consumePiggybackAck();
 		this._sendEncoded(binding, encoded);
 	}
@@ -1367,105 +1293,6 @@ export class RpcSessionImpl implements IRpcSession {
 		}
 		this._consumePiggybackAck();
 		this._sendEncoded(binding, encoded);
-	}
-
-	_reserveReplayEntry(
-		message: RpcSemanticMessage,
-	): IRpcReplayEntry | undefined {
-		let maximumEnvelope: Uint8Array;
-		try {
-			maximumEnvelope = this._codec.encode({
-				kind: RpcWireRecordKindEnum.message,
-				seq: Number.MAX_SAFE_INTEGER,
-				ackThrough: Number.MAX_SAFE_INTEGER,
-				message,
-			});
-		} catch {
-			return undefined;
-		}
-		const ordinaryCharge = maximumEnvelope.byteLength + 256;
-		const resourceClass =
-			message.kind === RpcWireRecordKindEnum.error
-				? "terminal"
-				: message.kind === RpcWireRecordKindEnum.cancel
-					? "cancel"
-					: "ordinary";
-		const charge =
-			resourceClass === "terminal"
-				? 768
-				: resourceClass === "cancel"
-					? 384
-					: ordinaryCharge;
-		const maximumEntries =
-			this._host.policy.maxPendingInvocationsPerSession * 4;
-		const maximumBytes = Math.floor(
-			this._host.policy.maxRetainedBytesPerSession / 2,
-		);
-		const maximumTerminalBytes = Math.floor(
-			this._host.policy.maxRetainedBytesPerSession / 4,
-		);
-		const isTerminalPayload = message.kind === RpcWireRecordKindEnum.result;
-		let retainedBytesReservation: IRpcRetainedBytesReservation | undefined;
-		// Ordinary replay must fit aggregate entry, byte, and terminal-payload budgets.
-		const ordinaryReplayCapacityExceeded =
-			this._ordinaryReplayCount >= maximumEntries ||
-			charge > maximumBytes - this._replayBytes ||
-			(isTerminalPayload &&
-				(this._terminalPayloadCount >= 256 ||
-					charge > maximumTerminalBytes - this._terminalReplayBytes));
-		if (resourceClass === "terminal") {
-			if (ordinaryCharge > charge || this._terminalReplayCount >= 256) {
-				return undefined;
-			}
-			this._terminalReplayCount += 1;
-		} else if (resourceClass === "cancel") {
-			if (ordinaryCharge > charge || this._cancelReplayCount >= 256) {
-				return undefined;
-			}
-			this._cancelReplayCount += 1;
-		} else if (ordinaryReplayCapacityExceeded) {
-			return undefined;
-		} else {
-			retainedBytesReservation = this.reserveRetainedBytes(charge);
-			if (retainedBytesReservation === undefined) {
-				return undefined;
-			}
-			this._ordinaryReplayCount += 1;
-			this._replayBytes += charge;
-			if (isTerminalPayload) {
-				this._terminalPayloadCount += 1;
-				this._terminalReplayBytes += charge;
-			}
-		}
-		return {
-			message,
-			charge,
-			retainedBytesReservation,
-			resourceClass,
-			released: false,
-		};
-	}
-
-	_releaseReplayEntry(replay: IRpcReplayEntry): void {
-		if (replay.released) {
-			return;
-		}
-		replay.released = true;
-		replay.retainedBytesReservation?.release();
-		if (replay.resourceClass === "terminal") {
-			this._terminalReplayCount -= 1;
-			return;
-		}
-		if (replay.resourceClass === "cancel") {
-			this._cancelReplayCount -= 1;
-			return;
-		}
-		this._ordinaryReplayCount -= 1;
-		this._replayBytes -= replay.charge;
-		if (replay.message.kind === RpcWireRecordKindEnum.result) {
-			this._terminalPayloadCount -= 1;
-			this._terminalReplayBytes -= replay.charge;
-		}
 	}
 
 	_createEnvelope(
@@ -1546,27 +1373,7 @@ export class RpcSessionImpl implements IRpcSession {
 			return true;
 		}
 		this._peerReceivedThrough = ackThrough;
-		for (const sequence of this._replay.keys()) {
-			if (sequence <= ackThrough) {
-				const replay = this._replay.get(sequence);
-				if (replay !== undefined) {
-					this._releaseReplayEntry(replay);
-				}
-				this._replay.delete(sequence);
-			}
-		}
-		this._replayBarrier = this._replayBarrier.filter(
-			(sequence) => sequence > ackThrough,
-		);
-		for (const [callId, incoming] of this._incomingCalls) {
-			// ACK retirement applies only after the incoming terminal was sequenced and acknowledged.
-			const terminalIsAcknowledged =
-				incoming.terminalSequence !== undefined &&
-				incoming.terminalSequence <= ackThrough;
-			if (terminalIsAcknowledged) {
-				this._incomingCalls.delete(callId);
-			}
-		}
+		this._callRetention.acknowledge(ackThrough);
 		if (checkGracefulShutdown) {
 			this._checkGracefulShutdown();
 		}
@@ -1609,14 +1416,7 @@ export class RpcSessionImpl implements IRpcSession {
 			);
 			this._retireInvocation(entry);
 		}
-		for (const incoming of this._incomingCalls.values()) {
-			if (!incoming.terminalSelected && incoming.call !== undefined) {
-				incoming.terminalSelected = true;
-				this._finishIncomingCall(incoming, {
-					type: RpcCallTerminalTypeEnum.sessionTerminated,
-				});
-			}
-		}
+		this._callRetention.terminateIncoming();
 	}
 
 	_retireInvocation(entry: IRpcInvocationEntry): void {
@@ -1654,14 +1454,10 @@ export class RpcSessionImpl implements IRpcSession {
 	}
 
 	_releaseReplayState(): void {
-		for (const replay of this._replay.values()) {
-			this._releaseReplayEntry(replay);
-		}
+		this._callRetention.releaseReplay();
 		for (const queued of this._controlQueue) {
-			this._releaseReplayEntry(queued.replay);
+			queued.replay.release();
 		}
-		this._replay.clear();
-		this._replayBarrier.length = 0;
 		this._controlQueue.length = 0;
 	}
 
@@ -1961,17 +1757,14 @@ export class RpcSessionImpl implements IRpcSession {
 			}
 			return;
 		}
-		const incomingActive = [...this._incomingCalls.values()].some(
-			(entry) => !entry.terminalSelected,
-		);
 		// Graceful close waits for all retained work and binding I/O to drain.
 		const drainIsIncomplete =
 			this._invocations.size !== 0 ||
-			incomingActive ||
+			this._callRetention.hasActiveIncoming ||
 			this._pendingInvocations.some((entry) => !entry.retired) ||
 			this._controlQueue.length !== 0 ||
-			this._replayBarrier.length !== 0 ||
-			this._replay.size !== 0 ||
+			this._callRetention.hasReplayBarrier ||
+			this._callRetention.replayCount !== 0 ||
 			this._ackDirty ||
 			this._ackDue ||
 			!binding._active ||
@@ -2012,6 +1805,7 @@ export class RpcSessionImpl implements IRpcSession {
 
 type RpcSessionImplDependencies = Readonly<{
 	readonly codec: IRpcCodec;
+	readonly createCallRetention: RpcSessionCallRetentionFactory;
 	readonly counterExhausted?: boolean;
 	readonly retainedBytesLedger: IRpcRetainedBytesLedger;
 }>;
@@ -2053,24 +1847,9 @@ interface IRpcInvocationEntry {
 	callId?: string;
 }
 
-interface IRpcIncomingEntry {
-	readonly callId: string;
-	call?: IRpcProtocolIncomingCall;
-	terminalSequence?: number;
-	terminalSelected: boolean;
-}
-
-interface IRpcReplayEntry {
-	readonly message: RpcSemanticMessage;
-	readonly charge: number;
-	readonly retainedBytesReservation?: IRpcRetainedBytesReservation;
-	readonly resourceClass: "ordinary" | "terminal" | "cancel";
-	released: boolean;
-}
-
 interface IRpcQueuedSemantic {
 	readonly message: RpcSemanticMessage;
-	readonly replay: IRpcReplayEntry;
+	readonly replay: IRpcReplayReservation;
 }
 
 const RPC_SEQUENCE_RESERVE = 512;

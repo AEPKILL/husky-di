@@ -9,19 +9,15 @@ import { describe, expect, it } from "vitest";
 
 import { RpcCallTerminalTypeEnum } from "../../src/enums/protocol/rpc-call-terminal-type.enum";
 import { RpcIncomingCallKindEnum } from "../../src/enums/protocol/rpc-incoming-call-kind.enum";
+import { createRpcPeer } from "../../src/factories/rpc-peer.factory";
 import { RpcHandlerSchedulerImpl } from "../../src/impls/owner/rpc-handler-scheduler.impl";
 import { RpcConnectorPublisherImpl } from "../../src/impls/owner/rpc-owner-publisher.impl";
-import {
-	type CreateRpcPeerOptions,
-	RpcPeerImpl,
-} from "../../src/impls/peer/rpc-peer.impl";
 import {
 	createRemoteServiceDescriptor,
 	createRpcAcceptor,
 	createRpcConnector,
 	RpcStateStatusEnum,
 } from "../../src/index";
-import type { IRpcPeerHost } from "../../src/interfaces/peer/rpc-peer-host.interface";
 import type { IRpcProtocolIncomingHandlerCall } from "../../src/protocol";
 import { normalizeRpcApplicationArguments } from "../../src/utils/rpc-application-value.util";
 import {
@@ -44,18 +40,6 @@ const IScheduledRequirementsService =
 	createServiceIdentifier<IScheduledRequirementsService>(
 		"IScheduledRequirementsService",
 	);
-
-function createRpcPeer(options: CreateRpcPeerOptions): IRpcPeerHost {
-	const peer = new RpcPeerImpl(options);
-	return Object.freeze({
-		peer,
-		reserveIncomingCall: (
-			request: Parameters<IRpcPeerHost["reserveIncomingCall"]>[0],
-			consume: Parameters<IRpcPeerHost["reserveIncomingCall"]>[1],
-		) => peer.reserveIncomingCall(request, consume),
-		hasLocalExposure: (wireName: string) => peer.hasLocalExposure(wireName),
-	});
-}
 
 describe("Default RPC Protocol remaining requirements", () => {
 	it("RPC-LEDGER-001 RPC-RESOURCE-005 charges Pending payload weight plus 256 bytes before assigning wire identity", async () => {

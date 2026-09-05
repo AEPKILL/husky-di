@@ -304,7 +304,7 @@ describe("Remote RPC requirement evidence", () => {
 			"rpcActiveRecordSchema",
 		] as const;
 		const runtimeSchemaOwnerPaths = [
-			"packages/remote/src/impls/peer/rpc-peer.impl.ts",
+			"packages/remote/src/impls/peer/rpc-peer-call-lifecycle.impl.ts",
 			"packages/remote/src/utils/protocol/rpc-base64-url-32-schema.util.ts",
 			"packages/remote/src/utils/protocol/rpc-wire-grammar.util.ts",
 			"packages/remote/src/utils/protocol/rpc-wire-identifier-schema.util.ts",
@@ -331,7 +331,7 @@ describe("Remote RPC requirement evidence", () => {
 			"packages/remote/src/factories/rpc-owner-assembly.factory.ts",
 			"packages/remote/src/impls/owner/rpc-acceptor.impl.ts",
 			"packages/remote/src/impls/owner/rpc-session-ownership.impl.ts",
-			"packages/remote/src/impls/peer/rpc-peer.impl.ts",
+			"packages/remote/src/impls/peer/rpc-peer-call-lifecycle.impl.ts",
 			"packages/remote/src/utils/rpc-exposure.util.ts",
 		] as const;
 		const nonNullObjectGuardConsumerPaths = [
@@ -339,7 +339,7 @@ describe("Remote RPC requirement evidence", () => {
 			"packages/remote/src/factories/rpc-owner-assembly.factory.ts",
 			"packages/remote/src/impls/owner/rpc-acceptor.impl.ts",
 			"packages/remote/src/impls/owner/rpc-session-ownership.impl.ts",
-			"packages/remote/src/impls/peer/rpc-peer.impl.ts",
+			"packages/remote/src/impls/peer/rpc-peer-call-lifecycle.impl.ts",
 		] as const;
 		const undefinedGuardConsumerPaths = [
 			"packages/remote/src/impls/owner/rpc-acceptor.impl.ts",

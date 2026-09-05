@@ -10,6 +10,7 @@ import { RpcCallTerminalTypeEnum } from "../../src/enums/protocol/rpc-call-termi
 import { RpcEndpointFailureEnum } from "../../src/enums/protocol/rpc-endpoint-failure.enum";
 import { RpcCloseReasonEnum } from "../../src/enums/rpc-close-reason.enum";
 import { RpcExceptionCodeEnum } from "../../src/enums/rpc-exception-code.enum";
+import { createRpcSessionCallRetention } from "../../src/factories/rpc-session-call-retention.factory";
 import { RpcRetainedBytesLedgerImpl } from "../../src/impls/common/rpc-retained-bytes-ledger.impl";
 import { RpcCodecImpl } from "../../src/impls/protocol/rpc-codec.impl";
 import { RpcSessionImpl } from "../../src/impls/session/rpc-session.impl";
@@ -75,6 +76,7 @@ function createSession(sessionId: string): Readonly<{
 			},
 			{
 				codec,
+				createCallRetention: createRpcSessionCallRetention,
 				retainedBytesLedger: new RpcRetainedBytesLedgerImpl(
 					policy.maxRetainedBytesPerSession,
 				),
@@ -141,7 +143,7 @@ describe("Default RPC Session authority plans", () => {
 			outgoingCalls: session._outgoingCalls.size,
 			outgoingOrdinal: session._nextOutgoingCallOrdinal,
 			outgoingSequence: session._nextOutgoingSequence,
-			replay: session._replay.size,
+			replay: session._callRetention.replayCount,
 			sent: sent.length,
 			started: entry.started,
 		}).toEqual({
@@ -160,7 +162,7 @@ describe("Default RPC Session authority plans", () => {
 		await vi.waitFor(() => expect(sent).toHaveLength(1));
 		expect(entry).toMatchObject({ admitted: true, callId: "1", started: true });
 		expect(session._outgoingCalls.get("1")).toBe(entry);
-		expect(session._replay.size).toBe(1);
+		expect(session._callRetention.replayCount).toBe(1);
 		expect(session._nextOutgoingCallOrdinal).toBe(outgoingOrdinal + 1);
 		expect(session._nextOutgoingSequence).toBe(outgoingSequence + 1);
 		expect(finishes).toEqual([]);

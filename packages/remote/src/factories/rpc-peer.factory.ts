@@ -8,13 +8,17 @@ import {
 	type CreateRpcPeerOptions,
 	RpcPeerImpl,
 } from "@/impls/peer/rpc-peer.impl";
+import { RpcPeerCallLifecycleImpl } from "@/impls/peer/rpc-peer-call-lifecycle.impl";
 import type { IRpcPeerHost } from "@/interfaces/peer/rpc-peer-host.interface";
 
 export type RpcPeerFactory = (options: CreateRpcPeerOptions) => IRpcPeerHost;
 
 /** Creates a stable Peer behind the private Protocol host contract. */
 export function createRpcPeer(options: CreateRpcPeerOptions): IRpcPeerHost {
-	const peer = new RpcPeerImpl(options);
+	const peer = new RpcPeerImpl(
+		options,
+		(lifecycleOptions) => new RpcPeerCallLifecycleImpl(lifecycleOptions),
+	);
 	return Object.freeze({
 		peer,
 		reserveIncomingCall: (

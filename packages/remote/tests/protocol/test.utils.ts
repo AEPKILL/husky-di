@@ -5,6 +5,7 @@
  */
 
 import { Subject } from "rxjs";
+import { createRpcSessionCallRetention } from "../../src/factories/rpc-session-call-retention.factory";
 import { RpcRetainedBytesLedgerImpl } from "../../src/impls/common/rpc-retained-bytes-ledger.impl";
 import { RpcEndpointImpl } from "../../src/impls/endpoint/rpc-endpoint.impl";
 import { RpcCodecImpl } from "../../src/impls/protocol/rpc-codec.impl";
@@ -147,6 +148,7 @@ export function createRpcDirectSessionHarness(
 		},
 		{
 			codec,
+			createCallRetention: createRpcSessionCallRetention,
 			retainedBytesLedger: new RpcRetainedBytesLedgerImpl(
 				policy.maxRetainedBytesPerSession,
 			),

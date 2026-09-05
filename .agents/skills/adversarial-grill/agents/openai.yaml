@@ -1,0 +1,5 @@
+interface:
+  display_name: "Adversarial Grill"
+  short_description: "Finish a grill through adversarial agent dialogue"
+policy:
+  allow_implicit_invocation: false
