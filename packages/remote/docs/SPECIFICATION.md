@@ -2352,6 +2352,18 @@ Case IDs **MUST** be documented by the conformance entry point, remain stable af
 `string` rather than a closed exported literal union so additive cases do not break fixture types. It
 **MUST NOT** expose Default-Protocol private module or decoded-record types through its fixture contract.
 
+For Protocol cases, reporting **MUST** follow bounded disposal and freeze the case outcome. The primary
+acquisition/work/assertion failure **MUST** precede supplemental causes; remaining causes **MUST** follow
+resource acquisition order, then capability-read, handoff/work, close, and cleanup phase order, then invocation
+order. A sole cause **MUST** retain its identity; multiple causes **MUST** become the case failure's inner
+`AggregateError`. Failure ownership **MUST** use operation identity and distinct raw asynchronous task identity,
+not Error identity: propagating or awaiting the same failure again contributes no duplicate, while independent
+operations failing with the same Error contribute separate causes. A shared cleanup task **MUST** have one
+settlement outcome and wait; each distinct pending cleanup task contributes one disposal timeout, while a
+rejected task contributes no timeout. A work deadline contributes one primary timeout. Late work settlement
+after work seals **MUST** be consumed without changing the selected outcome, and no settlement after disposal
+finalization may change the case failure or report again. Cleanup failure **MUST NOT** erase a primary failure.
+
 **RPC-CONFORMANCE-002 — Protocol suite.** Protocol runner **MUST** cover role-factory construction
 non-reentrancy, handoff, normalized snapshots, outgoing prepare/start/finish and pre-start cancellation, incoming
 resource/semantic/handler dispositions, handler permit ownership, fault scope, counter drain, and
@@ -2365,6 +2377,35 @@ additionally pass its runtime validation and security suites. `counterExhaustion
 candidate under test-only configuration such that the first otherwise admissible call on a fresh Session reaches
 counter drain. `createActiveProtocolFaultMessage()` **MUST** return one candidate-grammar byte message that faults
 an active Session; neither hook changes the production SPI or exposes the built-in grammar.
+
+Every Protocol case, including construction freshness, counter drain, and cached cleanup, **MUST** establish
+resource custody before its first factory call. Every returned role identity **MUST** be recorded immediately,
+before validation or another acquisition; duplicate identity **MUST** still fail freshness but be disposed once.
+The runner **MUST** independently read and capture safely callable close and cleanup capabilities with their
+original receiver, preserving each access failure without suppressing the other capability. Nonobjects and
+resources never returned by a throwing factory transfer no callable cleanup authority. The runner **MUST NOT**
+guess or invoke unvalidated members.
+
+Each case's acquisition and semantic assertions **MUST** share one absolute, non-sliding 2,000 ms work interval.
+Every bounded await or observation **MUST** consume its remaining interval. Work success, failure, or timeout
+**MUST** seal the case generation and begin one fresh absolute 2,000 ms disposal interval. Before abort callbacks,
+disposal **MUST** revoke host/transport admission authority; it **MUST** then abort shared handoffs, independently
+attempt each unattempted captured close capability, terminate runner-owned transport, and independently start
+each eligible cleanup capability. All cleanup waits **MUST** share that disposal deadline, even when another
+role throws, rejects, or never settles. Started asynchronous handoffs and cleanup tasks **MUST** receive rejection
+consumers immediately, before a later synchronous operation can throw. Sealed work **MUST NOT** acquire another
+role, install a Session, or affect a later case. These asynchronous bounds cannot preempt synchronous candidate
+code that never returns.
+
+Explicit close and cleanup assertions **MUST** freshly read, validate, and invoke the original role member on
+each observation, with its original receiver. Acquisition-captured capabilities **MUST** serve only as disposal
+fallback. Cleanup identity assertions **MUST** compare the original raw returned tasks; the runner **MUST NOT**
+substitute its own cached task. A method is attempted only immediately before its function body begins. A
+throwing or noncallable property read before any invocation **MUST** still permit one safe captured fallback;
+a started invocation, even one that throws, **MUST NOT** be retried by disposal. Disposal **MUST** consume and
+wait distinct previously returned cleanup tasks without a redundant third invocation. Raw close assertions
+**MUST** observe synchronous Direct Close before runner transport fallback. Construction non-reentry verdicts
+**MUST** be frozen after their work observation so teardown callbacks cannot rewrite them.
 
 **RPC-CONFORMANCE-003 — Adapter suite.** Both Adapter runners **MUST** cover subscribe-before-start, handoff and
 ownership, source/message identity/order/hot terminal behavior, Local Admission/single send/backpressure,

@@ -525,9 +525,11 @@ export class RpcSessionImpl implements IRpcSession {
 	}
 
 	_receiveBinding(binding: RpcSessionBindingImpl, bytes: Uint8Array): void {
+		if (this._closed) {
+			return;
+		}
 		// Ingress is accepted only from the active current binding of an open Session.
-		const bindingCannotReceive =
-			this._closed || this._binding !== binding || !binding._active;
+		const bindingCannotReceive = this._binding !== binding || !binding._active;
 		if (bindingCannotReceive) {
 			this._deferDirectClose(binding._endpoint);
 			return;
@@ -562,7 +564,7 @@ export class RpcSessionImpl implements IRpcSession {
 			return;
 		}
 		if (record.kind === RpcWireRecordKindEnum.close) {
-			this._terminalFromPeer();
+			this._terminalFromPeer(binding);
 			return;
 		}
 		if (record.kind !== RpcWireRecordKindEnum.message) {
@@ -746,13 +748,7 @@ export class RpcSessionImpl implements IRpcSession {
 	}
 
 	forceClose(): void {
-		if (this._closed) {
-			return;
-		}
-		this._teardownTerminalState();
-		this._onTerminal();
-		this._resolveShutdown?.();
-		this._resolveShutdown = undefined;
+		this._completeTerminal({ kind: "framework-force" });
 	}
 
 	_receiveEnvelope(envelope: RpcMessageEnvelope): boolean {
@@ -1109,14 +1105,6 @@ export class RpcSessionImpl implements IRpcSession {
 		if (this._closed) {
 			return;
 		}
-		const binding = this._binding;
-		this._binding = undefined;
-		const recoveryDeadlineAtLoss =
-			this._recoveryTimer === undefined
-				? Date.now() + this._host.policy.recoveryGraceMs
-				: undefined;
-		this._stopActivity();
-		this._deferDirectClose(binding?._endpoint);
 		if (this._counterDraining) {
 			this._terminateRetainedSession(
 				RpcCloseReasonEnum.counterExhaustion,
@@ -1128,6 +1116,14 @@ export class RpcSessionImpl implements IRpcSession {
 			this._terminateRetainedSession(RpcCloseReasonEnum.forcedClose, cause);
 			return;
 		}
+		const binding = this._binding;
+		this._binding = undefined;
+		const recoveryDeadlineAtLoss =
+			this._recoveryTimer === undefined
+				? Date.now() + this._host.policy.recoveryGraceMs
+				: undefined;
+		this._stopActivity();
+		this._deferDirectClose(binding?._endpoint);
 		if (this._recoveryTimer === undefined) {
 			const recoveryDeadline =
 				recoveryDeadlineAtLoss ??
@@ -1159,12 +1155,10 @@ export class RpcSessionImpl implements IRpcSession {
 		if (this._closed || !this._recovering) {
 			return;
 		}
-		this._teardownTerminalState();
-		this._sessionHost?.transition({
-			type: RpcProtocolSessionTransitionTypeEnum.closed,
+		this._completeTerminal({
+			kind: "session-closed",
 			reason: RpcCloseReasonEnum.recoveryExpired,
 		});
-		this._onTerminal();
 	}
 
 	_terminateRetainedSession(
@@ -1175,47 +1169,66 @@ export class RpcSessionImpl implements IRpcSession {
 			| RpcCloseReasonEnum.remoteTerminated,
 		cause?: Error,
 	): void {
-		if (this._closed) {
-			return;
-		}
-		this._teardownTerminalState();
-		this._sessionHost?.transition({
-			type: RpcProtocolSessionTransitionTypeEnum.closed,
+		this._completeTerminal({
+			kind: "session-closed",
 			reason,
 			cause,
 		});
-		this._onTerminal();
-		this._resolveShutdown?.();
-		this._resolveShutdown = undefined;
 	}
 
-	_terminalFromPeer(): void {
+	_terminalFromPeer(binding: RpcSessionBindingImpl): void {
+		const bindingIsStale =
+			this._binding !== binding || !binding._active || this._closed;
+		if (bindingIsStale) {
+			return;
+		}
+		this._completeTerminal({
+			kind: "session-closed",
+			reason: RpcCloseReasonEnum.remoteTerminated,
+		});
+	}
+
+	_completeTerminal(terminal: SessionTerminalCause): void {
 		if (this._closed) {
 			return;
 		}
-		this._teardownTerminalState();
-		this._sessionHost?.transition({
-			type: RpcProtocolSessionTransitionTypeEnum.closed,
-			reason: RpcCloseReasonEnum.remoteTerminated,
-		});
-		this._onTerminal();
-	}
-
-	_teardownTerminalState(): void {
 		const binding = this._binding;
 		this._closed = true;
 		this._binding = undefined;
-		this._clearTimers();
-		this._invocations.terminate();
-		this._incomingCalls.terminate();
-		this._releaseReplayState();
-		this._protectedRetainedBytesReservation.release();
-		unregisterRpcSessionRetainedBytes(this);
-		this._resumeToken = undefined;
 		try {
-			binding?._endpoint.fenceAndClose();
-		} catch {
-			// Terminal Direct Close is best-effort after Session state is committed.
+			this._clearTimers();
+			this._invocations.terminate();
+			this._incomingCalls.terminate();
+			this._releaseReplayState();
+			this._protectedRetainedBytesReservation.release();
+			unregisterRpcSessionRetainedBytes(this);
+			this._resumeToken = undefined;
+		} finally {
+			try {
+				binding?._endpoint.fenceAndClose();
+			} catch {
+				// Terminal Direct Close is best-effort after Session state is committed.
+			} finally {
+				try {
+					if (terminal.kind === "session-closed") {
+						this._sessionHost?.transition({
+							type: RpcProtocolSessionTransitionTypeEnum.closed,
+							reason: terminal.reason,
+							...(terminal.cause === undefined
+								? {}
+								: { cause: terminal.cause }),
+						});
+					}
+				} finally {
+					try {
+						this._onTerminal();
+					} finally {
+						const resolveShutdown = this._resolveShutdown;
+						this._resolveShutdown = undefined;
+						resolveShutdown?.();
+					}
+				}
+			}
 		}
 	}
 
@@ -1364,6 +1377,19 @@ export class RpcSessionImpl implements IRpcSession {
 		);
 	}
 }
+
+type SessionTerminalCause =
+	| { readonly kind: "framework-force" }
+	| {
+			readonly kind: "session-closed";
+			readonly reason:
+				| RpcCloseReasonEnum.remoteTerminated
+				| RpcCloseReasonEnum.recoveryExpired
+				| RpcCloseReasonEnum.continuityFailure
+				| RpcCloseReasonEnum.counterExhaustion
+				| RpcCloseReasonEnum.forcedClose;
+			readonly cause?: Error;
+	  };
 
 type RpcSessionImplDependencies = Readonly<{
 	readonly codec: IRpcCodec;

@@ -27,7 +27,8 @@ export type {
  * - `protocol.construction.acceptor-fresh-non-reentrant`
  * - `protocol.handoff.subscribe-before-install`
  * - `protocol.values.normalized-snapshots`
- * - `protocol.outgoing.reserve-commit-start-sink`
+ * - `protocol.outgoing.prepare-start-finish`
+ * - `protocol.outgoing.cancel-before-start-definite-non-execution`
  * - `protocol.incoming.resource-disposition`
  * - `protocol.incoming.semantic-unknown-service`
  * - `protocol.incoming.semantic-unknown-method`

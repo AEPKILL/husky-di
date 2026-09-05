@@ -13,6 +13,7 @@ import {
 	parseRpcOwnerPolicy,
 	validateRpcOwnerProtocol,
 } from "@/factories/rpc-owner-assembly.factory";
+import { createRpcOwnerTermination } from "@/factories/rpc-owner-termination.factory";
 import { createRpcProtocolConnector } from "@/factories/rpc-protocol.factory";
 import { createRpcConnectorSessionOwnership } from "@/factories/rpc-session-ownership.factory";
 import { RpcConnectorImpl } from "@/impls/owner/rpc-connector.impl";
@@ -78,6 +79,7 @@ export function createRpcConnector(
 		}),
 		...createRpcOwnerResources(parsed.policy, protocol),
 		createSessionOwnership: createRpcConnectorSessionOwnership,
+		createTermination: createRpcOwnerTermination,
 	});
 	construction.activate(owner);
 	return owner;

@@ -5,8 +5,6 @@
  */
 
 import type { Observable, Subscription } from "rxjs";
-import { RpcCloseOutcomeEnum } from "@/enums/rpc-close-outcome.enum";
-import { RpcCloseReasonEnum } from "@/enums/rpc-close-reason.enum";
 import { RpcExceptionCodeEnum } from "@/enums/rpc-exception-code.enum";
 import { RpcStateStatusEnum } from "@/enums/rpc-state-status.enum";
 import { createRpcException } from "@/factories/rpc-exception.factory";
@@ -20,6 +18,10 @@ import type {
 	RpcOwnedConnection,
 } from "@/interfaces/owner/rpc-owner-custody.interface";
 import type { IRpcConnectorPublisher } from "@/interfaces/owner/rpc-owner-publisher.interface";
+import type {
+	IRpcOwnerTermination,
+	RpcOwnerTerminationFactory,
+} from "@/interfaces/owner/rpc-owner-termination.interface";
 import type {
 	IRpcConnectorSessionAttachment,
 	IRpcConnectorSessionOwnership,
@@ -52,6 +54,7 @@ export type CreateRpcConnectorImplOptions = Readonly<{
 	readonly custody: IRpcOwnerCustody;
 	readonly handlerScheduler: IRpcHandlerScheduler;
 	readonly createSessionOwnership: RpcConnectorSessionOwnershipFactory;
+	readonly createTermination: RpcOwnerTerminationFactory<RpcConnectorClosedState>;
 	readonly publisher: IRpcConnectorPublisher;
 	readonly protocol: IRpcProtocolConnector;
 }>;
@@ -59,7 +62,6 @@ export type CreateRpcConnectorImplOptions = Readonly<{
 /** Owns one stable Connector peer and one owner-scoped Protocol role. */
 export class RpcConnectorImpl implements IRpcConnector {
 	readonly #protocol: IRpcProtocolConnector;
-	readonly #policy: IRpcProtocolRuntimePolicy;
 	readonly #retainedBytesLedger: IRpcRetainedBytesLedger;
 	readonly #publisher: IRpcConnectorPublisher;
 	readonly #sessionOwnership: IRpcConnectorSessionOwnership;
@@ -67,10 +69,7 @@ export class RpcConnectorImpl implements IRpcConnector {
 	readonly #connectionLimit: number;
 	#attempt: RpcConnectorAttempt | undefined;
 	#terminationRequested = false;
-	#terminationTask: Promise<void> | undefined;
-	#resolveTermination: (() => void) | undefined;
-	#rejectTermination: ((error: unknown) => void) | undefined;
-	#graceTimer: ReturnType<typeof setTimeout> | undefined;
+	readonly #termination: IRpcOwnerTermination;
 	readonly state$: Observable<RpcConnectorState>;
 	readonly event$: Observable<RpcEvent>;
 	readonly peer: IRpcPeer;
@@ -78,6 +77,7 @@ export class RpcConnectorImpl implements IRpcConnector {
 	constructor(options: CreateRpcConnectorImplOptions) {
 		const {
 			createSessionOwnership,
+			createTermination,
 			custody,
 			handlerScheduler,
 			publisher,
@@ -86,16 +86,36 @@ export class RpcConnectorImpl implements IRpcConnector {
 			protocol,
 		} = options;
 		this.#protocol = protocol;
-		this.#policy = policy;
 		this.#custody = custody;
 		this.#publisher = publisher;
 		this.#retainedBytesLedger = retainedBytesLedger;
 		this.#connectionLimit = policy.maxSessions + 2 * policy.maxHandshakes;
 		this.state$ = publisher.state$;
 		this.event$ = publisher.event$;
+		const termination = createTermination({
+			deadlineMs: policy.shutdownDeadlineMs,
+			gateNewWork: () => {
+				this.#terminationRequested = true;
+			},
+			readStatus: () => publisher.state.status,
+			transactions: Object.freeze({
+				beginGracefulShutdown: () =>
+					this.#sessionOwnership.beginGracefulShutdown(),
+				beginClosing: (reason, forced) =>
+					this.#sessionOwnership.beginClosing(reason, forced),
+			}),
+			protocol: Object.freeze({ shutdown: () => protocol.shutdown() }),
+			custody: Object.freeze({ finishCleanup: () => custody.finishCleanup() }),
+			finalization: Object.freeze({
+				releaseReferences: () => {},
+				finish: (state, settle) => publisher.finish(state, settle),
+			}),
+		});
+		this.#termination = termination.owner;
 		this.#sessionOwnership = createSessionOwnership({
 			publisher,
 			protocol,
+			termination: termination.lifecycle,
 			peerEnvironment: {
 				findOwnerExposure: () => undefined,
 				isOwnerActive: () =>
@@ -106,17 +126,9 @@ export class RpcConnectorImpl implements IRpcConnector {
 				reserveOwnerRetainedBytes: (bytes) => this.reserveRetainedBytes(bytes),
 			},
 			lifecycle: {
-				ensureTermination: () => {
-					if (this.#terminationTask === undefined) {
-						this.#createTerminationTask();
-					}
-				},
 				abortCurrentAttempt: () => this.#abortCurrentAttempt(),
 				failProvisionalAttachment: (attachment, error) =>
 					this.#failProvisionalAttachment(attachment, error),
-				clearGraceTimer: () => this.#clearGraceTimer(),
-				continueGracefulShutdown: () => this.#continueGracefulShutdown(),
-				startCleanup: (finalState) => this.#startCleanup(finalState),
 			},
 		});
 		this.peer = this.#sessionOwnership.peer;
@@ -124,10 +136,6 @@ export class RpcConnectorImpl implements IRpcConnector {
 
 	get state(): RpcConnectorState {
 		return this.#publisher.state;
-	}
-
-	#isOwnerDraining(): boolean {
-		return this.#publisher.state.status === RpcStateStatusEnum.draining;
 	}
 
 	/** Package-private Protocol retained-byte reservation port. */
@@ -494,73 +502,11 @@ export class RpcConnectorImpl implements IRpcConnector {
 	}
 
 	shutdown(): Promise<void> {
-		if (this.#terminationTask !== undefined) {
-			return this.#terminationTask;
-		}
-		const task = this.#createTerminationTask();
-		this.#beginGracefulShutdown();
-		return task;
+		return this.#termination.shutdown();
 	}
 
 	close(): Promise<void> {
-		const task = this.#terminationTask ?? this.#createTerminationTask();
-		// Forced close starts only from a live owner state.
-		const canBeginForcedClose =
-			this.state.status === RpcStateStatusEnum.active ||
-			this.state.status === RpcStateStatusEnum.draining;
-		if (canBeginForcedClose) {
-			this.#beginClosing(RpcCloseReasonEnum.forcedClose, true);
-		}
-		return task;
-	}
-
-	#createTerminationTask(): Promise<void> {
-		const termination = Promise.withResolvers<void>();
-		const task = termination.promise;
-		this.#terminationRequested = true;
-		this.#resolveTermination = termination.resolve;
-		this.#rejectTermination = termination.reject;
-		this.#terminationTask = task;
-		void task.catch(() => {});
-		return task;
-	}
-
-	#beginGracefulShutdown(): void {
-		this.#sessionOwnership.beginGracefulShutdown();
-	}
-
-	#continueGracefulShutdown(): void {
-		if (!this.#isOwnerDraining()) {
-			return;
-		}
-
-		this.#graceTimer = setTimeout(
-			() => this.#beginClosing(RpcCloseReasonEnum.shutdownDeadline, true),
-			this.#policy.shutdownDeadlineMs,
-		);
-		let grace: Promise<unknown>;
-		try {
-			grace = Promise.resolve(this.#protocol.shutdown());
-		} catch {
-			this.#beginClosing(RpcCloseReasonEnum.forcedClose, true);
-			return;
-		}
-		grace.then(
-			() => {
-				if (this.state.status === RpcStateStatusEnum.draining) {
-					this.#beginClosing(RpcCloseReasonEnum.gracefulShutdown, false);
-				}
-			},
-			() => this.#beginClosing(RpcCloseReasonEnum.forcedClose, true),
-		);
-	}
-
-	#clearGraceTimer(): void {
-		if (this.#graceTimer === undefined) {
-			return;
-		}
-		clearTimeout(this.#graceTimer);
-		this.#graceTimer = undefined;
+		return this.#termination.close();
 	}
 
 	#failProvisionalAttachment(
@@ -588,47 +534,6 @@ export class RpcConnectorImpl implements IRpcConnector {
 			),
 		);
 		this.#attempt = undefined;
-	}
-
-	#beginClosing(
-		reason:
-			| RpcCloseReasonEnum.gracefulShutdown
-			| RpcCloseReasonEnum.forcedClose
-			| RpcCloseReasonEnum.shutdownDeadline,
-		forced: boolean,
-	): void {
-		this.#sessionOwnership.beginClosing(reason, forced);
-	}
-
-	#startCleanup(finalState: RpcConnectorClosedState): void {
-		void this.#custody.finishCleanup().then(
-			() => this.#finishCleanupSuccess(finalState),
-			(error: unknown) => this.#finishCleanupFailure(error),
-		);
-	}
-
-	#finishCleanupSuccess(finalState: RpcConnectorClosedState): void {
-		if (this.state.status !== RpcStateStatusEnum.closing) {
-			return;
-		}
-		this.#publisher.finish(finalState, () => this.#resolveTermination?.());
-	}
-
-	#finishCleanupFailure(value: unknown): void {
-		if (this.state.status !== RpcStateStatusEnum.closing) {
-			return;
-		}
-		const error =
-			value instanceof Error ? value : new Error("RPC Owner cleanup failed.");
-		this.#publisher.finish(
-			{
-				status: RpcStateStatusEnum.closed,
-				outcome: RpcCloseOutcomeEnum.failed,
-				reason: RpcCloseReasonEnum.cleanupFailed,
-				error,
-			},
-			() => this.#rejectTermination?.(error),
-		);
 	}
 }
 

@@ -16,6 +16,7 @@ import type {
 	IRpcAcceptorPublisher,
 	IRpcConnectorPublisher,
 } from "@/interfaces/owner/rpc-owner-publisher.interface";
+import type { IRpcOwnerTerminationLifecycle } from "@/interfaces/owner/rpc-owner-termination.interface";
 import type {
 	IRpcAcceptorSessionOwnership,
 	IRpcConnectorSessionAttachment,
@@ -55,20 +56,14 @@ export type CreateRpcConnectorSessionOwnershipOptions = Readonly<{
 	readonly publisher: IRpcConnectorPublisher;
 	readonly protocol: IRpcProtocolConnector;
 	readonly peerEnvironment: RpcSessionPeerEnvironment;
+	readonly termination: IRpcOwnerTerminationLifecycle<
+		Extract<RpcConnectorState, { readonly status: RpcStateStatusEnum.closed }>
+	>;
 	readonly lifecycle: Readonly<{
-		ensureTermination(): void;
 		abortCurrentAttempt(): void;
 		failProvisionalAttachment(
 			attachment: IRpcConnectorSessionAttachment,
 			error: Error,
-		): void;
-		clearGraceTimer(): void;
-		continueGracefulShutdown(): void;
-		startCleanup(
-			finalState: Extract<
-				RpcConnectorState,
-				{ readonly status: RpcStateStatusEnum.closed }
-			>,
 		): void;
 	}>;
 }>;
@@ -78,18 +73,12 @@ export type CreateRpcAcceptorSessionOwnershipOptions = Readonly<{
 	readonly protocol: IRpcProtocolAcceptor;
 	readonly maximumSessions: number;
 	readonly peerEnvironment: RpcSessionPeerEnvironment;
+	readonly termination: IRpcOwnerTerminationLifecycle<
+		Extract<RpcAcceptorState, { readonly status: RpcStateStatusEnum.closed }>
+	>;
 	readonly lifecycle: Readonly<{
 		canAdmitSession(): boolean;
-		ensureTermination(): void;
-		clearGraceTimer(): void;
 		abortListener(): void;
-		continueGracefulShutdown(): void;
-		startCleanup(
-			finalState: Extract<
-				RpcAcceptorState,
-				{ readonly status: RpcStateStatusEnum.closed }
-			>,
-		): void;
 	}>;
 }>;
 
@@ -312,6 +301,7 @@ export class RpcConnectorSessionOwnershipImpl
 					events,
 				},
 				apply: (commitSnapshots) => {
+					const continueGrace = this.#options.termination.enterGrace();
 					if (peerHasNoSession) {
 						this.#options.lifecycle.abortCurrentAttempt();
 					}
@@ -327,7 +317,7 @@ export class RpcConnectorSessionOwnershipImpl
 						this.#releaseSession(session);
 					}
 					commitSnapshots();
-					return this.#options.lifecycle.continueGracefulShutdown;
+					return continueGrace;
 				},
 			};
 		});
@@ -363,14 +353,16 @@ export class RpcConnectorSessionOwnershipImpl
 					events,
 				},
 				apply: (commitSnapshots) => {
-					this.#options.lifecycle.clearGraceTimer();
+					const continueClosing = this.#options.termination.enterClosing(
+						closure.finalState,
+					);
 					this.#options.lifecycle.abortCurrentAttempt();
 					this.#releaseSession();
 					commitSnapshots();
 					if (forced) {
 						closeProtocol(this.#options.protocol);
 					}
-					return () => this.#options.lifecycle.startCleanup(closure.finalState);
+					return continueClosing;
 				},
 			};
 		});
@@ -419,7 +411,7 @@ export class RpcConnectorSessionOwnershipImpl
 			current &&
 			transition.type === RpcProtocolSessionTransitionTypeEnum.closed
 		) {
-			this.#options.lifecycle.ensureTermination();
+			this.#options.termination.ensureTermination();
 		}
 		this.#options.publisher.enqueue(() => {
 			if (!this.#active || this.#record.isFenced(session)) {
@@ -496,7 +488,7 @@ export class RpcConnectorSessionOwnershipImpl
 			continueAfterClose?.();
 			return;
 		}
-		this.#options.lifecycle.ensureTermination();
+		this.#options.termination.ensureTermination();
 		this.#options.publisher.enqueue(() => {
 			const terminationAlreadyStarted =
 				this.#options.publisher.state.status === RpcStateStatusEnum.closing ||
@@ -527,7 +519,7 @@ export class RpcConnectorSessionOwnershipImpl
 		beforeSnapshots?: () => void,
 		continueAfterClose?: () => void,
 	): RpcConnectorCommit {
-		this.#options.lifecycle.ensureTermination();
+		this.#options.termination.ensureTermination();
 		const finalState = change.state;
 		return {
 			publication: {
@@ -539,13 +531,15 @@ export class RpcConnectorSessionOwnershipImpl
 				],
 			},
 			apply: (commitSnapshots) => {
+				const continueClosing =
+					this.#options.termination.enterClosing(finalState);
 				this.#options.lifecycle.abortCurrentAttempt();
 				beforeSnapshots?.();
 				this.#releaseSession();
 				commitSnapshots();
 				return () => {
 					try {
-						this.#options.lifecycle.startCleanup(finalState);
+						continueClosing();
 					} finally {
 						continueAfterClose?.();
 					}
@@ -741,6 +735,7 @@ export class RpcAcceptorSessionOwnershipImpl
 					events: [{ type: RpcEventTypeEnum.ownerDraining }, ...peerEvents],
 				},
 				apply: (commitSnapshots) => {
+					const continueGrace = this.#options.termination.enterGrace();
 					const terminals = terminalRecords.flatMap((record) => {
 						const session = record.session;
 						if (session === undefined) {
@@ -759,7 +754,7 @@ export class RpcAcceptorSessionOwnershipImpl
 					}
 					commitSnapshots();
 					this.#options.lifecycle.abortListener();
-					return this.#options.lifecycle.continueGracefulShutdown;
+					return continueGrace;
 				},
 			};
 		});
@@ -791,7 +786,8 @@ export class RpcAcceptorSessionOwnershipImpl
 					],
 				},
 				apply: (commitSnapshots) => {
-					this.#options.lifecycle.clearGraceTimer();
+					const continueClosing =
+						this.#options.termination.enterClosing(finalState);
 					const releaseFences = terminalRecords.flatMap((record) => {
 						const session = record.session;
 						const release =
@@ -809,7 +805,7 @@ export class RpcAcceptorSessionOwnershipImpl
 					for (const releaseFence of releaseFences) {
 						releaseFence();
 					}
-					return () => this.#options.lifecycle.startCleanup(finalState);
+					return continueClosing;
 				},
 			};
 		});
@@ -823,7 +819,7 @@ export class RpcAcceptorSessionOwnershipImpl
 		if (ownerIsTerminal) {
 			return;
 		}
-		this.#options.lifecycle.ensureTermination();
+		this.#options.termination.ensureTermination();
 		const faultError = createRpcException(RpcExceptionCodeEnum.protocol, error);
 		const releaseSessionFences = [...this.#sessions.values()].flatMap(
 			(record) => {
@@ -881,7 +877,8 @@ export class RpcAcceptorSessionOwnershipImpl
 					],
 				},
 				apply: (commitSnapshots) => {
-					this.#options.lifecycle.clearGraceTimer();
+					const continueClosing =
+						this.#options.termination.enterClosing(finalState);
 					this.#options.lifecycle.abortListener();
 					closeProtocol(this.#options.protocol);
 					for (const record of terminalRecords) {
@@ -890,7 +887,7 @@ export class RpcAcceptorSessionOwnershipImpl
 					commitSnapshots();
 					return () => {
 						try {
-							this.#options.lifecycle.startCleanup(finalState);
+							continueClosing();
 						} finally {
 							releaseFaultFence();
 						}

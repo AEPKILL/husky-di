@@ -12,7 +12,12 @@ import { Observable, Subject } from "rxjs";
 import { describe, expect, expectTypeOf, it, vi } from "vitest";
 
 import packageManifest from "../package.json";
-import { RpcConformanceStatusEnum } from "../src/conformance";
+import {
+	type RpcConformanceCaseResult,
+	RpcConformanceStatusEnum,
+	type RpcProtocolConformanceCandidate,
+	runRpcProtocolConformance,
+} from "../src/conformance";
 import {
 	createRemoteServiceDescriptor,
 	createRpcAcceptor,
@@ -1142,6 +1147,209 @@ describe("cold Topology Owner factories", () => {
 			createRpcAcceptor({ protocolFactory: proxyAcceptorFactory }),
 		).toThrow(expect.objectContaining({ code: RpcExceptionCodeEnum.protocol }));
 		expect(acceptorValidationRead).toBe(true);
+	});
+});
+
+describe("Default Protocol semantic terminal barriers", () => {
+	it("RPC-SPI-012 RPC-SHUTDOWN-009 completes semantic shutdown after remote Close before physical cleanup", async () => {
+		const descriptor = createRemoteServiceDescriptor(IDeferredService, {
+			wireName: "example.semantic-shutdown.v1",
+			methods: { run: true },
+		});
+		const network = createRpcTestNetwork();
+		const physicalCleanup = Promise.withResolvers<void>();
+		const handlerStarted = Promise.withResolvers<void>();
+		const handler = Promise.withResolvers<number>();
+		const order: string[] = [];
+		let directCloseStarted = false;
+		let protocol: ReturnType<typeof createRpcProtocolConnector> | undefined;
+		const connector = createRpcConnector({
+			protocolFactory(host) {
+				protocol = createRpcProtocolConnector(host);
+				return protocol;
+			},
+		});
+		const acceptor = createRpcAcceptor();
+		acceptor.expose(descriptor, {
+			run() {
+				handlerStarted.resolve();
+				return handler.promise;
+			},
+		});
+		const adapter = network.createConnectorAdapter("silent");
+		try {
+			await acceptor.listen(network.acceptorAdapter);
+			await connector.connect({
+				adapter: {
+					connect: (signal) => adapter.connect(signal),
+					connection$: new Observable<IRpcConnection>((subscriber) =>
+						adapter.connection$.subscribe({
+							next(connection) {
+								subscriber.next({
+									message$: connection.message$,
+									send: (message) => connection.send(message),
+									close() {
+										if (!directCloseStarted) {
+											directCloseStarted = true;
+											order.push("direct-close");
+											void connection.close();
+										}
+										return physicalCleanup.promise;
+									},
+								});
+							},
+							error: (error: unknown) => subscriber.error(error),
+							complete: () => subscriber.complete(),
+						}),
+					),
+				},
+			});
+			const call = connector.peer.resolve(descriptor).run(1);
+			void call.catch(() => {});
+			await handlerStarted.promise;
+			if (protocol === undefined)
+				throw new Error("Expected the built-in Protocol role.");
+			const shutdown = protocol
+				.shutdown()
+				.then(() => order.push("semantic-shutdown"));
+			const recordsBeforeClose = network.records.length;
+			network.emit(
+				1,
+				"connector",
+				new TextEncoder().encode('{"kind":"close"}'),
+			);
+			await expect(call).rejects.toMatchObject({
+				code: RpcExceptionCodeEnum.outcomeUnknown,
+			});
+			await shutdown;
+			expect(order).toEqual(["direct-close", "semantic-shutdown"]);
+			expect(connector.state.status).toBe(RpcStateStatusEnum.closing);
+			expect(connector.peer.state).toMatchObject({
+				status: RpcStateStatusEnum.closed,
+				reason: RpcCloseReasonEnum.remoteTerminated,
+			});
+			expect(
+				network.records
+					.slice(recordsBeforeClose)
+					.filter((record) => record.direction === "connector"),
+			).toEqual([]);
+		} finally {
+			physicalCleanup.resolve();
+			handler.resolve(1);
+			await Promise.all([connector.close(), acceptor.close()]);
+		}
+	});
+
+	it("RPC-SHUTDOWN-008 RPC-SHUTDOWN-009 keeps a healthy cutoff Session in the Acceptor grace barrier after remote Close", async () => {
+		const descriptor = createRemoteServiceDescriptor(IDeferredService, {
+			wireName: "example.sibling-grace.v1",
+			methods: { run: true },
+		});
+		const network = createRpcTestNetwork();
+		let protocol: ReturnType<typeof createRpcProtocolAcceptor> | undefined;
+		const acceptor = createRpcAcceptor({
+			runtimePolicy: { ackDelayMs: 1 },
+			protocolFactory(host) {
+				protocol = createRpcProtocolAcceptor(host);
+				return protocol;
+			},
+		});
+		const firstConnector = createRpcConnector({
+			runtimePolicy: { ackDelayMs: 1 },
+		});
+		const secondConnector = createRpcConnector({
+			runtimePolicy: { ackDelayMs: 1 },
+		});
+		const firstStarted = Promise.withResolvers<void>();
+		const secondStarted = Promise.withResolvers<void>();
+		const firstHandler = Promise.withResolvers<number>();
+		const secondHandler = Promise.withResolvers<number>();
+		firstConnector.peer.expose(descriptor, {
+			run() {
+				firstStarted.resolve();
+				return firstHandler.promise;
+			},
+		});
+		secondConnector.peer.expose(descriptor, {
+			run() {
+				secondStarted.resolve();
+				return secondHandler.promise;
+			},
+		});
+		const directCloses: string[] = [];
+		try {
+			await acceptor.listen(network.acceptorAdapter);
+			await firstConnector.connect({
+				adapter: network.createConnectorAdapter("silent", (direction) =>
+					directCloses.push(`first-${direction}`),
+				),
+			});
+			await secondConnector.connect({
+				adapter: network.createConnectorAdapter("silent", (direction) =>
+					directCloses.push(`second-${direction}`),
+				),
+			});
+			const [firstPeer, secondPeer] = acceptor.peers;
+			if (
+				firstPeer === undefined ||
+				secondPeer === undefined ||
+				protocol === undefined
+			)
+				throw new Error("Expected two Session peers and the Acceptor role.");
+			const firstCall = firstPeer.resolve(descriptor).run(1);
+			const secondCall = secondPeer.resolve(descriptor).run(2);
+			void firstCall.catch(() => {});
+			void secondCall.catch(() => {});
+			await Promise.all([firstStarted.promise, secondStarted.promise]);
+			let ownerSettled = false;
+			let roleSettled = false;
+			const shutdown = acceptor.shutdown().then(() => {
+				ownerSettled = true;
+			});
+			const roleShutdown = protocol.shutdown().then(() => {
+				roleSettled = true;
+			});
+			network.emit(1, "acceptor", new TextEncoder().encode('{"kind":"close"}'));
+			await expect(firstCall).rejects.toMatchObject({
+				code: RpcExceptionCodeEnum.outcomeUnknown,
+			});
+			expect(directCloses).toEqual(["first-acceptor"]);
+			expect(firstPeer.state).toMatchObject({
+				status: RpcStateStatusEnum.closed,
+				reason: RpcCloseReasonEnum.remoteTerminated,
+			});
+			expect(acceptor.peers).toEqual([secondPeer]);
+			expect(secondPeer.state.status).toBe(RpcStateStatusEnum.draining);
+			expect({ ownerSettled, roleSettled }).toEqual({
+				ownerSettled: false,
+				roleSettled: false,
+			});
+			secondHandler.resolve(20);
+			await expect(secondCall).resolves.toBe(20);
+			await Promise.all([shutdown, roleShutdown]);
+			expect({ ownerSettled, roleSettled }).toEqual({
+				ownerSettled: true,
+				roleSettled: true,
+			});
+			expect(directCloses).toEqual([
+				"first-acceptor",
+				expect.stringMatching(/^second-/),
+			]);
+			expect(
+				network.records.filter(
+					(record) =>
+						record.direction === "acceptor" && record.value.kind === "close",
+				),
+			).toHaveLength(1);
+		} finally {
+			firstHandler.resolve(10);
+			secondHandler.resolve(20);
+			await Promise.all([
+				acceptor.close(),
+				firstConnector.close(),
+				secondConnector.close(),
+			]);
+		}
 	});
 });
 
@@ -6465,5 +6673,167 @@ describe("Acceptor Topology Owner termination", () => {
 			"task-rejected",
 		]);
 		expect(acceptor.shutdown()).toBe(task);
+	});
+});
+
+describe("Protocol conformance lifetime", () => {
+	it("RPC-CONFORMANCE-001 RPC-CONFORMANCE-002 disposes partial construction and preserves ordered operation failures", async () => {
+		const primary = new Error("second construction failed");
+		const releaseError = new Error("independent release failures");
+		const releases: string[] = [];
+		const reports: RpcConformanceCaseResult[] = [];
+		let constructions = 0;
+		const protocol: RpcProtocolConformanceCandidate = {
+			connector() {
+				constructions += 1;
+				if (constructions > 1) {
+					throw primary;
+				}
+				return {
+					bind: async () => {},
+					shutdown: async () => {},
+					close() {
+						releases.push("close");
+						throw releaseError;
+					},
+					cleanup() {
+						releases.push("cleanup");
+						throw releaseError;
+					},
+				};
+			},
+			acceptor() {
+				throw primary;
+			},
+		};
+		const error: unknown = await runRpcProtocolConformance(
+			{
+				protocol,
+				counterExhaustionProtocol: protocol,
+				createActiveProtocolFaultMessage: () => new Uint8Array(),
+			},
+			{ report: (result) => reports.push(result) },
+		).catch((failure: unknown) => failure);
+
+		expect(releases).toEqual(["close", "cleanup"]);
+		expect(reports).toHaveLength(15);
+		expect(error).toBeInstanceOf(AggregateError);
+		const failures = (error as AggregateError).errors as Error[];
+		expect(failures).toHaveLength(15);
+		const cause = failures[0]?.cause as AggregateError;
+		expect(cause).toBeInstanceOf(AggregateError);
+		expect(cause.errors).toHaveLength(3);
+		expect(cause.errors[0]).toBe(primary);
+		expect(cause.errors[1]).toBe(releaseError);
+		expect(cause.errors[2]).toBe(releaseError);
+		for (const [index, report] of reports.entries()) {
+			expect(report.status).toBe(RpcConformanceStatusEnum.failed);
+			if (report.status === RpcConformanceStatusEnum.failed) {
+				expect(report.error).toBe(failures[index]);
+			}
+		}
+	});
+
+	it("RPC-CONFORMANCE-001 RPC-CONFORMANCE-002 bounds all work and disposal separately and freezes late outcomes", async () => {
+		vi.useFakeTimers();
+		try {
+			const handoff = Promise.withResolvers<void>();
+			const cleanup = Promise.withResolvers<void>();
+			const reports: RpcConformanceCaseResult[] = [];
+			const releases: string[] = [];
+			let currentCase = 0;
+			const protocol: RpcProtocolConformanceCandidate = {
+				connector() {
+					if (currentCase > 2) {
+						throw new Error("later candidate unavailable");
+					}
+					const blocked = currentCase === 2;
+					const task = blocked ? cleanup.promise : Promise.resolve();
+					return {
+						bind(connection) {
+							connection.message$.subscribe();
+							return handoff.promise;
+						},
+						shutdown: async () => {},
+						close() {
+							if (blocked) releases.push("connector-close");
+						},
+						cleanup() {
+							if (blocked) releases.push("connector-cleanup");
+							return task;
+						},
+					};
+				},
+				acceptor() {
+					if (currentCase > 2) {
+						throw new Error("later candidate unavailable");
+					}
+					const blocked = currentCase === 2;
+					const task = Promise.resolve();
+					return {
+						accept(connection) {
+							connection.message$.subscribe();
+							return handoff.promise;
+						},
+						shutdown: async () => {},
+						close() {
+							if (blocked) releases.push("acceptor-close");
+						},
+						cleanup() {
+							if (blocked) releases.push("acceptor-cleanup");
+							return task;
+						},
+					};
+				},
+			};
+			const outcome = runRpcProtocolConformance(
+				{
+					protocol,
+					counterExhaustionProtocol: protocol,
+					createActiveProtocolFaultMessage: () => new Uint8Array(),
+				},
+				{
+					report(result) {
+						reports.push(result);
+						currentCase += 1;
+					},
+				},
+			).catch((error: unknown) => error);
+			await vi.advanceTimersByTimeAsync(0);
+			expect(reports).toHaveLength(2);
+			await vi.advanceTimersByTimeAsync(1_999);
+			expect(releases).toEqual([]);
+			await vi.advanceTimersByTimeAsync(1);
+			expect(releases).toEqual([
+				"connector-close",
+				"acceptor-close",
+				"connector-cleanup",
+				"acceptor-cleanup",
+			]);
+			await vi.advanceTimersByTimeAsync(1_999);
+			expect(reports).toHaveLength(2);
+			await vi.advanceTimersByTimeAsync(1);
+			const error = await outcome;
+			expect(error).toBeInstanceOf(AggregateError);
+			expect(reports).toHaveLength(15);
+			const report = reports[2];
+			expect(report?.status).toBe(RpcConformanceStatusEnum.failed);
+			if (report?.status !== RpcConformanceStatusEnum.failed) {
+				throw new Error("Expected the bounded handoff case to fail.");
+			}
+			const cause = report.error.cause as AggregateError;
+			expect(cause).toBeInstanceOf(AggregateError);
+			expect(cause.errors).toHaveLength(2);
+			const causes = [...cause.errors];
+			handoff.reject(new Error("handoff rejected after work sealed"));
+			cleanup.reject(new Error("cleanup rejected after its deadline"));
+			await vi.advanceTimersByTimeAsync(10_000);
+			expect(reports).toHaveLength(15);
+			expect(report.error.cause).toBe(cause);
+			expect(cause.errors).toEqual(causes);
+			expect(releases).toHaveLength(4);
+		} finally {
+			vi.useRealTimers();
+		}
 	});
 });

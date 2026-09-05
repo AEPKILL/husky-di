@@ -141,3 +141,62 @@ test("RPC-PKG-008 RPC-SPI-006 exposes only atomic prepare and scoped incoming ca
 		import("../../src/protocol").IRpcProtocolIncomingCallReservation;
 	void (null as unknown as MissingGenericIncomingReservation);
 });
+
+test("RPC-PKG-003 keeps Protocol case lifetime collaborators private on every entrypoint", () => {
+	// @ts-expect-error Protocol case custody and observation types are private.
+	void (null as unknown as import("../../src/index").IRpcProtocolCaseLifetime);
+	// @ts-expect-error Protocol case custody and observation types are private.
+	void (null as unknown as import("../../src/index").IRpcProtocolCaseScope);
+	// @ts-expect-error Protocol case custody and observation types are private.
+	void (null as unknown as import("../../src/index").RpcProtocolCaseLifetimeFactory);
+	// @ts-expect-error Protocol case custody and observation types are private.
+	void (null as unknown as import("../../src/index").RpcProtocolCaseLifetimeImpl);
+	// @ts-expect-error Protocol case custody and observation types are private.
+	void (null as unknown as import("../../src/index").ProtocolPair);
+	// @ts-expect-error Protocol case custody and observation types are private.
+	void (null as unknown as import("../../src/index").ProtocolHostProbe);
+	// @ts-expect-error Protocol case lifetime assembly is private.
+	void (null as unknown as typeof import("../../src/index").createRpcProtocolCaseLifetime);
+	// @ts-expect-error Protocol case custody and observation types are private.
+	void (null as unknown as import("../../src/protocol").IRpcProtocolCaseLifetime);
+	// @ts-expect-error Protocol case custody and observation types are private.
+	void (null as unknown as import("../../src/protocol").IRpcProtocolCaseScope);
+	// @ts-expect-error Protocol case custody and observation types are private.
+	void (null as unknown as import("../../src/protocol").RpcProtocolCaseLifetimeFactory);
+	// @ts-expect-error Protocol case custody and observation types are private.
+	void (null as unknown as import("../../src/protocol").RpcProtocolCaseLifetimeImpl);
+	// @ts-expect-error Protocol case custody and observation types are private.
+	void (null as unknown as import("../../src/protocol").ProtocolPair);
+	// @ts-expect-error Protocol case custody and observation types are private.
+	void (null as unknown as import("../../src/protocol").ProtocolHostProbe);
+	// @ts-expect-error Protocol case lifetime assembly is private.
+	void (null as unknown as typeof import("../../src/protocol").createRpcProtocolCaseLifetime);
+	// @ts-expect-error Protocol case custody and observation types are private.
+	void (null as unknown as import("../../src/transport").IRpcProtocolCaseLifetime);
+	// @ts-expect-error Protocol case custody and observation types are private.
+	void (null as unknown as import("../../src/transport").IRpcProtocolCaseScope);
+	// @ts-expect-error Protocol case custody and observation types are private.
+	void (null as unknown as import("../../src/transport").RpcProtocolCaseLifetimeFactory);
+	// @ts-expect-error Protocol case custody and observation types are private.
+	void (null as unknown as import("../../src/transport").RpcProtocolCaseLifetimeImpl);
+	// @ts-expect-error Protocol case custody and observation types are private.
+	void (null as unknown as import("../../src/transport").ProtocolPair);
+	// @ts-expect-error Protocol case custody and observation types are private.
+	void (null as unknown as import("../../src/transport").ProtocolHostProbe);
+	// @ts-expect-error Protocol case lifetime assembly is private.
+	void (null as unknown as typeof import("../../src/transport").createRpcProtocolCaseLifetime);
+	// @ts-expect-error Protocol case custody and observation types are private.
+	void (null as unknown as import("../../src/conformance").IRpcProtocolCaseLifetime);
+	// @ts-expect-error Protocol case custody and observation types are private.
+	void (null as unknown as import("../../src/conformance").IRpcProtocolCaseScope);
+	// @ts-expect-error Protocol case custody and observation types are private.
+	void (null as unknown as import("../../src/conformance").RpcProtocolCaseLifetimeFactory);
+	// @ts-expect-error Protocol case custody and observation types are private.
+	void (null as unknown as import("../../src/conformance").RpcProtocolCaseLifetimeImpl);
+	// @ts-expect-error Protocol case custody and observation types are private.
+	void (null as unknown as import("../../src/conformance").ProtocolPair);
+	// @ts-expect-error Protocol case custody and observation types are private.
+	void (null as unknown as import("../../src/conformance").ProtocolHostProbe);
+	// @ts-expect-error Protocol case lifetime assembly is private.
+	void (null as unknown as typeof import("../../src/conformance").createRpcProtocolCaseLifetime);
+});

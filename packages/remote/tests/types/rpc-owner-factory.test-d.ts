@@ -5,6 +5,7 @@
  */
 
 import { assertType, expectTypeOf, test } from "vitest";
+import type * as PublicRemote from "../../src/index";
 
 import {
 	type CreateRpcConnectorReconnectionOptions,
@@ -31,6 +32,30 @@ import {
 declare const adapterFactory: RpcConnectorAdapterFactory;
 declare const connectorProtocolFactory: RpcProtocolConnectorFactory;
 declare const acceptorProtocolFactory: RpcProtocolAcceptorFactory;
+
+test("RPC-PKG-003 keeps Owner termination lifetime and assembly private", () => {
+	// @ts-expect-error The Owner request view is a private behavioral collaborator.
+	type MissingTermination = PublicRemote.IRpcOwnerTermination;
+	void (null as unknown as MissingTermination);
+	// @ts-expect-error Winning transaction capabilities are not application API.
+	type MissingTerminationLifecycle = PublicRemote.IRpcOwnerTerminationLifecycle;
+	void (null as unknown as MissingTerminationLifecycle);
+	// @ts-expect-error Termination implementation remains package-private.
+	type MissingTerminationImpl = PublicRemote.RpcOwnerTerminationImpl;
+	void (null as unknown as MissingTerminationImpl);
+	type MissingTerminationCreator =
+		// @ts-expect-error Owner termination creation is not a public extension point.
+		typeof PublicRemote.createRpcOwnerTermination;
+	void (null as unknown as MissingTerminationCreator);
+	type MissingTerminationFactory =
+		// @ts-expect-error Protocol extensions cannot replace Framework termination.
+		import("../../src/protocol").RpcOwnerTerminationFactory;
+	void (null as unknown as MissingTerminationFactory);
+	type MissingTerminationOptions =
+		// @ts-expect-error Protocol extensions cannot construct Framework termination.
+		import("../../src/protocol").CreateRpcOwnerTerminationOptions;
+	void (null as unknown as MissingTerminationOptions);
+});
 
 const connector = createRpcConnector({
 	protocolFactory: connectorProtocolFactory,

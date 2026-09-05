@@ -108,21 +108,26 @@ function createConnectorHarness(): ConnectorHarness {
 				ownerReservedBytes.push(bytes);
 				return ownerReservation;
 			}),
-			lifecycle: {
+			termination: {
 				ensureTermination: () => {
 					if (!terminationStarted) {
 						terminationStarted = true;
 						actions.push("termination");
 					}
 				},
+				enterGrace: () => () => {
+					actions.push("continue-grace");
+				},
+				enterClosing: () => () => {
+					actions.push("cleanup");
+				},
+			},
+			lifecycle: {
 				abortCurrentAttempt: () => actions.push("abort-attempt"),
 				failProvisionalAttachment: (_attachment, error) =>
 					actions.push(
 						`fail-provisional:${"code" in error ? String(error.code) : "none"}`,
 					),
-				clearGraceTimer: () => actions.push("clear-timer"),
-				continueGracefulShutdown: () => actions.push("continue-grace"),
-				startCleanup: () => actions.push("cleanup"),
 			},
 		},
 		{ createPeer: createPeerFactory(peerConstructions) },
@@ -160,18 +165,23 @@ function createAcceptorHarness(maximumSessions = 2): AcceptorHarness {
 			protocol,
 			maximumSessions,
 			peerEnvironment: createPeerEnvironment(),
-			lifecycle: {
-				canAdmitSession: () => true,
+			termination: {
 				ensureTermination: () => {
 					if (!terminationStarted) {
 						terminationStarted = true;
 						actions.push("termination");
 					}
 				},
-				clearGraceTimer: () => actions.push("clear-timer"),
+				enterGrace: () => () => {
+					actions.push("continue-grace");
+				},
+				enterClosing: () => () => {
+					actions.push("cleanup");
+				},
+			},
+			lifecycle: {
+				canAdmitSession: () => true,
 				abortListener: () => actions.push("abort-listener"),
-				continueGracefulShutdown: () => actions.push("continue-grace"),
-				startCleanup: () => actions.push("cleanup"),
 			},
 		},
 		{ createPeer: createPeerFactory(peerConstructions) },
@@ -527,7 +537,6 @@ describe("Acceptor Session ownership", () => {
 		]);
 		expect(harness.actions).toEqual([
 			"termination",
-			"clear-timer",
 			"abort-listener",
 			`event:${RpcEventTypeEnum.peerClosed}:peers=0`,
 			`event:${RpcEventTypeEnum.peerClosed}:peers=0`,

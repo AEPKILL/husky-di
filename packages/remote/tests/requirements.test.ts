@@ -325,7 +325,7 @@ describe("Remote RPC requirement evidence", () => {
 			"packages/remote/src/utils/rpc-exposure.util.ts",
 		] as const;
 		const callableGuardConsumerPaths = [
-			"packages/remote/src/conformance/rpc-protocol-conformance.util.ts",
+			"packages/remote/src/conformance/impls/rpc-protocol-case-lifetime.impl.ts",
 			"packages/remote/src/factories/rpc-acceptor.factory.ts",
 			"packages/remote/src/factories/rpc-connector.factory.ts",
 			"packages/remote/src/factories/rpc-owner-assembly.factory.ts",
