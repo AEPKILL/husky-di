@@ -1,17 +1,21 @@
 ---
 name: adversarial-grill
-description: Complete a design grill through adversarial questioning between two agents.
+description: Complete a design grill through adversarial questioning between two agents, with glossary and ADR records by default.
 disable-model-invocation: true
 ---
 
 # Adversarial Grill
 
-Have two subagents question, answer, and refine a design until the grill is
-complete. Read [grilling](../grilling/SKILL.md) for the design tree, frontier, and
-question format. When documents are requested, including through
-`grill-with-docs`, also use [domain-modeling](../domain-modeling/SKILL.md) and its
-linked formats to record the design as it settles. This workflow produces the
-design and requested records; it does not authorize implementing the design.
+Use [grill-with-docs](../grill-with-docs/SKILL.md) as the default workflow, with
+two subagents questioning, answering, and refining a design until the grill is
+complete. Read its underlying [grilling](../grilling/SKILL.md) for the design
+tree, frontier, and question format, and
+[domain-modeling](../domain-modeling/SKILL.md) and its linked formats to record
+the design as it settles. Include those records by default; honor explicit
+requests for discussion only or limits on document writes. The roles below
+adapt the interview while retaining the selected workflow's documentation and
+completion requirements. This workflow produces the design and scoped records;
+it does not authorize implementing the design.
 
 ## Roles
 
@@ -25,10 +29,10 @@ design and requested records; it does not authorize implementing the design.
 
 ## 1. Frame and start
 
-Give both roles a self-contained brief with the design topic, scope, requested
-records, completion criteria, applicable instructions, and the user's existing
-decisions and delegated authority. Include the same original source baseline,
-capturing relevant tracked and untracked document changes. Set one finite total
+Give both roles a self-contained brief with the design topic, scope, default and
+user-requested records, completion criteria, applicable instructions, and the
+user's existing decisions and delegated authority. Include the same original
+source baseline, capturing relevant tracked and untracked document changes. Set one finite total
 exchange budget before delegation, using any user limit; the Coordinator may
 choose a reasonable budget without asking for routine permission.
 
@@ -87,9 +91,10 @@ objections, and spent budget through updates, retries, and continuations.
 
 ## 3. Record settled design during the interview
 
-When records are authorized, the Proposer updates them as contents become
-resolved, following `domain-modeling`'s timing and formats. Capture resolved
-terms immediately in the appropriate `CONTEXT.md`; keep it glossary-only.
+In the default `grill-with-docs` workflow, the Proposer updates records as their
+contents become resolved, within the user's document scope and following
+`domain-modeling`'s timing and formats. Capture resolved terms immediately in the
+appropriate `CONTEXT.md`; keep it glossary-only.
 Create files lazily and offer or write an ADR only when all three criteria hold:
 hard to reverse, surprising without context, and a real trade-off. Keep
 unresolved proposals in permitted working material rather than authoritative
