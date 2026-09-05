@@ -5,7 +5,10 @@
  */
 
 import { Subject } from "rxjs";
+import { createRpcSessionActivity } from "../../src/factories/rpc-session-activity.factory";
 import { createRpcSessionCallRetention } from "../../src/factories/rpc-session-call-retention.factory";
+import { createRpcSessionIncomingCalls } from "../../src/factories/rpc-session-incoming-calls.factory";
+import { createRpcSessionInvocations } from "../../src/factories/rpc-session-invocations.factory";
 import { RpcRetainedBytesLedgerImpl } from "../../src/impls/common/rpc-retained-bytes-ledger.impl";
 import { RpcEndpointImpl } from "../../src/impls/endpoint/rpc-endpoint.impl";
 import { RpcCodecImpl } from "../../src/impls/protocol/rpc-codec.impl";
@@ -18,6 +21,7 @@ import type {
 	RpcProtocolSessionTransition,
 } from "../../src/interfaces/protocol/rpc-protocol.interface";
 import type { IRpcSessionBinding } from "../../src/interfaces/session/rpc-session.interface";
+import type { RpcSessionInvocationsFactory } from "../../src/interfaces/session/rpc-session-invocations.interface";
 import type {
 	IRpcAcceptorAdapter,
 	IRpcConnectorAdapter,
@@ -75,6 +79,7 @@ export interface IRpcDirectSessionHarness {
 
 export function createRpcDirectSessionHarness(
 	policyOverrides: Partial<IRpcProtocolRuntimePolicy> = {},
+	createInvocations: RpcSessionInvocationsFactory = createRpcSessionInvocations,
 ): IRpcDirectSessionHarness {
 	const sent: Readonly<Record<string, unknown>>[] = [];
 	const transitions: RpcProtocolSessionTransition[] = [];
@@ -148,7 +153,10 @@ export function createRpcDirectSessionHarness(
 		},
 		{
 			codec,
+			createActivity: createRpcSessionActivity,
 			createCallRetention: createRpcSessionCallRetention,
+			createIncomingCalls: createRpcSessionIncomingCalls,
+			createInvocations,
 			retainedBytesLedger: new RpcRetainedBytesLedgerImpl(
 				policy.maxRetainedBytesPerSession,
 			),

@@ -7,6 +7,7 @@
 import type { RpcEndpointFailureEnum } from "@/enums/protocol/rpc-endpoint-failure.enum";
 import type { IRpcEndpoint } from "@/interfaces/endpoint/rpc-endpoint.interface";
 import type {
+	IRpcProtocolHost,
 	IRpcProtocolSession,
 	IRpcProtocolSessionHost,
 	IRpcRetainedBytesReservation,
@@ -21,6 +22,13 @@ export interface IRpcSession extends IRpcProtocolSession {
 	terminateForced(): void;
 	shutdown(): Promise<void>;
 }
+
+export type RpcSessionFactory = (options: {
+	readonly host: IRpcProtocolHost;
+	readonly sessionId: string;
+	readonly resumeToken: string;
+	readonly onTerminal: () => void;
+}) => IRpcSession;
 
 export interface IRpcBindingPlan {
 	install(endpoint: IRpcEndpoint): IRpcSessionBinding;

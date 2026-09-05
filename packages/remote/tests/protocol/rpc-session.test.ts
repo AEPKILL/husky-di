@@ -10,7 +10,10 @@ import { RpcCallTerminalTypeEnum } from "../../src/enums/protocol/rpc-call-termi
 import { RpcEndpointFailureEnum } from "../../src/enums/protocol/rpc-endpoint-failure.enum";
 import { RpcCloseReasonEnum } from "../../src/enums/rpc-close-reason.enum";
 import { RpcExceptionCodeEnum } from "../../src/enums/rpc-exception-code.enum";
+import { createRpcSessionActivity } from "../../src/factories/rpc-session-activity.factory";
 import { createRpcSessionCallRetention } from "../../src/factories/rpc-session-call-retention.factory";
+import { createRpcSessionIncomingCalls } from "../../src/factories/rpc-session-incoming-calls.factory";
+import { createRpcSessionInvocations } from "../../src/factories/rpc-session-invocations.factory";
 import { RpcRetainedBytesLedgerImpl } from "../../src/impls/common/rpc-retained-bytes-ledger.impl";
 import { RpcCodecImpl } from "../../src/impls/protocol/rpc-codec.impl";
 import { RpcSessionImpl } from "../../src/impls/session/rpc-session.impl";
@@ -21,6 +24,10 @@ import type {
 	IRpcProtocolSessionHost,
 	RpcProtocolSessionTransition,
 } from "../../src/interfaces/protocol/rpc-protocol.interface";
+import type {
+	IRpcSessionActivity,
+	RpcSessionActivityFactory,
+} from "../../src/interfaces/session/rpc-session-activity.interface";
 import {
 	normalizeRpcApplicationArguments,
 	normalizeRpcApplicationValue,
@@ -47,7 +54,10 @@ const policy: IRpcProtocolRuntimePolicy = {
 
 const codec = new RpcCodecImpl();
 
-function createSession(sessionId: string): Readonly<{
+function createSession(
+	sessionId: string,
+	createActivity: RpcSessionActivityFactory = createRpcSessionActivity,
+): Readonly<{
 	readonly session: RpcSessionImpl;
 	readonly sessionHost: IRpcProtocolSessionHost;
 	readonly transitions: RpcProtocolSessionTransition[];
@@ -76,7 +86,10 @@ function createSession(sessionId: string): Readonly<{
 			},
 			{
 				codec,
+				createActivity,
 				createCallRetention: createRpcSessionCallRetention,
+				createIncomingCalls: createRpcSessionIncomingCalls,
+				createInvocations: createRpcSessionInvocations,
 				retainedBytesLedger: new RpcRetainedBytesLedgerImpl(
 					policy.maxRetainedBytesPerSession,
 				),
@@ -115,11 +128,95 @@ function enterRecovery(
 }
 
 describe("Default RPC Session authority plans", () => {
+	it("RPC-SESSION-011 RPC-RECOVERY-005 RPC-VALID-002 scopes Activity Probe ownership to the activated current binding", () => {
+		const activities: {
+			readonly options: Parameters<RpcSessionActivityFactory>[0];
+			readonly activity: IRpcSessionActivity;
+		}[] = [];
+		const createActivity: RpcSessionActivityFactory = (options) => {
+			const activity: IRpcSessionActivity = {
+				hasPendingProbe: false,
+				start: vi.fn(),
+				recordInbound: vi.fn(),
+				takeProbe: vi.fn(() => undefined),
+				stop: vi.fn(),
+			};
+			activities.push({ options, activity });
+			return activity;
+		};
+		const { session, sessionHost, transitions } = createSession(
+			"activity-lifetime",
+			createActivity,
+		);
+		const initial = session.prepareFresh(sessionHost).install(createEndpoint());
+		expect(activities).toHaveLength(0);
+		expect(initial.activate()).toBe(true);
+		expect(initial.activate()).toBe(false);
+		const first = activities[0];
+		if (first === undefined) {
+			throw new Error("Expected activity for the first activated binding.");
+		}
+		expect(first.activity.start).toHaveBeenCalledTimes(1);
+
+		const replacement = session.reviewResume({
+			token: "activity-lifetime-token",
+			attempt: 1,
+			cursor: 0,
+		});
+		if (replacement.kind !== "bind") {
+			throw new Error("Expected a replacement binding plan.");
+		}
+		const current = replacement.plan.install(createEndpoint());
+		expect(first.activity.stop).toHaveBeenCalledTimes(1);
+		expect(activities).toHaveLength(1);
+		first.options.onProbeDue();
+		first.options.onSilent();
+		expect(transitions).toEqual([]);
+		expect(current.activate()).toBe(true);
+		const second = activities[1];
+		if (second === undefined) {
+			throw new Error("Expected activity for the replacement binding.");
+		}
+		expect(second.activity.start).toHaveBeenCalledTimes(1);
+
+		const encoder = new TextEncoder();
+		const validAck = encoder.encode('{"kind":"ack","ackThrough":0}');
+		initial.receive(validAck);
+		current.receive(encoder.encode("invalid"));
+		current.receive(encoder.encode('{"kind":"ack","ackThrough":1}'));
+		expect(first.activity.recordInbound).not.toHaveBeenCalled();
+		expect(second.activity.recordInbound).not.toHaveBeenCalled();
+		current.receive(validAck);
+		expect(second.activity.recordInbound).toHaveBeenCalledExactlyOnceWith(
+			"ack",
+		);
+
+		first.options.onSilent();
+		expect(transitions).toEqual([]);
+		second.options.onSilent();
+		expect(transitions).toEqual([
+			{ type: "recovering", cause: expect.any(Error) },
+		]);
+		expect(second.activity.stop).toHaveBeenCalledTimes(1);
+		session.forceClose();
+		second.options.onSilent();
+		expect(transitions).toHaveLength(1);
+	});
+
 	it("RPC-SPI-004 keeps preparation identity-free until start", async () => {
 		const { session, sent } = createRpcDirectSessionHarness();
 		const finishes: unknown[] = [];
-		const outgoingOrdinal = session._nextOutgoingCallOrdinal;
-		const outgoingSequence = session._nextOutgoingSequence;
+		const delayed = session.prepareInvocation(
+			{
+				service: "example.atomic-prepare.v1",
+				method: "run",
+				args: normalizeRpcApplicationArguments(["delayed"]),
+			},
+			(outcome) => finishes.push(outcome),
+		);
+		if (delayed === undefined) {
+			throw new Error("Expected the earlier Pending Invocation capacity.");
+		}
 		const invocation = session.prepareInvocation(
 			{
 				service: "example.atomic-prepare.v1",
@@ -131,65 +228,52 @@ describe("Default RPC Session authority plans", () => {
 		if (invocation === undefined) {
 			throw new Error("Expected Pending Invocation capacity.");
 		}
-		const [entry] = session._invocations;
-		if (entry === undefined) {
-			throw new Error("Expected one Pending Invocation entry.");
-		}
 
-		expect({
-			admitted: entry.admitted,
-			callId: entry.callId,
-			finishes,
-			outgoingCalls: session._outgoingCalls.size,
-			outgoingOrdinal: session._nextOutgoingCallOrdinal,
-			outgoingSequence: session._nextOutgoingSequence,
-			replay: session._callRetention.replayCount,
-			sent: sent.length,
-			started: entry.started,
-		}).toEqual({
-			admitted: false,
-			callId: undefined,
-			finishes: [],
-			outgoingCalls: 0,
-			outgoingOrdinal,
-			outgoingSequence,
-			replay: 0,
-			sent: 0,
-			started: false,
-		});
+		expect(finishes).toEqual([]);
+		expect(sent).toEqual([]);
+		expect(session._callRetention.replayCount).toBe(0);
 
 		invocation.start();
 		await vi.waitFor(() => expect(sent).toHaveLength(1));
-		expect(entry).toMatchObject({ admitted: true, callId: "1", started: true });
-		expect(session._outgoingCalls.get("1")).toBe(entry);
+		expect(sent[0]).toMatchObject({
+			kind: "message",
+			seq: 1,
+			message: { kind: "call", callId: "1", args: ["value"] },
+		});
 		expect(session._callRetention.replayCount).toBe(1);
-		expect(session._nextOutgoingCallOrdinal).toBe(outgoingOrdinal + 1);
-		expect(session._nextOutgoingSequence).toBe(outgoingSequence + 1);
+		// Preparation order cannot reserve identities ahead of the start gate.
+		delayed.start();
+		await vi.waitFor(() => expect(sent).toHaveLength(2));
+		expect(sent[1]).toMatchObject({
+			kind: "message",
+			seq: 2,
+			message: { kind: "call", callId: "2", args: ["delayed"] },
+		});
 		expect(finishes).toEqual([]);
 		session.forceClose();
 	});
 
-	it("RPC-SPI-004 keeps start inert after canceling a Pending Invocation", () => {
-		const { session, sent, faults } = createRpcDirectSessionHarness();
+	it("RPC-SPI-004 keeps start inert after canceling a Pending Invocation", async () => {
+		const { session, sent, faults } = createRpcDirectSessionHarness({
+			maxPendingInvocationsPerSession: 1,
+		});
 		const finishes: unknown[] = [];
-		const invocation = session.prepareInvocation(
-			{
-				service: "example.canceled-prepare.v1",
-				method: "run",
-				args: normalizeRpcApplicationArguments([]),
-			},
-			(outcome) => finishes.push(outcome),
+		const request = {
+			service: "example.canceled-prepare.v1",
+			method: "run",
+			args: normalizeRpcApplicationArguments([]),
+		};
+		const invocation = session.prepareInvocation(request, (outcome) =>
+			finishes.push(outcome),
 		);
 		if (invocation === undefined) {
 			throw new Error("Expected Pending Invocation capacity.");
 		}
-		const [entry] = session._invocations;
-		if (entry === undefined) {
-			throw new Error("Expected one Pending Invocation entry.");
-		}
 
 		invocation.cancel();
 		invocation.start();
+		invocation.start();
+		invocation.cancel();
 
 		expect(finishes).toEqual([
 			{
@@ -197,20 +281,93 @@ describe("Default RPC Session authority plans", () => {
 				code: RpcExceptionCodeEnum.canceled,
 			},
 		]);
-		expect({
-			faults,
-			invocations: session._invocations.size,
-			sent: sent.length,
-			started: entry.started,
-			retired: entry.retired,
-		}).toEqual({
-			faults: [],
-			invocations: 0,
-			sent: 0,
-			started: false,
-			retired: true,
+		expect(faults).toEqual([]);
+		expect(sent).toEqual([]);
+		expect(session._callRetention.replayCount).toBe(0);
+
+		const replacement = session.prepareInvocation(request, () => undefined);
+		if (replacement === undefined) {
+			throw new Error("Expected canceled Pending capacity to be reusable.");
+		}
+		replacement.start();
+		await vi.waitFor(() => expect(sent).toHaveLength(1));
+		expect(sent[0]).toMatchObject({
+			kind: "message",
+			seq: 1,
+			message: { kind: "call", callId: "1" },
 		});
 		session.forceClose();
+		expect(finishes).toHaveLength(1);
+	});
+
+	it.each([
+		"result",
+		"error",
+	] as const)("RPC-CALL-005 RPC-LEDGER-005 retains canceled admitted work until its late %s", async (kind) => {
+		const { session, sent, receive, faults } = createRpcDirectSessionHarness({
+			maxPendingInvocationsPerSession: 1,
+		});
+		const request = {
+			service: "example.admitted-cancel.v1",
+			method: "run",
+			args: normalizeRpcApplicationArguments([]),
+		};
+		const finish = vi.fn();
+		const invocation = session.prepareInvocation(request, finish);
+		if (invocation === undefined) {
+			throw new Error("Expected Invocation capacity.");
+		}
+		invocation.start();
+		await vi.waitFor(() => expect(sent).toHaveLength(1));
+		invocation.cancel();
+		await vi.waitFor(() => expect(sent).toHaveLength(2));
+		expect(sent[1]).toMatchObject({
+			kind: "message",
+			seq: 2,
+			message: { kind: "cancel", callId: "1" },
+		});
+		expect(finish.mock.calls).toEqual([
+			[
+				{
+					type: RpcCallTerminalTypeEnum.failed,
+					code: RpcExceptionCodeEnum.canceled,
+				},
+			],
+		]);
+		expect(session.prepareInvocation(request, () => undefined)).toBeUndefined();
+
+		receive(
+			codec.encode({
+				kind: "message",
+				seq: 1,
+				ackThrough: 2,
+				message:
+					kind === "result"
+						? { kind, callId: "1", value: "late" }
+						: {
+								kind,
+								callId: "1",
+								error: { code: "handler-failed", message: "Late failure." },
+							},
+			}),
+		);
+		const replacement = session.prepareInvocation(request, () => undefined);
+		if (replacement === undefined) {
+			throw new Error(
+				"Expected authoritative terminal to restore Invocation capacity.",
+			);
+		}
+		replacement.start();
+		await vi.waitFor(() => expect(sent).toHaveLength(3));
+		expect(sent[2]).toMatchObject({
+			kind: "message",
+			seq: 3,
+			ackThrough: 1,
+			message: { kind: "call", callId: "2" },
+		});
+		expect(faults).toEqual([]);
+		session.forceClose();
+		expect(finish).toHaveBeenCalledTimes(1);
 	});
 
 	it("binds a plan to its issuing Session and rejects a second install", () => {

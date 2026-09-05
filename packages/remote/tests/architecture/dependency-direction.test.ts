@@ -676,10 +676,9 @@ describe("Remote package dependency direction", () => {
 		expect(violations).toEqual([]);
 	});
 
-	it("keeps construction options owned by implementations and creator contracts in factories", () => {
+	it("keeps existing Peer and Session ownership construction contracts local", () => {
 		for (const [domain, file, name] of [
 			["peer", "rpc-peer", "RpcPeer"],
-			["session", "rpc-session", "RpcSession"],
 			["owner", "rpc-session-ownership", "RpcConnectorSessionOwnership"],
 			["owner", "rpc-session-ownership", "RpcAcceptorSessionOwnership"],
 		]) {
@@ -700,6 +699,24 @@ describe("Remote package dependency direction", () => {
 			expect(factorySource).toContain(`options: Create${name}Options`);
 			expect(factorySource).toContain(`@/impls/${domain}/${file}.impl`);
 		}
+	});
+
+	it("keeps Session creation independent of its concrete implementation", () => {
+		const sessionInterfaceSource = readFileSync(
+			resolve(sourceRoot, "interfaces/session/rpc-session.interface.ts"),
+			"utf8",
+		);
+		const sessionImplementationSource = readFileSync(
+			resolve(implementationRoot, "session/rpc-session.impl.ts"),
+			"utf8",
+		);
+
+		expect(sessionInterfaceSource).toContain("export type RpcSessionFactory =");
+		expect(sessionInterfaceSource).not.toContain("@/impls/");
+		expect(sessionInterfaceSource).not.toContain("@/factories/");
+		expect(sessionImplementationSource).toContain(
+			"export type CreateRpcSessionOptions = Parameters<RpcSessionFactory>[0];",
+		);
 		const protocolImplementationSources = [
 			readFileSync(
 				resolve(implementationRoot, "protocol/rpc-protocol-connector.impl.ts"),
@@ -713,8 +730,14 @@ describe("Remote package dependency direction", () => {
 
 		for (const implementationSource of protocolImplementationSources) {
 			expect(implementationSource).toContain("RpcSessionFactory");
+			expect(implementationSource).toContain(
+				"@/interfaces/session/rpc-session.interface",
+			);
 			expect(implementationSource).not.toContain(
 				"@/factories/rpc-protocol.factory",
+			);
+			expect(implementationSource).not.toContain(
+				"@/factories/rpc-session.factory",
 			);
 		}
 	});

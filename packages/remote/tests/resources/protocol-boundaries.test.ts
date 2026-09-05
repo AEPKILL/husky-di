@@ -9,12 +9,16 @@ import { describe, expect, it, vi } from "vitest";
 import {
 	RPC_MAX_WIRE_DEPTH,
 	RPC_MAX_WIRE_NODES,
+	RPC_PROTECTED_SESSION_BYTES,
 } from "../../src/constants/protocol/rpc-profile.const";
 import { RpcDecodePhaseEnum } from "../../src/enums/protocol/rpc-decode-phase.enum";
 import type { RpcEndpointFailureEnum } from "../../src/enums/protocol/rpc-endpoint-failure.enum";
 import { RpcWireRecordKindEnum } from "../../src/enums/protocol/rpc-wire-record-kind.enum";
 import { RpcExceptionCodeEnum } from "../../src/enums/rpc-exception-code.enum";
+import { createRpcSessionActivity } from "../../src/factories/rpc-session-activity.factory";
 import { createRpcSessionCallRetention } from "../../src/factories/rpc-session-call-retention.factory";
+import { createRpcSessionIncomingCalls } from "../../src/factories/rpc-session-incoming-calls.factory";
+import { createRpcSessionInvocations } from "../../src/factories/rpc-session-invocations.factory";
 import { RpcRetainedBytesLedgerImpl } from "../../src/impls/common/rpc-retained-bytes-ledger.impl";
 import { RpcEndpointImpl } from "../../src/impls/endpoint/rpc-endpoint.impl";
 import { RpcCodecImpl } from "../../src/impls/protocol/rpc-codec.impl";
@@ -174,7 +178,10 @@ function createSession(
 		},
 		{
 			codec,
+			createActivity: createRpcSessionActivity,
 			createCallRetention: createRpcSessionCallRetention,
+			createIncomingCalls: createRpcSessionIncomingCalls,
+			createInvocations: createRpcSessionInvocations,
 			retainedBytesLedger: new RpcRetainedBytesLedgerImpl(
 				runtimePolicy.maxRetainedBytesPerSession,
 			),
@@ -485,26 +492,21 @@ describe("Default RPC Protocol resource boundaries", () => {
 					"Expected Pending Invocation capacity after cancellation.",
 				);
 			}
-			const [entry] = session._invocations;
-			if (entry === undefined) {
-				throw new Error("Expected the committed Pending Invocation entry.");
-			}
-
+			invocation.start();
 			invocation.cancel();
 
-			expect(session._pendingInvocations).toHaveLength(0);
-			expect(entry.request).toBeUndefined();
-			expect(entry.callId).toBeUndefined();
-			expect(entry.admitted).toBe(false);
+			const reclaimed = session.reserveRetainedBytes(
+				session._host.policy.maxRetainedBytesPerSession -
+					RPC_PROTECTED_SESSION_BYTES,
+			);
+			expect(reclaimed).toBeDefined();
+			reclaimed?.release();
 		}
 		expect(finishes).toEqual([
 			{ type: "failed", code: "canceled" },
 			{ type: "failed", code: "canceled" },
 			{ type: "failed", code: "canceled" },
 		]);
-		expect(session._invocations.size).toBe(0);
-		expect(session._invocationCount).toBe(0);
-		expect(session._pendingInvocationBytes).toBe(0);
 		session.forceClose();
 	});
 

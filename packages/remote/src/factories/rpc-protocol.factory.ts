@@ -4,8 +4,10 @@
  * @created 2026-08-19 00:00:00
  */
 
-import type { RpcSessionFactory } from "@/factories/rpc-session.factory";
+import { createRpcSessionActivity } from "@/factories/rpc-session-activity.factory";
 import { createRpcSessionCallRetention } from "@/factories/rpc-session-call-retention.factory";
+import { createRpcSessionIncomingCalls } from "@/factories/rpc-session-incoming-calls.factory";
+import { createRpcSessionInvocations } from "@/factories/rpc-session-invocations.factory";
 import { RpcRetainedBytesLedgerImpl } from "@/impls/common/rpc-retained-bytes-ledger.impl";
 import { RpcCodecImpl } from "@/impls/protocol/rpc-codec.impl";
 import { RpcProtocolAcceptorImpl } from "@/impls/protocol/rpc-protocol-acceptor.impl";
@@ -17,7 +19,10 @@ import type {
 	IRpcProtocolConnector,
 	IRpcProtocolConnectorHost,
 } from "@/interfaces/protocol/rpc-protocol.interface";
-import type { IRpcSession } from "@/interfaces/session/rpc-session.interface";
+import type {
+	IRpcSession,
+	RpcSessionFactory,
+} from "@/interfaces/session/rpc-session.interface";
 import { createRpcSecurityCarrier } from "@/utils/protocol/rpc-base64-url-32-schema.util";
 
 /** Creates a fresh built-in Connector Protocol role for one owner. */
@@ -55,7 +60,10 @@ export function createBuiltInRpcSessionFactory(
 	return (options): IRpcSession =>
 		new RpcSessionImpl(options, {
 			codec,
+			createActivity: createRpcSessionActivity,
 			createCallRetention: createRpcSessionCallRetention,
+			createIncomingCalls: createRpcSessionIncomingCalls,
+			createInvocations: createRpcSessionInvocations,
 			counterExhausted,
 			retainedBytesLedger: new RpcRetainedBytesLedgerImpl(
 				options.host.policy.maxRetainedBytesPerSession,

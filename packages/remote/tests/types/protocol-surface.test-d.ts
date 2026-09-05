@@ -51,6 +51,51 @@ test("RPC-PKG-003 keeps the built-in Protocol private", () => {
 	// @ts-expect-error Default Protocol retention implementation remains private.
 	type MissingCallRetentionImpl = PublicRemote.RpcSessionCallRetentionImpl;
 	void (null as unknown as MissingCallRetentionImpl);
+
+	// @ts-expect-error Activity Probe ownership is a private Session collaborator.
+	type MissingSessionActivity = PublicRemote.IRpcSessionActivity;
+	void (null as unknown as MissingSessionActivity);
+
+	type MissingSessionActivityFactory =
+		// @ts-expect-error Protocol extensions do not expose Activity Probe assembly.
+		import("../../src/protocol").RpcSessionActivityFactory;
+	void (null as unknown as MissingSessionActivityFactory);
+
+	// @ts-expect-error Default Protocol Activity Probe implementation remains private.
+	type MissingSessionActivityImpl = PublicRemote.RpcSessionActivityImpl;
+	void (null as unknown as MissingSessionActivityImpl);
+
+	// @ts-expect-error Outgoing Invocation ownership is a private Session collaborator.
+	type MissingSessionInvocations = PublicRemote.IRpcSessionInvocations;
+	void (null as unknown as MissingSessionInvocations);
+
+	type MissingSessionInvocationsFactory =
+		// @ts-expect-error Protocol extensions do not expose Invocation assembly.
+		import("../../src/protocol").RpcSessionInvocationsFactory;
+	void (null as unknown as MissingSessionInvocationsFactory);
+
+	// @ts-expect-error Default Protocol Invocation implementation remains private.
+	type MissingSessionInvocationsImpl = PublicRemote.RpcSessionInvocationsImpl;
+	void (null as unknown as MissingSessionInvocationsImpl);
+
+	// @ts-expect-error Incoming call ownership is a private Session collaborator.
+	type MissingSessionIncomingCalls = PublicRemote.IRpcSessionIncomingCalls;
+	void (null as unknown as MissingSessionIncomingCalls);
+
+	type MissingSessionIncomingCallsFactory =
+		// @ts-expect-error Protocol extensions do not expose incoming call assembly.
+		import("../../src/protocol").RpcSessionIncomingCallsFactory;
+	void (null as unknown as MissingSessionIncomingCallsFactory);
+
+	type MissingSessionIncomingCallsImpl =
+		// @ts-expect-error Default Protocol incoming call implementation remains private.
+		PublicRemote.RpcSessionIncomingCallsImpl;
+	void (null as unknown as MissingSessionIncomingCallsImpl);
+
+	type MissingSessionFactory =
+		// @ts-expect-error Default Protocol Session assembly remains private.
+		import("../../src/protocol").RpcSessionFactory;
+	void (null as unknown as MissingSessionFactory);
 });
 
 test("RPC-PKG-008 RPC-SPI-006 exposes only atomic prepare and scoped incoming call phases", () => {

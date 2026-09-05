@@ -12,6 +12,7 @@ import {
 	createRpcCounterExhaustionProtocolAcceptorForTest,
 	createRpcCounterExhaustionProtocolConnectorForTest,
 } from "../../src/factories/rpc-protocol.factory";
+import { RpcSessionInvocationsImpl } from "../../src/impls/session/rpc-session-invocations.impl";
 import {
 	createRemoteServiceDescriptor,
 	createRpcAcceptor,
@@ -31,10 +32,10 @@ const ICounterService =
 	createServiceIdentifier<ICounterService>("ICounterService");
 
 describe("Default RPC Protocol counter drain", () => {
-	it("RPC-SHUTDOWN-010 ignores due Ping/Pong flags when evaluating the complete drain predicate", async () => {
+	it("RPC-SHUTDOWN-010 ignores a pending Activity Probe when evaluating the complete drain predicate", async () => {
 		const { session, sent } = createRpcDirectSessionHarness();
-		session._pingDue = true;
-		session._pongDue = true;
+		session._activity?.recordInbound(RpcWireRecordKindEnum.ping);
+		expect(session._activity?.hasPendingProbe).toBe(true);
 
 		const shutdown = session.shutdown();
 
@@ -87,8 +88,11 @@ describe("Default RPC Protocol counter drain", () => {
 	});
 
 	it("RPC-COUNTER-001 RPC-COUNTER-003 drains after allocating the last safe Call Ordinal RPC-CORPUS-004", async () => {
-		const { session, sent, transitions } = createRpcDirectSessionHarness();
-		session._nextOutgoingCallOrdinal = Number.MAX_SAFE_INTEGER;
+		const { session, sent, transitions } = createRpcDirectSessionHarness(
+			{},
+			(options) =>
+				new RpcSessionInvocationsImpl(options, Number.MAX_SAFE_INTEGER),
+		);
 		const invocation = session.prepareInvocation(
 			{
 				service: "example.counter.v1",
@@ -104,7 +108,11 @@ describe("Default RPC Protocol counter drain", () => {
 		invocation.start();
 		await vi.waitFor(() => expect(sent).toHaveLength(1));
 
-		expect(Number.isSafeInteger(session._nextOutgoingCallOrdinal)).toBe(true);
+		expect(sent[0]).toMatchObject({
+			kind: "message",
+			seq: 1,
+			message: { kind: "call", callId: String(Number.MAX_SAFE_INTEGER) },
+		});
 		expect(transitions).toContainEqual({
 			type: "draining",
 			reason: "counter-exhaustion",

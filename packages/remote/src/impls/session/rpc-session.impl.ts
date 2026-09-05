@@ -1,5 +1,5 @@
 /**
- * @overview Private retained husky-di-rpc/1 Logical Session and replay state.
+ * @overview Coordinates retained Session authority, call lifetimes, and outbound scheduling.
  * @author AEPKILL
  * @created 2026-08-19 00:00:00
  */
@@ -8,15 +8,12 @@ import {
 	RPC_PROFILE,
 	RPC_PROTECTED_SESSION_BYTES,
 } from "@/constants/protocol/rpc-profile.const";
-import { RpcCallTerminalTypeEnum } from "@/enums/protocol/rpc-call-terminal-type.enum";
 import { RpcDecodePhaseEnum } from "@/enums/protocol/rpc-decode-phase.enum";
 import { RpcEndpointFailureEnum } from "@/enums/protocol/rpc-endpoint-failure.enum";
-import { RpcIncomingCallKindEnum } from "@/enums/protocol/rpc-incoming-call-kind.enum";
 import { RpcPeerCursorClassificationEnum } from "@/enums/protocol/rpc-peer-cursor-classification.enum";
 import { RpcProtocolSessionTransitionTypeEnum } from "@/enums/protocol/rpc-protocol-session-transition-type.enum";
 import { RpcWireRecordKindEnum } from "@/enums/protocol/rpc-wire-record-kind.enum";
 import { RpcCloseReasonEnum } from "@/enums/rpc-close-reason.enum";
-import { RpcExceptionCodeEnum } from "@/enums/rpc-exception-code.enum";
 import type { IRpcRetainedBytesLedger } from "@/interfaces/common/rpc-retained-bytes-ledger.interface";
 import type { IRpcEndpoint } from "@/interfaces/endpoint/rpc-endpoint.interface";
 import type { IRpcCodec } from "@/interfaces/protocol/rpc-codec.interface";
@@ -27,7 +24,6 @@ import type {
 	IRpcProtocolSessionHost,
 	IRpcRetainedBytesReservation,
 	RpcCallOutcome,
-	RpcHandlerOutcome,
 } from "@/interfaces/protocol/rpc-protocol.interface";
 import type {
 	IRpcBindingPlan,
@@ -38,23 +34,30 @@ import type {
 	RpcResumeClaim,
 	RpcResumeDecision,
 	RpcResumeOutcome,
+	RpcSessionFactory,
 } from "@/interfaces/session/rpc-session.interface";
 import type {
+	IRpcSessionActivity,
+	RpcSessionActivityFactory,
+} from "@/interfaces/session/rpc-session-activity.interface";
+import type {
 	IRpcReplayReservation,
-	IRpcRetainedIncomingCall,
-	IRpcRetainedTerminal,
 	IRpcSessionCallRetention,
 	RpcSessionCallRetentionFactory,
 } from "@/interfaces/session/rpc-session-call-retention.interface";
 import type {
+	IRpcSessionIncomingCalls,
+	RpcSessionIncomingCallsFactory,
+} from "@/interfaces/session/rpc-session-incoming-calls.interface";
+import type {
+	IRpcSessionInvocations,
+	RpcSessionInvocationsFactory,
+} from "@/interfaces/session/rpc-session-invocations.interface";
+import type {
 	RpcActiveRecord,
-	RpcCallMessage,
-	RpcErrorMessage,
 	RpcJsonRecord,
 	RpcMessageEnvelope,
-	RpcResultMessage,
 	RpcSemanticMessage,
-	RpcWireErrorCode,
 } from "@/types/protocol/rpc-wire-record.type";
 import { rpcSecurityCarriersEqual } from "@/utils/protocol/rpc-base64-url-32-schema.util";
 import {
@@ -62,18 +65,14 @@ import {
 	unregisterRpcSessionRetainedBytes,
 } from "@/utils/rpc-session-retained-bytes.util";
 
-export type CreateRpcSessionOptions = {
-	readonly host: IRpcProtocolHost;
-	readonly sessionId: string;
-	readonly resumeToken: string;
-	readonly onTerminal: () => void;
-};
+export type CreateRpcSessionOptions = Parameters<RpcSessionFactory>[0];
 
 /** Retains one Session Incarnation independently from its current Connection. */
 export class RpcSessionImpl implements IRpcSession {
 	readonly _host: IRpcProtocolHost;
 	readonly _sessionId: string;
 	readonly _codec: IRpcCodec;
+	readonly _createActivity: RpcSessionActivityFactory;
 	readonly _onTerminal: () => void;
 	readonly _retainedBytesLedger: IRpcRetainedBytesLedger;
 	readonly _protectedRetainedBytesReservation: IRpcRetainedBytesReservation;
@@ -89,27 +88,15 @@ export class RpcSessionImpl implements IRpcSession {
 	_highestSentSequence = 0;
 	_receivedThrough = 0;
 	_peerReceivedThrough = 0;
-	_nextOutgoingCallOrdinal = 1;
-	_outgoingCallOrdinalExhausted = false;
-	_highestIncomingCallOrdinal = 0;
-	_invocationCount = 0;
-	_pendingInvocationBytes = 0;
-	readonly _invocations = new Set<IRpcInvocationEntry>();
-	readonly _pendingInvocations: IRpcInvocationEntry[] = [];
-	readonly _outgoingCalls = new Map<string, IRpcInvocationEntry>();
 	readonly _callRetention: IRpcSessionCallRetention;
+	readonly _incomingCalls: IRpcSessionIncomingCalls;
+	readonly _invocations: IRpcSessionInvocations;
 	readonly _controlQueue: IRpcQueuedSemantic[] = [];
 	_nextSequencedLane: "control" | "data" = "control";
 	_ackDirty = false;
 	_ackDue = false;
 	_ackTimer: ReturnType<typeof setTimeout> | undefined;
-	_healthTimer: ReturnType<typeof setTimeout> | undefined;
-	_healthExpectedFireAt = 0;
-	_healthStallGraceUntil = 0;
-	_lastInboundActivityAt = 0;
-	_nextProbeAt = 0;
-	_pingDue = false;
-	_pongDue = false;
+	_activity: IRpcSessionActivity | undefined;
 	_probeSentLast = false;
 	_recovering = false;
 	_recoveryTimer: ReturnType<typeof setTimeout> | undefined;
@@ -128,7 +115,10 @@ export class RpcSessionImpl implements IRpcSession {
 		const { host, onTerminal, resumeToken, sessionId } = options;
 		const {
 			codec,
+			createActivity,
 			createCallRetention,
+			createIncomingCalls,
+			createInvocations,
 			counterExhausted = false,
 			retainedBytesLedger,
 		} = dependencies;
@@ -148,10 +138,46 @@ export class RpcSessionImpl implements IRpcSession {
 		);
 		this._sessionId = sessionId;
 		this._codec = codec;
+		this._createActivity = createActivity;
 		this._callRetention = createCallRetention({
 			codec,
 			policy: host.policy,
 			reserveRetainedBytes: (bytes) => this.reserveRetainedBytes(bytes),
+		});
+		this._incomingCalls = createIncomingCalls({
+			retention: this._callRetention,
+			normalizeApplicationArguments: (args) =>
+				host.normalizeApplicationArguments(args),
+			isDraining: () => this._draining,
+			reserveIncomingCall: (request, consume) => {
+				const sessionHost = this._sessionHost;
+				if (sessionHost === undefined) {
+					throw new Error("Default RPC Session has no Framework host.");
+				}
+				return sessionHost.reserveIncomingCall(request, consume);
+			},
+			onTerminal: (replay) => this._queueReplay(replay),
+			onFault: (error) => this._fault(RpcCloseReasonEnum.resourceFault, error),
+		});
+		this._invocations = createInvocations({
+			codec,
+			policy: host.policy,
+			reserveRetainedBytes: (bytes) => this.reserveRetainedBytes(bytes),
+			reserveReplay: (message) => this._callRetention.reserveReplay(message),
+			normalizeApplicationValue: (value) =>
+				host.normalizeApplicationValue(value),
+			onReady: () => this._pump(),
+			onRetired: () => this._checkGracefulShutdown(),
+			onCancel: (callId) => {
+				this._queueSemantic(
+					Object.freeze({
+						kind: RpcWireRecordKindEnum.cancel,
+						callId,
+					}),
+				);
+			},
+			onFault: (reason, error) => this._fault(reason, error),
+			onCounterExhausted: () => this._beginCounterDrain(),
 		});
 		this._resumeToken = resumeToken;
 		this._onTerminal = onTerminal;
@@ -441,10 +467,7 @@ export class RpcSessionImpl implements IRpcSession {
 				: new Error("Default RPC binding Endpoint setup failed.");
 		}
 
-		this._stopHealthTimer();
-		this._healthStallGraceUntil = 0;
-		this._pingDue = false;
-		this._pongDue = false;
+		this._stopActivity();
 		const previousBinding = this._binding;
 		if (prepared.kind === "fresh") {
 			this._sessionHost = prepared.host;
@@ -495,7 +518,7 @@ export class RpcSessionImpl implements IRpcSession {
 		if (this._binding !== binding || this._closed) {
 			return false;
 		}
-		this._startHealthTimer(binding);
+		this._startActivity(binding);
 		// Exit bootstrap activation before replay can reenter the peer's reply gate.
 		queueMicrotask(() => this._pump());
 		return this._binding === binding && !this._closed;
@@ -525,18 +548,17 @@ export class RpcSessionImpl implements IRpcSession {
 
 		if (record.kind === RpcWireRecordKindEnum.ack) {
 			if (this._applyAck(record.ackThrough)) {
-				this._recordInboundActivity(binding);
+				this._recordInboundActivity(binding, record.kind);
 			}
 			return;
 		}
 		if (record.kind === RpcWireRecordKindEnum.ping) {
-			this._recordInboundActivity(binding);
-			this._pongDue = true;
+			this._recordInboundActivity(binding, record.kind);
 			this._pump();
 			return;
 		}
 		if (record.kind === RpcWireRecordKindEnum.pong) {
-			this._recordInboundActivity(binding);
+			this._recordInboundActivity(binding, record.kind);
 			return;
 		}
 		if (record.kind === RpcWireRecordKindEnum.close) {
@@ -551,7 +573,7 @@ export class RpcSessionImpl implements IRpcSession {
 			return;
 		}
 		if (this._receiveEnvelope(record)) {
-			this._recordInboundActivity(binding);
+			this._recordInboundActivity(binding, record.kind);
 		}
 	}
 
@@ -702,43 +724,10 @@ export class RpcSessionImpl implements IRpcSession {
 		request: IRpcProtocolCallRequest,
 		finish: (outcome: RpcCallOutcome) => void,
 	): IRpcProtocolInvocation | undefined {
-		const pendingCharge = request.args.weight + 256;
-		const maximumPendingBytes = Math.floor(
-			this._host.policy.maxRetainedBytesPerSession / 4,
-		);
-		// Pending invocation admission requires an active Session and count/byte capacity.
-		const cannotReserveInvocation =
-			this._closed ||
-			this._draining ||
-			this._invocationCount >=
-				this._host.policy.maxPendingInvocationsPerSession ||
-			!Number.isSafeInteger(pendingCharge) ||
-			pendingCharge > maximumPendingBytes - this._pendingInvocationBytes;
-		if (cannotReserveInvocation) {
+		if (this._closed || this._draining) {
 			return undefined;
 		}
-		const retainedBytesReservation = this.reserveRetainedBytes(pendingCharge);
-		if (retainedBytesReservation === undefined) {
-			return undefined;
-		}
-		this._invocationCount += 1;
-		this._pendingInvocationBytes += pendingCharge;
-		const entry: IRpcInvocationEntry = {
-			request,
-			finish,
-			pendingCharge,
-			retainedBytesReservation,
-			pendingCharged: true,
-			started: false,
-			admitted: false,
-			publicFinished: false,
-			retired: false,
-		};
-		this._invocations.add(entry);
-		return Object.freeze({
-			start: () => this._startInvocation(entry),
-			cancel: () => this._cancelInvocation(entry),
-		});
+		return this._invocations.prepareInvocation(request, finish);
 	}
 
 	shutdown(): Promise<void> {
@@ -807,179 +796,23 @@ export class RpcSessionImpl implements IRpcSession {
 
 	_dispatchSemantic(message: RpcSemanticMessage): void {
 		if (message.kind === RpcWireRecordKindEnum.call) {
-			this._receiveCall(message);
+			this._incomingCalls.receiveCall(message);
 			return;
 		}
 		if (message.kind === RpcWireRecordKindEnum.cancel) {
-			this._receiveCancel(message.callId);
+			this._incomingCalls.receiveCancel(message.callId);
 			return;
 		}
-		if (message.kind === RpcWireRecordKindEnum.result) {
-			this._receiveResult(message);
-			return;
-		}
-		this._receiveError(message);
+		this._invocations.receiveTerminal(message);
 	}
 
-	_receiveCall(message: RpcCallMessage): void {
-		const args = this._host.normalizeApplicationArguments(message.args);
-		const ordinal = Number(message.callId);
-		if (ordinal !== this._highestIncomingCallOrdinal + 1) {
-			throw new Error("Default RPC Call Ordinal is not contiguous.");
-		}
-		const sessionHost = this._sessionHost;
-		if (sessionHost === undefined) {
-			throw new Error("Default RPC Session has no Framework host.");
-		}
-		if (this._draining || this._callRetention.incomingCount >= 256) {
-			this._highestIncomingCallOrdinal = ordinal;
-			this._queueError(message.callId, RpcExceptionCodeEnum.unavailable);
-			return;
-		}
-		this._highestIncomingCallOrdinal = ordinal;
-		const reserved = sessionHost.reserveIncomingCall(
-			{
-				service: message.service,
-				method: message.method,
-				args,
-			},
-			(reservation) => {
-				if (reservation.kind === RpcIncomingCallKindEnum.unknown) {
-					const terminal = {
-						type: RpcCallTerminalTypeEnum.failed,
-						code: reservation.code,
-					} as const;
-					const entry = this._callRetention.retainIncoming(
-						message.callId,
-						terminal,
-					);
-					// The retained identity precedes Framework commit and its observable event.
-					entry.attach(reservation.commit());
-					const completion = entry.selectCompletion(terminal);
-					if (completion !== undefined) {
-						completion.publish();
-						this._queueRetainedTerminal(completion);
-					}
-					return undefined;
-				}
-
-				const entry = this._callRetention.retainIncoming(message.callId, {
-					type: RpcCallTerminalTypeEnum.sessionTerminated,
-				});
-				// The retained identity precedes Framework commit and Handler scheduling.
-				const incoming = reservation.commit();
-				entry.attach(incoming);
-				if (this._closed) {
-					return undefined;
-				}
-				void incoming.handlerOutcome.then(
-					(outcome) => this._finishIncomingHandler(entry, outcome),
-					() =>
-						this._finishIncomingHandler(entry, {
-							type: RpcCallTerminalTypeEnum.failed,
-							code: RpcExceptionCodeEnum.handlerFailed,
-						}),
-				);
-				return undefined;
-			},
-		);
-		if (!reserved) {
-			this._queueRetainedTerminal(
-				this._callRetention.rejectIncoming(message.callId),
-			);
-		}
-	}
-
-	_receiveCancel(callId: string): void {
-		if (Number(callId) > this._highestIncomingCallOrdinal) {
-			throw new Error("Default RPC cancel refers to a future Call Ordinal.");
-		}
-		const completion = this._callRetention.cancelIncoming(callId);
-		if (completion !== undefined) {
-			completion.publish();
-			this._queueRetainedTerminal(completion);
-		}
-	}
-
-	_receiveResult(message: RpcResultMessage): void {
-		const invocation = this._outgoingCalls.get(message.callId);
-		if (invocation === undefined) {
-			throw new Error("Default RPC result has no matching Logical Call.");
-		}
-		let outcome: RpcCallOutcome;
-		if (Object.hasOwn(message, "value")) {
-			outcome = {
-				type: RpcCallTerminalTypeEnum.returned,
-				value: this._host.normalizeApplicationValue(message.value),
-			};
-		} else {
-			outcome = { type: RpcCallTerminalTypeEnum.returnedVoid };
-		}
-		this._finishInvocation(invocation, outcome);
-		this._retireInvocation(invocation);
-	}
-
-	_receiveError(message: RpcErrorMessage): void {
-		const invocation = this._outgoingCalls.get(message.callId);
-		if (invocation === undefined) {
-			throw new Error("Default RPC error has no matching Logical Call.");
-		}
-		if (Object.hasOwn(message.error as RpcJsonRecord, "details")) {
-			this._host.normalizeApplicationValue(message.error.details);
-		}
-		this._finishInvocation(invocation, {
-			type: RpcCallTerminalTypeEnum.failed,
-			code: message.error.code,
-		});
-		this._retireInvocation(invocation);
-	}
-
-	_finishIncomingHandler(
-		entry: IRpcRetainedIncomingCall,
-		outcome: RpcHandlerOutcome,
-	): void {
-		const completion = entry.selectCompletion(outcome);
-		if (completion !== undefined) {
-			this._queueRetainedTerminal(completion);
-			completion.publish();
-		}
-	}
-
-	_queueRetainedTerminal(completion: IRpcRetainedTerminal): void {
-		const replay = completion.replay;
+	_queueReplay(replay: IRpcReplayReservation): void {
 		if (this._closed) {
-			replay?.release();
-			return;
-		}
-		if (replay === undefined) {
-			this._fault(
-				RpcCloseReasonEnum.resourceFault,
-				new Error("Default RPC protected terminal reserve is exhausted."),
-			);
+			replay.release();
 			return;
 		}
 		this._controlQueue.push({ message: replay.message, replay });
 		this._pump();
-	}
-
-	_queueError(callId: string, code: RpcWireErrorCode): boolean {
-		const queued = this._queueSemantic(
-			Object.freeze({
-				kind: RpcWireRecordKindEnum.error,
-				callId,
-				error: Object.freeze({
-					code,
-					message: `Remote call failed with code ${code}.`,
-				}),
-			}) as RpcErrorMessage,
-		);
-		if (!queued) {
-			this._fault(
-				RpcCloseReasonEnum.resourceFault,
-				new Error("Default RPC protected terminal reserve is exhausted."),
-			);
-		}
-		return queued;
 	}
 
 	_queueSemantic(message: RpcSemanticMessage): boolean {
@@ -990,53 +823,8 @@ export class RpcSessionImpl implements IRpcSession {
 		if (replay === undefined) {
 			return false;
 		}
-		this._controlQueue.push({ message, replay });
-		this._pump();
+		this._queueReplay(replay);
 		return true;
-	}
-
-	_startInvocation(entry: IRpcInvocationEntry): void {
-		if (entry.started) {
-			this._fault(
-				RpcCloseReasonEnum.protocolFault,
-				new Error("Default RPC invocation start was called more than once."),
-			);
-			return;
-		}
-		if (entry.retired) {
-			return;
-		}
-		entry.started = true;
-		if (this._closed) {
-			this._finishInvocation(entry, {
-				type: RpcCallTerminalTypeEnum.failed,
-				code: RpcExceptionCodeEnum.unavailable,
-			});
-			this._retireInvocation(entry);
-			return;
-		}
-		this._pendingInvocations.push(entry);
-		this._pump();
-	}
-
-	_cancelInvocation(entry: IRpcInvocationEntry): void {
-		if (entry.retired || entry.publicFinished) {
-			return;
-		}
-		this._finishInvocation(entry, {
-			type: RpcCallTerminalTypeEnum.failed,
-			code: RpcExceptionCodeEnum.canceled,
-		});
-		if (!entry.admitted) {
-			this._retireInvocation(entry);
-			return;
-		}
-		this._queueSemantic(
-			Object.freeze({
-				kind: RpcWireRecordKindEnum.cancel,
-				callId: entry.callId as string,
-			}) as RpcSemanticMessage,
-		);
 	}
 
 	_pump(): void {
@@ -1051,28 +839,19 @@ export class RpcSessionImpl implements IRpcSession {
 			return;
 		}
 
-		while (this._pendingInvocations[0]?.retired) {
-			this._pendingInvocations.shift();
-		}
 		const hasReplay = this._callRetention.hasReplayBarrier;
 		const control = this._controlQueue[0];
-		const pending = this._pendingInvocations[0];
-		const probeDue = this._pongDue || this._pingDue;
+		const hasPending = this._invocations.hasPending;
+		const activity = this._activity;
+		const probeDue = activity?.hasPendingProbe === true;
 		const ackDue = this._ackDue && this._ackDirty;
 		const nonProbeDue =
-			hasReplay || control !== undefined || pending !== undefined || ackDue;
+			hasReplay || control !== undefined || hasPending || ackDue;
 		if (probeDue && (!this._probeSentLast || !nonProbeDue)) {
-			this._probeSentLast = true;
-			if (this._pongDue) {
-				this._pongDue = false;
-				this._sendUnsequenced(binding, {
-					kind: RpcWireRecordKindEnum.pong,
-				});
-			} else {
-				this._pingDue = false;
-				this._sendUnsequenced(binding, {
-					kind: RpcWireRecordKindEnum.ping,
-				});
+			const probe = activity.takeProbe();
+			if (probe !== undefined) {
+				this._probeSentLast = true;
+				this._sendUnsequenced(binding, { kind: probe });
 			}
 			return;
 		}
@@ -1089,7 +868,7 @@ export class RpcSessionImpl implements IRpcSession {
 		// Control traffic wins its turn when present and selected by the lane scheduler.
 		const shouldSendControl =
 			control !== undefined &&
-			(pending === undefined || this._nextSequencedLane === "control");
+			(!hasPending || this._nextSequencedLane === "control");
 		if (shouldSendControl) {
 			this._controlQueue.shift();
 			this._nextSequencedLane = "data";
@@ -1097,10 +876,10 @@ export class RpcSessionImpl implements IRpcSession {
 			this._admitSemantic(binding, control);
 			return;
 		}
-		if (pending !== undefined) {
+		if (hasPending) {
 			this._nextSequencedLane = "control";
 			this._probeSentLast = false;
-			this._admitInvocation(binding, pending);
+			this._admitNextInvocation(binding);
 			return;
 		}
 
@@ -1116,120 +895,25 @@ export class RpcSessionImpl implements IRpcSession {
 		this._checkGracefulShutdown();
 	}
 
-	_admitInvocation(
-		binding: RpcSessionBindingImpl,
-		entry: IRpcInvocationEntry,
-	): void {
-		// Admission stops before either call or delivery sequencing can overflow.
-		const invocationCounterIsExhausted =
-			this._outgoingCallOrdinalExhausted ||
-			!Number.isSafeInteger(this._nextOutgoingCallOrdinal) ||
-			this._nextOutgoingSequence > RPC_LAST_ORDINARY_SEQUENCE;
-		if (invocationCounterIsExhausted) {
+	_admitNextInvocation(binding: RpcSessionBindingImpl): void {
+		if (this._nextOutgoingSequence > RPC_LAST_ORDINARY_SEQUENCE) {
 			this._beginCounterDrain();
 			return;
 		}
-		let request = entry.request;
-		if (request === undefined) {
-			this._fault(
-				RpcCloseReasonEnum.protocolFault,
-				new Error("Default RPC Pending Invocation lost its request."),
-			);
-			return;
-		}
-		const callId = String(this._nextOutgoingCallOrdinal);
-		let message: RpcCallMessage | undefined = Object.freeze({
-			kind: RpcWireRecordKindEnum.call,
-			callId,
-			service: request.service,
-			method: request.method,
-			args: request.args.value,
-		}) as RpcCallMessage;
 		const sequence = this._nextOutgoingSequence;
-		this._releasePendingRetainedBytes(entry);
-		let replay = this._callRetention.reserveReplay(message);
-		if (replay === undefined) {
-			// Keep the payload charged outside the entry so reentrant terminal cleanup
-			// cannot release its guard before this admission frame returns.
-			let retainedBytesGuard = this.reserveRetainedBytes(entry.pendingCharge);
-			if (retainedBytesGuard === undefined) {
-				entry.request = undefined;
-				request = undefined;
-				message = undefined;
-				this._fault(
-					RpcCloseReasonEnum.resourceFault,
-					new Error("Default RPC Pending retained-byte charge was lost."),
-				);
-				return;
-			}
-			entry.request = undefined;
-			request = undefined;
-			message = undefined;
-			this._pendingInvocations.shift();
-			this._releasePendingInvocationCharge(entry);
-			try {
-				this._finishInvocation(entry, {
-					type: RpcCallTerminalTypeEnum.failed,
-					code: RpcExceptionCodeEnum.unavailable,
-				});
-			} finally {
-				try {
-					this._retireInvocation(entry);
-				} finally {
-					retainedBytesGuard.release();
-					retainedBytesGuard = undefined;
-				}
-			}
-			this._pump();
-			return;
-		}
-		let encoded: Uint8Array;
-		try {
-			encoded = this._codec.encode(this._createEnvelope(sequence, message));
-		} catch {
-			let guardedReplay: IRpcReplayReservation | undefined = replay;
-			replay = undefined;
-			entry.request = undefined;
-			request = undefined;
-			message = undefined;
-			this._pendingInvocations.shift();
-			this._releasePendingInvocationCharge(entry);
-			try {
-				this._finishInvocation(entry, {
-					type: RpcCallTerminalTypeEnum.failed,
-					code: RpcExceptionCodeEnum.unavailable,
-				});
-			} finally {
-				try {
-					this._retireInvocation(entry);
-				} finally {
-					guardedReplay.release();
-					guardedReplay = undefined;
-				}
-			}
-			this._pump();
-			return;
-		}
-
-		this._pendingInvocations.shift();
-		if (this._nextOutgoingCallOrdinal === Number.MAX_SAFE_INTEGER) {
-			this._outgoingCallOrdinalExhausted = true;
-		} else {
-			this._nextOutgoingCallOrdinal += 1;
-		}
-		this._nextOutgoingSequence += 1;
-		this._highestSentSequence = sequence;
-		entry.admitted = true;
-		entry.callId = callId;
-		this._releasePendingInvocationCharge(entry);
-		this._outgoingCalls.set(callId, entry);
-		this._callRetention.commitReplay(sequence, replay);
-		entry.request = undefined;
-		this._consumePiggybackAck();
-		this._sendEncoded(binding, encoded);
-		if (this._outgoingCallOrdinalExhausted) {
-			this._beginCounterDrain();
-		}
+		this._invocations.admitNext({
+			sequence,
+			ackThrough: this._ackDirty ? this._receivedThrough : undefined,
+			commitAndSend: (encoded, replay) => {
+				// The Invocation has preflighted and committed its Call Identity. Keep
+				// shared delivery identity, replay custody, and send in this same turn.
+				this._nextOutgoingSequence += 1;
+				this._highestSentSequence = sequence;
+				this._callRetention.commitReplay(sequence, replay);
+				this._consumePiggybackAck();
+				this._sendEncoded(binding, encoded);
+			},
+		});
 	}
 
 	_admitSemantic(
@@ -1392,67 +1076,6 @@ export class RpcSessionImpl implements IRpcSession {
 		}, this._host.policy.ackDelayMs);
 	}
 
-	_finishInvocation(entry: IRpcInvocationEntry, outcome: RpcCallOutcome): void {
-		if (entry.publicFinished) {
-			return;
-		}
-		entry.publicFinished = true;
-		entry.finish(outcome);
-	}
-
-	_terminateOpenCalls(): void {
-		for (const entry of [...this._invocations]) {
-			this._finishInvocation(
-				entry,
-				entry.admitted
-					? {
-							type: RpcCallTerminalTypeEnum.failed,
-							code: RpcExceptionCodeEnum.outcomeUnknown,
-						}
-					: {
-							type: RpcCallTerminalTypeEnum.failed,
-							code: RpcExceptionCodeEnum.unavailable,
-						},
-			);
-			this._retireInvocation(entry);
-		}
-		this._callRetention.terminateIncoming();
-	}
-
-	_retireInvocation(entry: IRpcInvocationEntry): void {
-		if (entry.retired) {
-			return;
-		}
-		entry.retired = true;
-		const pendingIndex = this._pendingInvocations.indexOf(entry);
-		if (pendingIndex !== -1) {
-			this._pendingInvocations.splice(pendingIndex, 1);
-		}
-		entry.request = undefined;
-		this._releasePendingInvocationCharge(entry);
-		this._invocations.delete(entry);
-		if (entry.callId !== undefined) {
-			this._outgoingCalls.delete(entry.callId);
-		}
-		this._invocationCount -= 1;
-		this._checkGracefulShutdown();
-	}
-
-	_releasePendingInvocationCharge(entry: IRpcInvocationEntry): void {
-		if (!entry.pendingCharged) {
-			return;
-		}
-		entry.pendingCharged = false;
-		this._pendingInvocationBytes -= entry.pendingCharge;
-		this._releasePendingRetainedBytes(entry);
-	}
-
-	_releasePendingRetainedBytes(entry: IRpcInvocationEntry): void {
-		const reservation = entry.retainedBytesReservation;
-		entry.retainedBytesReservation = undefined;
-		reservation?.release();
-	}
-
 	_releaseReplayState(): void {
 		this._callRetention.releaseReplay();
 		for (const queued of this._controlQueue) {
@@ -1478,15 +1101,7 @@ export class RpcSessionImpl implements IRpcSession {
 				new Error("Default RPC counter drain deadline expired."),
 			);
 		}, this._host.policy.shutdownDeadlineMs);
-		for (const entry of [...this._invocations]) {
-			if (!entry.admitted) {
-				this._finishInvocation(entry, {
-					type: RpcCallTerminalTypeEnum.failed,
-					code: RpcExceptionCodeEnum.unavailable,
-				});
-				this._retireInvocation(entry);
-			}
-		}
+		this._invocations.rejectPending();
 		this._checkGracefulShutdown();
 	}
 
@@ -1500,10 +1115,7 @@ export class RpcSessionImpl implements IRpcSession {
 			this._recoveryTimer === undefined
 				? Date.now() + this._host.policy.recoveryGraceMs
 				: undefined;
-		this._stopHealthTimer();
-		this._healthStallGraceUntil = 0;
-		this._pingDue = false;
-		this._pongDue = false;
+		this._stopActivity();
 		this._deferDirectClose(binding?._endpoint);
 		if (this._counterDraining) {
 			this._terminateRetainedSession(
@@ -1594,7 +1206,8 @@ export class RpcSessionImpl implements IRpcSession {
 		this._closed = true;
 		this._binding = undefined;
 		this._clearTimers();
-		this._terminateOpenCalls();
+		this._invocations.terminate();
+		this._incomingCalls.terminate();
 		this._releaseReplayState();
 		this._protectedRetainedBytesReservation.release();
 		unregisterRpcSessionRetainedBytes(this);
@@ -1647,96 +1260,46 @@ export class RpcSessionImpl implements IRpcSession {
 			clearTimeout(this._counterDrainTimer);
 			this._counterDrainTimer = undefined;
 		}
-		this._stopHealthTimer();
-		this._healthStallGraceUntil = 0;
+		this._stopActivity();
 		this._recoveryDeadline = undefined;
 	}
 
-	_startHealthTimer(binding: RpcSessionBindingImpl): void {
-		this._stopHealthTimer();
-		const now = Date.now();
-		this._healthStallGraceUntil = 0;
-		this._lastInboundActivityAt = now;
-		this._nextProbeAt = now + this._host.policy.activityProbeIntervalMs;
-		this._scheduleHealthTimer(binding);
+	_startActivity(binding: RpcSessionBindingImpl): void {
+		this._stopActivity();
+		const activity = this._createActivity({
+			policy: this._host.policy,
+			onProbeDue: () => {
+				if (this._binding === binding && !this._closed) {
+					this._pump();
+				}
+			},
+			onSilent: () => {
+				if (this._binding === binding && !this._closed) {
+					this._enterRecovery(new Error("Default RPC binding became silent."));
+				}
+			},
+		});
+		this._activity = activity;
+		activity.start();
 	}
 
-	_recordInboundActivity(binding: RpcSessionBindingImpl): void {
-		// Activity belongs only to the active current binding of an open Session.
+	_recordInboundActivity(
+		binding: RpcSessionBindingImpl,
+		kind: RpcActiveRecord["kind"],
+	): void {
+		// Validation can reenter the Session; only the surviving binding owns activity.
 		const bindingIsStale =
 			this._binding !== binding || !binding._active || this._closed;
 		if (bindingIsStale) {
 			return;
 		}
-		const now = Date.now();
-		this._healthStallGraceUntil = 0;
-		this._lastInboundActivityAt = now;
-		this._nextProbeAt = now + this._host.policy.activityProbeIntervalMs;
-		this._pingDue = false;
-		this._scheduleHealthTimer(binding);
+		this._activity?.recordInbound(kind);
 	}
 
-	_scheduleHealthTimer(binding: RpcSessionBindingImpl): void {
-		this._stopHealthTimer();
-		// Health checks run only for the active current binding of an open Session.
-		const bindingIsStale =
-			this._binding !== binding || !binding._active || this._closed;
-		if (bindingIsStale) {
-			return;
-		}
-		const silenceAt = Math.max(
-			this._lastInboundActivityAt + this._host.policy.silenceTimeoutMs,
-			this._healthStallGraceUntil,
-		);
-		this._healthExpectedFireAt = Math.min(this._nextProbeAt, silenceAt);
-		this._healthTimer = setTimeout(
-			() => this._healthTimerFired(binding),
-			Math.max(0, this._healthExpectedFireAt - Date.now()),
-		);
-	}
-
-	_healthTimerFired(binding: RpcSessionBindingImpl): void {
-		this._healthTimer = undefined;
-		// A timer firing from any replaced or inactive binding has no authority.
-		const timerIsStale =
-			this._binding !== binding || !binding._active || this._closed;
-		if (timerIsStale) {
-			return;
-		}
-		const now = Date.now();
-		if (
-			now - this._healthExpectedFireAt >
-			this._host.policy.activityProbeIntervalMs
-		) {
-			this._pingDue = true;
-			this._nextProbeAt = now + this._host.policy.activityProbeIntervalMs;
-			this._healthStallGraceUntil = this._nextProbeAt;
-			this._pump();
-			this._scheduleHealthTimer(binding);
-			return;
-		}
-		// Silence is authoritative only after both the activity deadline and stall grace expire.
-		const bindingIsSilent =
-			now - this._lastInboundActivityAt >= this._host.policy.silenceTimeoutMs &&
-			now >= this._healthStallGraceUntil;
-		if (bindingIsSilent) {
-			this._enterRecovery(new Error("Default RPC binding became silent."));
-			return;
-		}
-		if (now >= this._nextProbeAt) {
-			this._pingDue = true;
-			this._nextProbeAt = now + this._host.policy.activityProbeIntervalMs;
-			this._pump();
-		}
-		this._scheduleHealthTimer(binding);
-	}
-
-	_stopHealthTimer(): void {
-		if (this._healthTimer !== undefined) {
-			clearTimeout(this._healthTimer);
-			this._healthTimer = undefined;
-		}
-		this._healthExpectedFireAt = 0;
+	_stopActivity(): void {
+		const activity = this._activity;
+		this._activity = undefined;
+		activity?.stop();
 	}
 
 	_checkGracefulShutdown(): void {
@@ -1759,9 +1322,8 @@ export class RpcSessionImpl implements IRpcSession {
 		}
 		// Graceful close waits for all retained work and binding I/O to drain.
 		const drainIsIncomplete =
-			this._invocations.size !== 0 ||
-			this._callRetention.hasActiveIncoming ||
-			this._pendingInvocations.some((entry) => !entry.retired) ||
+			this._invocations.hasActive ||
+			this._incomingCalls.hasActive ||
 			this._controlQueue.length !== 0 ||
 			this._callRetention.hasReplayBarrier ||
 			this._callRetention.replayCount !== 0 ||
@@ -1805,7 +1367,10 @@ export class RpcSessionImpl implements IRpcSession {
 
 type RpcSessionImplDependencies = Readonly<{
 	readonly codec: IRpcCodec;
+	readonly createActivity: RpcSessionActivityFactory;
 	readonly createCallRetention: RpcSessionCallRetentionFactory;
+	readonly createIncomingCalls: RpcSessionIncomingCallsFactory;
+	readonly createInvocations: RpcSessionInvocationsFactory;
 	readonly counterExhausted?: boolean;
 	readonly retainedBytesLedger: IRpcRetainedBytesLedger;
 }>;
@@ -1833,19 +1398,6 @@ type RpcResumeAttemptFacts = Readonly<{
 	readonly facts: RpcSessionCandidateFacts;
 	readonly resumeAttempt: number;
 }>;
-
-interface IRpcInvocationEntry {
-	request?: IRpcProtocolCallRequest;
-	readonly finish: (outcome: RpcCallOutcome) => void;
-	readonly pendingCharge: number;
-	retainedBytesReservation?: IRpcRetainedBytesReservation;
-	pendingCharged: boolean;
-	started: boolean;
-	admitted: boolean;
-	publicFinished: boolean;
-	retired: boolean;
-	callId?: string;
-}
 
 interface IRpcQueuedSemantic {
 	readonly message: RpcSemanticMessage;

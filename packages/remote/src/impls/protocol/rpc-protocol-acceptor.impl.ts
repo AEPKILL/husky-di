@@ -13,7 +13,6 @@ import { RpcProtocolSessionTransitionTypeEnum } from "@/enums/protocol/rpc-proto
 import { RpcResumeRejectCodeEnum } from "@/enums/protocol/rpc-resume-reject-code.enum";
 import { RpcWireRecordKindEnum } from "@/enums/protocol/rpc-wire-record-kind.enum";
 import { RpcCloseReasonEnum } from "@/enums/rpc-close-reason.enum";
-import type { RpcSessionFactory } from "@/factories/rpc-session.factory";
 import {
 	closeUnboundConnection,
 	RpcBindingAttempt,
@@ -23,7 +22,10 @@ import type {
 	IRpcProtocolAcceptor,
 	IRpcProtocolAcceptorHost,
 } from "@/interfaces/protocol/rpc-protocol.interface";
-import type { IRpcSession } from "@/interfaces/session/rpc-session.interface";
+import type {
+	IRpcSession,
+	RpcSessionFactory,
+} from "@/interfaces/session/rpc-session.interface";
 import type { IRpcConnection } from "@/interfaces/transport/rpc-connection.interface";
 import type {
 	RpcFreshAccept,

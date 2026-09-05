@@ -11,7 +11,6 @@ import {
 import { RpcDecodePhaseEnum } from "@/enums/protocol/rpc-decode-phase.enum";
 import { RpcResumeRejectCodeEnum } from "@/enums/protocol/rpc-resume-reject-code.enum";
 import { RpcWireRecordKindEnum } from "@/enums/protocol/rpc-wire-record-kind.enum";
-import type { RpcSessionFactory } from "@/factories/rpc-session.factory";
 import {
 	closeUnboundConnection,
 	RpcBindingAttempt,
@@ -24,6 +23,7 @@ import type {
 import type {
 	IRpcSession,
 	RpcResumeOutcome,
+	RpcSessionFactory,
 } from "@/interfaces/session/rpc-session.interface";
 import type { IRpcConnection } from "@/interfaces/transport/rpc-connection.interface";
 import type {
