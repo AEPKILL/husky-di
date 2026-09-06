@@ -22,9 +22,6 @@
 	"types": "./dist/index.d.ts",
 	"files": [
 		"dist",
-		"docs",
-		"README.md",
-		"CHANGELOG.md",
 		"LICENSE"
 	],
 	"scripts": {
@@ -32,12 +29,6 @@
 		"dev": "rslib build --watch",
 		"test": "pnpm run typecheck && vitest run",
 		"typecheck": "tsc -p tsconfig.json && tsc -p tests/tsconfig.json"
-	},
-	"dependencies": {
-		"@husky-di/remote": "workspace:^",
-		"rxjs": "^7.8.2",
-		"ws": "^8.21.0",
-		"zod": "^4.4.3"
 	},
 	"devDependencies": {
 		"@husky-di/config": "workspace:*",

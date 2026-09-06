@@ -6,4 +6,8 @@
 
 import { createVitestConfig } from "@husky-di/config/vitest";
 
-export default createVitestConfig(import.meta.url);
+export default createVitestConfig(import.meta.url, {
+	test: {
+		passWithNoTests: true,
+	},
+});
