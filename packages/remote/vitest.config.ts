@@ -12,7 +12,7 @@ export default createVitestConfig(import.meta.url, {
 		exclude: ["tests/browser/**", "tests/types/**"],
 		passWithNoTests: true,
 		typecheck: {
-			include: ["tests/types/**/*.test-d.ts"],
+			include: ["tests/specification.test.ts", "tests/types/**/*.test-d.ts"],
 			tsconfig: "tests/tsconfig.json",
 		},
 	},
