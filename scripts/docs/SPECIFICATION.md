@@ -1,8 +1,9 @@
 # Code Standard Checker Specification
 
-**Status:** Normative for schema file support.
+**Status:** Normative for schema files and module-first source placement.
 
-This specification covers the `.schema.ts` extension to the repository checker.
+This specification covers schema files and module-first source placement in the
+repository checker.
 The agent-facing placement and modeling guidance remains in
 [husky-di-code-standard](../../.agents/skills/husky-di-code-standard/SKILL.md).
 Matching behavioral evidence is in `tests/specification.test.ts`, included in
@@ -38,3 +39,12 @@ re-exports, functions, classes, and enums MUST be rejected using
 
 Adding schema files MUST preserve the existing `.type.ts` declaration rules,
 including schema colocation and the `type-file/exports-only` diagnostic ID.
+
+## PLACEMENT-001: Module-first source roots
+
+The checker MUST support `module/role` directories in configured
+`moduleSourceRoots`, which default to `packages/remote/src/modules`. It MUST collect
+TypeScript files below these roots and apply the role's existing suffix and
+declaration rules. Unknown roles MUST report `placement/source-directory`.
+Source-root entrypoints and existing role-first placement MUST remain supported.
+Other source roots MUST retain their existing collection and placement rules.

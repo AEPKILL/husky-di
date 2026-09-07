@@ -16,7 +16,7 @@ import {
 	type RemoteServiceImplementation,
 	type RpcMethodDefinitions,
 	remoteServiceDescriptorOptionsSchema,
-} from "../src/types/remote-service-descriptor.type";
+} from "../src/modules/peer/types/remote-service-descriptor.type";
 
 describe("Remote Service Descriptor specification", () => {
 	it("RPC-DESC-001: selects only required string methods and reserves then", () => {

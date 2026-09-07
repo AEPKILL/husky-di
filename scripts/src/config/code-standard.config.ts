@@ -21,6 +21,7 @@ export const DEFAULT_CONFIG: CodeStandardConfig = {
 		"node_modules",
 	],
 	packageRootNames: ["packages", "examples", "scripts"],
+	moduleSourceRoots: ["packages/remote/src/modules"],
 	sourceDirectoryNames: [
 		"constants",
 		"consts",

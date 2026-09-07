@@ -6,15 +6,14 @@
 
 import type { Observable } from "rxjs";
 import { type input, type output, z } from "zod";
-
-import type { REMOTE_SERVICE_DESCRIPTOR_TYPE } from "@/constants/peer/remote-service-descriptor.const";
-import { rpcWireIdentifierSchema } from "@/schemas/protocol/rpc-wire-identifier.schema";
+import type { REMOTE_SERVICE_DESCRIPTOR_TYPE } from "@/modules/peer/constants/remote-service-descriptor.const";
+import { rpcWireIdentifierSchema } from "@/modules/protocol/schemas/rpc-wire-identifier.schema";
 import type {
 	AnyMethod,
 	HasAnyParameter,
 	IsAny,
 	RequiredKey,
-} from "@/types/common.type";
+} from "@/shared/types/common.type";
 
 export type RemoteMethodKey<T> = {
 	[K in keyof T]-?: K extends string

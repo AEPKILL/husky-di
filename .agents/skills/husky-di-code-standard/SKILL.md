@@ -13,27 +13,43 @@ use `packages/core` only as a shared-naming fallback.
 ## Workflow
 
 1. **Inspect.** Read the nearest neighbors, closest equivalent, and any normative
-   specification or ADR governing the task. Read `CONTEXT.md` when domain
-   concepts change. Identify each target's role, owner, public/private surface,
-   and behavior impact.
+   specification or ADR governing the task. Follow the context-reading triggers
+   in [domain guidance](../../../docs/agents/domain.md#before-exploring).
+   Identify each target's role, owner, public/private surface, and behavior impact.
 2. **Classify.** Confirm the topology, role, and suffix of every added or moved
    file before implementation.
 3. **Implement and propagate.** Match the local code shape and update every
    dependent reference in the same pass.
-4. **Verify.** Run structural checks first, then every applicable affected-package
-   check.
+4. **Verify.** Select checks by change impact using [Validation](#validation).
 
-Completion requires every changed file to be accounted for, stale-reference
-searches to be clean, and every applicable check to pass or have its failure
-reported with evidence.
+Apply these rules to the task's changes and their necessary propagation. Expand
+cleanup to existing code only when directly required by the task; touching a file
+does not require bringing its unrelated contents into compliance.
+
+Completion requires every file changed for the task to be accounted for, obsolete
+references to be resolved, and validation outcomes to meet the criteria below.
 
 ## Placement
 
-Preserve local topology. Library internals normally use the role-first map below;
-established feature/tooling trees such as `conformance`, plugins, nested test
-resources, benchmarks, and frontend trees remain feature-first. For paths the
-checker covers, its [config](../../../scripts/src/config/code-standard.config.ts)
-and validators are the mechanical source of truth for suffixes and naming.
+Preserve each package's established topology. Library internals may be role-first
+or module-first; both use the role map below. Established feature/tooling trees
+such as `conformance`, plugins, nested test resources, benchmarks, and frontend
+trees retain their local organization. For paths the checker covers, its
+[config](../../../scripts/src/config/code-standard.config.ts) and validators are
+the mechanical source of truth for suffixes and naming.
+
+For module-first library internals, as in `packages/remote`, use
+`src/modules/<module>/<role>/`, for example `modules/peer/types/` and
+`modules/protocol/schemas/`. Use `modules` for the aggregation directory: these
+are responsibility-based internal modules, including protocol, transport, and
+runtime implementations. Keep package entrypoint files at `src/`.
+
+Place cross-module helpers in the sibling `src/shared/<role>/`, for example
+`shared/types/` or `shared/utils/`. Modules may depend on shared helpers; shared
+helpers must remain independent of modules. Keep contracts owned by a specific
+module with that module even when another module consumes them. Apply this
+layout within module-first packages; preserve role-first packages unless their
+migration is requested.
 
 | Role | Meaning |
 | --- | --- |
@@ -47,7 +63,7 @@ and validators are the mechanical source of truth for suffixes and naming.
 | `enums` | Concepts intentionally modeled as named closed sets; names end in `Enum` |
 | `exceptions` | Custom `XxxException` classes |
 | `decorators` / `middlewares` | Their corresponding runtime roles |
-| `shared` | Deliberately shared references, instances, or state; follow local filename shape |
+| `shared` | Shared helpers, references, instances, or state; module-first packages group them by role |
 | `typings` | Declaration shims |
 
 In a role-first area, mirror a domain subdirectory across roles only for a
@@ -59,13 +75,9 @@ construction types follow Assembly Boundaries.
   precedent for specialized files such as `tests/performance/*.bench.ts`.
 - Name test subdirectories for a domain or behavior, and retain qualifiers such
   as `Default` only when they distinguish real alternatives.
-- Reuse established semantic categories and patterns.
 
 ## Naming And Modeling
 
-- Construction naming is contextual. Preserve established caller-facing option
-  names; use `CreateXxxOptions` for owned internal construction bags according to
-  Assembly Boundaries.
 - Omit `Default` when only one canonical implementation exists. Retain it when
   it distinguishes a real alternative or is established domain vocabulary.
 - Preserve the local private-field convention (`_name` or `#name`) rather than
@@ -105,9 +117,8 @@ keep internal creation policy private.
   tool-required defaults in config and generated files.
 - A source export enables internal reuse; only a declared entrypoint creates
   caller exposure. Keep entrypoints export-only except for imports and stable
-  constant forwarding. Keep concrete implementations and internal assembly
-  seams private unless an entrypoint declares a public extension surface; protect
-  important private surfaces with negative type tests.
+  constant forwarding. Apply [Assembly Boundaries](#assembly-boundaries) when
+  changing the visibility of implementations or assembly seams.
 
 ## File Shape
 
@@ -124,31 +135,11 @@ responsibility changes. A minimal new-file header is:
  */
 ```
 
-Default to colocating a schema in `.type.ts` when it defines, validates, or
-normalizes a data contract owned by that type module, including its input and
-output forms. Auxiliary schemas specific to that contract may stay alongside
-it. This also applies to generic contracts whose runtime validation covers only
-part of their static constraints.
-
-Use `schemas/<domain>/<name>.schema.ts` for an independent validation
-responsibility; omit the domain directory when no subsystem grouping is needed.
-Types derived from that schema may stay alongside it. For example, descriptor
-options and method-allowlist schemas belong with descriptor types, while common
-wire-identifier grammar owns an independent validation responsibility. Sharing a
-business area alone does not establish common contract ownership.
-
-Choose by contract ownership, not by line count, export visibility, consumer
-count, or the presence of `z.input` / `z.output`. The checker enforces directory,
-suffix, naming, and declaration rules; code review judges contract ownership.
-
-Both file kinds allow type aliases, interfaces, type-only exports, and schema
-constants. Schema values use `const` names ending in `Schema`, and their
-initializer's static type must be a Zod schema. Named runtime re-exports are
-allowed only when both the source and exported names end in `Schema` and the
-exported value has a Zod schema type. Refinement and transform callbacks inside
-schema expressions may implement validation and normalization. Keep standalone
-parsing wrappers, factories, classes, and other runtime declarations with their
-owning runtime role.
+Place schemas by contract ownership: colocate validation of a type-owned contract
+in `.type.ts`; give an independent validation responsibility a `.schema.ts` file
+in its owning `schemas/` role. When adding, changing, or moving either file kind,
+or changing schema ownership, read and apply
+[references/schema-contracts.md](references/schema-contracts.md).
 
 After the header, place directive prologues and imports, then keep these
 top-level blocks in order:
@@ -164,8 +155,9 @@ dependency and side-effect order, using an early named export binding when a
 runtime declaration must stay later. Change generated source at its template or
 generator; preserve externally fixed output and its explicit exclusion.
 
-Within a class, follow the nearest stable ordering. Otherwise use public API,
-state, constructor, public methods, then internal helpers.
+Within a class, follow the nearest stable ordering. Otherwise use public fields
+and accessors, internal state fields, constructor, public methods, then internal
+helpers. Preserve field initialization dependencies.
 
 ## Implementation Style
 
@@ -184,21 +176,37 @@ state, constructor, public methods, then internal helpers.
   specification gate in the root `AGENTS.md`.
 - A move or rename includes source imports, tests, entrypoints, build references,
   and requirement-evidence paths. Use `rg` to review old symbol and path forms,
-  including intentional prose matches.
+  updating obsolete references and accounting for intentional matches such as
+  historical prose.
 - For a public API change or public-type move, update or preserve every entrypoint
   that currently exposes the affected contract and run its consumer/type-surface
   coverage.
 
 ## Validation
 
-After a structural edit, run the structural checker early:
+For documentation-only changes, check affected links and document structure,
+plus any applicable document or skill validator. For code changes, including
+moves, run the root `pnpm check:code-standard` and the affected workspaces' tests
+and available `typecheck` scripts. When declarations or package surfaces change,
+also run their available `build` scripts and consumer/type-surface coverage.
+
+Inspect each affected workspace's `package.json` to select the test scripts that
+cover the changed behavior, including specialized `test:*` entries. For checker
+changes, run `pnpm --filter @husky-di/scripts test:code-standard`: running the
+checker validates repository source, while its tests validate the checker itself.
+Run task-specific scripts such as `bench` when applicable.
+
+After a structural code edit, run the structural checker early:
 
 ```bash
 pnpm --filter @husky-di/scripts check:code-standard
 ```
 
-Before completion, run the root `pnpm check:code-standard`, then the affected
-workspace's available `test`, `typecheck`, and—when declarations or package
-surfaces changed—`build` scripts. Run task-specific scripts such as `bench` when
-applicable. Finish with `git diff --check` and confirm that no unexpected
-generated artifacts entered the change.
+Fix failures introduced by the task before declaring completion. For confirmed
+pre-existing failures or environment blockers, report the command, evidence for
+that attribution, impact, and remaining validation gaps. Investigate failures of
+uncertain origin; if attribution remains blocked, explicitly report the work as
+incomplete rather than treating the failure log as completion evidence.
+
+Finish every change with `git diff --check` and confirm that no unexpected
+generated artifacts entered the task's diff.

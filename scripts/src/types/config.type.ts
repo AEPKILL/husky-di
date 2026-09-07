@@ -26,6 +26,11 @@ export type CodeStandardConfig = {
 	readonly sourceDirectoryNames: readonly string[];
 
 	/**
+	 * Repository-relative source roots that also allow module/role directories.
+	 */
+	readonly moduleSourceRoots?: readonly string[];
+
+	/**
 	 * Map of source directory names to required file suffixes.
 	 * Each entry can be a string suffix or a RegExp pattern.
 	 * Multiple suffixes/patterns can be specified per directory.

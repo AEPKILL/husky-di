@@ -94,6 +94,9 @@ export function isInScopeFile(
 		}
 
 		return (
+			config.moduleSourceRoots?.some((root) =>
+				relativeFilePath.startsWith(`${root}/`),
+			) === true ||
 			config.sourceDirectories.includes(nextSegment) ||
 			config.sourceDirectoryNames.includes(nextSegment)
 		);

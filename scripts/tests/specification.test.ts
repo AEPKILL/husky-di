@@ -1,5 +1,5 @@
 /**
- * @overview Code standard schema file specification compliance tests.
+ * @overview Code standard schema and module placement specification tests.
  * @author AEPKILL
  * @created 2026-09-07 00:00:00
  */
@@ -10,6 +10,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, describe, it } from "node:test";
 
+import { collectInScopeFiles } from "../src/utils/file-collector.util.js";
 import { validateCodeStandard } from "../src/utils/validate-code-standard.util.js";
 
 const SOURCE_HEADER = `/**
@@ -161,6 +162,62 @@ export const valueSchema = z.string();
 `,
 		});
 
+		assert.deepEqual(validateCodeStandard(rootDirectoryPath), []);
+	});
+});
+
+describe("Code standard module placement specification", () => {
+	it("PLACEMENT-001: validates module roles and preserves root entrypoints", () => {
+		const rootDirectoryPath = createSchemaWorkspace({
+			"packages/remote/src/index.ts": "export {};",
+			"packages/remote/src/shared/types/common.type.ts":
+				"export type Value = string;",
+			"packages/remote/src/modules/peer/types/descriptor.type.ts":
+				"export type Descriptor = string;",
+			"packages/remote/src/modules/peer/constants/descriptor.const.ts":
+				'export const DESCRIPTOR = "descriptor";',
+			"packages/remote/src/modules/protocol/schemas/identifier.schema.ts":
+				'import { z } from "zod"; export const identifierSchema = z.string();',
+		});
+
+		assert.equal(collectInScopeFiles(rootDirectoryPath).length, 5);
+		assert.deepEqual(validateCodeStandard(rootDirectoryPath), []);
+	});
+
+	it("PLACEMENT-001: reports invalid suffixes, declarations and unknown roles", () => {
+		const rootDirectoryPath = createSchemaWorkspace({
+			"packages/remote/src/modules/peer/misc/value.type.ts":
+				"export type Value = string;",
+			"packages/remote/src/modules/peer/types/value.schema.ts":
+				"export type Value = string;",
+			"packages/remote/src/modules/protocol/schemas/invalid.schema.ts":
+				"export const fakeSchema = {};",
+		});
+
+		assert.deepEqual(
+			validateCodeStandard(rootDirectoryPath).map(({ ruleId }) => ruleId),
+			[
+				"placement/source-directory",
+				"placement/source-directory-suffix",
+				"schema-file/exports-only",
+			],
+		);
+	});
+
+	it("PLACEMENT-001: retains collection rules outside configured roots", () => {
+		const rootDirectoryPath = createSchemaWorkspace({
+			"packages/remote/src/modules-other/peer/types/value.type.ts":
+				"export type Value = string;",
+			"packages/remote/src/peer/types/value.type.ts":
+				"export type Value = string;",
+			"packages/core/src/types/value.type.ts": "export type Value = string;",
+			"packages/core/src/peer/types/value.type.ts":
+				"export type Value = string;",
+		});
+
+		assert.deepEqual(collectInScopeFiles(rootDirectoryPath), [
+			join(rootDirectoryPath, "packages/core/src/types/value.type.ts"),
+		]);
 		assert.deepEqual(validateCodeStandard(rootDirectoryPath), []);
 	});
 });

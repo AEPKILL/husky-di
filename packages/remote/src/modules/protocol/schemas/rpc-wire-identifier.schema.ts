@@ -9,7 +9,7 @@ import { z } from "zod";
 import {
 	RPC_WIRE_IDENTIFIER_MAX_LENGTH,
 	RPC_WIRE_IDENTIFIER_MIN_LENGTH,
-} from "@/constants/protocol/rpc-size-limit.const";
+} from "@/modules/protocol/constants/rpc-size-limit.const";
 
 /**
  * Validates peer-visible RPC identifiers such as Wire Service Names and method

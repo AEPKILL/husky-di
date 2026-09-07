@@ -8,6 +8,10 @@ implementation.
 
 ## Placement And Ownership
 
+Resolve the role paths below using the topology in [Placement](../SKILL.md#placement).
+In module-first packages, `<role>/<domain>/` becomes
+`modules/<module>/<role>/`; cross-module helpers use `shared/<role>/`.
+
 - Place each repository-owned artifact by role: a behavioral contract in
   `interfaces/<domain>/`, a concrete class in `impls/<domain>/` as `XxxImpl`, and
   dependency assembly in a `*.factory.ts` module. A third-party extension seam
@@ -44,8 +48,13 @@ dependency assembly that selects the concrete implementation may import
 
 ## Lifetime And Surface
 
-- Bind dependencies during creation. Use `readonly` references and snapshot or
-  freeze input when runtime replacement is unsupported.
+- Bind dependencies during creation. When runtime replacement is unsupported,
+  use `readonly` references while preserving dependency instance identity and
+  allowing its contract-defined state transitions.
+- For configuration that must be isolated from later caller mutations, create
+  an owned snapshot. Let the contract determine the snapshot depth. Freeze only
+  owned data unless the contract explicitly authorizes freezing caller-owned
+  input; copying or freezing dependency instances is not implied by fixed binding.
 - Keep constructors public by default. Restrict one only for an invariant
   enforced consistently by both the types and runtime behavior.
 - Call an accessible constructor directly from its factory. Use

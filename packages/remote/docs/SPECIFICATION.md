@@ -3,13 +3,19 @@
 **Status:** Normative for the descriptor module in the current rebuild.
 
 This document covers the descriptor types and their runtime validation schemas
-in `src/types/remote-service-descriptor.type.ts`, and shared wire identifier
-validation in `src/schemas/protocol/rpc-wire-identifier.schema.ts`. The package
-root is currently empty; these contracts do not imply a published factory or RPC
-runtime.
+in `src/modules/peer/types/remote-service-descriptor.type.ts`, and shared wire
+identifier validation in
+`src/modules/protocol/schemas/rpc-wire-identifier.schema.ts`. The package root is
+currently empty; these contracts do not imply a published factory or RPC runtime.
 `MUST` and `MUST NOT` denote requirements. Matching evidence lives in
 `tests/specification.test.ts`, whose type assertions run through both the package
 TypeScript check and the Vitest type-checking suite.
+
+Source modules live under `src/modules/`, organized by module, then role:
+`peer/types`, `peer/constants`, `protocol/schemas`, and `protocol/constants`.
+Reusable cross-module type helpers live in `src/shared/types`. Modules may depend
+on shared helpers; shared helpers do not depend on modules. Package entrypoint
+files stay at the source root.
 
 ## RPC-DESC-001: Explicit method allowlist
 
