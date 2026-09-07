@@ -7,7 +7,7 @@
 import type { Observable } from "rxjs";
 import { type input, type output, z } from "zod";
 import type { REMOTE_SERVICE_DESCRIPTOR_TYPE } from "@/modules/peer/constants/remote-service-descriptor.const";
-import { rpcWireIdentifierSchema } from "@/modules/protocol/schemas/rpc-wire-identifier.schema";
+import { rpcWireIdentifierSchema } from "@/modules/protocol";
 import type {
 	AnyMethod,
 	HasAnyParameter,

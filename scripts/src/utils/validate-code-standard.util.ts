@@ -24,6 +24,7 @@ import { validateFilePlacement } from "../validators/file-placement.validator";
 import { validateHeaderMetadata } from "../validators/header-metadata.validator";
 import { validateImportSpecifiers } from "../validators/import-specifiers.validator";
 import { validateInterfaceNaming } from "../validators/interface-naming.validator";
+import { validateModuleImports } from "../validators/module-imports.validator";
 import { validateTypeAndSchemaFileExports } from "../validators/type-and-schema-file-exports.validator";
 import {
 	collectDirectoryFiles,
@@ -69,6 +70,9 @@ export function validateCodeStandard(
 		diagnostics.push(...validateConstantNaming(relativeFilePath, sourceFile));
 		diagnostics.push(...validateInterfaceNaming(relativeFilePath, sourceFile));
 		diagnostics.push(
+			...validateModuleImports(relativeFilePath, sourceFile, config),
+		);
+		diagnostics.push(
 			...validateTypeAndSchemaFileExports(
 				relativeFilePath,
 				schemaValidationContext?.sourceFile ?? sourceFile,
@@ -77,7 +81,9 @@ export function validateCodeStandard(
 			),
 		);
 		diagnostics.push(...validateDefaultExports(relativeFilePath, sourceFile));
-		diagnostics.push(...validateEntrypointShape(relativeFilePath, sourceFile));
+		diagnostics.push(
+			...validateEntrypointShape(relativeFilePath, sourceFile, config),
+		);
 		diagnostics.push(
 			...validateImportSpecifiers(
 				relativeFilePath,

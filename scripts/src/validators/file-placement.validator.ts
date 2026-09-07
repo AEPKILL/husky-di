@@ -65,6 +65,13 @@ export function validateFilePlacement(
 	const roleIndex = moduleSourceRoot
 		? getPathSegments(moduleSourceRoot).length + 1
 		: sourceIndex + 1;
+	if (
+		moduleSourceRoot &&
+		pathSegments.length === roleIndex + 1 &&
+		fileName === "index.ts"
+	) {
+		return [];
+	}
 	const sourceDirectoryName = pathSegments[roleIndex];
 	if (!config.sourceDirectoryNames.includes(sourceDirectoryName)) {
 		return [

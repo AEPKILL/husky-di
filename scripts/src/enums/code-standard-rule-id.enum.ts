@@ -21,6 +21,7 @@ export enum CodeStandardRuleIdEnum {
 	ExportsNoDefaultExport = "exports/no-default-export",
 	EntrypointExportOnly = "entrypoint/export-only",
 	ImportsNoInternalPackagePath = "imports/no-internal-package-path",
+	ImportsNoInternalModulePath = "imports/no-internal-module-path",
 	CommentsBiomeIgnoreReason = "comments/biome-ignore-reason",
 	TypeFileExportsOnly = "type-file/exports-only",
 	SchemaFileExportsOnly = "schema-file/exports-only",

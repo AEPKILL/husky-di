@@ -167,6 +167,78 @@ export const valueSchema = z.string();
 });
 
 describe("Code standard module placement specification", () => {
+	it("MODULE-001: accepts module entrypoints and rejects implementation or other root files", () => {
+		const rootDirectoryPath = createSchemaWorkspace({
+			"packages/remote/src/modules/peer/index.ts":
+				'export type { Descriptor } from "./types/descriptor.type";',
+			"packages/remote/src/modules/peer/types/descriptor.type.ts":
+				"export type Descriptor = string;",
+			"packages/remote/src/modules/owner/index.ts":
+				"export function createOwner() {}",
+			"packages/remote/src/modules/peer/helper.ts": "export {};",
+		});
+
+		assert.deepEqual(
+			validateCodeStandard(rootDirectoryPath).map(({ ruleId }) => ruleId),
+			["entrypoint/export-only", "placement/source-directory"],
+		);
+	});
+
+	it("MODULE-002: accepts entrypoint imports and imports within the same module", () => {
+		const rootDirectoryPath = createSchemaWorkspace({
+			"packages/remote/src/modules/peer/index.ts":
+				'export type { Descriptor } from "./types/descriptor.type";',
+			"packages/remote/src/modules/peer/types/descriptor.type.ts":
+				"export type Descriptor = string;",
+			"packages/remote/src/modules/peer/types/local.type.ts":
+				'import type { Descriptor } from "@/modules/peer/types/descriptor.type"; export type Local = Descriptor;',
+			"packages/remote/tests/consumer.test.ts": `
+import type { Descriptor } from "../src/modules/peer";
+import type { Descriptor as Local } from "../src/modules/peer/index";
+import "../src/modules/peer/index.ts";
+export type { Descriptor as Alias } from "@/modules/peer/index.js";
+export type PeerModule = typeof import("@/modules/peer");
+void import("../src/modules/peer/index.js");
+`,
+		});
+
+		assert.deepEqual(validateCodeStandard(rootDirectoryPath), []);
+	});
+
+	for (const source of [
+		'import type { Descriptor } from "@/modules/peer/types/descriptor.type";',
+		'export type { Descriptor } from "../src/modules/peer/types/descriptor.type";',
+		'export type Descriptor = import("@/modules/peer/types/descriptor.type").Descriptor;',
+		'void import("../src/modules/owner/../peer/types/descriptor.type");',
+		'require("@/modules/peer/types/descriptor.type");',
+		'import peer = require("../src/modules/peer/types/descriptor.type");',
+	]) {
+		it(`MODULE-002: rejects external deep references: ${source}`, () => {
+			const rootDirectoryPath = createSchemaWorkspace({
+				"packages/remote/tests/consumer.test.ts": source,
+			});
+
+			assert.deepEqual(
+				validateCodeStandard(rootDirectoryPath).map(({ ruleId }) => ruleId),
+				["imports/no-internal-module-path"],
+			);
+		});
+	}
+
+	it("MODULE-002: does not confuse sibling module names or unconfigured packages", () => {
+		const rootDirectoryPath = createSchemaWorkspace({
+			"packages/remote/src/modules/peer-other/types/value.type.ts":
+				'import type { Descriptor } from "@/modules/peer/types/descriptor.type";',
+			"packages/core/src/types/value.type.ts":
+				'import type { Value } from "@/modules/peer/types/value.type";',
+		});
+
+		assert.deepEqual(
+			validateCodeStandard(rootDirectoryPath).map(({ ruleId }) => ruleId),
+			["imports/no-internal-module-path"],
+		);
+	});
+
 	it("PLACEMENT-001: validates module roles and preserves root entrypoints", () => {
 		const rootDirectoryPath = createSchemaWorkspace({
 			"packages/remote/src/index.ts": "export {};",

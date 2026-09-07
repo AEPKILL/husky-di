@@ -48,3 +48,24 @@ TypeScript files below these roots and apply the role's existing suffix and
 declaration rules. Unknown roles MUST report `placement/source-directory`.
 Source-root entrypoints and existing role-first placement MUST remain supported.
 Other source roots MUST retain their existing collection and placement rules.
+
+## MODULE-001: Module entrypoints
+
+The root `index.ts` of each configured module MUST be accepted by placement
+validation and checked by `entrypoint/export-only`. Other files directly under
+a module root MUST still fail placement validation. Package-root entrypoint
+rules MUST remain unchanged.
+
+## MODULE-002: Imports through module entrypoints
+
+References from outside a configured module MUST target its directory or root
+`index` entrypoint. Deep references MUST report `imports/no-internal-module-path`.
+Files inside the target module MAY reference its internal files directly.
+
+The checker MUST inspect relative paths and package-source `@/` aliases in
+static imports, re-exports, import types, dynamic imports, and CommonJS imports
+with literal specifiers. It MUST normalize relative traversal before comparing
+module boundaries. Directory imports and explicit `index`, `index.ts`, or
+`index.js` references MUST be accepted. Computed specifiers and custom aliases
+are outside this rule's static scope. Roots not configured in `moduleSourceRoots`
+MUST retain their existing import rules.

@@ -112,6 +112,14 @@ keep internal creation policy private.
 - Use `import type` for type-only imports and inline `type` specifiers in mixed
   imports. Prefer `@/` for cross-directory package-source imports; same-directory,
   test, and tool imports follow local precedent.
+- In module-first packages, give each module a root
+  `src/modules/<module>/index.ts` as its sole external entrypoint. Imports and
+  re-exports from outside that module, including tests, must use this entrypoint
+  (for example `@/modules/peer`), never its internal file paths. Files within the
+  same module may import each other directly. Use explicit named re-exports in
+  the module index and expose only contracts needed outside the module; keep
+  implementation helpers internal. This applies to type-only and runtime
+  references alike.
 - Across packages, import only the root or a subpath declared in
   `package.json#exports`. Use named exports in normal source; preserve
   tool-required defaults in config and generated files.

@@ -1,12 +1,28 @@
 /**
- * @overview Remote Service Descriptor specification and type regression tests.
+ * @overview Migrated Remote contract specification and type regression tests.
  * @author AEPKILL
  * @created 2026-09-07 00:00:00
  */
 
+import type { Cleanup } from "@husky-di/core";
 import type { Observable } from "rxjs";
 import { describe, expect, expectTypeOf, it } from "vitest";
-
+import type {
+	IRpcAcceptor,
+	IRpcConnector,
+	RpcAcceptorListenerState,
+	RpcAcceptorState,
+	RpcConnectorConnectOptions,
+	RpcConnectorState,
+	RpcEvent,
+	RpcEventTypeEnum,
+} from "../src/modules/owner";
+import type {
+	IRpcPeer,
+	RpcCallDirectionEnum,
+	RpcCallStatusEnum,
+	RpcPeerState,
+} from "../src/modules/peer";
 import {
 	type RemoteMethodKey,
 	type RemoteService,
@@ -16,7 +32,17 @@ import {
 	type RemoteServiceImplementation,
 	type RpcMethodDefinitions,
 	remoteServiceDescriptorOptionsSchema,
-} from "../src/modules/peer/types/remote-service-descriptor.type";
+} from "../src/modules/peer";
+import type {
+	IRpcAcceptorAdapter,
+	IRpcConnection,
+	IRpcConnectorAdapter,
+} from "../src/modules/transport";
+import type { RpcCloseOutcomeEnum } from "../src/shared/enums/rpc-close-outcome.enum";
+import type { RpcCloseReasonEnum } from "../src/shared/enums/rpc-close-reason.enum";
+import { RpcExceptionCodeEnum } from "../src/shared/enums/rpc-exception-code.enum";
+import type { RpcStateStatusEnum } from "../src/shared/enums/rpc-state-status.enum";
+import { RpcException } from "../src/shared/exceptions/rpc.exception";
 
 describe("Remote Service Descriptor specification", () => {
 	it("RPC-DESC-001: selects only required string methods and reserves then", () => {
@@ -264,5 +290,230 @@ describe("Remote Service Descriptor specification", () => {
 			readonly query: true;
 			readonly stream: never;
 		}>();
+	});
+});
+
+describe("RPC Topology Owner contract specification", () => {
+	it("RPC-OWNER-001: preserves Owner state, event and peer surfaces", () => {
+		expectTypeOf<IRpcConnector["state"]>().toEqualTypeOf<RpcConnectorState>();
+		expectTypeOf<IRpcConnector["state$"]>().toEqualTypeOf<
+			Observable<RpcConnectorState>
+		>();
+		expectTypeOf<IRpcConnector["peer"]>().toEqualTypeOf<IRpcPeer>();
+		expectTypeOf<IRpcConnector["event$"]>().toEqualTypeOf<
+			Observable<RpcEvent>
+		>();
+		expectTypeOf<IRpcConnector["connect"]>().toEqualTypeOf<
+			(options: RpcConnectorConnectOptions) => Promise<void>
+		>();
+		expectTypeOf<RpcConnectorConnectOptions>().toEqualTypeOf<{
+			readonly adapter: IRpcConnectorAdapter;
+			readonly signal?: AbortSignal | undefined;
+		}>();
+		expectTypeOf<IRpcAcceptor["state"]>().toEqualTypeOf<RpcAcceptorState>();
+		expectTypeOf<IRpcAcceptor["state$"]>().toEqualTypeOf<
+			Observable<RpcAcceptorState>
+		>();
+		expectTypeOf<IRpcAcceptor["peers"]>().toEqualTypeOf<readonly IRpcPeer[]>();
+		expectTypeOf<IRpcAcceptor["peers$"]>().toEqualTypeOf<
+			Observable<readonly IRpcPeer[]>
+		>();
+		expectTypeOf<IRpcAcceptor["event$"]>().toEqualTypeOf<
+			Observable<RpcEvent>
+		>();
+		expectTypeOf<IRpcAcceptor["listen"]>().toEqualTypeOf<
+			(adapter: IRpcAcceptorAdapter) => Promise<void>
+		>();
+		expectTypeOf<
+			IRpcConnector["shutdown" | "close"] | IRpcAcceptor["shutdown" | "close"]
+		>().toEqualTypeOf<() => Promise<void>>();
+		expectTypeOf<
+			Extract<keyof IRpcConnector, "expose" | "resolve">
+		>().toBeNever();
+	});
+
+	it("RPC-OWNER-002: preserves descriptor inference and rejects incompatible implementations", () => {
+		const checkConsumer = (
+			acceptor: IRpcAcceptor,
+			peer: IRpcPeer,
+			descriptor: RemoteServiceDescriptor<
+				{
+					query(value: string, signal: AbortSignal): number;
+				},
+				{ query: { cancelable: true } }
+			>,
+			connector: IRpcConnector,
+		) => {
+			const implementation = {
+				query: (_value: string, _signal: AbortSignal) => 1,
+			};
+			expectTypeOf(
+				acceptor.expose(descriptor, implementation),
+			).toEqualTypeOf<Cleanup>();
+			expectTypeOf(
+				peer.expose(descriptor, implementation),
+			).toEqualTypeOf<Cleanup>();
+			expectTypeOf(peer.resolve(descriptor).query).toEqualTypeOf<
+				(value: string, signal: AbortSignal | undefined) => Promise<number>
+			>();
+			// @ts-expect-error Implementation inference must not widen the descriptor result.
+			acceptor.expose(descriptor, { query: () => "wrong result" });
+			// @ts-expect-error Implementation inference must not widen the descriptor parameter.
+			peer.expose(descriptor, { query: (_value: number) => 1 });
+			// @ts-expect-error Owner peer references are readonly.
+			connector.peer = peer;
+			// @ts-expect-error Acceptor peer collections are readonly.
+			acceptor.peers.push(peer);
+		};
+		expectTypeOf(checkConsumer).returns.toBeVoid();
+	});
+
+	it("RPC-OWNER-003: keeps lifecycle and closed-state outcomes discriminated", () => {
+		expectTypeOf<RpcConnectorState["status"]>().toEqualTypeOf<
+			| RpcStateStatusEnum.active
+			| RpcStateStatusEnum.draining
+			| RpcStateStatusEnum.closing
+			| RpcStateStatusEnum.closed
+		>();
+		expectTypeOf<RpcAcceptorState["status"]>().toEqualTypeOf<
+			RpcConnectorState["status"]
+		>();
+		expectTypeOf<
+			Extract<
+				RpcAcceptorState,
+				{ status: RpcStateStatusEnum.active }
+			>["listener"]
+		>().toEqualTypeOf<RpcAcceptorListenerState>();
+		expectTypeOf<
+			Extract<
+				RpcAcceptorState,
+				{ listener: RpcAcceptorListenerState }
+			>["status"]
+		>().toEqualTypeOf<RpcStateStatusEnum.active>();
+		expectTypeOf<
+			Extract<
+				RpcAcceptorListenerState,
+				{ outcome: RpcCloseOutcomeEnum.failed }
+			>["error"]
+		>().toEqualTypeOf<Error>();
+		expectTypeOf<
+			Extract<RpcPeerState, { status: RpcStateStatusEnum.recovering }>
+		>().not.toBeNever();
+		expectTypeOf<
+			Extract<
+				RpcConnectorState,
+				{
+					reason:
+						| RpcCloseReasonEnum.recoveryExpired
+						| RpcCloseReasonEnum.counterExhaustion;
+				}
+			>["error"]["code"]
+		>().toEqualTypeOf<RpcExceptionCodeEnum.unavailable>();
+		expectTypeOf<
+			Extract<
+				RpcConnectorState,
+				{
+					reason:
+						| RpcCloseReasonEnum.continuityFailure
+						| RpcCloseReasonEnum.protocolFault
+						| RpcCloseReasonEnum.resourceFault;
+				}
+			>["error"]["code"]
+		>().toEqualTypeOf<RpcExceptionCodeEnum.protocol>();
+		expectTypeOf<
+			Extract<
+				RpcAcceptorState,
+				{ reason: RpcCloseReasonEnum.cleanupFailed }
+			>["error"]
+		>().toEqualTypeOf<Error>();
+		expectTypeOf<
+			Extract<
+				"error",
+				keyof Extract<RpcPeerState, { outcome: RpcCloseOutcomeEnum.normal }>
+			>
+		>().toBeNever();
+	});
+
+	it("RPC-OWNER-003: preserves safe exception messages, codes and causes", () => {
+		const cause = new Error("private transport detail");
+		const error = new RpcException(RpcExceptionCodeEnum.unavailable, cause);
+		expect(error).toBeInstanceOf(Error);
+		expect(error.name).toBe("RpcException");
+		expect(error.message).toBe("unavailable: RPC failed.");
+		expect(error.code).toBe(RpcExceptionCodeEnum.unavailable);
+		expect(error.cause).toBe(cause);
+	});
+
+	it("RPC-OWNER-004: preserves safe call metadata and outcome narrowing", () => {
+		type Finished = Extract<RpcEvent, { type: RpcEventTypeEnum.callFinished }>;
+		type UnknownService = Extract<
+			Finished,
+			{
+				code: RpcExceptionCodeEnum.unknownService;
+				direction: RpcCallDirectionEnum.incoming;
+			}
+		>;
+		type UnknownMethod = Extract<
+			Finished,
+			{
+				code: RpcExceptionCodeEnum.unknownMethod;
+				direction: RpcCallDirectionEnum.incoming;
+			}
+		>;
+		expectTypeOf<Finished["observationId"]>().toEqualTypeOf<string>();
+		expectTypeOf<Finished["peer"]>().toEqualTypeOf<IRpcPeer>();
+		expectTypeOf<
+			UnknownService["service" | "method"]
+		>().toEqualTypeOf<undefined>();
+		expectTypeOf<UnknownMethod["service"]>().toEqualTypeOf<string>();
+		expectTypeOf<UnknownMethod["method"]>().toEqualTypeOf<undefined>();
+		expectTypeOf<
+			Extract<
+				Finished,
+				{
+					direction: RpcCallDirectionEnum.incoming;
+					service: string;
+					method: string;
+					outcome: RpcCallStatusEnum.rejected;
+				}
+			>["code"]
+		>().toEqualTypeOf<
+			RpcExceptionCodeEnum.canceled | RpcExceptionCodeEnum.handlerFailed
+		>();
+		expectTypeOf<
+			Extract<
+				Finished,
+				{
+					direction: RpcCallDirectionEnum.outgoing;
+					outcome: RpcCallStatusEnum.rejected;
+				}
+			>["code"]
+		>().toEqualTypeOf<
+			Exclude<RpcExceptionCodeEnum, RpcExceptionCodeEnum.protocol>
+		>();
+		type SensitiveEvent = RpcEvent extends infer Event
+			? Event extends RpcEvent
+				? Extract<keyof Event, "args" | "value" | "payload" | "error" | "cause">
+				: never
+			: never;
+		expectTypeOf<SensitiveEvent>().toBeNever();
+	});
+
+	it("RPC-OWNER-005: preserves Adapter roles and byte Connection signatures", () => {
+		expectTypeOf<
+			IRpcConnectorAdapter["connection$"] | IRpcAcceptorAdapter["connection$"]
+		>().toEqualTypeOf<Observable<IRpcConnection>>();
+		expectTypeOf<
+			IRpcConnectorAdapter["connect"] | IRpcAcceptorAdapter["listen"]
+		>().toEqualTypeOf<(signal: AbortSignal) => Promise<void>>();
+		expectTypeOf<IRpcConnection["message$"]>().toEqualTypeOf<
+			Observable<Uint8Array>
+		>();
+		expectTypeOf<IRpcConnection["send"]>().toEqualTypeOf<
+			(message: Uint8Array) => Promise<void>
+		>();
+		expectTypeOf<IRpcConnection["close"]>().toEqualTypeOf<
+			() => Promise<void>
+		>();
 	});
 });

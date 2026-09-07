@@ -2,7 +2,7 @@
  * Entrypoint shape validator.
  *
  * @overview
- * Validates that src/index.ts files only contain exports and stable forwarding.
+ * Validates that package and module entrypoints only contain exports and stable forwarding.
  * Prevents implementation logic in entrypoint files.
  *
  * @author AEPKILL
@@ -10,15 +10,23 @@
  */
 
 import * as ts from "typescript";
+import { DEFAULT_CONFIG } from "@/config/code-standard.config";
 import { CodeStandardRuleIdEnum } from "@/enums/code-standard-rule-id.enum";
 import type { CodeStandardDiagnostic } from "@/types/code-standard-diagnostic.type";
+import type { CodeStandardConfig } from "@/types/config.type";
 import { createDiagnostic } from "@/utils/create-diagnostic.util";
 
 export function validateEntrypointShape(
 	relativeFilePath: string,
 	sourceFile: ts.SourceFile,
+	config: CodeStandardConfig = DEFAULT_CONFIG,
 ): CodeStandardDiagnostic[] {
-	if (!relativeFilePath.endsWith("/src/index.ts")) {
+	const isModuleEntrypoint = config.moduleSourceRoots?.some((root) => {
+		if (!relativeFilePath.startsWith(`${root}/`)) return false;
+		const segments = relativeFilePath.slice(root.length + 1).split("/");
+		return segments.length === 2 && segments[1] === "index.ts";
+	});
+	if (!relativeFilePath.endsWith("/src/index.ts") && !isModuleEntrypoint) {
 		return [];
 	}
 
@@ -46,7 +54,7 @@ export function validateEntrypointShape(
 				relativeFilePath,
 				sourceFile,
 				statement.getStart(sourceFile),
-				"src/index.ts may only contain imports, export declarations, and stable constant forwarding.",
+				"Entrypoints may only contain imports, export declarations, and stable constant forwarding.",
 			),
 		];
 	}
