@@ -24,7 +24,7 @@ import { validateFilePlacement } from "../validators/file-placement.validator";
 import { validateHeaderMetadata } from "../validators/header-metadata.validator";
 import { validateImportSpecifiers } from "../validators/import-specifiers.validator";
 import { validateInterfaceNaming } from "../validators/interface-naming.validator";
-import { validateTypeFileExports } from "../validators/type-file-exports.validator";
+import { validateTypeAndSchemaFileExports } from "../validators/type-and-schema-file-exports.validator";
 import {
 	collectDirectoryFiles,
 	collectInScopeFiles,
@@ -38,8 +38,8 @@ export function validateCodeStandard(
 ): CodeStandardDiagnostic[] {
 	const diagnostics: CodeStandardDiagnostic[] = [];
 	const inScopeFilePaths = collectInScopeFiles(rootDirectoryPath, config);
-	const typeFileValidationContexts =
-		createTypeFileValidationContexts(inScopeFilePaths);
+	const schemaValidationContexts =
+		createSchemaValidationContexts(inScopeFilePaths);
 	const publicPackageImportSpecifiers = collectPublicPackageImportSpecifiers(
 		rootDirectoryPath,
 		config,
@@ -57,7 +57,7 @@ export function validateCodeStandard(
 		const relativeFilePath = toPortablePath(
 			filePath.slice(rootDirectoryPath.length + 1),
 		);
-		const typeFileValidationContext = typeFileValidationContexts.get(filePath);
+		const schemaValidationContext = schemaValidationContexts.get(filePath);
 
 		diagnostics.push(
 			...validateHeaderMetadata(relativeFilePath, sourceFile, sourceText),
@@ -69,11 +69,11 @@ export function validateCodeStandard(
 		diagnostics.push(...validateConstantNaming(relativeFilePath, sourceFile));
 		diagnostics.push(...validateInterfaceNaming(relativeFilePath, sourceFile));
 		diagnostics.push(
-			...validateTypeFileExports(
+			...validateTypeAndSchemaFileExports(
 				relativeFilePath,
-				typeFileValidationContext?.sourceFile ?? sourceFile,
-				typeFileValidationContext?.typeChecker,
-				typeFileValidationContext?.zodSchemaType,
+				schemaValidationContext?.sourceFile ?? sourceFile,
+				schemaValidationContext?.typeChecker,
+				schemaValidationContext?.zodSchemaType,
 			),
 		);
 		diagnostics.push(...validateDefaultExports(relativeFilePath, sourceFile));
@@ -101,20 +101,21 @@ export function validateCodeStandard(
 	});
 }
 
-type TypeFileValidationContext = Readonly<{
+type SchemaValidationContext = Readonly<{
 	sourceFile: ts.SourceFile;
 	typeChecker: ts.TypeChecker;
 	zodSchemaType: ts.Type | undefined;
 }>;
 
-function createTypeFileValidationContexts(
+function createSchemaValidationContexts(
 	filePaths: readonly string[],
-): ReadonlyMap<string, TypeFileValidationContext> {
-	const typeFilePaths = filePaths.filter((filePath) =>
-		filePath.endsWith(".type.ts"),
+): ReadonlyMap<string, SchemaValidationContext> {
+	const schemaFilePaths = filePaths.filter(
+		(filePath) =>
+			filePath.endsWith(".type.ts") || filePath.endsWith(".schema.ts"),
 	);
 	const filePathsByConfig = new Map<string, string[]>();
-	for (const filePath of typeFilePaths) {
+	for (const filePath of schemaFilePaths) {
 		const configPath =
 			ts.findConfigFile(dirname(filePath), ts.sys.fileExists) ?? "";
 		const configFilePaths = filePathsByConfig.get(configPath) ?? [];
@@ -122,7 +123,7 @@ function createTypeFileValidationContexts(
 		filePathsByConfig.set(configPath, configFilePaths);
 	}
 
-	const contexts = new Map<string, TypeFileValidationContext>();
+	const contexts = new Map<string, SchemaValidationContext>();
 	for (const [configPath, configFilePaths] of filePathsByConfig) {
 		const program = ts.createProgram({
 			rootNames: configFilePaths,

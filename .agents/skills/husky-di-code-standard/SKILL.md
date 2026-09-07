@@ -38,7 +38,8 @@ and validators are the mechanical source of truth for suffixes and naming.
 | Role | Meaning |
 | --- | --- |
 | `interfaces` | Structural or behavioral contracts; contract interfaces use `I...` |
-| `types` | Standalone data composition, type-level models, and their canonical schemas |
+| `types` | Type contracts and type-level models; schemas follow contract ownership |
+| `schemas` | Independent Zod validation schemas in `.schema.ts` files; may colocate derived types |
 | `impls` | Concrete behavior or state; replaceable implementations use `XxxImpl` |
 | `factories` | Creation and assembly; creator functions use `createXxx` |
 | `utils` | Mostly stateless helpers with verb-led names |
@@ -123,12 +124,31 @@ responsibility changes. A minimal new-file header is:
  */
 ```
 
-A `.type.ts` file may colocate canonical Zod schemas with the types derived from
-them. Schema values use `const` names ending in `Schema`, and their initializer's
-static type must be a Zod schema. Named runtime re-exports are allowed only when
-both the source and exported names end in `Schema` and the exported value has a
-Zod schema type; keep all other runtime declarations with their owning runtime
-role.
+Default to colocating a schema in `.type.ts` when it defines, validates, or
+normalizes a data contract owned by that type module, including its input and
+output forms. Auxiliary schemas specific to that contract may stay alongside
+it. This also applies to generic contracts whose runtime validation covers only
+part of their static constraints.
+
+Use `schemas/<domain>/<name>.schema.ts` for an independent validation
+responsibility; omit the domain directory when no subsystem grouping is needed.
+Types derived from that schema may stay alongside it. For example, descriptor
+options and method-allowlist schemas belong with descriptor types, while common
+wire-identifier grammar owns an independent validation responsibility. Sharing a
+business area alone does not establish common contract ownership.
+
+Choose by contract ownership, not by line count, export visibility, consumer
+count, or the presence of `z.input` / `z.output`. The checker enforces directory,
+suffix, naming, and declaration rules; code review judges contract ownership.
+
+Both file kinds allow type aliases, interfaces, type-only exports, and schema
+constants. Schema values use `const` names ending in `Schema`, and their
+initializer's static type must be a Zod schema. Named runtime re-exports are
+allowed only when both the source and exported names end in `Schema` and the
+exported value has a Zod schema type. Refinement and transform callbacks inside
+schema expressions may implement validation and normalization. Keep standalone
+parsing wrappers, factories, classes, and other runtime declarations with their
+owning runtime role.
 
 After the header, place directive prologues and imports, then keep these
 top-level blocks in order:

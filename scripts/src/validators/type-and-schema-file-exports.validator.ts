@@ -1,8 +1,8 @@
 /**
- * Type file exports validator.
+ * Type and schema file exports validator.
  *
  * @overview
- * Validates that .type.ts files contain type declarations and canonical schemas.
+ * Validates that .type.ts and .schema.ts files contain types and canonical schemas.
  * Prevents runtime values other than statically verified Zod schema constants.
  *
  * @author AEPKILL
@@ -15,7 +15,7 @@ import type { CodeStandardDiagnostic } from "@/types/code-standard-diagnostic.ty
 import { createDiagnostic } from "@/utils/create-diagnostic.util";
 import { extractFileName } from "@/utils/path.util";
 
-export function validateTypeFileExports(
+export function validateTypeAndSchemaFileExports(
 	relativeFilePath: string,
 	sourceFile: ts.SourceFile,
 	typeChecker?: ts.TypeChecker,
@@ -24,9 +24,14 @@ export function validateTypeFileExports(
 	const diagnostics: CodeStandardDiagnostic[] = [];
 
 	const fileName = extractFileName(relativeFilePath);
-	if (!fileName.endsWith(".type.ts")) {
+	const isSchemaFile = fileName.endsWith(".schema.ts");
+	if (!isSchemaFile && !fileName.endsWith(".type.ts")) {
 		return diagnostics;
 	}
+	const fileSuffix = isSchemaFile ? ".schema.ts" : ".type.ts";
+	const ruleId = isSchemaFile
+		? CodeStandardRuleIdEnum.SchemaFileExportsOnly
+		: CodeStandardRuleIdEnum.TypeFileExportsOnly;
 
 	for (const statement of sourceFile.statements) {
 		if (ALLOWED_STATEMENTS.has(statement.kind)) {
@@ -45,13 +50,13 @@ export function validateTypeFileExports(
 			continue;
 		}
 
-		const errorMessage =
-			STATEMENT_ERROR_MESSAGES[statement.kind] ??
-			".type.ts files may only contain type aliases, interfaces, type-only exports, and Zod schema constants.";
+		const errorMessage = ts.isVariableStatement(statement)
+			? `Runtime values in ${fileSuffix} files must be const Zod schemas with names ending in Schema.`
+			: `${fileSuffix} files may only contain type aliases, interfaces, type-only exports, and Zod schema constants.${STATEMENT_ERROR_MESSAGES[statement.kind] ?? ""}`;
 
 		diagnostics.push(
 			createDiagnostic(
-				CodeStandardRuleIdEnum.TypeFileExportsOnly,
+				ruleId,
 				relativeFilePath,
 				sourceFile,
 				statement.getStart(sourceFile),
@@ -70,14 +75,10 @@ const ALLOWED_STATEMENTS = new Set([
 ]);
 
 const STATEMENT_ERROR_MESSAGES: Record<number, string> = {
-	[ts.SyntaxKind.EnumDeclaration]:
-		".type.ts files may only contain type aliases, interfaces, type-only exports, and Zod schema constants. Enum declarations are not allowed.",
-	[ts.SyntaxKind.VariableStatement]:
-		"Runtime values in .type.ts files must be const Zod schemas with names ending in Schema.",
+	[ts.SyntaxKind.EnumDeclaration]: " Enum declarations are not allowed.",
 	[ts.SyntaxKind.FunctionDeclaration]:
-		".type.ts files may only contain type aliases, interfaces, type-only exports, and Zod schema constants. Function declarations are not allowed.",
-	[ts.SyntaxKind.ClassDeclaration]:
-		".type.ts files may only contain type aliases, interfaces, type-only exports, and Zod schema constants. Class declarations are not allowed.",
+		" Function declarations are not allowed.",
+	[ts.SyntaxKind.ClassDeclaration]: " Class declarations are not allowed.",
 };
 
 function isTypeOrSchemaExportDeclaration(
