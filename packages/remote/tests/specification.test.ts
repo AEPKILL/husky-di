@@ -4,9 +4,10 @@
  * @created 2026-09-07 00:00:00
  */
 
-import type { Cleanup } from "@husky-di/core";
+import { type Cleanup, createServiceIdentifier } from "@husky-di/core";
 import type { Observable } from "rxjs";
 import { describe, expect, expectTypeOf, it } from "vitest";
+import { createRemoteServiceDescriptor } from "../src/index";
 import type {
 	IRpcAcceptor,
 	IRpcConnector,
@@ -45,6 +46,28 @@ import type { RpcStateStatusEnum } from "../src/shared/enums/rpc-state-status.en
 import { RpcException } from "../src/shared/exceptions/rpc.exception";
 
 describe("Remote Service Descriptor specification", () => {
+	it("RPC-DESC-007: creates an opaque frozen descriptor and rejects invalid options", () => {
+		type Calculator = { add(left: number, right: number): number };
+		const ICalculator = createServiceIdentifier<Calculator>("Calculator");
+		const descriptor = createRemoteServiceDescriptor(ICalculator, {
+			wireName: "calculator.v1",
+			methods: { add: true },
+		});
+
+		expectTypeOf(descriptor).toEqualTypeOf<
+			RemoteServiceDescriptor<Calculator, { readonly add: true }>
+		>();
+		expect(Object.isFrozen(descriptor)).toBe(true);
+		expect(Object.getPrototypeOf(descriptor)).toBeNull();
+		expect(Reflect.ownKeys(descriptor)).toEqual([]);
+		expect(() =>
+			createRemoteServiceDescriptor(ICalculator, {
+				wireName: "",
+				methods: { add: true },
+			}),
+		).toThrow(TypeError);
+	});
+
 	it("RPC-DESC-001: selects only required string methods and reserves then", () => {
 		type Service = {
 			query(): string;

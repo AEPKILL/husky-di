@@ -1,14 +1,15 @@
 # Remote Contract Specification
 
-**Status:** Normative for the migrated contracts in the current rebuild.
+**Status:** Normative for the migrated contracts and descriptor factory in the current rebuild.
 
 This document covers the descriptor types and their runtime validation schemas
 in `src/modules/peer/types/remote-service-descriptor.type.ts`, and shared wire
 identifier validation in
 `src/modules/protocol/schemas/rpc-wire-identifier.schema.ts`, plus the Connector
 and Acceptor interfaces in `src/modules/owner/interfaces/` and their supporting
-Peer, Transport, state, and event contracts. The package root is
-currently empty; these contracts do not imply a published factory or RPC runtime.
+Peer, Transport, state, and event contracts. The package root exposes the
+descriptor factory and its type contract. Owner factories and the RPC runtime
+are not implemented in this stage.
 `MUST` and `MUST NOT` denote requirements. Matching evidence lives in
 `tests/specification.test.ts`, whose type assertions run through both the package
 TypeScript check and the Vitest type-checking suite.
@@ -103,6 +104,23 @@ validation of every generic instantiation or overload. Applications needing
 those local APIs should provide an ordinary remote-facing signature. This
 change does not introduce automatic rejection or full preservation of generic
 and overloaded methods; regression tests record the existing inference boundary.
+
+## RPC-DESC-007: Descriptor factory
+
+`createRemoteServiceDescriptor(serviceIdentifier, options)` MUST synchronously
+create an opaque frozen null-prototype descriptor retaining the service identifier
+and the validated options snapshot privately. The public descriptor MUST NOT expose the
+service identifier, wire name, or method definitions as readable metadata.
+
+The factory MUST validate options using the descriptor schemas and retain their
+detached readonly snapshot, including the frozen null-prototype method map and
+frozen cancellation definitions described in RPC-DESC-004. Later mutation of
+caller-owned options MUST NOT change the retained descriptor metadata. Invalid
+options MUST synchronously throw `TypeError` without returning a descriptor.
+
+The public factory MUST preserve service and method-definition inference,
+require the non-empty validated allowlist, and return the invariant opaque
+`RemoteServiceDescriptor<T, Definitions>` contract.
 
 ## RPC-OWNER-001: Topology Owner interfaces
 

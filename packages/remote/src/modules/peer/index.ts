@@ -26,4 +26,5 @@ export type {
 
 export { RpcCallDirectionEnum } from "./enums/rpc-call-direction.enum";
 export { RpcCallStatusEnum } from "./enums/rpc-call-status.enum";
+export { createRemoteServiceDescriptor } from "./factories/remote-service-descriptor.factory";
 export { remoteServiceDescriptorOptionsSchema } from "./types/remote-service-descriptor.type";
