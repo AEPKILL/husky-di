@@ -4,7 +4,10 @@
  * @created 2026-09-08 00:00:00
  */
 
-import { createServiceIdentifier } from "@husky-di/core";
+import {
+	createServiceIdentifier,
+	type ServiceIdentifier,
+} from "@husky-di/core";
 import { expectTypeOf, test } from "vitest";
 import type * as remote from "../../src/index";
 import {
@@ -58,7 +61,38 @@ test("RPC-DESC-007: preserves the public factory's allowlist and cancellation in
 	});
 });
 
-test("RPC-DESC-007: keeps descriptor metadata and branding out of the public surface", () => {
+test("RPC-DESC-007: exposes deeply readonly metadata even for mutable method definitions", () => {
+	type Service = { query(signal: AbortSignal): number };
+	type Definitions = { query: { cancelable: true } };
+	const IService = createServiceIdentifier<Service>("Service");
+	const methods: Definitions = { query: { cancelable: true } };
+	const descriptor = createRemoteServiceDescriptor(IService, {
+		wireName: "service",
+		methods,
+	});
+
+	expectTypeOf(descriptor.serviceIdentifier).toEqualTypeOf<
+		ServiceIdentifier<Service>
+	>();
+	expectTypeOf(descriptor.wireName).toBeString();
+	expectTypeOf(descriptor.methods).toEqualTypeOf<{
+		readonly query: { readonly cancelable: true };
+	}>();
+	// @ts-expect-error The service identifier reference is readonly.
+	descriptor.serviceIdentifier = IService;
+	// @ts-expect-error The wire name is readonly.
+	descriptor.wireName = "changed";
+	// @ts-expect-error The method map reference is readonly.
+	descriptor.methods = methods;
+	// @ts-expect-error Each selected method definition is readonly.
+	descriptor.methods.query = { cancelable: true };
+	// @ts-expect-error Nested cancellation metadata is readonly.
+	descriptor.methods.query.cancelable = true;
+	// @ts-expect-error The metadata exposes only selected method keys.
+	descriptor.methods.missing;
+});
+
+test("RPC-DESC-007: keeps internal helpers, schemas and branding out of the public surface", () => {
 	expectTypeOf<
 		Extract<
 			keyof typeof remote,

@@ -46,7 +46,7 @@ import type { RpcStateStatusEnum } from "../src/shared/enums/rpc-state-status.en
 import { RpcException } from "../src/shared/exceptions/rpc.exception";
 
 describe("Remote Service Descriptor specification", () => {
-	it("RPC-DESC-007: creates an opaque frozen descriptor and rejects invalid options", () => {
+	it("RPC-DESC-007: creates a frozen descriptor with readable metadata and rejects invalid options", () => {
 		type Calculator = { add(left: number, right: number): number };
 		const ICalculator = createServiceIdentifier<Calculator>("Calculator");
 		const descriptor = createRemoteServiceDescriptor(ICalculator, {
@@ -59,13 +59,46 @@ describe("Remote Service Descriptor specification", () => {
 		>();
 		expect(Object.isFrozen(descriptor)).toBe(true);
 		expect(Object.getPrototypeOf(descriptor)).toBeNull();
-		expect(Reflect.ownKeys(descriptor)).toEqual([]);
+		expect(descriptor.serviceIdentifier).toBe(ICalculator);
+		expect(descriptor.wireName).toBe("calculator.v1");
+		expect(descriptor.methods).toEqual({ add: true });
 		expect(() =>
 			createRemoteServiceDescriptor(ICalculator, {
 				wireName: "",
 				methods: { add: true },
 			}),
 		).toThrow(TypeError);
+	});
+
+	it("RPC-DESC-007: exposes an immutable metadata snapshot while preserving the caller's identifier", () => {
+		class QueryService {
+			query(_signal: AbortSignal): string {
+				return "value";
+			}
+		}
+		const options = {
+			wireName: "query.v1",
+			methods: { query: { cancelable: true as const } },
+		};
+		const descriptor = createRemoteServiceDescriptor(QueryService, options);
+
+		expect(descriptor.serviceIdentifier).toBe(QueryService);
+		expect(Object.isFrozen(QueryService)).toBe(false);
+		expect(Object.isFrozen(QueryService.prototype)).toBe(false);
+		expect(Object.getPrototypeOf(descriptor.methods)).toBeNull();
+		expect(Object.isFrozen(descriptor.methods)).toBe(true);
+		expect(Object.isFrozen(descriptor.methods.query)).toBe(true);
+
+		options.wireName = "query.v2";
+		expect(Reflect.set(options.methods.query, "cancelable", false)).toBe(true);
+		expect(Reflect.set(options.methods, "query", true)).toBe(true);
+		expect(descriptor.wireName).toBe("query.v1");
+		expect(descriptor.methods).toEqual({ query: { cancelable: true } });
+		expect(Reflect.set(descriptor, "wireName", "changed")).toBe(false);
+		expect(Reflect.set(descriptor.methods, "query", true)).toBe(false);
+		expect(Reflect.set(descriptor.methods.query, "cancelable", false)).toBe(
+			false,
+		);
 	});
 
 	it("RPC-DESC-001: selects only required string methods and reserves then", () => {

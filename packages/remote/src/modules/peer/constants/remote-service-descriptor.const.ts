@@ -5,8 +5,7 @@
  */
 
 /**
- * Brands descriptor objects without exposing service identity through ordinary
- * enumerable string keys.
+ * Provides the private type-level key for invariant Descriptor contracts.
  */
 export const REMOTE_SERVICE_DESCRIPTOR_TYPE: unique symbol = Symbol(
 	"RemoteServiceDescriptorType",

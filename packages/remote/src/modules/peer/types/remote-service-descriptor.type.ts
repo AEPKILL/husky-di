@@ -4,6 +4,7 @@
  * @created 2026-08-19 00:00:00
  */
 
+import type { ServiceIdentifier } from "@husky-di/core";
 import type { Observable } from "rxjs";
 import { type input, type output, z } from "zod";
 import type { REMOTE_SERVICE_DESCRIPTOR_TYPE } from "@/modules/peer/constants/remote-service-descriptor.const";
@@ -85,13 +86,17 @@ export type RemoteServiceImplementation<
 };
 
 /**
- * Describes one explicitly allowlisted remote service without exposing its
- * local identifier or wire metadata.
+ * Describes one explicitly allowlisted remote service with readonly metadata.
  */
 export type RemoteServiceDescriptor<
 	T,
 	Definitions extends RpcMethodDefinitions<T>,
 > = {
+	readonly serviceIdentifier: ServiceIdentifier<T>;
+	readonly wireName: RemoteServiceDescriptorOptionsSnapshot["wireName"];
+	readonly methods: {
+		readonly [Key in keyof Definitions]: Readonly<Definitions[Key]>;
+	};
 	readonly [REMOTE_SERVICE_DESCRIPTOR_TYPE]: (
 		service: T,
 		definitions: Definitions,

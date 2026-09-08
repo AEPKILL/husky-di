@@ -85,10 +85,11 @@ input after parsing MUST NOT change the snapshot.
 
 ## RPC-DESC-005: Descriptor type identity
 
-The opaque descriptor brand MUST keep both its service type and its method
+The descriptor's type-only brand MUST keep both its service type and its method
 definitions invariant. A descriptor MUST NOT become assignable to a descriptor
 with a wider or narrower service/allowlist merely because its callable facade
-appears compatible.
+appears compatible. This brand provides type-level identity; it does not prove
+at runtime that a descriptor was created by the factory.
 
 ## RPC-DESC-006: Inference boundary
 
@@ -108,18 +109,22 @@ and overloaded methods; regression tests record the existing inference boundary.
 ## RPC-DESC-007: Descriptor factory
 
 `createRemoteServiceDescriptor(serviceIdentifier, options)` MUST synchronously
-create an opaque frozen null-prototype descriptor retaining the service identifier
-and the validated options snapshot privately. The public descriptor MUST NOT expose the
-service identifier, wire name, or method definitions as readable metadata.
+create a frozen null-prototype descriptor exposing readonly `serviceIdentifier`,
+`wireName`, and `methods` metadata. Its `serviceIdentifier` MUST retain the
+supplied `ServiceIdentifier<T>` by identity. Readonly applies to that property;
+the factory MUST NOT freeze a caller-owned class or function identifier.
 
-The factory MUST validate options using the descriptor schemas and retain their
-detached readonly snapshot, including the frozen null-prototype method map and
-frozen cancellation definitions described in RPC-DESC-004. Later mutation of
-caller-owned options MUST NOT change the retained descriptor metadata. Invalid
-options MUST synchronously throw `TypeError` without returning a descriptor.
+The factory MUST validate options using the descriptor schemas and expose their
+detached readonly snapshot as its `wireName` and `methods`. The method map MUST
+preserve the statically selected method keys and definitions, with readonly
+properties including nested cancellation definitions. At runtime the method map
+MUST have a null prototype and both it and cancellation definitions MUST be
+frozen, as described in RPC-DESC-004. Later mutation of caller-owned options MUST
+NOT change the descriptor metadata. Invalid options MUST synchronously throw
+`TypeError` without returning a descriptor.
 
 The public factory MUST preserve service and method-definition inference,
-require the non-empty validated allowlist, and return the invariant opaque
+require the non-empty validated allowlist, and return the invariant
 `RemoteServiceDescriptor<T, Definitions>` contract.
 
 ## RPC-OWNER-001: Topology Owner interfaces
