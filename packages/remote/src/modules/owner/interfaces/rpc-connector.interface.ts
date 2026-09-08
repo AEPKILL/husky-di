@@ -5,10 +5,15 @@
  */
 
 import type { Observable } from "rxjs";
-import type { RpcConnectorConnectOptions } from "@/modules/owner/types/rpc-connector-connect-options.type";
 import type { RpcEvent } from "@/modules/owner/types/rpc-event.type";
 import type { RpcConnectorState } from "@/modules/owner/types/rpc-owner-state.type";
 import type { IRpcPeer } from "@/modules/peer";
+import type { IRpcConnectorAdapter } from "@/modules/transport";
+
+export type RpcConnectorConnectOptions = {
+	readonly adapter: IRpcConnectorAdapter;
+	readonly signal?: AbortSignal | undefined;
+};
 
 export interface IRpcConnector {
 	readonly state: RpcConnectorState;
