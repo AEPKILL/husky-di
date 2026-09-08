@@ -1,7 +1,7 @@
 # Remote Contract Specification
 
-**Status:** Normative for the migrated contracts, Connector lifecycle dependency
-contracts, and descriptor factory in the current rebuild.
+**Status:** Normative for the migrated contracts, descriptor factory, and Owner
+Session lifecycle runtime in the current rebuild.
 
 This document covers the descriptor types and their runtime validation schemas
 in `src/modules/peer/types/remote-service-descriptor.type.ts`, and shared wire
@@ -11,8 +11,10 @@ and Acceptor interfaces in `src/modules/owner/interfaces/` and their supporting
 Peer, Transport, state, and event contracts. It also defines the Connector's
 composition responsibilities, Session lifecycle attachment, and Peer state-view
 dependencies through the Owner, Protocol, and Peer module entry points. The
-package root exposes the descriptor factory and its type contract. Owner
-factories and the RPC runtime are not implemented in this stage.
+package root exposes the descriptor factory and its type contract. The Owner
+module implements Session lifecycle ownership and atomic Owner/Peer state
+publication through package-private assembly factories. The complete Connector,
+Peer invocation engine, and Protocol runtime are not implemented in this stage.
 `MUST` and `MUST NOT` denote requirements. Matching evidence lives in
 `tests/specification.test.ts`, whose type assertions run through both the package
 TypeScript check and the Vitest type-checking suite.
@@ -189,13 +191,18 @@ recovery, or shutdown; runtime guarantees require later implementation evidence.
 
 ## Connector lifecycle contract stage
 
-The requirements below define dependency signatures and the responsibilities
-their future implementations MUST satisfy. Matching `RPC-CONNECTOR-*` tests
-verify type structure through the module entry points. They do not establish
-runtime ordering, identity, cancellation, recovery, or cleanup guarantees.
-Runtime evidence remains deferred until the corresponding implementation stage.
-This stage adds no Owner factory, Peer invocation engine, Protocol runtime,
-wire grammar, automatic reconnection, or package-root lifecycle exports.
+RPC-CONNECTOR-001 through RPC-CONNECTOR-005 define dependency signatures and the
+responsibilities of their implementations. Their original tests verify type
+structure through the module entry points; type evidence alone does not establish
+runtime behavior. RPC-CONNECTOR-006 through RPC-CONNECTOR-010 specify the
+implemented Owner Session lifecycle and state-publication subset, with matching
+runtime and surface tests.
+
+Connection establishment, attempt cancellation, Protocol binding, actual Session
+Recovery, Protocol drain, physical cleanup, and public termination promises still
+require their later implementation evidence. This rebuild adds no complete
+Connector factory, Peer invocation engine, Protocol runtime, wire grammar,
+automatic reconnection, or package-root lifecycle exports.
 
 ## RPC-CONNECTOR-001: Connector composition and termination phases
 
@@ -328,9 +335,10 @@ dependency instances.
 One Connector MUST retain the same public Peer through initial connection,
 provisional failure, and retained-Session recovery. Service exposure and remote
 resolution remain on that Peer. Lifecycle attachment and activation MUST NOT
-alone grant access to a callable Session. This stage defines no complete Session
-call contract, Peer creator, Protocol factory, application-value contract, or
-runtime policy.
+alone grant access to a callable Session. The lifecycle contract stage defines no
+complete Session call contract, concrete Peer implementation, Protocol factory,
+application-value contract, or runtime policy. RPC-CONNECTOR-010 adds the narrow
+Peer creation dependency needed for lifecycle assembly.
 
 Later complete Session and Session-host contracts may compose these lifecycle
 capabilities with the asymmetric invocation and incoming-reservation contracts
@@ -353,3 +361,158 @@ extension API. This stage MUST preserve the existing package-root descriptor
 factory and descriptor type surface. Matching tests MUST include negative
 package-surface assertions and MUST NOT present type-level evidence as runtime
 lifecycle conformance.
+
+## Owner Session lifecycle runtime stage
+
+The requirements below cover the Owner's implementation of the existing
+lifecycle entry points. Tests inject a lifecycle-only Protocol Session, an Owner
+effects collaborator, and a Peer creator, and observe attachment authority and
+Owner/Peer snapshots through module entry points. These tests establish the
+lifecycle subset; they are not end-to-end RPC, call, transport, or cleanup
+conformance evidence. A lifecycle-only test Session MUST NOT be cast to a future
+complete Session capability.
+
+## RPC-CONNECTOR-006: Stable Peer and guarded Session activation
+
+`createRpcConnectorSessionLifecycle()` MUST invoke its injected `RpcPeerFactory`
+once with the supplied state's exact `peerStateView` and retain the returned Peer
+by identity. Construction MUST NOT initiate transport I/O. The same Peer MUST
+survive provisional attachment failure, activation, and recovery state changes.
+
+`attach()` MUST retain at most one Session while the Owner is active and lifecycle
+termination has not begun. Attachment MUST initially be provisional and MUST NOT
+publish a connected Peer state. It MUST return `undefined` when another Session
+is retained or attachment authority has been revoked.
+
+`activate(canActivate)` MUST commit only for the current provisional attachment,
+with an active Owner and a connecting Peer. It MUST invoke `canActivate()` only
+while eligible and recheck lifecycle eligibility after that callback returns.
+The callback returning false, or reentrant discard or termination during the
+callback, MUST prevent activation. A committed activation MUST mark the exact
+attachment active and commit connected before returning true. If a state
+observer terminates the Session during that publication, true MUST still record
+that activation committed; it MUST NOT restore the terminated attachment.
+Repeated activation MUST return false.
+
+`discard()` MUST revoke the exact provisional attachment before calling its
+Session's `forceClose()`, so reentrant Session callbacks cannot retain authority.
+Repeated discard, discard after activation, and discard through a stale attachment
+MUST be inert. Discard MUST release that Session without replacing the Peer or
+revoking a later attachment. Connection-attempt state restoration remains an
+Owner responsibility.
+
+## RPC-CONNECTOR-007: Scoped faults and first terminal selection
+
+A Session host MUST affect only its exact retained attachment. After discard or
+termination, its transitions and faults MUST be inert even when another Session
+has been attached. A provisional host fault MUST revoke its attachment, call the
+exact Session's `forceClose()`, and fail that attachment's owning attempt through
+`failAttachment()`. It MUST NOT close the Connector or replace the stable Peer.
+A provisional closed or recovering transition MUST likewise fail that attachment
+with `unavailable`; provisional draining and recovered transitions MUST NOT
+activate the Session or publish active/recovery Peer state.
+
+An active host fault or Connector-wide `protocolFault()` MUST select the typed
+protocol or resource failure and revoke attachment authority synchronously.
+The exact retained Session MUST be forced closed and the Owner's `beginClosing()`
+effect MUST run before the lifecycle publishes its terminal snapshot. The Owner
+effect remains required when no Session is retained, so Connector-wide faults can
+revoke activity beyond an attachment.
+
+Semantic termination MUST publish a closed Peer with the selected Session outcome
+and an Owner in closing. The lifecycle MUST leave the final Owner closed snapshot
+and asynchronous termination result to Owner cleanup. Normal Session reasons
+MUST produce normal closed states without errors; `recoveryExpired` and
+`counterExhaustion` MUST produce failed states with `unavailable`;
+`continuityFailure`, `protocolFault`, and `resourceFault` MUST produce failed
+states with `protocol`. Failure exceptions MUST retain a supplied cause.
+
+The first selected terminal outcome MUST win. Selection and authority revocation
+MUST precede external terminal effects, so reentrant transitions, faults, or
+termination requests cannot overwrite the outcome, publish a second terminal, or
+force the Session twice. A throwing `forceClose()` or Owner closing effect MUST
+NOT prevent terminal state publication; the terminal operation MUST still throw
+for outer error and cleanup handling.
+
+## RPC-CONNECTOR-008: Recovery and graceful lifecycle projection
+
+An active Session's recovering transition MUST publish a recovering Peer while
+retaining the same attachment, host, and Peer. A recovered transition from that
+state MUST restore the connected projection, or the draining projection with
+`counterExhaustion` if the Session was already counter-draining before recovery.
+It MUST NOT create another attachment or Peer. These transitions observe
+Protocol-owned recovery; they MUST NOT start transport attempts, reset recovery
+retention, or establish a replacement binding.
+
+A Protocol draining transition MUST project a Peer draining for
+`counterExhaustion` while leaving an active Owner active. Counter-drain intent
+MUST survive recovery and MUST NOT restore connected/new-call eligibility.
+Recovered transitions outside recovering, repeated recovering transitions, and
+repeated draining transitions MUST be inert.
+
+Graceful shutdown of an active bound Session MUST synchronously project the Owner
+as draining and the Peer as draining for `gracefulShutdown`. If the Peer is already
+draining for `counterExhaustion`, that Peer reason MUST be preserved at the Owner
+drain cutoff. The projection MUST commit before any synchronous state observer
+can admit a new attachment or activate a provisional one.
+
+Graceful shutdown of an unbound, connecting, or provisional Session MUST select
+`gracefulShutdown` immediately and revoke provisional activation authority; any
+retained provisional Session MUST be forced closed. A Session already recovering
+at the cutoff, or losing its binding while the Owner is draining, MUST instead
+take forced termination with `forcedClose`. Repeated graceful requests MUST NOT
+repeat terminal effects or revive Session authority.
+
+`beginClosing(reason, forced)` MUST select the supplied Owner reason when no
+terminal outcome has already won. With `forced: true`, it MUST force the retained
+Session before terminal publication; with `forced: false`, completed graceful
+drain MUST NOT force an already drained Session. Actual Protocol drain, shutdown
+deadline scheduling, Direct Connection Close, and cleanup completion remain Owner
+and Protocol assembly responsibilities outside this lifecycle implementation.
+
+## RPC-CONNECTOR-009: Atomic lifecycle snapshots and ordered observation
+
+`createRpcConnectorLifecycleState()` MUST start with an active Owner and an
+unbound Peer. Its `peerStateView`, that view's `readState` function, and both
+state-stream references MUST remain stable. The Peer view MUST expose only the
+readonly state-reading and observation capabilities of RPC-CONNECTOR-004.
+
+`commit(ownerState, peerState)` MUST copy and shallow-freeze both state snapshots
+and replace the authoritative pair before notifying either stream. Mutating a
+caller's input state object afterward MUST NOT change the stored snapshot.
+Referenced errors MUST retain their identity; the state store MUST NOT freeze
+caller-owned Error objects. A new subscriber MUST synchronously receive its
+current state snapshot.
+
+Reentrant commits MUST update live state reads synchronously and serialize
+notification delivery in commit order. Existing observers MUST NOT receive an
+older queued state after a newer state. A subscriber added during publication
+MUST begin with the current authoritative snapshot and MUST NOT subsequently
+receive older queued snapshots. Observers of either stream can read both live
+states from one committed pair; reentrancy may advance that pair beyond the
+notification currently being delivered.
+
+## RPC-CONNECTOR-010: Private lifecycle assembly dependencies
+
+The Owner module MUST export `createRpcConnectorSessionLifecycle`,
+`RpcConnectorSessionLifecycleFactory`, `IRpcConnectorSessionLifecycleOwner`,
+`createRpcConnectorLifecycleState`, and `IRpcConnectorLifecycleState` for internal
+assembly and conformance tests. The Peer module MUST export `RpcPeerFactory`,
+which accepts an `IRpcPeerStateView` and returns an `IRpcPeer`. Assembly supplies
+any additional Peer dependencies through the creation closure. These contracts
+MUST NOT introduce a Protocol Connector aggregate or make lifecycle attachment a
+call capability.
+
+The Session lifecycle factory MUST accept the behavioral state, Peer-creation,
+and Owner-effects dependencies. `IRpcConnectorSessionLifecycleOwner` MUST expose
+`failAttachment(attachment, error)` for exact provisional-attempt failure and
+`beginClosing(sessionClosedState, forced)` for synchronous Owner effects. This
+collaborator's `beginClosing()` MUST NOT publish lifecycle terminal snapshots;
+`failAttachment()` MAY restore the still-eligible owning attempt's state. The lifecycle owns force-close
+of its exact retained Session; the Owner owns attempt and Connector-wide Protocol
+revocation, Direct Close, and later asynchronous cleanup completion.
+
+The package root MUST NOT export these factories, dependencies, their concrete
+implementations, or `RpcPeerFactory`. The package-root descriptor factory and
+descriptor type surface MUST remain unchanged. Runtime module exports and
+negative package-surface type assertions MUST cover this boundary.

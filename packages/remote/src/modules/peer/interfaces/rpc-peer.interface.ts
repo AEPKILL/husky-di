@@ -6,6 +6,7 @@
 
 import type { Cleanup } from "@husky-di/core";
 import type { Observable } from "rxjs";
+import type { IRpcPeerStateView } from "@/modules/peer/interfaces/rpc-peer-state-view.interface";
 import type {
 	RemoteService,
 	RemoteServiceDescriptor,
@@ -13,6 +14,9 @@ import type {
 	RpcMethodDefinitions,
 } from "@/modules/peer/types/remote-service-descriptor.type";
 import type { RpcPeerState } from "@/modules/peer/types/rpc-peer-state.type";
+
+/** Assembly supplies the remaining Peer capabilities through its creation closure. */
+export type RpcPeerFactory = (stateView: IRpcPeerStateView) => IRpcPeer;
 
 export interface IRpcPeer {
 	readonly state: RpcPeerState;
