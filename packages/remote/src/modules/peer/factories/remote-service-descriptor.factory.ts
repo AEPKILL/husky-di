@@ -13,6 +13,7 @@ import {
 	type RpcMethodDefinitions,
 	remoteServiceDescriptorOptionsSchema,
 } from "@/modules/peer/types/remote-service-descriptor.type";
+import { isNonNullObject } from "@/shared/utils/type.util";
 
 /** Creates an opaque Descriptor and retains a detached allowlist snapshot. */
 export function createRemoteServiceDescriptor<
@@ -44,7 +45,7 @@ export function createRemoteServiceDescriptor<
 export function getRemoteServiceDescriptorData(
 	descriptor: unknown,
 ): RemoteServiceDescriptorData {
-	if (typeof descriptor !== "object" || descriptor === null) {
+	if (!isNonNullObject(descriptor)) {
 		throw new TypeError("descriptor must be created by this package instance.");
 	}
 	const data = remoteServiceDescriptorData.get(descriptor);
