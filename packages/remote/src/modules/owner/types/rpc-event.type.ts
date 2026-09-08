@@ -33,26 +33,22 @@ type RpcPeerLifecycleEvent =
 			readonly type: RpcEventTypeEnum.peerClosed;
 			readonly peer: IRpcPeer;
 			readonly outcome: RpcCloseOutcomeEnum.normal;
-			readonly reason: Extract<
-				RpcCloseReasonEnum,
+			readonly reason:
 				| RpcCloseReasonEnum.gracefulShutdown
 				| RpcCloseReasonEnum.forcedClose
 				| RpcCloseReasonEnum.shutdownDeadline
-				| RpcCloseReasonEnum.remoteTerminated
-			>;
+				| RpcCloseReasonEnum.remoteTerminated;
 	  }
 	| {
 			readonly type: RpcEventTypeEnum.peerClosed;
 			readonly peer: IRpcPeer;
 			readonly outcome: RpcCloseOutcomeEnum.failed;
-			readonly reason: Extract<
-				RpcCloseReasonEnum,
+			readonly reason:
 				| RpcCloseReasonEnum.recoveryExpired
 				| RpcCloseReasonEnum.counterExhaustion
 				| RpcCloseReasonEnum.continuityFailure
 				| RpcCloseReasonEnum.protocolFault
-				| RpcCloseReasonEnum.resourceFault
-			>;
+				| RpcCloseReasonEnum.resourceFault;
 	  };
 
 type RpcTopologyLifecycleEvent =
@@ -61,13 +57,11 @@ type RpcTopologyLifecycleEvent =
 	| {
 			readonly type: RpcEventTypeEnum.topologyClosed;
 			readonly outcome: RpcCloseOutcomeEnum.normal;
-			readonly reason: Extract<
-				RpcCloseReasonEnum,
+			readonly reason:
 				| RpcCloseReasonEnum.gracefulShutdown
 				| RpcCloseReasonEnum.forcedClose
 				| RpcCloseReasonEnum.shutdownDeadline
-				| RpcCloseReasonEnum.remoteTerminated
-			>;
+				| RpcCloseReasonEnum.remoteTerminated;
 	  }
 	| {
 			readonly type: RpcEventTypeEnum.topologyClosed;

@@ -26,6 +26,9 @@ Apply these rules to the task's changes and their necessary propagation. Expand
 cleanup to existing code only when directly required by the task; touching a file
 does not require bringing its unrelated contents into compliance.
 
+Retain preparation code explicitly confirmed by the user for a later stage;
+a lack of current callers alone is not grounds to remove it.
+
 Completion requires every file changed for the task to be accounted for, obsolete
 references to be resolved, and validation outcomes to meet the criteria below.
 
@@ -78,6 +81,8 @@ construction types follow Assembly Boundaries.
 
 ## Naming And Modeling
 
+- Prefer enums over string literal unions for named closed sets, including
+  discriminant tags; use enum members in union branches.
 - Omit `Default` when only one canonical implementation exists. Retain it when
   it distinguishes a real alternative or is established domain vocabulary.
 - Preserve the local private-field convention (`_name` or `#name`) rather than
@@ -101,11 +106,10 @@ lifetime rules.
 
 ### Exceptions
 
-Use `CodedException<TCode>` when callers branch on a stable code, following the
-package's enum or literal-union precedent. Put reusable creation policy or
-literal-code narrowing in `createXxxException`; the factory does not justify a
-private constructor. When the exception is public, expose its code contract too;
-keep internal creation policy private.
+Use `CodedException<TCode>` when callers branch on a stable code. Put reusable
+creation policy or code narrowing in `createXxxException`; the factory does not
+justify a private constructor. When the exception is public, expose its code
+contract too; keep internal creation policy private.
 
 ## Imports And API Boundaries
 

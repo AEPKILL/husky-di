@@ -12,10 +12,9 @@ export type RpcCallFailure = Exclude<
 	RpcExceptionCodeEnum.protocol
 >;
 
-export type RpcProtocolFaultReason = Extract<
-	RpcCloseReasonEnum,
-	RpcCloseReasonEnum.protocolFault | RpcCloseReasonEnum.resourceFault
->;
+export type RpcProtocolFaultReason =
+	| RpcCloseReasonEnum.protocolFault
+	| RpcCloseReasonEnum.resourceFault;
 
 export type RpcSessionCloseReason = Exclude<
 	RpcCloseReasonEnum,
