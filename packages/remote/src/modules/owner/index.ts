@@ -6,8 +6,16 @@
 
 /** biome-ignore-all assist/source/organizeImports: Type-only exports precede runtime exports per repository top-level declaration order. */
 export type { IRpcAcceptor } from "./interfaces/rpc-acceptor.interface";
-export type { IRpcConnector } from "./interfaces/rpc-connector.interface";
+export type {
+	IRpcConnectorSessionLifecycle,
+	IRpcConnectorSessionLifecycleAttachment,
+} from "./interfaces/rpc-connector-session-lifecycle.interface";
+export type {
+	IRpcConnector,
+	RpcConnectorConnectOptions,
+} from "./interfaces/rpc-connector.interface";
 export type { RpcEvent } from "./types/rpc-event.type";
+export type { RpcOwnerCloseReason } from "./types/rpc-owner-close-reason.type";
 export type {
 	RpcAcceptorListenerState,
 	RpcAcceptorState,

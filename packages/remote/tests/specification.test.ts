@@ -7,19 +7,24 @@
 import { type Cleanup, createServiceIdentifier } from "@husky-di/core";
 import type { Observable } from "rxjs";
 import { describe, expect, expectTypeOf, it } from "vitest";
+import type * as RemoteRoot from "../src/index";
 import { createRemoteServiceDescriptor } from "../src/index";
 import type {
 	IRpcAcceptor,
 	IRpcConnector,
+	IRpcConnectorSessionLifecycle,
+	IRpcConnectorSessionLifecycleAttachment,
 	RpcAcceptorListenerState,
 	RpcAcceptorState,
 	RpcConnectorConnectOptions,
 	RpcConnectorState,
 	RpcEvent,
 	RpcEventTypeEnum,
+	RpcOwnerCloseReason,
 } from "../src/modules/owner";
 import type {
 	IRpcPeer,
+	IRpcPeerStateView,
 	RpcCallDirectionEnum,
 	RpcCallStatusEnum,
 	RpcPeerState,
@@ -34,6 +39,14 @@ import {
 	type RpcMethodDefinitions,
 	remoteServiceDescriptorOptionsSchema,
 } from "../src/modules/peer";
+import type {
+	IRpcProtocolConnector,
+	IRpcProtocolConnectorLifecycleHost,
+	IRpcProtocolSessionLifecycle,
+	IRpcProtocolSessionLifecycleHost,
+	RpcProtocolSessionTransition,
+	RpcProtocolSessionTransitionTypeEnum,
+} from "../src/modules/protocol";
 import type {
 	IRpcAcceptorAdapter,
 	IRpcConnection,
@@ -350,6 +363,185 @@ describe("Remote Service Descriptor specification", () => {
 });
 
 describe("RPC Topology Owner contract specification", () => {
+	it("RPC-CONNECTOR-001: separates binding, graceful drain, synchronous stop and asynchronous cleanup", () => {
+		expectTypeOf<IRpcProtocolConnector["bind"]>().toEqualTypeOf<
+			(connection: IRpcConnection, signal: AbortSignal) => Promise<void>
+		>();
+		expectTypeOf<IRpcProtocolConnector["shutdown" | "cleanup"]>().toEqualTypeOf<
+			() => Promise<void>
+		>();
+		expectTypeOf<IRpcProtocolConnector["close"]>().toEqualTypeOf<() => void>();
+	});
+
+	it("RPC-CONNECTOR-002: limits Session attachment to lifecycle capabilities and discriminated transitions", () => {
+		expectTypeOf<
+			IRpcProtocolConnectorLifecycleHost["attachSession"]
+		>().toEqualTypeOf<
+			(
+				session: IRpcProtocolSessionLifecycle,
+			) => IRpcProtocolSessionLifecycleHost | undefined
+		>();
+		expectTypeOf<IRpcProtocolSessionLifecycle["forceClose"]>().toEqualTypeOf<
+			() => void
+		>();
+		expectTypeOf<
+			IRpcProtocolSessionLifecycleHost["transition"]
+		>().toEqualTypeOf<(transition: RpcProtocolSessionTransition) => void>();
+		expectTypeOf<
+			| IRpcProtocolConnectorLifecycleHost["fault"]
+			| IRpcProtocolSessionLifecycleHost["fault"]
+		>().toEqualTypeOf<
+			(
+				reason:
+					| RpcCloseReasonEnum.protocolFault
+					| RpcCloseReasonEnum.resourceFault,
+				error: Error,
+			) => void
+		>();
+		expectTypeOf<RpcProtocolSessionTransition["type"]>().toEqualTypeOf<
+			| RpcProtocolSessionTransitionTypeEnum.draining
+			| RpcProtocolSessionTransitionTypeEnum.recovering
+			| RpcProtocolSessionTransitionTypeEnum.recovered
+			| RpcProtocolSessionTransitionTypeEnum.closed
+		>();
+		expectTypeOf<
+			Extract<
+				RpcProtocolSessionTransition,
+				{ type: RpcProtocolSessionTransitionTypeEnum.draining }
+			>["reason"]
+		>().toEqualTypeOf<RpcCloseReasonEnum.counterExhaustion>();
+		expectTypeOf<
+			Extract<
+				RpcProtocolSessionTransition,
+				{ type: RpcProtocolSessionTransitionTypeEnum.recovering }
+			>["cause"]
+		>().toEqualTypeOf<Error | undefined>();
+		expectTypeOf<
+			keyof Extract<
+				RpcProtocolSessionTransition,
+				{ type: RpcProtocolSessionTransitionTypeEnum.recovered }
+			>
+		>().toEqualTypeOf<"type">();
+		expectTypeOf<
+			Extract<
+				RpcProtocolSessionTransition,
+				{ type: RpcProtocolSessionTransitionTypeEnum.closed }
+			>["reason"]
+		>().toEqualTypeOf<
+			| RpcCloseReasonEnum.gracefulShutdown
+			| RpcCloseReasonEnum.forcedClose
+			| RpcCloseReasonEnum.remoteTerminated
+			| RpcCloseReasonEnum.recoveryExpired
+			| RpcCloseReasonEnum.continuityFailure
+			| RpcCloseReasonEnum.counterExhaustion
+		>();
+		expectTypeOf<
+			keyof IRpcProtocolSessionLifecycle
+		>().toEqualTypeOf<"forceClose">();
+		expectTypeOf<keyof IRpcProtocolSessionLifecycleHost>().toEqualTypeOf<
+			"transition" | "fault"
+		>();
+	});
+
+	it("RPC-CONNECTOR-003: keeps provisional attachment distinct from activation and Owner termination", () => {
+		expectTypeOf<
+			IRpcConnectorSessionLifecycle["peer"]
+		>().toEqualTypeOf<IRpcPeer>();
+		expectTypeOf<
+			IRpcConnectorSessionLifecycle["attached"]
+		>().toEqualTypeOf<boolean>();
+		expectTypeOf<IRpcConnectorSessionLifecycle["attach"]>().toEqualTypeOf<
+			(
+				session: IRpcProtocolSessionLifecycle,
+			) => IRpcConnectorSessionLifecycleAttachment | undefined
+		>();
+		expectTypeOf<
+			IRpcConnectorSessionLifecycleAttachment["host"]
+		>().toEqualTypeOf<IRpcProtocolSessionLifecycleHost>();
+		expectTypeOf<
+			IRpcConnectorSessionLifecycleAttachment["active"]
+		>().toEqualTypeOf<boolean>();
+		expectTypeOf<
+			IRpcConnectorSessionLifecycleAttachment["activate"]
+		>().toEqualTypeOf<(canActivate: () => boolean) => boolean>();
+		expectTypeOf<
+			| IRpcConnectorSessionLifecycleAttachment["discard"]
+			| IRpcConnectorSessionLifecycle["beginGracefulShutdown"]
+		>().toEqualTypeOf<() => void>();
+		expectTypeOf<IRpcConnectorSessionLifecycle["beginClosing"]>().toEqualTypeOf<
+			(reason: RpcOwnerCloseReason, forced: boolean) => void
+		>();
+		expectTypeOf<RpcOwnerCloseReason>().toEqualTypeOf<
+			| RpcCloseReasonEnum.gracefulShutdown
+			| RpcCloseReasonEnum.forcedClose
+			| RpcCloseReasonEnum.shutdownDeadline
+		>();
+		expectTypeOf<
+			IRpcConnectorSessionLifecycle["protocolFault"]
+		>().toEqualTypeOf<IRpcProtocolConnectorLifecycleHost["fault"]>();
+		const checkConsumer = (
+			lifecycle: IRpcConnectorSessionLifecycle,
+			attachment: IRpcConnectorSessionLifecycleAttachment,
+			peer: IRpcPeer,
+			host: IRpcProtocolSessionLifecycleHost,
+		) => {
+			// @ts-expect-error The Owner's stable Peer reference cannot be replaced.
+			lifecycle.peer = peer;
+			// @ts-expect-error Attachment ownership is observed, never set by its consumer.
+			lifecycle.attached = false;
+			// @ts-expect-error Activation must cross the guarded commit method.
+			attachment.active = true;
+			// @ts-expect-error The Session-scoped notification host cannot be replaced.
+			attachment.host = host;
+		};
+		expectTypeOf(checkConsumer).returns.toBeVoid();
+	});
+
+	it("RPC-CONNECTOR-004: gives a stable Peer a live readonly view of Owner-managed state", () => {
+		expectTypeOf<IRpcPeerStateView["readState"]>().toEqualTypeOf<
+			() => RpcPeerState
+		>();
+		expectTypeOf<IRpcPeerStateView["state$"]>().toEqualTypeOf<
+			Observable<RpcPeerState>
+		>();
+		expectTypeOf<keyof IRpcPeerStateView>().toEqualTypeOf<
+			"readState" | "state$"
+		>();
+		const checkConsumer = (view: IRpcPeerStateView, peer: IRpcPeer) => {
+			// @ts-expect-error State authority is bound once, without a replacement setter.
+			view.readState = () => peer.state;
+			// @ts-expect-error The state source identity is bound once.
+			view.state$ = peer.state$;
+		};
+		expectTypeOf(checkConsumer).returns.toBeVoid();
+	});
+
+	it("RPC-CONNECTOR-005: keeps lifecycle assembly contracts out of the package root", () => {
+		// @ts-expect-error The Protocol role is currently an internal dependency contract.
+		expectTypeOf<RemoteRoot.IRpcProtocolConnector>();
+		// @ts-expect-error Session attachment remains module-visible only.
+		expectTypeOf<RemoteRoot.IRpcProtocolConnectorLifecycleHost>();
+		// @ts-expect-error Lifecycle-only Session capabilities are not a public call SPI.
+		expectTypeOf<RemoteRoot.IRpcProtocolSessionLifecycle>();
+		// @ts-expect-error Session lifecycle notifications are module-visible only.
+		expectTypeOf<RemoteRoot.IRpcProtocolSessionLifecycleHost>();
+		// @ts-expect-error Internal transition types are not package-root contracts.
+		expectTypeOf<RemoteRoot.RpcProtocolSessionTransition>();
+		// @ts-expect-error The internal transition enum is not a package-root export.
+		expectTypeOf<RemoteRoot.RpcProtocolSessionTransitionTypeEnum>();
+		// @ts-expect-error Stable Peer lifecycle ownership is internal assembly.
+		expectTypeOf<RemoteRoot.IRpcConnectorSessionLifecycle>();
+		// @ts-expect-error Provisional attachments are not a caller-facing API.
+		expectTypeOf<RemoteRoot.IRpcConnectorSessionLifecycleAttachment>();
+		// @ts-expect-error Owner-selected termination reasons remain module-visible.
+		expectTypeOf<RemoteRoot.RpcOwnerCloseReason>();
+		// @ts-expect-error The state view is supplied internally, not by package consumers.
+		expectTypeOf<RemoteRoot.IRpcPeerStateView>();
+		expectTypeOf<
+			keyof typeof RemoteRoot
+		>().toEqualTypeOf<"createRemoteServiceDescriptor">();
+	});
+
 	it("RPC-OWNER-001: preserves Owner state, event and peer surfaces", () => {
 		expectTypeOf<IRpcConnector["state"]>().toEqualTypeOf<RpcConnectorState>();
 		expectTypeOf<IRpcConnector["state$"]>().toEqualTypeOf<

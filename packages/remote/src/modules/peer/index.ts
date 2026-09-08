@@ -5,6 +5,7 @@
  */
 
 /** biome-ignore-all assist/source/organizeImports: Type-only exports precede runtime exports per repository top-level declaration order. */
+export type { IRpcPeerStateView } from "./interfaces/rpc-peer-state-view.interface";
 export type { IRpcPeer } from "./interfaces/rpc-peer.interface";
 export type {
 	RemoteMethodKey,
