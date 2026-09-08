@@ -9,10 +9,10 @@ identifier validation in
 `src/modules/protocol/schemas/rpc-wire-identifier.schema.ts`, plus the Connector
 and Acceptor interfaces in `src/modules/owner/interfaces/` and their supporting
 Peer, Transport, state, and event contracts. It also defines the Connector's
-Protocol role, Session lifecycle attachment, and Peer state-view dependencies
-through the Owner, Protocol, and Peer module entry points. The package root
-exposes the descriptor factory and its type contract. Owner factories and the
-RPC runtime are not implemented in this stage.
+composition responsibilities, Session lifecycle attachment, and Peer state-view
+dependencies through the Owner, Protocol, and Peer module entry points. The
+package root exposes the descriptor factory and its type contract. Owner
+factories and the RPC runtime are not implemented in this stage.
 `MUST` and `MUST NOT` denote requirements. Matching evidence lives in
 `tests/specification.test.ts`, whose type assertions run through both the package
 TypeScript check and the Vitest type-checking suite.
@@ -197,29 +197,33 @@ Runtime evidence remains deferred until the corresponding implementation stage.
 This stage adds no Owner factory, Peer invocation engine, Protocol runtime,
 wire grammar, automatic reconnection, or package-root lifecycle exports.
 
-## RPC-CONNECTOR-001: Protocol role and termination phases
+## RPC-CONNECTOR-001: Connector composition and termination phases
 
-The Protocol module MUST expose `IRpcProtocolConnector` with
-`bind(connection: IRpcConnection, signal: AbortSignal): Promise<void>`,
-`shutdown(): Promise<void>`, `close(): void`, and `cleanup(): Promise<void>`.
-One role instance belongs to one Connector for its lifetime. A replacement
-Physical Connection MUST use the same role and retained Logical Session.
+The public `IRpcConnector` MUST retain `connect()`, `shutdown()`, and `close()`
+as specified by RPC-OWNER-001. Its implementation MUST compose connection
+establishment, Session lifecycle, and owned-resource cleanup responsibilities.
+These responsibilities do not require an aggregate Protocol Connector interface
+or a fixed grouping of internal operations. The Protocol module MUST NOT export
+such an aggregate in this stage.
 
-The Owner owns Adapter startup and hands the resulting Connection to `bind()`.
-Binding fulfillment MUST mean fresh or resumed Binding Activation. The Owner
-MUST wait for both Adapter handoff and Protocol binding success before fulfilling
-`connect()`; a Connection alone does not establish an RPC relationship.
+The Owner owns Adapter startup and supplies the resulting Connection for Protocol
+binding. The Owner MUST wait for both Adapter handoff and fresh or resumed Binding
+Activation before fulfilling `connect()`; a Connection alone does not establish
+an RPC relationship. A replacement Physical Connection MUST continue the retained
+Logical Session.
 
-Protocol `shutdown()` MUST synchronously gate new work and await semantic Session
-drain or local termination and invocation of Direct Close, without awaiting
-physical cleanup. `close()` MUST synchronously force termination, fence bindings,
-and invoke Direct Close without sending a Protocol Session-close message.
-`cleanup()` MUST return a cached final task for Protocol-owned resources; it MUST
-NOT include Connection cleanup or running handlers. The Owner separately tracks
-those resources and composes the final asynchronous public `shutdown()` / `close()`
-result. Repeated termination requests MUST NOT repeat terminal effects or cleanup.
-Owner cleanup failure MUST retain the distinct `cleanupFailed` closed-state case
-from RPC-OWNER-003.
+Graceful shutdown MUST synchronously gate new work, then permit semantic Session
+drain or local termination and invocation of Direct Close. Forced termination
+MUST synchronously revoke protocol activity and binding authority and invoke
+Direct Close without sending a Protocol Session-close message. Semantic
+termination MUST NOT await physical cleanup.
+
+Protocol-owned resource cleanup MUST remain distinct from Connection cleanup and
+running handlers. The Owner MUST track these resources and compose their cleanup
+into the final asynchronous public `shutdown()` / `close()` result. Repeated
+termination requests MUST NOT repeat terminal effects or cleanup. Owner cleanup
+failure MUST retain the distinct `cleanupFailed` closed-state case from
+RPC-OWNER-003.
 
 ## RPC-CONNECTOR-002: Session lifecycle and Protocol hosts
 
@@ -252,9 +256,10 @@ applies to that Session, while a Connector host fault applies to the owning
 Connector independently of a particular attachment.
 
 A Session fault MUST synchronously call the exact Session's `forceClose()` before
-publishing its terminal state. A Connector-wide fault MUST synchronously call
-the Protocol role's `close()` before publishing the Owner terminal state. The
-Protocol MUST NOT duplicate either fault with a second closed transition.
+publishing its terminal state. A Connector-wide fault MUST make the owning
+Connector synchronously terminate its protocol activity and revoke binding
+authority before publishing the Owner terminal state. The Protocol MUST NOT
+duplicate either fault with a second closed transition.
 
 ## RPC-CONNECTOR-003: Owner attachment and termination responsibilities
 

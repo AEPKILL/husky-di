@@ -39,8 +39,8 @@ import {
 	type RpcMethodDefinitions,
 	remoteServiceDescriptorOptionsSchema,
 } from "../src/modules/peer";
+import type * as ProtocolModule from "../src/modules/protocol";
 import type {
-	IRpcProtocolConnector,
 	IRpcProtocolConnectorLifecycleHost,
 	IRpcProtocolSessionLifecycle,
 	IRpcProtocolSessionLifecycleHost,
@@ -363,14 +363,9 @@ describe("Remote Service Descriptor specification", () => {
 });
 
 describe("RPC Topology Owner contract specification", () => {
-	it("RPC-CONNECTOR-001: separates binding, graceful drain, synchronous stop and asynchronous cleanup", () => {
-		expectTypeOf<IRpcProtocolConnector["bind"]>().toEqualTypeOf<
-			(connection: IRpcConnection, signal: AbortSignal) => Promise<void>
-		>();
-		expectTypeOf<IRpcProtocolConnector["shutdown" | "cleanup"]>().toEqualTypeOf<
-			() => Promise<void>
-		>();
-		expectTypeOf<IRpcProtocolConnector["close"]>().toEqualTypeOf<() => void>();
+	it("RPC-CONNECTOR-001: does not export a Protocol Connector aggregate", () => {
+		// @ts-expect-error Connector dependencies are composed without this aggregate contract.
+		expectTypeOf<ProtocolModule.IRpcProtocolConnector>();
 	});
 
 	it("RPC-CONNECTOR-002: limits Session attachment to lifecycle capabilities and discriminated transitions", () => {
@@ -517,8 +512,6 @@ describe("RPC Topology Owner contract specification", () => {
 	});
 
 	it("RPC-CONNECTOR-005: keeps lifecycle assembly contracts out of the package root", () => {
-		// @ts-expect-error The Protocol role is currently an internal dependency contract.
-		expectTypeOf<RemoteRoot.IRpcProtocolConnector>();
 		// @ts-expect-error Session attachment remains module-visible only.
 		expectTypeOf<RemoteRoot.IRpcProtocolConnectorLifecycleHost>();
 		// @ts-expect-error Lifecycle-only Session capabilities are not a public call SPI.

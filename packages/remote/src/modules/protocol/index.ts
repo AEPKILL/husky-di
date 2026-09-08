@@ -6,7 +6,6 @@
 
 /** biome-ignore-all assist/source/organizeImports: Type-only exports precede runtime exports per repository top-level declaration order. */
 export type { IRpcProtocolConnectorLifecycleHost } from "./interfaces/rpc-protocol-connector-lifecycle-host.interface";
-export type { IRpcProtocolConnector } from "./interfaces/rpc-protocol-connector.interface";
 export type {
 	IRpcProtocolSessionLifecycle,
 	IRpcProtocolSessionLifecycleHost,
