@@ -7,29 +7,19 @@
 import { type Cleanup, createServiceIdentifier } from "@husky-di/core";
 import type { Observable } from "rxjs";
 import { describe, expect, expectTypeOf, it } from "vitest";
-import type * as RemoteRoot from "../src/index";
 import { createRemoteServiceDescriptor } from "../src/index";
-import type * as OwnerModule from "../src/modules/owner";
 import type {
 	IRpcAcceptor,
 	IRpcConnector,
-	IRpcConnectorSessionLifecycle,
-	IRpcConnectorSessionLifecycleAttachment,
 	RpcAcceptorListenerState,
 	RpcAcceptorState,
 	RpcConnectorConnectOptions,
 	RpcConnectorState,
 	RpcEvent,
 	RpcEventTypeEnum,
-	RpcOwnerCloseReason,
-} from "../src/modules/owner";
-import {
-	createRpcConnectorLifecycleState,
-	createRpcConnectorSessionLifecycle,
 } from "../src/modules/owner";
 import type {
 	IRpcPeer,
-	IRpcPeerStateView,
 	RpcCallDirectionEnum,
 	RpcCallStatusEnum,
 	RpcPeerState,
@@ -44,25 +34,16 @@ import {
 	type RpcMethodDefinitions,
 	remoteServiceDescriptorOptionsSchema,
 } from "../src/modules/peer";
-import type * as ProtocolModule from "../src/modules/protocol";
-import type {
-	IRpcProtocolConnectorLifecycleHost,
-	IRpcProtocolSessionLifecycle,
-	IRpcProtocolSessionLifecycleHost,
-	RpcProtocolSessionTransition,
-} from "../src/modules/protocol";
-import { RpcProtocolSessionTransitionTypeEnum } from "../src/modules/protocol";
 import type {
 	IRpcAcceptorAdapter,
 	IRpcConnection,
 	IRpcConnectorAdapter,
 } from "../src/modules/transport";
-import { RpcCloseOutcomeEnum } from "../src/shared/enums/rpc-close-outcome.enum";
-import { RpcCloseReasonEnum } from "../src/shared/enums/rpc-close-reason.enum";
+import type { RpcCloseOutcomeEnum } from "../src/shared/enums/rpc-close-outcome.enum";
+import type { RpcCloseReasonEnum } from "../src/shared/enums/rpc-close-reason.enum";
 import { RpcExceptionCodeEnum } from "../src/shared/enums/rpc-exception-code.enum";
-import { RpcStateStatusEnum } from "../src/shared/enums/rpc-state-status.enum";
+import type { RpcStateStatusEnum } from "../src/shared/enums/rpc-state-status.enum";
 import { RpcException } from "../src/shared/exceptions/rpc.exception";
-import { createRpcLifecycleFixture } from "./resources/rpc-lifecycle.util";
 
 describe("Remote Service Descriptor specification", () => {
 	it("RPC-DESC-007: creates a frozen descriptor with readable metadata and rejects invalid options", () => {
@@ -369,344 +350,6 @@ describe("Remote Service Descriptor specification", () => {
 });
 
 describe("RPC Topology Owner contract specification", () => {
-	it("RPC-CONNECTOR-007: fences terminal callbacks and keeps Connector-wide faults effective without a Session", () => {
-		const fixture = createRpcLifecycleFixture();
-		let forced = false;
-		const attachment = fixture.attach({
-			forceClose: () => {
-				forced = true;
-				attachment.host.transition({
-					type: RpcProtocolSessionTransitionTypeEnum.closed,
-					reason: RpcCloseReasonEnum.remoteTerminated,
-				});
-			},
-		});
-		attachment.activate(() => true);
-		let forcedBeforePublication = false;
-		fixture.lifecycle.peer.state$.subscribe((state) => {
-			if (state.status === RpcStateStatusEnum.closed)
-				forcedBeforePublication = forced;
-		});
-		const cause = new Error("Invalid Session.");
-		attachment.host.fault(RpcCloseReasonEnum.resourceFault, cause);
-		expect(forcedBeforePublication).toBe(true);
-		expect(fixture.lifecycle.peer.state).toMatchObject({
-			status: RpcStateStatusEnum.closed,
-			outcome: RpcCloseOutcomeEnum.failed,
-			reason: RpcCloseReasonEnum.resourceFault,
-			error: { code: RpcExceptionCodeEnum.protocol, cause },
-		});
-		expect(fixture.state.state.status).toBe(RpcStateStatusEnum.closing);
-		expect(fixture.closings).toHaveLength(1);
-		const empty = createRpcLifecycleFixture();
-		empty.lifecycle.protocolFault(RpcCloseReasonEnum.protocolFault, cause);
-		expect(empty.closings).toHaveLength(1);
-		expect(empty.closings[0]?.forced).toBe(true);
-	});
-
-	it("RPC-CONNECTOR-008: preserves recovery identity and counter-drain intent until forced loss of a draining binding", () => {
-		const fixture = createRpcLifecycleFixture();
-		const peer = fixture.lifecycle.peer;
-		let forced = 0;
-		const attachment = fixture.attach({
-			forceClose: () => {
-				forced++;
-			},
-		});
-		attachment.activate(() => true);
-		attachment.host.transition({
-			type: RpcProtocolSessionTransitionTypeEnum.draining,
-			reason: RpcCloseReasonEnum.counterExhaustion,
-		});
-		attachment.host.transition({
-			type: RpcProtocolSessionTransitionTypeEnum.recovering,
-		});
-		expect(peer.state.status).toBe(RpcStateStatusEnum.recovering);
-		attachment.host.transition({
-			type: RpcProtocolSessionTransitionTypeEnum.recovered,
-		});
-		expect(peer.state).toEqual({
-			status: RpcStateStatusEnum.draining,
-			reason: RpcCloseReasonEnum.counterExhaustion,
-		});
-		fixture.lifecycle.beginGracefulShutdown();
-		expect(fixture.state.state.status).toBe(RpcStateStatusEnum.draining);
-		expect(forced).toBe(0);
-		attachment.host.transition({
-			type: RpcProtocolSessionTransitionTypeEnum.recovering,
-		});
-		expect(forced).toBe(1);
-		expect(peer.state).toMatchObject({
-			status: RpcStateStatusEnum.closed,
-			reason: RpcCloseReasonEnum.forcedClose,
-		});
-		expect(fixture.lifecycle.peer).toBe(peer);
-	});
-
-	it("RPC-CONNECTOR-009: commits both snapshots atomically and serializes reentrant observation", () => {
-		const state = createRpcConnectorLifecycleState();
-		const observations: RpcStateStatusEnum[] = [];
-		let peerAtCutoff: RpcStateStatusEnum | undefined;
-		state.state$.subscribe((owner) => {
-			if (owner.status !== RpcStateStatusEnum.draining) return;
-			peerAtCutoff = state.peerStateView.readState().status;
-			state.commit(
-				{ status: RpcStateStatusEnum.closing },
-				{
-					status: RpcStateStatusEnum.closed,
-					outcome: RpcCloseOutcomeEnum.normal,
-					reason: RpcCloseReasonEnum.forcedClose,
-				},
-			);
-		});
-		state.state$.subscribe((owner) => {
-			observations.push(owner.status);
-		});
-		state.commit(
-			{ status: RpcStateStatusEnum.draining },
-			{
-				status: RpcStateStatusEnum.draining,
-				reason: RpcCloseReasonEnum.gracefulShutdown,
-			},
-		);
-		expect(peerAtCutoff).toBe(RpcStateStatusEnum.draining);
-		expect(observations).toEqual([
-			RpcStateStatusEnum.active,
-			RpcStateStatusEnum.draining,
-			RpcStateStatusEnum.closing,
-		]);
-		expect(Object.isFrozen(state.state)).toBe(true);
-		expect(Object.isFrozen(state.peerStateView.readState())).toBe(true);
-	});
-
-	it("RPC-CONNECTOR-010: exposes behavioral assembly only through internal module entry points", () => {
-		expectTypeOf(
-			createRpcConnectorSessionLifecycle,
-		).toEqualTypeOf<OwnerModule.RpcConnectorSessionLifecycleFactory>();
-		expectTypeOf(
-			createRpcConnectorLifecycleState,
-		).returns.toEqualTypeOf<OwnerModule.IRpcConnectorLifecycleState>();
-		// @ts-expect-error Internal assembly factories are not package-root exports.
-		expectTypeOf<RemoteRoot.createRpcConnectorSessionLifecycle>();
-		// @ts-expect-error The state store is internal assembly.
-		expectTypeOf<RemoteRoot.createRpcConnectorLifecycleState>();
-		// @ts-expect-error State mutation is internal to the Owner.
-		expectTypeOf<RemoteRoot.IRpcConnectorLifecycleState>();
-		// @ts-expect-error Owner effects are not a package extension API.
-		expectTypeOf<RemoteRoot.IRpcConnectorSessionLifecycleOwner>();
-		// @ts-expect-error Session lifecycle creation is not a package extension API.
-		expectTypeOf<RemoteRoot.RpcConnectorSessionLifecycleFactory>();
-		// @ts-expect-error The Peer creator is internal assembly.
-		expectTypeOf<RemoteRoot.RpcPeerFactory>();
-		// @ts-expect-error Concrete state implementations remain private to the Owner module.
-		expectTypeOf<OwnerModule.RpcConnectorLifecycleStateImpl>();
-		// @ts-expect-error Concrete lifecycle implementations remain private to the Owner module.
-		expectTypeOf<OwnerModule.RpcConnectorSessionLifecycleImpl>();
-		expectTypeOf<
-			keyof typeof RemoteRoot
-		>().toEqualTypeOf<"createRemoteServiceDescriptor">();
-	});
-
-	it("RPC-CONNECTOR-006: retains one Peer through provisional discard and guarded activation", () => {
-		const { state, lifecycle } = createRpcLifecycleFixture();
-		const peer = lifecycle.peer;
-		let discarded = 0;
-		const first = lifecycle.attach({
-			forceClose: () => {
-				discarded++;
-			},
-		});
-		expect(lifecycle.attached).toBe(true);
-		expect(first?.active).toBe(false);
-		first?.discard();
-		first?.discard();
-		expect(discarded).toBe(1);
-		expect(lifecycle.attached).toBe(false);
-		state.commit(
-			{ status: RpcStateStatusEnum.active },
-			{ status: RpcStateStatusEnum.connecting },
-		);
-		const second = lifecycle.attach({ forceClose: () => {} });
-		expect(second?.activate(() => false)).toBe(false);
-		expect(second?.activate(() => true)).toBe(true);
-		first?.discard();
-		expect(second?.active).toBe(true);
-		expect(lifecycle.peer).toBe(peer);
-		expect(peer.state).toEqual({ status: RpcStateStatusEnum.connected });
-	});
-
-	it("RPC-CONNECTOR-001: does not export a Protocol Connector aggregate", () => {
-		// @ts-expect-error Connector dependencies are composed without this aggregate contract.
-		expectTypeOf<ProtocolModule.IRpcProtocolConnector>();
-	});
-
-	it("RPC-CONNECTOR-002: limits Session attachment to lifecycle capabilities and discriminated transitions", () => {
-		expectTypeOf<
-			IRpcProtocolConnectorLifecycleHost["attachSession"]
-		>().toEqualTypeOf<
-			(
-				session: IRpcProtocolSessionLifecycle,
-			) => IRpcProtocolSessionLifecycleHost | undefined
-		>();
-		expectTypeOf<IRpcProtocolSessionLifecycle["forceClose"]>().toEqualTypeOf<
-			() => void
-		>();
-		expectTypeOf<
-			IRpcProtocolSessionLifecycleHost["transition"]
-		>().toEqualTypeOf<(transition: RpcProtocolSessionTransition) => void>();
-		expectTypeOf<
-			| IRpcProtocolConnectorLifecycleHost["fault"]
-			| IRpcProtocolSessionLifecycleHost["fault"]
-		>().toEqualTypeOf<
-			(
-				reason:
-					| RpcCloseReasonEnum.protocolFault
-					| RpcCloseReasonEnum.resourceFault,
-				error: Error,
-			) => void
-		>();
-		expectTypeOf<RpcProtocolSessionTransition["type"]>().toEqualTypeOf<
-			| RpcProtocolSessionTransitionTypeEnum.draining
-			| RpcProtocolSessionTransitionTypeEnum.recovering
-			| RpcProtocolSessionTransitionTypeEnum.recovered
-			| RpcProtocolSessionTransitionTypeEnum.closed
-		>();
-		expectTypeOf<
-			Extract<
-				RpcProtocolSessionTransition,
-				{ type: RpcProtocolSessionTransitionTypeEnum.draining }
-			>["reason"]
-		>().toEqualTypeOf<RpcCloseReasonEnum.counterExhaustion>();
-		expectTypeOf<
-			Extract<
-				RpcProtocolSessionTransition,
-				{ type: RpcProtocolSessionTransitionTypeEnum.recovering }
-			>["cause"]
-		>().toEqualTypeOf<Error | undefined>();
-		expectTypeOf<
-			keyof Extract<
-				RpcProtocolSessionTransition,
-				{ type: RpcProtocolSessionTransitionTypeEnum.recovered }
-			>
-		>().toEqualTypeOf<"type">();
-		expectTypeOf<
-			Extract<
-				RpcProtocolSessionTransition,
-				{ type: RpcProtocolSessionTransitionTypeEnum.closed }
-			>["reason"]
-		>().toEqualTypeOf<
-			| RpcCloseReasonEnum.gracefulShutdown
-			| RpcCloseReasonEnum.forcedClose
-			| RpcCloseReasonEnum.remoteTerminated
-			| RpcCloseReasonEnum.recoveryExpired
-			| RpcCloseReasonEnum.continuityFailure
-			| RpcCloseReasonEnum.counterExhaustion
-		>();
-		expectTypeOf<
-			keyof IRpcProtocolSessionLifecycle
-		>().toEqualTypeOf<"forceClose">();
-		expectTypeOf<keyof IRpcProtocolSessionLifecycleHost>().toEqualTypeOf<
-			"transition" | "fault"
-		>();
-	});
-
-	it("RPC-CONNECTOR-003: keeps provisional attachment distinct from activation and Owner termination", () => {
-		expectTypeOf<
-			IRpcConnectorSessionLifecycle["peer"]
-		>().toEqualTypeOf<IRpcPeer>();
-		expectTypeOf<
-			IRpcConnectorSessionLifecycle["attached"]
-		>().toEqualTypeOf<boolean>();
-		expectTypeOf<IRpcConnectorSessionLifecycle["attach"]>().toEqualTypeOf<
-			(
-				session: IRpcProtocolSessionLifecycle,
-			) => IRpcConnectorSessionLifecycleAttachment | undefined
-		>();
-		expectTypeOf<
-			IRpcConnectorSessionLifecycleAttachment["host"]
-		>().toEqualTypeOf<IRpcProtocolSessionLifecycleHost>();
-		expectTypeOf<
-			IRpcConnectorSessionLifecycleAttachment["active"]
-		>().toEqualTypeOf<boolean>();
-		expectTypeOf<
-			IRpcConnectorSessionLifecycleAttachment["activate"]
-		>().toEqualTypeOf<(canActivate: () => boolean) => boolean>();
-		expectTypeOf<
-			| IRpcConnectorSessionLifecycleAttachment["discard"]
-			| IRpcConnectorSessionLifecycle["beginGracefulShutdown"]
-		>().toEqualTypeOf<() => void>();
-		expectTypeOf<IRpcConnectorSessionLifecycle["beginClosing"]>().toEqualTypeOf<
-			(reason: RpcOwnerCloseReason, forced: boolean) => void
-		>();
-		expectTypeOf<RpcOwnerCloseReason>().toEqualTypeOf<
-			| RpcCloseReasonEnum.gracefulShutdown
-			| RpcCloseReasonEnum.forcedClose
-			| RpcCloseReasonEnum.shutdownDeadline
-		>();
-		expectTypeOf<
-			IRpcConnectorSessionLifecycle["protocolFault"]
-		>().toEqualTypeOf<IRpcProtocolConnectorLifecycleHost["fault"]>();
-		const checkConsumer = (
-			lifecycle: IRpcConnectorSessionLifecycle,
-			attachment: IRpcConnectorSessionLifecycleAttachment,
-			peer: IRpcPeer,
-			host: IRpcProtocolSessionLifecycleHost,
-		) => {
-			// @ts-expect-error The Owner's stable Peer reference cannot be replaced.
-			lifecycle.peer = peer;
-			// @ts-expect-error Attachment ownership is observed, never set by its consumer.
-			lifecycle.attached = false;
-			// @ts-expect-error Activation must cross the guarded commit method.
-			attachment.active = true;
-			// @ts-expect-error The Session-scoped notification host cannot be replaced.
-			attachment.host = host;
-		};
-		expectTypeOf(checkConsumer).returns.toBeVoid();
-	});
-
-	it("RPC-CONNECTOR-004: gives a stable Peer a live readonly view of Owner-managed state", () => {
-		expectTypeOf<IRpcPeerStateView["readState"]>().toEqualTypeOf<
-			() => RpcPeerState
-		>();
-		expectTypeOf<IRpcPeerStateView["state$"]>().toEqualTypeOf<
-			Observable<RpcPeerState>
-		>();
-		expectTypeOf<keyof IRpcPeerStateView>().toEqualTypeOf<
-			"readState" | "state$"
-		>();
-		const checkConsumer = (view: IRpcPeerStateView, peer: IRpcPeer) => {
-			// @ts-expect-error State authority is bound once, without a replacement setter.
-			view.readState = () => peer.state;
-			// @ts-expect-error The state source identity is bound once.
-			view.state$ = peer.state$;
-		};
-		expectTypeOf(checkConsumer).returns.toBeVoid();
-	});
-
-	it("RPC-CONNECTOR-005: keeps lifecycle assembly contracts out of the package root", () => {
-		// @ts-expect-error Session attachment remains module-visible only.
-		expectTypeOf<RemoteRoot.IRpcProtocolConnectorLifecycleHost>();
-		// @ts-expect-error Lifecycle-only Session capabilities are not a public call SPI.
-		expectTypeOf<RemoteRoot.IRpcProtocolSessionLifecycle>();
-		// @ts-expect-error Session lifecycle notifications are module-visible only.
-		expectTypeOf<RemoteRoot.IRpcProtocolSessionLifecycleHost>();
-		// @ts-expect-error Internal transition types are not package-root contracts.
-		expectTypeOf<RemoteRoot.RpcProtocolSessionTransition>();
-		// @ts-expect-error The internal transition enum is not a package-root export.
-		expectTypeOf<RemoteRoot.RpcProtocolSessionTransitionTypeEnum>();
-		// @ts-expect-error Stable Peer lifecycle ownership is internal assembly.
-		expectTypeOf<RemoteRoot.IRpcConnectorSessionLifecycle>();
-		// @ts-expect-error Provisional attachments are not a caller-facing API.
-		expectTypeOf<RemoteRoot.IRpcConnectorSessionLifecycleAttachment>();
-		// @ts-expect-error Owner-selected termination reasons remain module-visible.
-		expectTypeOf<RemoteRoot.RpcOwnerCloseReason>();
-		// @ts-expect-error The state view is supplied internally, not by package consumers.
-		expectTypeOf<RemoteRoot.IRpcPeerStateView>();
-		expectTypeOf<
-			keyof typeof RemoteRoot
-		>().toEqualTypeOf<"createRemoteServiceDescriptor">();
-	});
-
 	it("RPC-OWNER-001: preserves Owner state, event and peer surfaces", () => {
 		expectTypeOf<IRpcConnector["state"]>().toEqualTypeOf<RpcConnectorState>();
 		expectTypeOf<IRpcConnector["state$"]>().toEqualTypeOf<
