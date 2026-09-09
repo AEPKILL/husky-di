@@ -1,5 +1,5 @@
 /**
- * @overview Private reusable type-level helpers shared across remote modules.
+ * @overview Private reusable type-level helpers shared across remote domains.
  * @author AEPKILL
  * @created 2026-08-30 13:24:59
  */

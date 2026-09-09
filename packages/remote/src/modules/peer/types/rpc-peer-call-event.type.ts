@@ -4,11 +4,11 @@
  * @created 2026-08-19 00:00:00
  */
 
-import type { RpcEventTypeEnum } from "@/modules/owner";
 import type { RpcCallDirectionEnum } from "@/modules/peer/enums/rpc-call-direction.enum";
 import type { RpcCallStatusEnum } from "@/modules/peer/enums/rpc-call-status.enum";
 import type { IRpcPeer } from "@/modules/peer/interfaces/rpc-peer.interface";
 import type { RpcCallFailure } from "@/modules/protocol";
+import type { RpcEventTypeEnum } from "@/shared/enums/rpc-event-type.enum";
 import type { RpcExceptionCodeEnum } from "@/shared/enums/rpc-exception-code.enum";
 
 export type RpcPeerCallEvent = RpcCallStartedEvent | RpcCallFinishedEvent;

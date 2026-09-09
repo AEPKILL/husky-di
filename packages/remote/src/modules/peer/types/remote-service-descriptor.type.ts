@@ -4,14 +4,15 @@
  * @created 2026-08-19 00:00:00
  */
 
-import type { ServiceIdentifier } from "@husky-di/core";
 import type { Observable } from "rxjs";
 import { type input, type output, z } from "zod";
+
 import type { REMOTE_SERVICE_DESCRIPTOR_TYPE } from "@/modules/peer/constants/remote-service-descriptor.const";
 import { rpcWireIdentifierSchema } from "@/modules/protocol";
 import type {
 	AnyMethod,
 	HasAnyParameter,
+	HasNoParameters,
 	IsAny,
 	RequiredKey,
 } from "@/shared/types/common.type";
@@ -49,13 +50,12 @@ export type NonEmptyMethodDefinitions<Definitions extends object> = [
 	? never
 	: unknown;
 
-export type IsCancelableMethod<Definition> =
-	Definition extends RpcCancelableMethodDefinition ? true : false;
+export type IsCancelableMethod<Definition> = Definition extends {
+	readonly cancelable: true;
+}
+	? true
+	: false;
 
-/**
- * Projects ordinary call signatures to an asynchronous facade. Generic
- * correlations are not preserved; overloaded methods use the last signature.
- */
 export type RemoteMethod<F, Definition> = F extends (
 	...args: infer Args
 ) => infer Result
@@ -86,17 +86,13 @@ export type RemoteServiceImplementation<
 };
 
 /**
- * Describes one explicitly allowlisted remote service with readonly metadata.
+ * Describes one explicitly allowlisted remote service without exposing its
+ * local identifier or wire metadata.
  */
 export type RemoteServiceDescriptor<
 	T,
 	Definitions extends RpcMethodDefinitions<T>,
 > = {
-	readonly serviceIdentifier: ServiceIdentifier<T>;
-	readonly wireName: RemoteServiceDescriptorOptionsSnapshot["wireName"];
-	readonly methods: {
-		readonly [Key in keyof Definitions]: Readonly<Definitions[Key]>;
-	};
 	readonly [REMOTE_SERVICE_DESCRIPTOR_TYPE]: (
 		service: T,
 		definitions: Definitions,
@@ -158,7 +154,10 @@ export const rpcMethodDefinitionsSchema = z
 		}),
 	)
 	.transform(({ entries }) => {
-		const methods = Object.create(null) as Record<string, RpcMethodDefinition>;
+		const methods = Object.create(null) as Record<
+			string,
+			true | { readonly cancelable: true }
+		>;
 		for (const [methodName, definition] of entries) {
 			methods[methodName] = definition;
 		}
@@ -173,12 +172,6 @@ export const remoteServiceDescriptorOptionsSchema = z
 	})
 	.readonly();
 
-type RpcMethodDefinition = output<typeof rpcMethodDefinitionSchema>;
-
-type RpcCancelableMethodDefinition = output<
-	typeof rpcCancelableMethodDefinitionSchema
->;
-
 type ContainsAbortSignal<T> =
 	IsAny<T> extends true
 		? false
@@ -186,13 +179,9 @@ type ContainsAbortSignal<T> =
 			? false
 			: true;
 
-// Inspect each slot before combining results: unknown would absorb a signal
-// from another slot if the parameter types were first collapsed into a union.
-type TupleContainsAbortSignal<Args extends readonly unknown[]> = true extends {
-	[K in keyof Args]: ContainsAbortSignal<Args[K]>;
-}[number]
-	? true
-	: false;
+type ParametersContainAbortSignal<F extends AnyMethod> = ContainsAbortSignal<
+	Parameters<F>[number]
+>;
 
 type HasUnsupportedUnaryResult<F extends AnyMethod> =
 	IsAny<Awaited<ReturnType<F>>> extends true
@@ -212,34 +201,35 @@ type HasValidCancellationSlot<F extends AnyMethod> =
 				? false
 				: [Last] extends [AbortSignal]
 					? [AbortSignal] extends [Last]
-						? TupleContainsAbortSignal<Head> extends false
+						? ContainsAbortSignal<Head[number]> extends false
 							? true
 							: false
 						: false
 					: false
 		: false;
 
-type RpcUnaryMethodDefinition<F extends AnyMethod> =
+type RpcUnaryMethodDefinition<F extends AnyMethod = AnyMethod> =
 	HasAnyParameter<F> extends true
 		? never
 		: HasUnsupportedUnaryResult<F> extends true
 			? never
-			: TupleContainsAbortSignal<Parameters<F>> extends false
+			: HasNoParameters<F> extends true
 				? true
-				: HasValidCancellationSlot<F> extends true
-					? RpcCancelableMethodDefinition
-					: never;
+				: ParametersContainAbortSignal<F> extends false
+					? true
+					: HasValidCancellationSlot<F> extends true
+						? { readonly cancelable: true }
+						: never;
 
 type ValidateMethodDefinition<F extends AnyMethod, Definition> =
 	Definition extends RpcUnaryMethodDefinition<F>
 		? Definition extends true
 			? Definition
-			: Definition extends RpcCancelableMethodDefinition
-				? Exclude<
-						keyof Definition,
-						keyof RpcCancelableMethodDefinition
-					> extends never
-					? Definition
+			: Definition extends { readonly cancelable: true }
+				? Exclude<keyof Definition, "cancelable"> extends never
+					? HasValidCancellationSlot<F> extends true
+						? Definition
+						: never
 					: never
 				: never
 		: never;

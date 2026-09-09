@@ -9,7 +9,11 @@ import { createVitestConfig } from "@husky-di/config/vitest";
 export default createVitestConfig(import.meta.url, {
 	test: {
 		include: ["tests/**/*.test.ts"],
-		exclude: ["tests/browser/**", "tests/types/**"],
+		exclude: [
+			"tests/browser/**",
+			"tests/types/**",
+			...(process.env.RPC_PACKAGE_TEST ? [] : ["tests/package/**"]),
+		],
 		passWithNoTests: true,
 		typecheck: {
 			include: ["tests/specification.test.ts", "tests/types/**/*.test-d.ts"],

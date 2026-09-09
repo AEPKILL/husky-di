@@ -1,12 +1,9 @@
 /**
- * @overview Internal Remote Service Descriptor constants.
+ * @overview Internal Remote Service Descriptor type-brand constant.
  * @author AEPKILL
- * @created 2026-09-07 00:00:00
+ * @created 2026-08-30 12:38:55
  */
 
-/**
- * Provides the private type-level key for invariant Descriptor contracts.
- */
 export const REMOTE_SERVICE_DESCRIPTOR_TYPE: unique symbol = Symbol(
 	"RemoteServiceDescriptorType",
 );

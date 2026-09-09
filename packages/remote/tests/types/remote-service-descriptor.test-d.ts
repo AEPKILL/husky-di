@@ -1,104 +1,179 @@
 /**
- * @overview Public descriptor factory inference and private-surface regression coverage.
+ * @overview Compile-time Remote Service Descriptor specification probes.
  * @author AEPKILL
- * @created 2026-09-08 00:00:00
+ * @created 2026-08-19 00:00:00
  */
 
-import {
-	createServiceIdentifier,
-	type ServiceIdentifier,
-} from "@husky-di/core";
+import { createServiceIdentifier } from "@husky-di/core";
+import type { Observable } from "rxjs";
 import { expectTypeOf, test } from "vitest";
-import type * as remote from "../../src/index";
+
 import {
 	createRemoteServiceDescriptor,
-	type RemoteService,
 	type RemoteServiceDescriptor,
 } from "../../src/index";
 
-test("RPC-DESC-007: preserves the public factory's allowlist and cancellation inference", () => {
-	type Service = {
-		query(value: string, signal: AbortSignal): Promise<number>;
-		optional?(): void;
-	};
-	const IService = createServiceIdentifier<Service>("Service");
-	const descriptor = createRemoteServiceDescriptor(IService, {
-		wireName: "service",
-		methods: { query: { cancelable: true } },
-	});
+interface ValidService {
+	add(left: number, right: number): number;
+	cancel(value: string, signal: AbortSignal): Promise<string>;
+	optional(value?: string): string;
+	join(...values: string[]): string;
+	readonly version: string;
+}
 
-	expectTypeOf(descriptor).toEqualTypeOf<
+interface InvalidService {
+	// biome-ignore lint/suspicious/noExplicitAny: proves untyped wire parameters are rejected.
+	anyParameter(value: any): string;
+	// biome-ignore lint/suspicious/noExplicitAny: proves untyped wire results are rejected.
+	anyResult(): any;
+	observable(): Observable<string>;
+	iterable(): AsyncIterable<string>;
+	optionalSignal(signal?: AbortSignal): void;
+	signalFirst(signal: AbortSignal, value: string): void;
+	ordinary(value: string): void;
+	then(): void;
+}
+
+interface OtherService {
+	add(left: number, right: number): number;
+}
+
+const IValidService = createServiceIdentifier<ValidService>("IValidService");
+const IInvalidService =
+	createServiceIdentifier<InvalidService>("IInvalidService");
+
+const validDescriptor = createRemoteServiceDescriptor(IValidService, {
+	wireName: "example.valid.v1",
+	methods: {
+		add: true,
+		cancel: { cancelable: true },
+		optional: true,
+		join: true,
+	},
+});
+
+test("RPC-DESC-001 infers the exact selected service definition", () => {
+	expectTypeOf(validDescriptor).toEqualTypeOf<
 		RemoteServiceDescriptor<
-			Service,
-			{ readonly query: { readonly cancelable: true } }
+			ValidService,
+			{
+				readonly add: true;
+				readonly cancel: { readonly cancelable: true };
+				readonly optional: true;
+				readonly join: true;
+			}
 		>
 	>();
-	expectTypeOf<
-		RemoteService<Service, { query: { cancelable: true } }>["query"]
-	>().toEqualTypeOf<
-		(value: string, signal: AbortSignal | undefined) => Promise<number>
-	>();
+});
 
-	createRemoteServiceDescriptor(IService, {
-		wireName: "service",
-		// @ts-expect-error A caller must select at least one required method.
+test("RPC-DESC-002 rejects invalid method definitions", () => {
+	createRemoteServiceDescriptor(IValidService, {
+		wireName: "example.empty.v1",
+		// @ts-expect-error RPC-DESC-002 requires a non-empty allowlist.
 		methods: {},
 	});
-	createRemoteServiceDescriptor(IService, {
-		wireName: "service",
-		// @ts-expect-error Cancellation metadata is required for a method with a signal.
-		methods: { query: true },
+
+	createRemoteServiceDescriptor(IValidService, {
+		wireName: "example.property.v1",
+		// @ts-expect-error RPC-DESC-002 allows methods, not data properties.
+		methods: {
+			version: true,
+		},
 	});
-	createRemoteServiceDescriptor(IService, {
-		wireName: "service",
-		// @ts-expect-error Optional methods cannot establish an allowlist contract.
-		methods: { optional: true },
+
+	createRemoteServiceDescriptor(IInvalidService, {
+		wireName: "example.then.v1",
+		// @ts-expect-error RPC-DESC-002 reserves then.
+		methods: {
+			// biome-ignore lint/suspicious/noThenProperty: verifies the reserved method is rejected.
+			then: true,
+		},
 	});
-	createRemoteServiceDescriptor(IService, {
-		wireName: "service",
-		// @ts-expect-error Method names must belong to the service contract.
-		methods: { missing: true },
+
+	createRemoteServiceDescriptor(IInvalidService, {
+		wireName: "example.any-parameter.v1",
+		// @ts-expect-error RPC-DESC-002 rejects any parameters.
+		methods: {
+			anyParameter: true,
+		},
+	});
+
+	createRemoteServiceDescriptor(IInvalidService, {
+		wireName: "example.any-result.v1",
+		// @ts-expect-error RPC-DESC-002 rejects any results.
+		methods: {
+			anyResult: true,
+		},
+	});
+
+	createRemoteServiceDescriptor(IInvalidService, {
+		wireName: "example.observable.v1",
+		// @ts-expect-error RPC-DESC-002 rejects Observable results.
+		methods: {
+			observable: true,
+		},
+	});
+
+	createRemoteServiceDescriptor(IInvalidService, {
+		wireName: "example.iterable.v1",
+		// @ts-expect-error RPC-DESC-002 rejects AsyncIterable results.
+		methods: {
+			iterable: true,
+		},
+	});
+
+	createRemoteServiceDescriptor(IInvalidService, {
+		wireName: "example.optional-signal.v1",
+		// @ts-expect-error RPC-DESC-002 requires an exact trailing AbortSignal.
+		methods: {
+			optionalSignal: { cancelable: true },
+		},
+	});
+
+	createRemoteServiceDescriptor(IInvalidService, {
+		wireName: "example.signal-first.v1",
+		// @ts-expect-error RPC-DESC-002 requires AbortSignal to be final.
+		methods: {
+			signalFirst: { cancelable: true },
+		},
+	});
+
+	createRemoteServiceDescriptor(IInvalidService, {
+		wireName: "example.ordinary-cancel.v1",
+		// @ts-expect-error RPC-DESC-002 cannot mark a signal-free method cancelable.
+		methods: {
+			ordinary: { cancelable: true },
+		},
+	});
+
+	createRemoteServiceDescriptor(IInvalidService, {
+		wireName: "example.signal-as-ordinary.v1",
+		// @ts-expect-error RPC-DESC-002 cannot expose a signal method as ordinary unary.
+		methods: {
+			signalFirst: true,
+		},
 	});
 });
 
-test("RPC-DESC-007: exposes deeply readonly metadata even for mutable method definitions", () => {
-	type Service = { query(signal: AbortSignal): number };
-	type Definitions = { query: { cancelable: true } };
-	const IService = createServiceIdentifier<Service>("Service");
-	const methods: Definitions = { query: { cancelable: true } };
-	const descriptor = createRemoteServiceDescriptor(IService, {
-		wireName: "service",
-		methods,
-	});
-
-	expectTypeOf(descriptor.serviceIdentifier).toEqualTypeOf<
-		ServiceIdentifier<Service>
-	>();
-	expectTypeOf(descriptor.wireName).toBeString();
-	expectTypeOf(descriptor.methods).toEqualTypeOf<{
-		readonly query: { readonly cancelable: true };
-	}>();
-	// @ts-expect-error The service identifier reference is readonly.
-	descriptor.serviceIdentifier = IService;
-	// @ts-expect-error The wire name is readonly.
-	descriptor.wireName = "changed";
-	// @ts-expect-error The method map reference is readonly.
-	descriptor.methods = methods;
-	// @ts-expect-error Each selected method definition is readonly.
-	descriptor.methods.query = { cancelable: true };
-	// @ts-expect-error Nested cancellation metadata is readonly.
-	descriptor.methods.query.cancelable = true;
-	// @ts-expect-error The metadata exposes only selected method keys.
-	descriptor.methods.missing;
+const IOtherService = createServiceIdentifier<OtherService>("IOtherService");
+const otherDescriptor = createRemoteServiceDescriptor(IOtherService, {
+	wireName: "example.other.v1",
+	methods: { add: true },
 });
 
-test("RPC-DESC-007: keeps internal helpers, schemas and branding out of the public surface", () => {
-	expectTypeOf<
-		Extract<
-			keyof typeof remote,
-			| "getRemoteServiceDescriptorData"
-			| "remoteServiceDescriptorOptionsSchema"
-			| "REMOTE_SERVICE_DESCRIPTOR_TYPE"
-		>
-	>().toBeNever();
+const addOnlyDescriptor = createRemoteServiceDescriptor(IValidService, {
+	wireName: "example.add-only.v1",
+	methods: { add: true },
+});
+
+test("RPC-DESC-001 keeps Descriptor type parameters invariant", () => {
+	expectTypeOf(otherDescriptor).not.toMatchTypeOf<typeof validDescriptor>();
+	expectTypeOf(addOnlyDescriptor).not.toMatchTypeOf<typeof validDescriptor>();
+});
+
+test("RPC-PKG-009 keeps conditional helper types private", () => {
+	// biome-ignore format: keeps the missing-export diagnostic on the expected line.
+	// @ts-expect-error RPC-PKG-009 does not export conditional helper types.
+	type MissingRpcMethodDefinitions = import("../../src/index").RpcMethodDefinitions;
+	void (null as unknown as MissingRpcMethodDefinitions);
 });

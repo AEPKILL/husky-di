@@ -11,19 +11,41 @@
 			"types": "./dist/index.d.ts",
 			"import": "./dist/index.js",
 			"require": "./dist/index.cjs"
+		},
+		"./protocol": {
+			"types": "./dist/protocol.d.ts",
+			"import": "./dist/protocol.js",
+			"require": "./dist/protocol.cjs"
+		},
+		"./transport": {
+			"types": "./dist/transport.d.ts",
+			"import": "./dist/transport.js",
+			"require": "./dist/transport.cjs"
+		},
+		"./conformance": {
+			"types": "./dist/conformance.d.ts",
+			"import": "./dist/conformance.js",
+			"require": "./dist/conformance.cjs"
 		}
 	},
 	"main": "./dist/index.cjs",
 	"types": "./dist/index.d.ts",
 	"files": [
 		"dist",
+		"docs/PROTOCOL.md",
+		"docs/REQUIREMENTS.md",
+		"docs/SPECIFICATION.md",
+		"docs/TRANSPORT.md",
+		"README.md",
+		"CHANGELOG.md",
 		"LICENSE"
 	],
 	"scripts": {
 		"build": "rslib build",
 		"dev": "rslib build --watch",
-		"test": "pnpm run typecheck && pnpm run test:types && vitest run && pnpm run test:browser",
+		"test": "pnpm run typecheck && pnpm run test:types && vitest run && pnpm run test:browser && pnpm run test:package",
 		"test:browser": "playwright test --config playwright.config.ts --pass-with-no-tests",
+		"test:package": "pnpm --filter @husky-di/core build && pnpm run build && RPC_PACKAGE_TEST=1 vitest run tests/package",
 		"test:types": "vitest run --typecheck --typecheck.only",
 		"typecheck": "tsc -p tsconfig.json && tsc -p tests/tsconfig.json"
 	},

@@ -1,7 +1,7 @@
 /**
- * @overview Caller-facing RPC Peer state and Session close outcomes.
+ * @overview RPC Peer lifecycle states and correlated terminal outcomes.
  * @author AEPKILL
- * @created 2026-08-19 00:00:00
+ * @created 2026-09-09 00:00:00
  */
 
 import type {
@@ -27,7 +27,25 @@ export type RpcPeerState =
 	| { readonly status: RpcStateStatusEnum.recovering }
 	| RpcSessionClosedState;
 
-export type RpcSessionClosedState =
+type RpcNormalSessionCloseReason = Extract<
+	RpcSessionCloseReason,
+	| RpcCloseReasonEnum.gracefulShutdown
+	| RpcCloseReasonEnum.forcedClose
+	| RpcCloseReasonEnum.shutdownDeadline
+	| RpcCloseReasonEnum.remoteTerminated
+>;
+
+type RpcUnavailableSessionFailureReason = Extract<
+	RpcSessionCloseReason,
+	RpcCloseReasonEnum.recoveryExpired | RpcCloseReasonEnum.counterExhaustion
+>;
+
+type RpcProtocolSessionFailureReason = Extract<
+	RpcSessionCloseReason,
+	RpcCloseReasonEnum.continuityFailure | RpcProtocolFaultReason
+>;
+
+type RpcSessionClosedState =
 	| {
 			readonly status: RpcStateStatusEnum.closed;
 			readonly outcome: RpcCloseOutcomeEnum.normal;
@@ -49,21 +67,3 @@ export type RpcSessionClosedState =
 				readonly code: RpcExceptionCodeEnum.protocol;
 			};
 	  };
-
-type RpcNormalSessionCloseReason = Extract<
-	RpcSessionCloseReason,
-	| RpcCloseReasonEnum.gracefulShutdown
-	| RpcCloseReasonEnum.forcedClose
-	| RpcCloseReasonEnum.shutdownDeadline
-	| RpcCloseReasonEnum.remoteTerminated
->;
-
-type RpcUnavailableSessionFailureReason = Extract<
-	RpcSessionCloseReason,
-	RpcCloseReasonEnum.recoveryExpired | RpcCloseReasonEnum.counterExhaustion
->;
-
-type RpcProtocolSessionFailureReason = Extract<
-	RpcSessionCloseReason,
-	RpcCloseReasonEnum.continuityFailure | RpcProtocolFaultReason
->;

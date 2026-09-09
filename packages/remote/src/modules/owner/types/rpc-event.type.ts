@@ -4,10 +4,10 @@
  * @created 2026-08-19 00:00:00
  */
 
-import type { RpcEventTypeEnum } from "@/modules/owner/enums/rpc-event-type.enum";
 import type { IRpcPeer, RpcPeerCallEvent } from "@/modules/peer";
 import type { RpcCloseOutcomeEnum } from "@/shared/enums/rpc-close-outcome.enum";
 import type { RpcCloseReasonEnum } from "@/shared/enums/rpc-close-reason.enum";
+import type { RpcEventTypeEnum } from "@/shared/enums/rpc-event-type.enum";
 
 export type RpcEvent =
 	| RpcTopologyLifecycleEvent
@@ -33,22 +33,26 @@ type RpcPeerLifecycleEvent =
 			readonly type: RpcEventTypeEnum.peerClosed;
 			readonly peer: IRpcPeer;
 			readonly outcome: RpcCloseOutcomeEnum.normal;
-			readonly reason:
+			readonly reason: Extract<
+				RpcCloseReasonEnum,
 				| RpcCloseReasonEnum.gracefulShutdown
 				| RpcCloseReasonEnum.forcedClose
 				| RpcCloseReasonEnum.shutdownDeadline
-				| RpcCloseReasonEnum.remoteTerminated;
+				| RpcCloseReasonEnum.remoteTerminated
+			>;
 	  }
 	| {
 			readonly type: RpcEventTypeEnum.peerClosed;
 			readonly peer: IRpcPeer;
 			readonly outcome: RpcCloseOutcomeEnum.failed;
-			readonly reason:
+			readonly reason: Extract<
+				RpcCloseReasonEnum,
 				| RpcCloseReasonEnum.recoveryExpired
 				| RpcCloseReasonEnum.counterExhaustion
 				| RpcCloseReasonEnum.continuityFailure
 				| RpcCloseReasonEnum.protocolFault
-				| RpcCloseReasonEnum.resourceFault;
+				| RpcCloseReasonEnum.resourceFault
+			>;
 	  };
 
 type RpcTopologyLifecycleEvent =
@@ -57,11 +61,13 @@ type RpcTopologyLifecycleEvent =
 	| {
 			readonly type: RpcEventTypeEnum.topologyClosed;
 			readonly outcome: RpcCloseOutcomeEnum.normal;
-			readonly reason:
+			readonly reason: Extract<
+				RpcCloseReasonEnum,
 				| RpcCloseReasonEnum.gracefulShutdown
 				| RpcCloseReasonEnum.forcedClose
 				| RpcCloseReasonEnum.shutdownDeadline
-				| RpcCloseReasonEnum.remoteTerminated;
+				| RpcCloseReasonEnum.remoteTerminated
+			>;
 	  }
 	| {
 			readonly type: RpcEventTypeEnum.topologyClosed;
