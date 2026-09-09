@@ -1,5 +1,5 @@
 {
-	"name": "@husky-di/example-remote-websocket",
+	"name": "@husky-di/example-remote-lab",
 	"private": true,
 	"type": "module",
 	"scripts": {
@@ -7,11 +7,13 @@
 		"start": "node --import tsx src/server/dev.ts",
 		"start:web": "vite",
 		"test": "node --import tsx --test tests/*.test.ts",
+		"test:browser": "playwright test --config playwright.config.ts",
 		"typecheck": "tsc -p tsconfig.json --noEmit",
 		"start:server": "node --import tsx src/server/main.ts"
 	},
 	"devDependencies": {
 		"@husky-di/config": "workspace:*",
+		"@playwright/test": "1.62.1",
 		"@types/node": "^25.5.0",
 		"tsx": "^4.20.5",
 		"typescript": "^6.0.3",

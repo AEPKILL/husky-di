@@ -52,7 +52,7 @@ An HTTP server option or server-authenticated TLS does not itself authenticate a
 initiating application. Plain `ws:` examples are for local development.
 
 See the [normative specification](docs/SPECIFICATION.md) for options and lifecycle
-contracts and the workspace [`remote-websocket` example](../../examples/remote-websocket/README.md)
+contracts and the workspace [Remote Lab example](../../examples/remote-lab/README.md)
 for a runnable browser/server demonstration. Development checks:
 
 ```sh

@@ -8,6 +8,7 @@ import {
 	createRpcConnector,
 	createRpcConnectorReconnection,
 	type RpcConnectorAdapterFactory,
+	type RpcConnectorRuntimePolicyOptions,
 } from "@husky-di/remote";
 import { REMOTE_BROWSER_DISPLAY_SERVICE } from "@/consts/remote-services.const";
 import type { IBrowserDisplayService } from "@/interfaces/browser-display-service.interface";
@@ -16,12 +17,15 @@ import type { IExampleClient } from "@/interfaces/example-client.interface";
 export type CreateExampleClientOptions = {
 	readonly adapterFactory: RpcConnectorAdapterFactory;
 	readonly display: IBrowserDisplayService;
+	readonly runtimePolicy?: RpcConnectorRuntimePolicyOptions;
 };
 
 export function createExampleClient(
 	options: CreateExampleClientOptions,
 ): IExampleClient {
-	const connector = createRpcConnector();
+	const connector = createRpcConnector({
+		runtimePolicy: options.runtimePolicy,
+	});
 	connector.peer.expose(REMOTE_BROWSER_DISPLAY_SERVICE, options.display);
 	const reconnection = createRpcConnectorReconnection({
 		connector,

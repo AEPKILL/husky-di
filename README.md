@@ -20,8 +20,8 @@ It focuses on type safety, predictable runtime behavior, and clear package bound
 - `@husky-di/remote-websocket`: browser and Node WebSocket Transport Adapters
   [packages/remote-websocket/README.md](./packages/remote-websocket/README.md)
 
-Run the [Remote WebSocket example](./examples/remote-websocket/README.md) with
-`pnpm --filter @husky-di/example-remote-websocket start` to explore browser ↔ Node
+Run [Remote Lab](./examples/remote-lab/README.md) with
+`pnpm --filter @husky-di/example-remote-lab start` to explore browser ↔ Node
 calls, connection recovery, and RPC lifecycle observations.
 
 ## License

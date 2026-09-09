@@ -26,8 +26,10 @@ import { createExampleServer } from "@/factories/example-server.factory";
 import { createRpcDiagnostics } from "@/factories/rpc-diagnostics.factory";
 import type { NodeDiagnosticsSnapshot } from "@/types/rpc-diagnostics.type";
 import { getPeerStatusLabel } from "@/web/utils/get-peer-status-label.util";
+import "./lab/lab-scenarios.test";
+import "./recording/recording.test";
 
-describe("Remote WebSocket example specification", () => {
+describe("Remote Lab specification", () => {
 	it("EXAMPLE-WS-STATE-001 labels actual disconnection separately from reconnection attempts", () => {
 		const labels = [
 			[RpcStateStatusEnum.unbound, "Not connected"],

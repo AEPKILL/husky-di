@@ -54,7 +54,8 @@ facade results are always Promises, and `then` is reserved.
 
 Call `client.peer.expose()` for calls in the opposite direction and resolve from
 an accepted Peer in `server.peers`. Acceptor exposures apply atomically to current
-and future Peers. Peer-local exposures override the same Acceptor wire name.
+and future Peers. Peer-local and Acceptor exposures share one effective namespace;
+exposing the same wire name in both throws `TypeError`.
 The idempotent cleanup returned by `expose()` removes the route for future calls
 without interrupting an admitted handler. For multiple peers, snapshot
 `server.peers` and compose independent calls with `Promise.allSettled()`.
@@ -179,7 +180,7 @@ automatic Container integration.
 
 For browser and Node WebSocket transport, use the separate
 [`@husky-di/remote-websocket` package](../remote-websocket/README.md). The
-[runnable example](../../examples/remote-websocket/README.md) demonstrates
+[runnable example](../../examples/remote-lab/README.md) demonstrates
 bidirectional calls and composes its Adapters with the built-in reconnection
 supervisor.
 

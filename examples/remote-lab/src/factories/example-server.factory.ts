@@ -1,5 +1,5 @@
 /**
- * @overview Hosts bidirectional RPC and payload-free HTTP diagnostics on a loopback Node server.
+ * @overview Hosts bidirectional RPC, Lab scenarios, and separate application and safe diagnostic snapshots.
  * @author AEPKILL
  * @created 2026-09-09 00:00:00
  */
@@ -16,6 +16,10 @@ import {
 	REMOTE_BROWSER_DISPLAY_SERVICE,
 	REMOTE_GREETING_SERVICE,
 } from "@/consts/remote-services.const";
+import { LabSideEnum } from "@/enums/lab-recording.enum";
+import { createLabHost } from "@/factories/lab-host.factory";
+import { createLabRecorder } from "@/factories/lab-recorder.factory";
+import { createObservedAcceptorAdapter } from "@/factories/observed-connector-adapter.factory";
 import { createRpcDiagnostics } from "@/factories/rpc-diagnostics.factory";
 import type { IExampleServer } from "@/interfaces/example-server.interface";
 import type { NodeDiagnosticsSnapshot } from "@/types/rpc-diagnostics.type";
@@ -27,9 +31,12 @@ export async function createExampleServer(
 ): Promise<IExampleServer> {
 	const acceptor = createRpcAcceptor();
 	const diagnostics = createRpcDiagnostics();
+	const recorder = createLabRecorder(LabSideEnum.node);
+	const lab = createLabHost({ acceptor, recorder });
 	const events = acceptor.event$.subscribe((event) => {
 		diagnostics.record(event);
 		if (event.type === RpcEventTypeEnum.peerOpened) {
+			lab.openPeer(event.peer);
 			event.peer.expose(REMOTE_GREETING_SERVICE, {
 				greet,
 				ready: () =>
@@ -38,12 +45,19 @@ export async function createExampleServer(
 						.showMessage("Node called this browser."),
 			});
 		}
+		recorder.recordEvent(
+			event,
+			"peer" in event ? lab.peerId(event.peer) : undefined,
+		);
+		if (event.type === RpcEventTypeEnum.peerClosed) lab.closePeer(event.peer);
 	});
 	const server = createServer((request, response) => {
 		response.setHeader("Content-Type", "application/json; charset=utf-8");
 		response.setHeader("Cache-Control", "no-store");
 		if (request.method === "GET" && request.url === "/health") {
 			response.end(JSON.stringify({ status: "ok" }));
+		} else if (request.method === "GET" && request.url === "/api/lab") {
+			response.end(JSON.stringify(lab.snapshot()));
 		} else if (request.method === "GET" && request.url === "/api/snapshot") {
 			const state = acceptor.state;
 			const snapshot: NodeDiagnosticsSnapshot = {
@@ -65,6 +79,7 @@ export async function createExampleServer(
 	const shutdown = () => {
 		shutdownTask ??= (async () => {
 			try {
+				lab.resumeAll();
 				await acceptor.shutdown();
 			} finally {
 				events.unsubscribe();
@@ -88,7 +103,10 @@ export async function createExampleServer(
 			});
 		});
 		await acceptor.listen(
-			createNodeWebSocketAcceptorAdapter({ server, path: "/rpc" }),
+			createObservedAcceptorAdapter(
+				createNodeWebSocketAcceptorAdapter({ server, path: "/rpc" }),
+				recorder,
+			),
 		);
 		const address = server.address();
 		if (address === null || typeof address === "string")
