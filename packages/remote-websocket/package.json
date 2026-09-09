@@ -22,22 +22,33 @@
 	"types": "./dist/index.d.ts",
 	"files": [
 		"dist",
+		"docs",
+		"README.md",
+		"CHANGELOG.md",
 		"LICENSE"
 	],
 	"scripts": {
 		"build": "rslib build",
 		"dev": "rslib build --watch",
-		"test": "pnpm run typecheck && vitest run",
-		"typecheck": "tsc -p tsconfig.json && tsc -p tests/tsconfig.json"
+		"test": "pnpm run typecheck && vitest run && pnpm run test:package",
+		"typecheck": "tsc -p tsconfig.json && tsc -p tests/tsconfig.json",
+		"test:package": "pnpm --filter @husky-di/core build && pnpm --filter @husky-di/remote build && pnpm run build && WS_PACKAGE_TEST=1 vitest run tests/package.test.ts"
 	},
 	"devDependencies": {
 		"@husky-di/config": "workspace:*",
 		"@rslib/core": "^0.20.1",
 		"@types/node": "^25.5.0",
 		"typescript": "^6.0.3",
-		"vitest": "^4.1.2"
+		"vitest": "^4.1.2",
+		"@types/ws": "^8.18.1",
+		"esbuild": "0.27.4"
 	},
 	"publishConfig": {
 		"access": "public"
+	},
+	"dependencies": {
+		"@husky-di/remote": "workspace:*",
+		"rxjs": "^7.8.2",
+		"ws": "^8.21.3"
 	}
 }

@@ -8,6 +8,9 @@ import { createVitestConfig } from "@husky-di/config/vitest";
 
 export default createVitestConfig(import.meta.url, {
 	test: {
-		passWithNoTests: true,
+		exclude:
+			process.env.WS_PACKAGE_TEST === "1"
+				? []
+				: ["tests/package.test.ts", "**/node_modules/**", "**/dist/**"],
 	},
 });

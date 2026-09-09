@@ -43,7 +43,8 @@ including schema colocation and the `type-file/exports-only` diagnostic ID.
 ## PLACEMENT-001: Module-first source roots
 
 The checker MUST support `module/role` directories in configured
-`moduleSourceRoots`, which default to `packages/remote/src/modules`. It MUST collect
+`moduleSourceRoots`, which default to `packages/remote/src/modules` and
+`packages/remote-websocket/src/modules`. It MUST collect
 TypeScript files below these roots and apply the role's existing suffix and
 declaration rules. Unknown roles MUST report `placement/source-directory`.
 Source-root entrypoints and existing role-first placement MUST remain supported.

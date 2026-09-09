@@ -177,6 +177,12 @@ Adapter supplies the ordered byte channel and framing. This package does not
 include a WebSocket Adapter, streaming RPC, notifications, service discovery, or
 automatic Container integration.
 
+For browser and Node WebSocket transport, use the separate
+[`@husky-di/remote-websocket` package](../remote-websocket/README.md). The
+[runnable example](../../examples/remote-websocket/README.md) demonstrates
+bidirectional calls and composes its Adapters with the built-in reconnection
+supervisor.
+
 Recovery uses an independent, stable 256-bit bearer `resumeToken`. Use a
 confidential, integrity-protected, anti-replay channel that authenticates the
 intended endpoint; complete its handshake before RPC handoff and never send

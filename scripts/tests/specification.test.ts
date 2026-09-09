@@ -167,6 +167,23 @@ export const valueSchema = z.string();
 });
 
 describe("Code standard module placement specification", () => {
+	it("PLACEMENT-001 MODULE-002: validates WebSocket module roles and boundaries", () => {
+		const rootDirectoryPath = createSchemaWorkspace({
+			"packages/remote-websocket/src/modules/connection/index.ts":
+				'export type { Connection } from "./types/connection.type";',
+			"packages/remote-websocket/src/modules/connection/types/connection.type.ts":
+				"export type Connection = object;",
+			"packages/remote-websocket/tests/consumer.test.ts":
+				'import type { Connection } from "@/modules/connection/types/connection.type";',
+		});
+
+		assert.equal(collectInScopeFiles(rootDirectoryPath).length, 3);
+		assert.deepEqual(
+			validateCodeStandard(rootDirectoryPath).map(({ ruleId }) => ruleId),
+			["imports/no-internal-module-path"],
+		);
+	});
+
 	it("MODULE-001: accepts module entrypoints and rejects implementation or other root files", () => {
 		const rootDirectoryPath = createSchemaWorkspace({
 			"packages/remote/src/modules/peer/index.ts":

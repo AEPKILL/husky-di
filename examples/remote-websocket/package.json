@@ -4,10 +4,11 @@
 	"type": "module",
 	"scripts": {
 		"build:web": "vite build",
-		"start": "vite",
+		"start": "node --import tsx src/server/dev.ts",
 		"start:web": "vite",
-		"test": "node --import tsx --test",
-		"typecheck": "tsc -p tsconfig.json --noEmit"
+		"test": "node --import tsx --test tests/*.test.ts",
+		"typecheck": "tsc -p tsconfig.json --noEmit",
+		"start:server": "node --import tsx src/server/main.ts"
 	},
 	"devDependencies": {
 		"@husky-di/config": "workspace:*",
@@ -15,5 +16,11 @@
 		"tsx": "^4.20.5",
 		"typescript": "^6.0.3",
 		"vite": "^8.1.0"
+	},
+	"dependencies": {
+		"@husky-di/core": "workspace:*",
+		"@husky-di/remote": "workspace:*",
+		"@husky-di/remote-websocket": "workspace:*",
+		"rxjs": "^7.8.2"
 	}
 }

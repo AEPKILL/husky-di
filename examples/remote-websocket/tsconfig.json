@@ -2,13 +2,12 @@
 	"extends": "@husky-di/config/tsconfig/base.json",
 	"compilerOptions": {
 		"lib": ["ESNext", "DOM"],
-		"jsx": "react-jsx",
 		"target": "ESNext",
-		"rootDir": "./src",
+		"rootDir": ".",
 		"types": ["node", "vite/client"],
 		"paths": {
 			"@/*": ["./src/*"]
 		}
 	},
-	"include": ["src"]
+	"include": ["src", "tests", "vite.config.ts"]
 }
