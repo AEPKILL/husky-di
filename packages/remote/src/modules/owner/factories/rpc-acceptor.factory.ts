@@ -5,11 +5,9 @@
  */
 
 import {
-	createRpcOwnerProtocolException,
-	createRpcOwnerProtocolHost,
+	createRpcOwnerProtocolAcceptor,
 	createRpcOwnerResources,
 	parseRpcOwnerPolicy,
-	validateRpcOwnerProtocol,
 } from "@/modules/owner/factories/rpc-owner-assembly.factory";
 import { createRpcOwnerTermination } from "@/modules/owner/factories/rpc-owner-termination.factory";
 import { createRpcAcceptorSessionOwnership } from "@/modules/owner/factories/rpc-session-ownership.factory";
@@ -21,58 +19,27 @@ import {
 	rpcAcceptorOptionsSchema,
 } from "@/modules/owner/types/rpc-caller.type";
 import type {
-	IRpcProtocolAcceptor,
 	IRpcProtocolRuntimePolicy,
-	IRpcProtocolSession,
-	IRpcProtocolSessionHost,
-	IRpcRetainedBytesReservation,
 	RpcProtocolAcceptorFactory,
-	RpcProtocolFaultReason,
 } from "@/modules/protocol";
 import {
 	createRpcProtocolAcceptor,
 	DEFAULT_RPC_RUNTIME_POLICY,
 } from "@/modules/protocol";
 import { RpcStateStatusEnum } from "@/shared/enums/rpc-state-status.enum";
-import { isCallable } from "@/shared/utils/type-guard.util";
 
 /** Creates a cold Acceptor without starting transport I/O. */
 export function createRpcAcceptor(options?: RpcAcceptorOptions): IRpcAcceptor {
 	const parsed = parseAcceptorOptions(options);
-	const construction = createRpcOwnerProtocolHost<IRpcAcceptorProtocolPorts>(
-		parsed.policy,
-	);
-	let protocol: IRpcProtocolAcceptor;
-	try {
-		const factory =
-			parsed.protocolFactory === undefined
-				? createRpcProtocolAcceptor
-				: parsed.protocolFactory;
-		if (!isCallable(factory)) {
-			throw new TypeError("protocolFactory must be callable.");
-		}
-		protocol = factory(
-			Object.freeze({
-				...construction.host,
-				admitSession: (session: IRpcProtocolSession) =>
-					construction.readDuringRuntime(
-						(owner) => owner.admitProtocolSession(session),
-						undefined,
-					),
-			}),
-		);
-		validateRpcOwnerProtocol(protocol, [
-			"accept",
-			"shutdown",
-			"close",
-			"cleanup",
-		]);
-		construction.assertConstructionSafe();
-	} catch (error) {
-		throw createRpcOwnerProtocolException(error);
-	}
-	const owner = new RpcAcceptorImpl({
-		protocol,
+	return new RpcAcceptorImpl({
+		createProtocol: (ports) =>
+			createRpcOwnerProtocolAcceptor(
+				parsed.policy,
+				parsed.protocolFactory === undefined
+					? createRpcProtocolAcceptor
+					: parsed.protocolFactory,
+				ports,
+			),
 		policy: parsed.policy,
 		publisher: new RpcAcceptorPublisherImpl({
 			initialState: Object.freeze({
@@ -80,20 +47,10 @@ export function createRpcAcceptor(options?: RpcAcceptorOptions): IRpcAcceptor {
 				listener: Object.freeze({ status: RpcStateStatusEnum.idle }),
 			}),
 		}),
-		...createRpcOwnerResources(parsed.policy, protocol),
+		...createRpcOwnerResources(parsed.policy),
 		createSessionOwnership: createRpcAcceptorSessionOwnership,
 		createTermination: createRpcOwnerTermination,
 	});
-	construction.activate(owner);
-	return owner;
-}
-
-interface IRpcAcceptorProtocolPorts {
-	reserveRetainedBytes(bytes: number): IRpcRetainedBytesReservation | undefined;
-	protocolFault(reason: RpcProtocolFaultReason, error: Error): void;
-	admitProtocolSession(
-		session: IRpcProtocolSession,
-	): IRpcProtocolSessionHost | undefined;
 }
 
 function parseAcceptorOptions(options: RpcAcceptorOptions | undefined): {

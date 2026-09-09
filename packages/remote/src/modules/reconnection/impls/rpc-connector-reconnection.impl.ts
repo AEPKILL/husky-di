@@ -16,6 +16,7 @@ import type {
 	RpcConnectorReconnectionPolicy,
 	RpcConnectorReconnectionState,
 } from "@/modules/reconnection/types/rpc-connector-reconnection.type";
+import { RPC_MAX_PLATFORM_TIMER_DELAY_MS } from "@/shared/constants/rpc-timer.const";
 import { RpcExceptionCodeEnum } from "@/shared/enums/rpc-exception-code.enum";
 import { RpcStateStatusEnum } from "@/shared/enums/rpc-state-status.enum";
 import { createRpcException } from "@/shared/factories/rpc-exception.factory";
@@ -239,7 +240,7 @@ export class RpcConnectorReconnectionImpl implements IRpcConnectorReconnection {
 	}
 
 	#scheduleRetry(nextAttempt: number, remainingMs: number): void {
-		const delayMs = Math.min(remainingMs, maximumPlatformTimerDelayMs);
+		const delayMs = Math.min(remainingMs, RPC_MAX_PLATFORM_TIMER_DELAY_MS);
 		this.#retryTimer = setTimeout(() => {
 			this.#retryTimer = undefined;
 			// A retry timer has authority only over its matching waiting attempt.
@@ -268,7 +269,7 @@ export class RpcConnectorReconnectionImpl implements IRpcConnectorReconnection {
 		controller: AbortController,
 		remainingMs: number,
 	): void {
-		const delayMs = Math.min(remainingMs, maximumPlatformTimerDelayMs);
+		const delayMs = Math.min(remainingMs, RPC_MAX_PLATFORM_TIMER_DELAY_MS);
 		this.#attemptTimer = setTimeout(() => {
 			this.#attemptTimer = undefined;
 			if (this.#attemptController !== controller) {
@@ -413,5 +414,3 @@ export class RpcConnectorReconnectionImpl implements IRpcConnectorReconnection {
 		}
 	}
 }
-
-const maximumPlatformTimerDelayMs = 2_147_483_647;

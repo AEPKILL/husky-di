@@ -11,10 +11,7 @@ import {
 import { RpcDecodePhaseEnum } from "@/modules/protocol/enums/rpc-decode-phase.enum";
 import { RpcResumeRejectCodeEnum } from "@/modules/protocol/enums/rpc-resume-reject-code.enum";
 import { RpcWireRecordKindEnum } from "@/modules/protocol/enums/rpc-wire-record-kind.enum";
-import {
-	closeUnboundConnection,
-	RpcBindingAttempt,
-} from "@/modules/protocol/impls/rpc-binding-attempt.impl";
+import { RpcBindingAttempt } from "@/modules/protocol/impls/rpc-binding-attempt.impl";
 import type { IRpcCodec } from "@/modules/protocol/interfaces/rpc-codec.interface";
 import type {
 	IRpcProtocolConnector,
@@ -29,6 +26,7 @@ import type {
 	RpcFreshRequest,
 	RpcResumeRequest,
 } from "@/modules/protocol/types/rpc-wire-record.type";
+import { closeUnboundConnection } from "@/modules/protocol/utils/rpc-direct-close.util";
 import type { IRpcConnection } from "@/modules/transport";
 
 export type CreateRpcProtocolConnectorOptions = Readonly<{

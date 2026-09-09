@@ -10,8 +10,12 @@ import { RpcProtocolConnectorImpl } from "@/modules/protocol/impls/rpc-protocol-
 import { RpcSessionImpl } from "@/modules/protocol/impls/rpc-session.impl";
 import { RpcSessionActivityImpl } from "@/modules/protocol/impls/rpc-session-activity.impl";
 import { RpcSessionCallRetentionImpl } from "@/modules/protocol/impls/rpc-session-call-retention.impl";
+import { RpcSessionConnectionImpl } from "@/modules/protocol/impls/rpc-session-connection.impl";
+import { RpcSessionContinuityImpl } from "@/modules/protocol/impls/rpc-session-continuity.impl";
+import { RpcSessionDeliveryImpl } from "@/modules/protocol/impls/rpc-session-delivery.impl";
 import { RpcSessionIncomingCallsImpl } from "@/modules/protocol/impls/rpc-session-incoming-calls.impl";
 import { RpcSessionInvocationsImpl } from "@/modules/protocol/impls/rpc-session-invocations.impl";
+import { RpcSessionShutdownImpl } from "@/modules/protocol/impls/rpc-session-shutdown.impl";
 import type {
 	IRpcProtocolAcceptor,
 	IRpcProtocolAcceptorHost,
@@ -24,8 +28,12 @@ import type {
 } from "@/modules/protocol/interfaces/rpc-session.interface";
 import type { RpcSessionActivityFactory } from "@/modules/protocol/interfaces/rpc-session-activity.interface";
 import type { RpcSessionCallRetentionFactory } from "@/modules/protocol/interfaces/rpc-session-call-retention.interface";
+import type { RpcSessionConnectionFactory } from "@/modules/protocol/interfaces/rpc-session-connection.interface";
+import type { RpcSessionContinuityFactory } from "@/modules/protocol/interfaces/rpc-session-continuity.interface";
+import type { RpcSessionDeliveryFactory } from "@/modules/protocol/interfaces/rpc-session-delivery.interface";
 import type { RpcSessionIncomingCallsFactory } from "@/modules/protocol/interfaces/rpc-session-incoming-calls.interface";
 import type { RpcSessionInvocationsFactory } from "@/modules/protocol/interfaces/rpc-session-invocations.interface";
+import type { RpcSessionShutdownFactory } from "@/modules/protocol/interfaces/rpc-session-shutdown.interface";
 import { createRpcSecurityCarrier } from "@/modules/protocol/utils/rpc-base64-url-32-schema.util";
 import { RpcRetainedBytesLedgerImpl } from "@/shared/impls/rpc-retained-bytes-ledger.impl";
 
@@ -65,6 +73,10 @@ export function createBuiltInRpcSessionFactory(
 		new RpcSessionImpl(options, {
 			codec,
 			createActivity: createRpcSessionActivity,
+			createShutdown: createRpcSessionShutdown,
+			createDelivery: createRpcSessionDelivery,
+			createContinuity: createRpcSessionContinuity,
+			createConnection: createRpcSessionConnection,
 			createCallRetention: createRpcSessionCallRetention,
 			createIncomingCalls: createRpcSessionIncomingCalls,
 			createInvocations: createRpcSessionInvocations,
@@ -89,6 +101,20 @@ export const createRpcSessionIncomingCalls: RpcSessionIncomingCallsFactory = (
 export const createRpcSessionInvocations: RpcSessionInvocationsFactory = (
 	options,
 ) => new RpcSessionInvocationsImpl(options);
+
+export const createRpcSessionConnection: RpcSessionConnectionFactory = (
+	options,
+) => new RpcSessionConnectionImpl(options);
+
+export const createRpcSessionContinuity: RpcSessionContinuityFactory = (
+	options,
+) => new RpcSessionContinuityImpl(options);
+
+export const createRpcSessionDelivery: RpcSessionDeliveryFactory = (options) =>
+	new RpcSessionDeliveryImpl(options);
+
+export const createRpcSessionShutdown: RpcSessionShutdownFactory = (options) =>
+	new RpcSessionShutdownImpl(options);
 
 const codec = Object.freeze(new RpcCodecImpl());
 

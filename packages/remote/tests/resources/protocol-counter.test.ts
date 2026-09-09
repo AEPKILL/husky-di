@@ -15,6 +15,7 @@ import {
 	createRpcCounterExhaustionProtocolAcceptorForTest,
 	createRpcCounterExhaustionProtocolConnectorForTest,
 	normalizeRpcApplicationArguments,
+	type RpcSessionDeliveryImpl,
 	RpcSessionInvocationsImpl,
 	RpcWireRecordKindEnum,
 } from "../../src/modules/protocol";
@@ -34,8 +35,8 @@ const ICounterService =
 describe("Default RPC Protocol counter drain", () => {
 	it("RPC-SHUTDOWN-010 ignores a pending Activity Probe when evaluating the complete drain predicate", async () => {
 		const { session, sent } = createRpcDirectSessionHarness();
-		session._activity?.recordInbound(RpcWireRecordKindEnum.ping);
-		expect(session._activity?.hasPendingProbe).toBe(true);
+		session._binding?.activity?.recordInbound(RpcWireRecordKindEnum.ping);
+		expect(session._binding?.activity?.hasPendingProbe).toBe(true);
 
 		const shutdown = session.shutdown();
 
@@ -46,15 +47,16 @@ describe("Default RPC Protocol counter drain", () => {
 	it("RPC-COUNTER-001 RPC-COUNTER-002 consumes the final 512 protected sequences without leaving the safe-integer domain RPC-CORPUS-004", async () => {
 		const { session, sent, transitions, faults } =
 			createRpcDirectSessionHarness();
-		session._nextOutgoingSequence = Number.MAX_SAFE_INTEGER - 511;
+		(session._delivery as RpcSessionDeliveryImpl)._nextOutgoingSequence =
+			Number.MAX_SAFE_INTEGER - 511;
 		for (let ordinal = 1; ordinal <= 256; ordinal += 1) {
-			session._queueSemantic({
+			session._delivery.queueSemantic({
 				kind: RpcWireRecordKindEnum.cancel,
 				callId: String(ordinal),
 			});
 		}
 		for (let ordinal = 257; ordinal <= 512; ordinal += 1) {
-			session._queueSemantic({
+			session._delivery.queueSemantic({
 				kind: RpcWireRecordKindEnum.error,
 				callId: String(ordinal),
 				error: {
@@ -63,14 +65,20 @@ describe("Default RPC Protocol counter drain", () => {
 				},
 			});
 		}
-		session._beginCounterDrain();
+		session._shutdown.beginCounterDrain();
 
 		await vi.waitFor(() => expect(sent).toHaveLength(512));
 
-		expect(session._highestSentSequence).toBe(Number.MAX_SAFE_INTEGER);
-		expect(Number.isSafeInteger(session._nextOutgoingSequence)).toBe(true);
-		session._applyAck(Number.MAX_SAFE_INTEGER);
-		session._queueSemantic({
+		expect(
+			(session._delivery as RpcSessionDeliveryImpl)._highestSentSequence,
+		).toBe(Number.MAX_SAFE_INTEGER);
+		expect(
+			Number.isSafeInteger(
+				(session._delivery as RpcSessionDeliveryImpl)._nextOutgoingSequence,
+			),
+		).toBe(true);
+		session._delivery.acknowledge(Number.MAX_SAFE_INTEGER);
+		session._delivery.queueSemantic({
 			kind: RpcWireRecordKindEnum.cancel,
 			callId: "513",
 		});

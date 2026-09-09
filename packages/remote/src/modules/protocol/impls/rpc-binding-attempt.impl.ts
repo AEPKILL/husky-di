@@ -441,12 +441,3 @@ export class RpcBindingAttempt {
 		this._temporaryReleases.clear();
 	}
 }
-
-/** Closes a Connection that never acquired binding authority. */
-export function closeUnboundConnection(connection: IRpcConnection): void {
-	queueMicrotask(() => {
-		void Promise.try(() => connection.close()).catch(() => {
-			// A pre-bootstrap Connection has no Session authority to report against.
-		});
-	});
-}

@@ -35,9 +35,7 @@ export {
 	RpcAcceptorPublisherImpl,
 	RpcConnectorPublisherImpl,
 } from "./impls/rpc-owner-publisher.impl";
-export {
-	RpcAcceptorSessionOwnershipImpl,
-	RpcConnectorSessionOwnershipImpl,
-} from "./impls/rpc-session-ownership.impl";
+export { RpcAcceptorSessionOwnershipImpl } from "./impls/rpc-acceptor-session-ownership.impl";
+export { RpcConnectorSessionOwnershipImpl } from "./impls/rpc-connector-session-ownership.impl";
 export { RpcHandlerSchedulerImpl } from "./impls/rpc-handler-scheduler.impl";
 export { rpcConnectorConnectOptionsSchema } from "./types/rpc-caller.type";

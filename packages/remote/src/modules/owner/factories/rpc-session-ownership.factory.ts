@@ -6,10 +6,12 @@
 
 import {
 	type CreateRpcAcceptorSessionOwnershipOptions,
-	type CreateRpcConnectorSessionOwnershipOptions,
 	RpcAcceptorSessionOwnershipImpl,
+} from "@/modules/owner/impls/rpc-acceptor-session-ownership.impl";
+import {
+	type CreateRpcConnectorSessionOwnershipOptions,
 	RpcConnectorSessionOwnershipImpl,
-} from "@/modules/owner/impls/rpc-session-ownership.impl";
+} from "@/modules/owner/impls/rpc-connector-session-ownership.impl";
 import type {
 	IRpcAcceptorSessionOwnership,
 	IRpcConnectorSessionOwnership,

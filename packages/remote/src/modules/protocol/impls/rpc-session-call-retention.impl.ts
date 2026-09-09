@@ -24,6 +24,7 @@ import type {
 	RpcSemanticMessage,
 	RpcWireErrorCode,
 } from "@/modules/protocol/types/rpc-wire-record.type";
+import { createRpcMessageEnvelope } from "@/modules/protocol/utils/rpc-message-envelope.util";
 import { RpcExceptionCodeEnum } from "@/shared/enums/rpc-exception-code.enum";
 
 export type CreateRpcSessionCallRetentionOptions =
@@ -269,12 +270,13 @@ export class RpcSessionCallRetentionImpl implements IRpcSessionCallRetention {
 		}
 		let maximumEnvelope: Uint8Array;
 		try {
-			maximumEnvelope = this._codec.encode({
-				kind: RpcWireRecordKindEnum.message,
-				seq: Number.MAX_SAFE_INTEGER,
-				ackThrough: Number.MAX_SAFE_INTEGER,
-				message,
-			});
+			maximumEnvelope = this._codec.encode(
+				createRpcMessageEnvelope(
+					Number.MAX_SAFE_INTEGER,
+					message,
+					Number.MAX_SAFE_INTEGER,
+				),
+			);
 		} catch {
 			return undefined;
 		}

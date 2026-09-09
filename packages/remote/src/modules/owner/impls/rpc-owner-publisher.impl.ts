@@ -10,19 +10,24 @@ import type {
 	IRpcConnectorPublisher,
 } from "@/modules/owner/interfaces/rpc-owner-publisher.interface";
 import type {
+	RpcAcceptorClosedState,
 	RpcAcceptorState,
+	RpcConnectorClosedState,
 	RpcConnectorState,
 } from "@/modules/owner/types/rpc-caller.type";
 import type { RpcEvent } from "@/modules/owner/types/rpc-event.type";
 import type {
-	RpcAcceptorCommit,
 	RpcAcceptorPublication,
-	RpcConnectorCommit,
 	RpcConnectorPublication,
 	RpcOwnerCommit,
 	RpcOwnerContinuation,
 	RpcPeerStatePublication,
 } from "@/modules/owner/types/rpc-owner-publication.type";
+import {
+	createTopologyClosedEvent,
+	snapshotOwnerState,
+	snapshotRecord,
+} from "@/modules/owner/utils/snapshot-rpc-publication.util";
 import type {
 	IRpcPeer,
 	IRpcPeerHost,
@@ -31,8 +36,6 @@ import type {
 	RpcPeerState,
 	RpcPeerStateView,
 } from "@/modules/peer";
-import { RpcCloseOutcomeEnum } from "@/shared/enums/rpc-close-outcome.enum";
-import { RpcEventTypeEnum } from "@/shared/enums/rpc-event-type.enum";
 import { RpcStateStatusEnum } from "@/shared/enums/rpc-state-status.enum";
 
 export type CreateRpcConnectorPublisherOptions = Readonly<{
@@ -45,22 +48,7 @@ export type CreateRpcAcceptorPublisherOptions = Readonly<{
 
 export { RpcAcceptorPublisherImpl, RpcConnectorPublisherImpl };
 
-type RpcConnectorFinalState = Extract<
-	RpcConnectorState,
-	{ readonly status: RpcStateStatusEnum.closed }
->;
-
-type RpcAcceptorFinalState = Extract<
-	RpcAcceptorState,
-	{ readonly status: RpcStateStatusEnum.closed }
->;
-
-type RpcOwnerFinalState = RpcConnectorFinalState | RpcAcceptorFinalState;
-
-type RpcTopologyClosedEvent = Extract<
-	RpcEvent,
-	{ readonly type: RpcEventTypeEnum.topologyClosed }
->;
+type RpcOwnerFinalState = RpcConnectorClosedState | RpcAcceptorClosedState;
 
 type RpcPublisherPublication<TOwnerState> = Readonly<{
 	readonly state?: TOwnerState;
@@ -90,7 +78,6 @@ type RpcPreparedPeerPublication = Readonly<{
 type RpcPreparedPublication<TOwnerState> = Readonly<{
 	readonly state: TOwnerState | undefined;
 	readonly role: RpcPreparedRolePublication | undefined;
-	readonly peers: readonly IRpcPeer[] | undefined;
 	readonly peerStates: readonly RpcPreparedPeerPublication[];
 	readonly events: readonly RpcEvent[];
 }>;
@@ -99,7 +86,6 @@ abstract class RpcOwnerPublisherImpl<
 	TOwnerState,
 	TFinalState extends TOwnerState & RpcOwnerFinalState,
 	TPublication extends RpcPublisherPublication<TOwnerState>,
-	TCommit extends RpcOwnerCommit<TPublication>,
 > {
 	readonly #stateSubject = new ReplaySubject<TOwnerState>(1);
 	readonly #eventSubject = new Subject<RpcEvent>();
@@ -112,12 +98,7 @@ abstract class RpcOwnerPublisherImpl<
 	readonly state$: Observable<TOwnerState>;
 	readonly event$: Observable<RpcEvent>;
 	readonly callEventSink: RpcCallEventSink = (event) => {
-		const snapshot = snapshotRecord(event, "RPC call event");
-		if (this.#capturedCallEvents === undefined) {
-			this.#eventSubject.next(snapshot);
-			return;
-		}
-		this.#capturedCallEvents.push(snapshot);
+		this.#publishCallEvent(snapshotRecord(event, "RPC call event"));
 	};
 
 	protected constructor(initialState: TOwnerState) {
@@ -163,7 +144,7 @@ abstract class RpcOwnerPublisherImpl<
 		}
 	}
 
-	enqueue(decide: () => TCommit | undefined): void {
+	enqueue(decide: () => RpcOwnerCommit<TPublication> | undefined): void {
 		this.#enqueue(() => {
 			if (this.#finished) {
 				return;
@@ -204,7 +185,7 @@ abstract class RpcOwnerPublisherImpl<
 
 	protected completeRole(): void {}
 
-	#applyCommit(commit: TCommit): void {
+	#applyCommit(commit: RpcOwnerCommit<TPublication>): void {
 		const prepared = this.#preparePublication(commit.publication);
 		const apply = commit.apply;
 		const parentCapture = this.#capturedCallEvents;
@@ -287,7 +268,6 @@ abstract class RpcOwnerPublisherImpl<
 		return {
 			state,
 			role: this.prepareRolePublication(peers),
-			peers,
 			peerStates,
 			events,
 		};
@@ -441,9 +421,8 @@ abstract class RpcOwnerPublisherImpl<
 class RpcConnectorPublisherImpl
 	extends RpcOwnerPublisherImpl<
 		RpcConnectorState,
-		RpcConnectorFinalState,
-		RpcConnectorPublication,
-		RpcConnectorCommit
+		RpcConnectorClosedState,
+		RpcConnectorPublication
 	>
 	implements IRpcConnectorPublisher
 {
@@ -464,9 +443,8 @@ class RpcConnectorPublisherImpl
 class RpcAcceptorPublisherImpl
 	extends RpcOwnerPublisherImpl<
 		RpcAcceptorState,
-		RpcAcceptorFinalState,
-		RpcAcceptorPublication,
-		RpcAcceptorCommit
+		RpcAcceptorClosedState,
+		RpcAcceptorPublication
 	>
 	implements IRpcAcceptorPublisher
 {
@@ -506,41 +484,4 @@ class RpcAcceptorPublisherImpl
 	protected override completeRole(): void {
 		this.#peersSubject.complete();
 	}
-}
-
-function snapshotOwnerState<T>(state: T): T {
-	const snapshot = snapshotRecord(state, "RPC Owner state") as T & {
-		readonly listener?: unknown;
-	};
-	if (snapshot.listener === undefined) {
-		return snapshot;
-	}
-	return Object.freeze({
-		...snapshot,
-		listener: snapshotRecord(snapshot.listener, "RPC Acceptor listener state"),
-	}) as T;
-}
-
-function snapshotRecord<T>(value: T, label: string): T {
-	if (typeof value !== "object" || value === null) {
-		throw new TypeError(`${label} must be an object.`);
-	}
-	return Object.freeze({ ...value }) as T;
-}
-
-function createTopologyClosedEvent(
-	state: RpcOwnerFinalState,
-): RpcTopologyClosedEvent {
-	if (state.outcome === RpcCloseOutcomeEnum.normal) {
-		return {
-			type: RpcEventTypeEnum.topologyClosed,
-			outcome: RpcCloseOutcomeEnum.normal,
-			reason: state.reason,
-		};
-	}
-	return {
-		type: RpcEventTypeEnum.topologyClosed,
-		outcome: RpcCloseOutcomeEnum.failed,
-		reason: state.reason,
-	};
 }

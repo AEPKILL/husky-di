@@ -11,12 +11,17 @@ export default createVitestConfig(import.meta.url, {
 		include: ["tests/**/*.test.ts"],
 		exclude: [
 			"tests/browser/**",
+			// The normative entry imports these suites so each case runs once.
+			"tests/specification/**",
 			"tests/types/**",
 			...(process.env.RPC_PACKAGE_TEST ? [] : ["tests/package/**"]),
 		],
 		passWithNoTests: true,
 		typecheck: {
-			include: ["tests/specification.test.ts", "tests/types/**/*.test-d.ts"],
+			include: [
+				"tests/specification/**/*.test.ts",
+				"tests/types/**/*.test-d.ts",
+			],
 			tsconfig: "tests/tsconfig.json",
 		},
 	},

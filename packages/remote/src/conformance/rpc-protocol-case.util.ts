@@ -5,6 +5,7 @@
  */
 
 import { Observable, Subject } from "rxjs";
+import type { IRpcProtocolCaseScope } from "@/conformance/interfaces/rpc-protocol-case-lifetime.interface";
 import { assertRpcConformance } from "@/conformance/rpc-conformance.util";
 import type {
 	ProtocolHostProbe,
@@ -21,6 +22,7 @@ import type {
 	IRpcProtocolRuntimePolicy,
 	IRpcProtocolSession,
 	IRpcProtocolSessionHost,
+	RpcCallOutcome,
 	RpcIncomingTerminal,
 	RpcProtocolFaultReason,
 	RpcProtocolSessionTransition,
@@ -33,6 +35,7 @@ import {
 	rpcApplicationValuesEqual,
 } from "@/modules/protocol";
 import type { IRpcConnection } from "@/modules/transport";
+import { isCallable } from "@/shared/utils/type-guard.util";
 export function createConnectorHostProbe(): {
 	readonly host: IRpcProtocolConnectorHost;
 	readonly calls: number;
@@ -254,6 +257,40 @@ export function createTrackedTransport(
 		connectorIngress,
 	);
 	return transport;
+}
+
+export async function invokeProtocolCase(
+	scope: IRpcProtocolCaseScope,
+	session: IRpcProtocolSession,
+	args: IRpcApplicationArgumentsSnapshot,
+): Promise<RpcCallOutcome> {
+	const { promise: outcome, resolve: finish } =
+		Promise.withResolvers<RpcCallOutcome>();
+	const invocation = session.prepareInvocation(
+		{ service: "service", method: "method", args },
+		finish,
+	);
+	assertRpcConformance(
+		invocation !== undefined,
+		"Invocation capacity was unavailable.",
+	);
+	invocation.start();
+	return scope.waitForTask(outcome, "Invocation sink");
+}
+
+export function guardProtocolCaseHost<
+	T extends IRpcProtocolConnectorHost | IRpcProtocolAcceptorHost,
+>(host: T, isActive: () => boolean): T {
+	return new Proxy(host, {
+		get: (target, key, receiver) => {
+			const value: unknown = Reflect.get(target, key, receiver);
+			if (!isCallable(value)) return value;
+			return (...args: unknown[]) => {
+				if (!isActive()) return undefined;
+				return Reflect.apply(value, target, args);
+			};
+		},
+	});
 }
 
 const CONFORMANCE_POLICY: IRpcProtocolRuntimePolicy = Object.freeze({

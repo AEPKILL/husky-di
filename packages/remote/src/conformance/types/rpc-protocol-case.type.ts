@@ -4,6 +4,9 @@
  * @created 2026-08-19 00:00:00
  */
 
+import type { IRpcProtocolCaseScope } from "@/conformance/interfaces/rpc-protocol-case-lifetime.interface";
+import type { RpcProtocolConformanceCandidate } from "@/conformance/rpc-conformance.type";
+
 import type {
 	IRpcApplicationArgumentsSnapshot,
 	IRpcProtocolAcceptor,
@@ -80,4 +83,10 @@ export type ProtocolPair = {
 	readonly acceptorProbe: ProtocolHostProbe<IRpcProtocolAcceptorHost>;
 	readonly connectorSession: IRpcProtocolSession;
 	readonly transport: TrackedProtocolTransport;
+};
+
+export type ProtocolCase = {
+	readonly caseId: string;
+	readonly candidate?: RpcProtocolConformanceCandidate;
+	run(scope: IRpcProtocolCaseScope): void | Promise<void>;
 };

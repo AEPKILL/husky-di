@@ -5,14 +5,16 @@
  */
 
 import type { Cleanup } from "@husky-di/core";
-import type { Observable, Subscription } from "rxjs";
+import type { Observable } from "rxjs";
 import { RpcAcceptorListenerStopReasonEnum } from "@/modules/owner/enums/rpc-acceptor-listener-stop-reason.enum";
+import { createRpcAcceptorListenerAttempt } from "@/modules/owner/factories/rpc-startup-attempt.factory";
 import type { IRpcAcceptor } from "@/modules/owner/interfaces/rpc-acceptor.interface";
 import type {
 	IRpcOwnerCustody,
-	RpcOwnedCleanup,
 	RpcOwnedConnection,
+	RpcOwnerCustodyFactory,
 } from "@/modules/owner/interfaces/rpc-owner-custody.interface";
+import type { RpcOwnerProtocolAcceptorFactory } from "@/modules/owner/interfaces/rpc-owner-protocol.interface";
 import type { IRpcAcceptorPublisher } from "@/modules/owner/interfaces/rpc-owner-publisher.interface";
 import type {
 	IRpcOwnerTermination,
@@ -23,10 +25,13 @@ import type {
 	RpcAcceptorSessionOwnershipFactory,
 } from "@/modules/owner/interfaces/rpc-session-ownership.interface";
 import type {
+	RpcAcceptorClosedState,
 	RpcAcceptorListenerState,
 	RpcAcceptorState,
 } from "@/modules/owner/types/rpc-caller.type";
 import type { RpcEvent } from "@/modules/owner/types/rpc-event.type";
+import type { RpcAcceptorListenerAttempt } from "@/modules/owner/types/rpc-startup-attempt.type";
+import { parseRpcAcceptorStartup } from "@/modules/owner/utils/parse-rpc-startup.util";
 import type {
 	IRpcHandlerScheduler,
 	IRpcPeer,
@@ -50,21 +55,16 @@ import { RpcExceptionCodeEnum } from "@/shared/enums/rpc-exception-code.enum";
 import { RpcStateStatusEnum } from "@/shared/enums/rpc-state-status.enum";
 import { createRpcException } from "@/shared/factories/rpc-exception.factory";
 import type { IRpcRetainedBytesLedger } from "@/shared/interfaces/rpc-retained-bytes-ledger.interface";
-import {
-	isCallable,
-	isNonNullObject,
-	isUndefined,
-} from "@/shared/utils/type-guard.util";
 
 export type CreateRpcAcceptorImplOptions = Readonly<{
 	readonly policy: IRpcProtocolRuntimePolicy;
 	readonly retainedBytesLedger: IRpcRetainedBytesLedger;
-	readonly custody: IRpcOwnerCustody;
+	readonly createCustody: RpcOwnerCustodyFactory;
 	readonly handlerScheduler: IRpcHandlerScheduler;
 	readonly createSessionOwnership: RpcAcceptorSessionOwnershipFactory;
 	readonly createTermination: RpcOwnerTerminationFactory<RpcAcceptorClosedState>;
 	readonly publisher: IRpcAcceptorPublisher;
-	readonly protocol: IRpcProtocolAcceptor;
+	readonly createProtocol: RpcOwnerProtocolAcceptorFactory;
 }>;
 
 /** Owns Acceptor listener state and its current stable peer membership. */
@@ -89,17 +89,23 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 		const {
 			createSessionOwnership,
 			createTermination,
-			custody,
+			createCustody,
 			handlerScheduler,
 			publisher,
 			policy,
 			retainedBytesLedger,
-			protocol,
+			createProtocol,
 		} = options;
-		this.#protocol = protocol;
-		this.#custody = custody;
 		this.#retainedBytesLedger = retainedBytesLedger;
 		this.#publisher = publisher;
+		const protocol = createProtocol({
+			reserveRetainedBytes: (bytes) => this.reserveRetainedBytes(bytes),
+			fault: (reason, error) => this.protocolFault(reason, error),
+			admitSession: (session) => this.admitProtocolSession(session),
+		});
+		this.#protocol = protocol;
+		const custody = createCustody(() => protocol.cleanup());
+		this.#custody = custody;
 		const termination = createTermination({
 			deadlineMs: policy.shutdownDeadlineMs,
 			gateNewWork: () => {},
@@ -212,69 +218,16 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 				createRpcException(RpcExceptionCodeEnum.unavailable),
 			);
 		}
-		if (!isNonNullObject(adapter)) {
-			return Promise.reject(new TypeError("adapter must be an object."));
-		}
-		const connectionSource = Reflect.get(adapter, "connection$") as unknown;
-		const listen = Reflect.get(adapter, "listen");
-		const subscribe = isUndefined(connectionSource)
-			? undefined
-			: Reflect.get(connectionSource as object, "subscribe");
-		// An Acceptor Adapter must provide callable subscription and listen entrypoints.
-		const adapterShapeIsInvalid = !isCallable(subscribe) || !isCallable(listen);
-		if (adapterShapeIsInvalid) {
-			return Promise.reject(new TypeError("adapter has an invalid shape."));
-		}
-		const validConnectionSource =
-			connectionSource as Observable<IRpcConnection>;
+		const { connection$: validConnectionSource, listen } =
+			parseRpcAcceptorStartup(adapter);
 
 		const {
-			promise: startup,
-			resolve: resolveStartup,
-			reject: rejectStartup,
-		} = Promise.withResolvers<void>();
-		const {
-			promise: adapterStartup,
-			resolve: resolveAdapterStartup,
-			reject: rejectAdapterStartup,
-		} = Promise.withResolvers<void>();
-		let attempt!: RpcAcceptorListenerAttempt;
-		const startupCleanupTask = Promise.race([
-			adapterStartup.then(
-				() => undefined,
-				(error: unknown) => {
-					// Cleanup suppresses only the AbortError produced by its own cancellation.
-					const cleanupFailed =
-						attempt.cleanupRequested &&
-						!(error instanceof DOMException && error.name === "AbortError");
-					if (cleanupFailed) {
-						throw error;
-					}
-				},
-			),
-			// Give a synchronous Adapter abort rejection first claim on cleanup.
-			startup
-				.then(
-					() => undefined,
-					() => undefined,
-				)
-				.then(() => undefined),
-		]);
-		void startupCleanupTask.catch(() => {});
-		const listenerCleanup = this.#custody.ownCleanup(() =>
-			attempt.subscription?.unsubscribe(),
-		);
-		const startupCleanup = this.#custody.ownCleanup(() => startupCleanupTask);
-		attempt = {
-			abortController: new AbortController(),
-			resolve: resolveStartup,
-			reject: rejectStartup,
-			listenerCleanup,
-			startupCleanup,
-			ready: false,
-			terminal: false,
-			cleanupRequested: false,
-		};
+			attempt,
+			startup,
+			adapterStartup,
+			resolveAdapterStartup,
+			rejectAdapterStartup,
+		} = createRpcAcceptorListenerAttempt(this.#custody);
 		this.#listenerAttempt = attempt;
 		this.#commitListener({ status: RpcStateStatusEnum.starting });
 		if (attempt.terminal || this.#listenerAttempt !== attempt) {
@@ -524,21 +477,3 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 		this.#sessionOwnership.protocolFault(reason, error);
 	}
 }
-
-interface RpcAcceptorListenerAttempt {
-	readonly abortController: AbortController;
-	readonly resolve: () => void;
-	readonly reject: (error: unknown) => void;
-	readonly listenerCleanup: RpcOwnedCleanup;
-	readonly startupCleanup: RpcOwnedCleanup;
-	subscription?: Subscription;
-	ready: boolean;
-	terminal: boolean;
-	cleanupRequested: boolean;
-	cleanupBarrier?: Promise<void>;
-}
-
-type RpcAcceptorClosedState = Extract<
-	RpcAcceptorState,
-	{ readonly status: RpcStateStatusEnum.closed }
->;

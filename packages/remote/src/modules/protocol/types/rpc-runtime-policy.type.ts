@@ -9,9 +9,9 @@ import { RPC_PROTECTED_SESSION_BYTES } from "@/modules/protocol/constants/rpc-pr
 import {
 	DEFAULT_RPC_RUNTIME_POLICY,
 	RPC_HANDSHAKE_TRANSIENT_BYTES,
-	RPC_MAX_PLATFORM_TIMER_DELAY_MS,
 	RPC_MIN_RETAINED_BYTES_PER_SESSION,
 } from "@/modules/protocol/constants/rpc-runtime-policy.const";
+import { RPC_MAX_PLATFORM_TIMER_DELAY_MS } from "@/shared/constants/rpc-timer.const";
 
 export type RpcAcceptorRuntimePolicyOptions = Readonly<
 	input<typeof rpcAcceptorRuntimePolicyOptionsSchema>

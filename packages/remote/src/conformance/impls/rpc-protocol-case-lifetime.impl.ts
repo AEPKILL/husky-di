@@ -4,6 +4,8 @@
  * @created 2026-09-05 00:00:00
  */
 
+import { RpcCaseOperationPhaseEnum } from "@/conformance/enums/rpc-case-operation-phase.enum";
+import { RpcCaseOperationException } from "@/conformance/exceptions/rpc-case-operation.exception";
 import type {
 	IRpcProtocolCaseLifetime,
 	IRpcProtocolCaseScope,
@@ -13,11 +15,25 @@ import { assertRpcConformance } from "@/conformance/rpc-conformance.util";
 import {
 	createSessionHostProbe,
 	createTrackedTransport,
+	guardProtocolCaseHost,
 } from "@/conformance/rpc-protocol-case.util";
+import {
+	collectRpcCaseFailures,
+	failRpcCaseOperation,
+	performRpcCaseOperation,
+	readRpcCaseMethod,
+	settleRpcCaseDisposalTasks,
+	trackRpcCaseTask,
+} from "@/conformance/rpc-protocol-case-operation.util";
 import type {
 	ProtocolPair,
 	TrackedProtocolTransport,
 } from "@/conformance/types/rpc-protocol-case.type";
+import type {
+	Operation,
+	RoleResource,
+	TaskRecord,
+} from "@/conformance/types/rpc-protocol-case-lifetime.type";
 import type {
 	IRpcProtocolAcceptor,
 	IRpcProtocolAcceptorHost,
@@ -25,7 +41,7 @@ import type {
 	IRpcProtocolConnectorHost,
 } from "@/modules/protocol";
 import type { IRpcConnection } from "@/modules/transport";
-import { isCallable, isNonNullObject } from "@/shared/utils/type-guard.util";
+import { isNonNullObject } from "@/shared/utils/type-guard.util";
 
 export class RpcProtocolCaseLifetimeImpl
 	implements IRpcProtocolCaseLifetime, IRpcProtocolCaseScope
@@ -72,9 +88,12 @@ export class RpcProtocolCaseLifetimeImpl
 				(error: unknown) => {
 					if (this.#phase !== "work") return;
 					const failure =
-						error instanceof OperationFailure
+						error instanceof RpcCaseOperationException
 							? error.operation
-							: this.#fail(this.#operation(-1, OPERATION_PHASE.work), error);
+							: failRpcCaseOperation(
+									this.#operation(-1, RpcCaseOperationPhaseEnum.work),
+									error,
+								);
 					seal(Date.now() >= this.#deadline ? this.#workTimeout() : failure);
 				},
 			);
@@ -82,17 +101,7 @@ export class RpcProtocolCaseLifetimeImpl
 		clearTimeout(timer);
 		await this.#dispose();
 		this.#phase = "finished";
-		const remaining = this.#operations
-			.filter((operation) => operation.failed && operation !== this.#primary)
-			.sort(
-				(left, right) =>
-					left.resource - right.resource ||
-					left.phase - right.phase ||
-					left.order - right.order,
-			);
-		const failures = (
-			this.#primary === undefined ? remaining : [this.#primary, ...remaining]
-		).map((operation) => operation.error);
+		const failures = collectRpcCaseFailures(this.#operations, this.#primary);
 		// Late task consumers keep only their own settlement record and sealed authority.
 		this.#candidate = undefined;
 		this.#resources.clear();
@@ -125,7 +134,7 @@ export class RpcProtocolCaseLifetimeImpl
 		const index = this.#nextResource++;
 		const operation = this.#operation(
 			index,
-			OPERATION_PHASE.work,
+			RpcCaseOperationPhaseEnum.work,
 			`${kind} construction`,
 		);
 		const candidate = this.#candidate;
@@ -133,16 +142,18 @@ export class RpcProtocolCaseLifetimeImpl
 			candidate !== undefined,
 			"Protocol case has no candidate.",
 		);
-		const role = this.#perform(operation, () =>
-			kind === "connector"
-				? candidate.connector(
-						this.#guardHost(host as IRpcProtocolConnectorHost),
-					)
-				: candidate.acceptor(this.#guardHost(host as IRpcProtocolAcceptorHost)),
-		);
+		const role = performRpcCaseOperation(operation, () => {
+			const guardedHost = guardProtocolCaseHost(
+				host,
+				() => this.#phase === "work" && Date.now() < this.#deadline,
+			);
+			return kind === "connector"
+				? candidate.connector(guardedHost as IRpcProtocolConnectorHost)
+				: candidate.acceptor(guardedHost as IRpcProtocolAcceptorHost);
+		});
 		if (!isNonNullObject(role))
-			throw new OperationFailure(
-				this.#fail(
+			throw new RpcCaseOperationException(
+				failRpcCaseOperation(
 					operation,
 					new Error("Protocol factory must return a role."),
 				),
@@ -160,12 +171,12 @@ export class RpcProtocolCaseLifetimeImpl
 			this.#resources.set(role, resource);
 			for (const member of ["close", "cleanup"] as const) {
 				try {
-					resource[member] = this.#readMethod(
+					resource[member] = readRpcCaseMethod(
 						resource,
 						member,
 						this.#operation(
 							index,
-							OPERATION_PHASE.capabilityRead,
+							RpcCaseOperationPhaseEnum.capabilityRead,
 							`${member} capability`,
 						),
 					);
@@ -177,22 +188,26 @@ export class RpcProtocolCaseLifetimeImpl
 		const invalidCapability = this.#operations.find(
 			(entry) =>
 				entry.resource === resource.index &&
-				entry.phase === OPERATION_PHASE.capabilityRead &&
+				entry.phase === RpcCaseOperationPhaseEnum.capabilityRead &&
 				entry.failed,
 		);
 		if (invalidCapability !== undefined)
-			throw new OperationFailure(invalidCapability);
-		this.#readMethod(
+			throw new RpcCaseOperationException(invalidCapability);
+		readRpcCaseMethod(
 			resource,
 			"shutdown",
-			this.#operation(index, OPERATION_PHASE.work, "shutdown capability"),
+			this.#operation(
+				index,
+				RpcCaseOperationPhaseEnum.work,
+				"shutdown capability",
+			),
 		);
-		this.#readMethod(
+		readRpcCaseMethod(
 			resource,
 			kind === "connector" ? "bind" : "accept",
 			this.#operation(
 				index,
-				OPERATION_PHASE.work,
+				RpcCaseOperationPhaseEnum.work,
 				`${kind} handoff capability`,
 			),
 		);
@@ -271,10 +286,14 @@ export class RpcProtocolCaseLifetimeImpl
 
 	async waitFor(predicate: () => boolean, operation: string): Promise<void> {
 		this.#assertWork();
-		const observation = this.#operation(-1, OPERATION_PHASE.work, operation);
+		const observation = this.#operation(
+			-1,
+			RpcCaseOperationPhaseEnum.work,
+			operation,
+		);
 		for (;;) {
 			this.#assertWork();
-			if (this.#perform(observation, predicate)) return;
+			if (performRpcCaseOperation(observation, predicate)) return;
 			await new Promise<void>((resolve) => setTimeout(resolve, 0));
 		}
 	}
@@ -288,12 +307,12 @@ export class RpcProtocolCaseLifetimeImpl
 			this.#tasks.get(task) ??
 			this.#track(
 				task,
-				this.#operation(-1, OPERATION_PHASE.work, operation),
+				this.#operation(-1, RpcCaseOperationPhaseEnum.work, operation),
 				false,
 			);
 		const result = await record.settlement;
 		this.#assertWork();
-		if (!result.ok) throw new OperationFailure(record.owner);
+		if (!result.ok) throw new RpcCaseOperationException(record.owner);
 		return result.value as T;
 	}
 
@@ -301,23 +320,7 @@ export class RpcProtocolCaseLifetimeImpl
 		if (this.#phase !== "work")
 			throw new Error("Protocol case work is sealed.");
 		if (Date.now() >= this.#deadline)
-			throw new OperationFailure(this.#workTimeout());
-	}
-
-	#guardHost<T extends IRpcProtocolConnectorHost | IRpcProtocolAcceptorHost>(
-		host: T,
-	): T {
-		return new Proxy(host, {
-			get: (target, key, receiver) => {
-				const value: unknown = Reflect.get(target, key, receiver);
-				if (!isCallable(value)) return value;
-				return (...args: unknown[]) => {
-					if (this.#phase !== "work" || Date.now() >= this.#deadline)
-						return undefined;
-					return Reflect.apply(value, target, args);
-				};
-			},
-		});
+			throw new RpcCaseOperationException(this.#workTimeout());
 	}
 
 	#resource(role: object): RoleResource {
@@ -336,17 +339,21 @@ export class RpcProtocolCaseLifetimeImpl
 	): Promise<void> {
 		this.#assertWork();
 		const resource = this.#resource(role);
-		const method = this.#readMethod(
+		const method = readRpcCaseMethod(
 			resource,
 			member,
-			this.#operation(resource.index, OPERATION_PHASE.work, `${member} access`),
+			this.#operation(
+				resource.index,
+				RpcCaseOperationPhaseEnum.work,
+				`${member} access`,
+			),
 		);
 		const operation = this.#operation(
 			resource.index,
-			OPERATION_PHASE.work,
+			RpcCaseOperationPhaseEnum.work,
 			`Protocol ${member}`,
 		);
-		const task = this.#perform(
+		const task = performRpcCaseOperation(
 			operation,
 			() =>
 				Reflect.apply(method, role, [
@@ -358,31 +365,18 @@ export class RpcProtocolCaseLifetimeImpl
 		return task;
 	}
 
-	#readMethod(
-		resource: RoleResource,
-		member: "close" | "cleanup" | "shutdown" | "bind" | "accept",
-		operation: Operation,
-	): (...args: never[]) => unknown {
-		return this.#perform(operation, () => {
-			const method: unknown = Reflect.get(resource.role, member);
-			assertRpcConformance(
-				isCallable(method),
-				`Protocol role is missing ${member}().`,
-			);
-			return method;
-		});
-	}
-
 	#invoke(
 		resource: RoleResource,
 		member: "close" | "cleanup",
 		fallback: boolean,
 	): unknown {
 		const phase =
-			member === "close" ? OPERATION_PHASE.close : OPERATION_PHASE.cleanup;
+			member === "close"
+				? RpcCaseOperationPhaseEnum.close
+				: RpcCaseOperationPhaseEnum.cleanup;
 		const method = fallback
 			? resource[member]
-			: this.#readMethod(
+			: readRpcCaseMethod(
 					resource,
 					member,
 					this.#operation(
@@ -399,7 +393,7 @@ export class RpcProtocolCaseLifetimeImpl
 		);
 		if (member === "close") resource.closeAttempted = true;
 		else resource.cleanupAttempted = true;
-		const result = this.#perform(operation, () =>
+		const result = performRpcCaseOperation(operation, () =>
 			Reflect.apply(method, resource.role, []),
 		);
 		if (member === "cleanup" || isNonNullObject(result))
@@ -412,43 +406,9 @@ export class RpcProtocolCaseLifetimeImpl
 		owner: Operation,
 		disposal: boolean,
 	): TaskRecord {
-		const existing = this.#tasks.get(task);
-		if (existing !== undefined) {
-			existing.disposal ||= disposal;
-			return existing;
-		}
-		this.#perform(owner, () =>
-			assertRpcConformance(
-				isNonNullObject(task) && isCallable(Reflect.get(task, "then")),
-				"Protocol operation did not return a task.",
-			),
+		return trackRpcCaseTask(this.#tasks, task, owner, disposal, (record) =>
+			this.#admitsSettlement(record),
 		);
-		const record: TaskRecord = {
-			owner,
-			disposal,
-			result: undefined,
-			settledAt: undefined,
-			settlement: Promise.resolve({ ok: true, value: undefined }),
-		};
-		this.#tasks.set(task, record);
-		record.settlement = Promise.resolve(task).then(
-			(value) => {
-				const result = { ok: true, value } as const;
-				record.result = result;
-				record.settledAt = Date.now();
-				return result;
-			},
-			(error: unknown) => {
-				const result = { ok: false, error } as const;
-				record.result = result;
-				record.settledAt = Date.now();
-				if (this.#admitsSettlement(record)) {
-					this.#fail(owner, error);
-				}
-				return result;
-			},
-		);
-		return record;
 	}
 
 	#admitsSettlement(record: TaskRecord): boolean {
@@ -472,10 +432,12 @@ export class RpcProtocolCaseLifetimeImpl
 			}
 		}
 		for (const { index, transport } of this.#transports) {
-			const operation = this.#operation(index, OPERATION_PHASE.close);
+			const operation = this.#operation(index, RpcCaseOperationPhaseEnum.close);
 			try {
 				this.#track(
-					this.#perform(operation, () => transport.connectorConnection.close()),
+					performRpcCaseOperation(operation, () =>
+						transport.connectorConnection.close(),
+					),
 					operation,
 					true,
 				);
@@ -492,38 +454,12 @@ export class RpcProtocolCaseLifetimeImpl
 			}
 		}
 		const tasks = [...this.#tasks.values()].filter((record) => record.disposal);
-		let timer: ReturnType<typeof setTimeout> | undefined;
-		await Promise.race([
-			Promise.all(tasks.map((record) => record.settlement)),
-			new Promise<void>((resolve) => {
-				timer = setTimeout(resolve, Math.max(0, deadline - Date.now()));
-			}),
-		]);
-		if (timer !== undefined) clearTimeout(timer);
-		for (const task of tasks) {
-			const result = task.result;
-			if (
-				result === undefined ||
-				task.settledAt === undefined ||
-				task.settledAt >= deadline
-			) {
-				this.#fail(
-					task.owner,
-					new Error(
-						`${task.owner.label} did not settle before the disposal deadline.`,
-					),
-				);
-			} else if (!result.ok) {
-				// Cleanup may already have settled between the work cutoff and seal,
-				// or reuse a task first returned by a handoff. Keep that settlement.
-				this.#fail(task.owner, result.error);
-			}
-		}
+		await settleRpcCaseDisposalTasks(tasks, deadline);
 	}
 
 	#operation(
 		resource: number,
-		phase: OperationPhase,
+		phase: RpcCaseOperationPhaseEnum,
 		label = "Protocol case operation",
 	): Operation {
 		const operation: Operation = {
@@ -538,70 +474,13 @@ export class RpcProtocolCaseLifetimeImpl
 		return operation;
 	}
 
-	#perform<T>(operation: Operation, action: () => T): T {
-		try {
-			return action();
-		} catch (error) {
-			throw new OperationFailure(this.#fail(operation, error));
-		}
-	}
-
-	#fail(operation: Operation, error: unknown): Operation {
-		if (!operation.failed) {
-			operation.failed = true;
-			operation.error = error;
-		}
-		return operation;
-	}
-
 	#workTimeout(): Operation {
-		this.#timeout ??= this.#fail(
-			this.#operation(-1, OPERATION_PHASE.work),
+		this.#timeout ??= failRpcCaseOperation(
+			this.#operation(-1, RpcCaseOperationPhaseEnum.work),
 			new Error("Protocol case work did not settle before its deadline."),
 		);
 		return this.#timeout;
 	}
 }
 
-type OperationPhase = (typeof OPERATION_PHASE)[keyof typeof OPERATION_PHASE];
-
-type Operation = {
-	readonly resource: number;
-	readonly phase: OperationPhase;
-	readonly label: string;
-	readonly order: number;
-	failed: boolean;
-	error: unknown;
-};
-type RoleResource = {
-	readonly index: number;
-	readonly role: object;
-	close: ((...args: never[]) => unknown) | undefined;
-	cleanup: ((...args: never[]) => unknown) | undefined;
-	closeAttempted: boolean;
-	cleanupAttempted: boolean;
-};
-type TaskResult =
-	| { readonly ok: true; readonly value: unknown }
-	| { readonly ok: false; readonly error: unknown };
-type TaskRecord = {
-	readonly owner: Operation;
-	disposal: boolean;
-	result: TaskResult | undefined;
-	settledAt: number | undefined;
-	settlement: Promise<TaskResult>;
-};
-
 const CASE_TIMEOUT_MS = 2_000;
-const OPERATION_PHASE = {
-	capabilityRead: 0,
-	work: 1,
-	close: 2,
-	cleanup: 3,
-} as const;
-
-class OperationFailure extends Error {
-	constructor(readonly operation: Operation) {
-		super("Protocol case operation failed.");
-	}
-}

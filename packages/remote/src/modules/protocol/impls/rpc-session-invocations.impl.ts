@@ -23,9 +23,9 @@ import type {
 	RpcCallMessage,
 	RpcErrorMessage,
 	RpcJsonRecord,
-	RpcMessageEnvelope,
 	RpcResultMessage,
 } from "@/modules/protocol/types/rpc-wire-record.type";
+import { createRpcMessageEnvelope } from "@/modules/protocol/utils/rpc-message-envelope.util";
 import { RpcCloseReasonEnum } from "@/shared/enums/rpc-close-reason.enum";
 import { RpcExceptionCodeEnum } from "@/shared/enums/rpc-exception-code.enum";
 
@@ -191,20 +191,11 @@ export class RpcSessionInvocationsImpl implements IRpcSessionInvocations {
 		}
 		let encoded: Uint8Array;
 		try {
-			const envelope = (
-				admission.ackThrough === undefined
-					? {
-							kind: RpcWireRecordKindEnum.message,
-							seq: admission.sequence,
-							message,
-						}
-					: {
-							kind: RpcWireRecordKindEnum.message,
-							seq: admission.sequence,
-							ackThrough: admission.ackThrough,
-							message,
-						}
-			) as RpcMessageEnvelope;
+			const envelope = createRpcMessageEnvelope(
+				admission.sequence,
+				message,
+				admission.ackThrough,
+			);
 			encoded = this._codec.encode(envelope);
 		} catch {
 			let guardedReplay: IRpcReplayReservation | undefined = replay;

@@ -17,8 +17,12 @@ import type {
 import {
 	createRpcSessionActivity,
 	createRpcSessionCallRetention,
+	createRpcSessionConnection,
+	createRpcSessionContinuity,
+	createRpcSessionDelivery,
 	createRpcSessionIncomingCalls,
 	createRpcSessionInvocations,
+	createRpcSessionShutdown,
 	normalizeRpcApplicationArguments,
 	normalizeRpcApplicationValue,
 	RpcCodecImpl,
@@ -156,6 +160,10 @@ export function createRpcDirectSessionHarness(
 			codec,
 			createActivity: createRpcSessionActivity,
 			createCallRetention: createRpcSessionCallRetention,
+			createConnection: createRpcSessionConnection,
+			createContinuity: createRpcSessionContinuity,
+			createDelivery: createRpcSessionDelivery,
+			createShutdown: createRpcSessionShutdown,
 			createIncomingCalls: createRpcSessionIncomingCalls,
 			createInvocations,
 			retainedBytesLedger: new RpcRetainedBytesLedgerImpl(

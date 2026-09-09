@@ -2253,7 +2253,7 @@ browser (`BR`), or instrumentation/fuzz/review (`IR`). Before release no require
 missing, or skipped.
 
 **RPC-EVIDENCE-003 — Normative runtime entry.** `packages/remote/tests/specification.test.ts` **MUST** be the
-top-level caller-facing normative suite. It **MAY** import split fixtures, but every test name **MUST** include
+top-level caller-facing normative suite. It **MAY** import split suites and fixtures, but every test name **MUST** include
 the corresponding requirement/case ID and observe only public caller, Protocol, or Adapter seams. It
 **MUST NOT** assert private class layout, private scheduler turns, or incidental microtask count.
 

@@ -1,18 +1,26 @@
 /**
- * @overview Shared resource assembly, policy validation, and construction-safe Protocol hosts for RPC Owners.
+ * @overview Assembles Owner resources and guarded Protocol roles from constructor-injected host capabilities.
  * @author AEPKILL
  * @created 2026-09-05 00:00:00
  */
 
 import { RpcHandlerSchedulerImpl } from "@/modules/owner/impls/rpc-handler-scheduler.impl";
 import { RpcOwnerCustodyImpl } from "@/modules/owner/impls/rpc-owner-custody.impl";
+import type { RpcOwnerCustodyFactory } from "@/modules/owner/interfaces/rpc-owner-custody.interface";
+import type {
+	IRpcOwnerProtocolAcceptorPorts,
+	IRpcOwnerProtocolConnectorPorts,
+	IRpcOwnerProtocolPorts,
+} from "@/modules/owner/interfaces/rpc-owner-protocol.interface";
 import type {
 	IRpcProtocolAcceptor,
+	IRpcProtocolAcceptorHost,
 	IRpcProtocolConnector,
+	IRpcProtocolConnectorHost,
 	IRpcProtocolHost,
 	IRpcProtocolRuntimePolicy,
-	IRpcRetainedBytesReservation,
-	RpcProtocolFaultReason,
+	RpcProtocolAcceptorFactory,
+	RpcProtocolConnectorFactory,
 } from "@/modules/protocol";
 import {
 	normalizeRpcApplicationArguments,
@@ -26,20 +34,43 @@ import { createRpcException } from "@/shared/factories/rpc-exception.factory";
 import { RpcRetainedBytesLedgerImpl } from "@/shared/impls/rpc-retained-bytes-ledger.impl";
 import { isCallable, isNonNullObject } from "@/shared/utils/type-guard.util";
 
-/** Creates the guarded host shared by both Owner roles during Protocol assembly. */
-export function createRpcOwnerProtocolHost<
-	TOwner extends IRpcOwnerProtocolPorts,
->(policy: IRpcProtocolRuntimePolicy) {
-	const readiness = new RpcOwnerReadiness<TOwner>();
-	return {
-		host: createHostBase(policy, readiness),
-		activate: (owner: TOwner): void => readiness.activate(owner),
-		assertConstructionSafe: (): void => readiness.assertConstructionSafe(),
-		readDuringRuntime: <TResult>(
-			operation: (owner: TOwner) => TResult,
-			constructionResult: TResult,
-		): TResult => readiness.readDuringRuntime(operation, constructionResult),
-	};
+/** Creates and validates a Connector Protocol with its host dependencies fixed. */
+export function createRpcOwnerProtocolConnector(
+	policy: IRpcProtocolRuntimePolicy,
+	factory: RpcProtocolConnectorFactory,
+	ports: IRpcOwnerProtocolConnectorPorts,
+): IRpcProtocolConnector {
+	return constructProtocol(
+		factory,
+		(guard) =>
+			Object.freeze<IRpcProtocolConnectorHost>({
+				...createHostBase(policy, ports, guard),
+				attachSession: (session) =>
+					guard.readDuringRuntime(
+						() => ports.attachSession(session),
+						undefined,
+					),
+			}),
+		["bind", "shutdown", "close", "cleanup"],
+	);
+}
+
+/** Creates and validates an Acceptor Protocol with its host dependencies fixed. */
+export function createRpcOwnerProtocolAcceptor(
+	policy: IRpcProtocolRuntimePolicy,
+	factory: RpcProtocolAcceptorFactory,
+	ports: IRpcOwnerProtocolAcceptorPorts,
+): IRpcProtocolAcceptor {
+	return constructProtocol(
+		factory,
+		(guard) =>
+			Object.freeze<IRpcProtocolAcceptorHost>({
+				...createHostBase(policy, ports, guard),
+				admitSession: (session) =>
+					guard.readDuringRuntime(() => ports.admitSession(session), undefined),
+			}),
+		["accept", "shutdown", "close", "cleanup"],
+	);
 }
 
 export function parseRpcOwnerPolicy(
@@ -54,17 +85,14 @@ export function parseRpcOwnerPolicy(
 	return policyResult.data;
 }
 
-export function createRpcOwnerResources(
-	policy: IRpcProtocolRuntimePolicy,
-	protocol: RpcProtocolRole,
-) {
+export function createRpcOwnerResources(policy: IRpcProtocolRuntimePolicy) {
+	const createCustody: RpcOwnerCustodyFactory = (cleanupProtocol) =>
+		new RpcOwnerCustodyImpl(policy.shutdownDeadlineMs, cleanupProtocol);
 	return {
 		retainedBytesLedger: new RpcRetainedBytesLedgerImpl(
 			policy.maxRetainedBytesTotal,
 		),
-		custody: new RpcOwnerCustodyImpl(policy.shutdownDeadlineMs, () =>
-			protocol.cleanup(),
-		),
+		createCustody,
 		handlerScheduler: new RpcHandlerSchedulerImpl(
 			policy.maxHandlersTotal,
 			policy.maxHandlersPerSession,
@@ -72,7 +100,15 @@ export function createRpcOwnerResources(
 	};
 }
 
-export function validateRpcOwnerProtocol(
+interface IRpcProtocolConstructionGuard {
+	invoke<TResult>(operation: () => TResult): TResult;
+	readDuringRuntime<TResult>(
+		operation: () => TResult,
+		constructionResult: TResult,
+	): TResult;
+}
+
+function validateRpcOwnerProtocol(
 	protocol: unknown,
 	members: readonly string[],
 ): void {
@@ -86,38 +122,25 @@ export function validateRpcOwnerProtocol(
 	}
 }
 
-export function createRpcOwnerProtocolException(error: unknown): Error {
-	return createRpcException(
-		RpcExceptionCodeEnum.protocol,
-		error instanceof Error ? error : new Error("Protocol construction failed."),
-	);
-}
-
-interface IRpcOwnerProtocolPorts {
-	reserveRetainedBytes(bytes: number): IRpcRetainedBytesReservation | undefined;
-	protocolFault(reason: RpcProtocolFaultReason, error: Error): void;
-}
-
-type RpcProtocolRole = IRpcProtocolConnector | IRpcProtocolAcceptor;
-
-function createHostBase<TOwner extends IRpcOwnerProtocolPorts>(
+function createHostBase(
 	policy: IRpcProtocolRuntimePolicy,
-	readiness: RpcOwnerReadiness<TOwner>,
+	ports: IRpcOwnerProtocolPorts,
+	guard: IRpcProtocolConstructionGuard,
 ): IRpcProtocolHost {
 	return {
 		policy,
 		reserveRetainedBytes: (bytes) =>
-			readiness.invoke((owner) => owner.reserveRetainedBytes(bytes)),
+			guard.invoke(() => ports.reserveRetainedBytes(bytes)),
 		normalizeApplicationValue: (value) =>
-			readiness.invoke(() => normalizeRpcApplicationValue(value)),
+			guard.invoke(() => normalizeRpcApplicationValue(value)),
 		normalizeApplicationArguments: (value) =>
-			readiness.invoke(() => normalizeRpcApplicationArguments(value)),
+			guard.invoke(() => normalizeRpcApplicationArguments(value)),
 		applicationValuesEqual: (left, right) =>
-			readiness.invoke((owner) => {
+			guard.invoke(() => {
 				try {
 					return rpcApplicationValuesEqual(left, right);
 				} catch (error) {
-					owner.protocolFault(
+					ports.fault(
 						RpcCloseReasonEnum.protocolFault,
 						error instanceof Error
 							? error
@@ -126,46 +149,53 @@ function createHostBase<TOwner extends IRpcOwnerProtocolPorts>(
 					return false;
 				}
 			}),
-		fault: (reason, error) =>
-			readiness.invoke((owner) => owner.protocolFault(reason, error)),
+		fault: (reason, error) => guard.invoke(() => ports.fault(reason, error)),
 	};
 }
 
-class RpcOwnerReadiness<TOwner> {
-	#owner!: TOwner;
-	#ready = false;
-	#constructionViolated = false;
-
-	activate(owner: TOwner): void {
-		this.assertConstructionSafe();
-		this.#owner = owner;
-		this.#ready = true;
-	}
-
-	assertConstructionSafe(): void {
-		if (this.#constructionViolated) {
+function constructProtocol<THost, TProtocol>(
+	factory: (host: THost) => TProtocol,
+	createHost: (guard: IRpcProtocolConstructionGuard) => THost,
+	members: readonly string[],
+): TProtocol {
+	let constructing = true;
+	let constructionViolated = false;
+	const guard: IRpcProtocolConstructionGuard = {
+		invoke: (operation) => {
+			if (constructing) {
+				constructionViolated = true;
+				throw new TypeError(
+					"Protocol host ports cannot be called during construction.",
+				);
+			}
+			return operation();
+		},
+		readDuringRuntime: (operation, constructionResult) => {
+			if (constructing) {
+				constructionViolated = true;
+				return constructionResult;
+			}
+			return operation();
+		},
+	};
+	try {
+		if (!isCallable(factory)) {
+			throw new TypeError("protocolFactory must be callable.");
+		}
+		const protocol = factory(createHost(guard));
+		validateRpcOwnerProtocol(protocol, members);
+		if (constructionViolated) {
 			throw new TypeError("Protocol mutated its host during construction.");
 		}
-	}
-
-	invoke<TResult>(operation: (owner: TOwner) => TResult): TResult {
-		if (!this.#ready) {
-			this.#constructionViolated = true;
-			throw new TypeError(
-				"Protocol host ports cannot be called during construction.",
-			);
-		}
-		return operation(this.#owner);
-	}
-
-	readDuringRuntime<TResult>(
-		operation: (owner: TOwner) => TResult,
-		constructionResult: TResult,
-	): TResult {
-		if (!this.#ready) {
-			this.#constructionViolated = true;
-			return constructionResult;
-		}
-		return operation(this.#owner);
+		// Only a successfully validated role may use the already-bound host ports.
+		constructing = false;
+		return protocol;
+	} catch (error) {
+		throw createRpcException(
+			RpcExceptionCodeEnum.protocol,
+			error instanceof Error
+				? error
+				: new Error("Protocol construction failed."),
+		);
 	}
 }

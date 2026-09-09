@@ -6,6 +6,10 @@
 
 import type { IRpcConnection } from "@/modules/transport";
 
+export type RpcOwnerCustodyFactory = (
+	cleanupProtocol: () => unknown,
+) => IRpcOwnerCustody;
+
 export type RpcOwnedConnection = {
 	readonly connection: IRpcConnection;
 	directClose(): Promise<void>;

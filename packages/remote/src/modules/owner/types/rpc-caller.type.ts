@@ -70,6 +70,39 @@ export type RpcAcceptorOptions = Readonly<
 	input<typeof rpcAcceptorOptionsSchema>
 >;
 
+export type RpcConnectorClosedState =
+	| Extract<RpcPeerState, { readonly status: RpcStateStatusEnum.closed }>
+	| {
+			readonly status: RpcStateStatusEnum.closed;
+			readonly outcome: RpcCloseOutcomeEnum.failed;
+			readonly reason: RpcCloseReasonEnum.cleanupFailed;
+			readonly error: Error;
+	  };
+
+export type RpcAcceptorClosedState =
+	| {
+			readonly status: RpcStateStatusEnum.closed;
+			readonly outcome: RpcCloseOutcomeEnum.normal;
+			readonly reason:
+				| RpcCloseReasonEnum.gracefulShutdown
+				| RpcCloseReasonEnum.forcedClose
+				| RpcCloseReasonEnum.shutdownDeadline;
+	  }
+	| {
+			readonly status: RpcStateStatusEnum.closed;
+			readonly outcome: RpcCloseOutcomeEnum.failed;
+			readonly reason: RpcProtocolFaultReason;
+			readonly error: RpcException & {
+				readonly code: RpcExceptionCodeEnum.protocol;
+			};
+	  }
+	| {
+			readonly status: RpcStateStatusEnum.closed;
+			readonly outcome: RpcCloseOutcomeEnum.failed;
+			readonly reason: RpcCloseReasonEnum.cleanupFailed;
+			readonly error: Error;
+	  };
+
 export const rpcConnectorOptionsObjectSchema = z.strictObject({
 	protocolFactory: z.custom<RpcProtocolConnectorFactory>().optional(),
 	runtimePolicy: rpcConnectorRuntimePolicyOptionsSchema.prefault({}),
@@ -161,36 +194,3 @@ export const rpcConnectorObservableSchema = z.custom<
 );
 
 export const rpcConnectorCallableSchema = z.function();
-
-type RpcConnectorClosedState =
-	| Extract<RpcPeerState, { readonly status: RpcStateStatusEnum.closed }>
-	| {
-			readonly status: RpcStateStatusEnum.closed;
-			readonly outcome: RpcCloseOutcomeEnum.failed;
-			readonly reason: RpcCloseReasonEnum.cleanupFailed;
-			readonly error: Error;
-	  };
-
-type RpcAcceptorClosedState =
-	| {
-			readonly status: RpcStateStatusEnum.closed;
-			readonly outcome: RpcCloseOutcomeEnum.normal;
-			readonly reason:
-				| RpcCloseReasonEnum.gracefulShutdown
-				| RpcCloseReasonEnum.forcedClose
-				| RpcCloseReasonEnum.shutdownDeadline;
-	  }
-	| {
-			readonly status: RpcStateStatusEnum.closed;
-			readonly outcome: RpcCloseOutcomeEnum.failed;
-			readonly reason: RpcProtocolFaultReason;
-			readonly error: RpcException & {
-				readonly code: RpcExceptionCodeEnum.protocol;
-			};
-	  }
-	| {
-			readonly status: RpcStateStatusEnum.closed;
-			readonly outcome: RpcCloseOutcomeEnum.failed;
-			readonly reason: RpcCloseReasonEnum.cleanupFailed;
-			readonly error: Error;
-	  };

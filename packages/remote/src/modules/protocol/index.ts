@@ -73,6 +73,10 @@ export {
 	createRpcProtocolAcceptor,
 	createRpcProtocolConnector,
 	createRpcSessionActivity,
+	createRpcSessionConnection,
+	createRpcSessionContinuity,
+	createRpcSessionDelivery,
+	createRpcSessionShutdown,
 	createRpcSessionCallRetention,
 	createRpcSessionIncomingCalls,
 	createRpcSessionInvocations,
@@ -113,3 +117,6 @@ export { RpcSessionImpl } from "./impls/rpc-session.impl";
 export { RpcSessionInvocationsImpl } from "./impls/rpc-session-invocations.impl";
 export { rpcWireIdentifierSchema } from "./schemas/rpc-wire-identifier.schema";
 export { RpcWireRecordKindEnum } from "./enums/rpc-wire-record-kind.enum";
+
+export { RpcSessionContinuityImpl } from "./impls/rpc-session-continuity.impl";
+export { RpcSessionDeliveryImpl } from "./impls/rpc-session-delivery.impl";

@@ -5,11 +5,9 @@
  */
 
 import {
-	createRpcOwnerProtocolException,
-	createRpcOwnerProtocolHost,
+	createRpcOwnerProtocolConnector,
 	createRpcOwnerResources,
 	parseRpcOwnerPolicy,
-	validateRpcOwnerProtocol,
 } from "@/modules/owner/factories/rpc-owner-assembly.factory";
 import { createRpcOwnerTermination } from "@/modules/owner/factories/rpc-owner-termination.factory";
 import { createRpcConnectorSessionOwnership } from "@/modules/owner/factories/rpc-session-ownership.factory";
@@ -21,78 +19,37 @@ import {
 	rpcConnectorOptionsSchema,
 } from "@/modules/owner/types/rpc-caller.type";
 import type {
-	IRpcProtocolConnector,
 	IRpcProtocolRuntimePolicy,
-	IRpcProtocolSession,
-	IRpcProtocolSessionHost,
-	IRpcRetainedBytesReservation,
 	RpcProtocolConnectorFactory,
-	RpcProtocolFaultReason,
 } from "@/modules/protocol";
 import {
 	createRpcProtocolConnector,
 	DEFAULT_RPC_RUNTIME_POLICY,
 } from "@/modules/protocol";
 import { RpcStateStatusEnum } from "@/shared/enums/rpc-state-status.enum";
-import { isCallable } from "@/shared/utils/type-guard.util";
 
 /** Creates a cold Connector without starting transport I/O. */
 export function createRpcConnector(
 	options?: RpcConnectorOptions,
 ): IRpcConnector {
 	const parsed = parseConnectorOptions(options);
-	const construction = createRpcOwnerProtocolHost<IRpcConnectorProtocolPorts>(
-		parsed.policy,
-	);
-	let protocol: IRpcProtocolConnector;
-	try {
-		const factory =
-			parsed.protocolFactory === undefined
-				? createRpcProtocolConnector
-				: parsed.protocolFactory;
-		if (!isCallable(factory)) {
-			throw new TypeError("protocolFactory must be callable.");
-		}
-		protocol = factory(
-			Object.freeze({
-				...construction.host,
-				attachSession: (session: IRpcProtocolSession) =>
-					construction.readDuringRuntime(
-						(owner) => owner.attachSession(session),
-						undefined,
-					),
-			}),
-		);
-		validateRpcOwnerProtocol(protocol, [
-			"bind",
-			"shutdown",
-			"close",
-			"cleanup",
-		]);
-		construction.assertConstructionSafe();
-	} catch (error) {
-		throw createRpcOwnerProtocolException(error);
-	}
-	const owner = new RpcConnectorImpl({
-		protocol,
+	return new RpcConnectorImpl({
+		createProtocol: (ports) =>
+			createRpcOwnerProtocolConnector(
+				parsed.policy,
+				parsed.protocolFactory === undefined
+					? createRpcProtocolConnector
+					: parsed.protocolFactory,
+				ports,
+			),
 		policy: parsed.policy,
 		publisher: new RpcConnectorPublisherImpl({
 			initialState: Object.freeze({ status: RpcStateStatusEnum.active }),
 		}),
-		...createRpcOwnerResources(parsed.policy, protocol),
+		...createRpcOwnerResources(parsed.policy),
 		createSessionOwnership: createRpcConnectorSessionOwnership,
 		createTermination: createRpcOwnerTermination,
 	});
-	construction.activate(owner);
-	return owner;
-}
-
-interface IRpcConnectorProtocolPorts {
-	reserveRetainedBytes(bytes: number): IRpcRetainedBytesReservation | undefined;
-	protocolFault(reason: RpcProtocolFaultReason, error: Error): void;
-	attachSession(
-		session: IRpcProtocolSession,
-	): IRpcProtocolSessionHost | undefined;
 }
 
 function parseConnectorOptions(options: RpcConnectorOptions | undefined): {

@@ -9,6 +9,8 @@ import type {
 	IRpcRetainedBytesReservation,
 } from "@/modules/protocol/interfaces/rpc-protocol.interface";
 
+import type { IRpcRetainedBytesLedger } from "@/shared/interfaces/rpc-retained-bytes-ledger.interface";
+
 /** Registers the built-in Session's private aggregate reservation port. */
 export function registerRpcSessionRetainedBytes(
 	session: IRpcProtocolSession,
@@ -40,6 +42,41 @@ export function reserveRpcSessionRetainedBytes(
 		return reserveSessionRetainedBytes(bytes);
 	}
 	return reserveOwnerRetainedBytes(bytes);
+}
+
+/** Acquires Session and Owner capacity atomically and releases both idempotently. */
+export function reserveRpcSessionAndOwnerRetainedBytes(
+	sessionLedger: IRpcRetainedBytesLedger,
+	reserveOwner: RpcSessionRetainedBytesReserve,
+	bytes: number,
+): IRpcRetainedBytesReservation | undefined {
+	const sessionReservation = sessionLedger.reserve(bytes);
+	if (sessionReservation === undefined) {
+		return undefined;
+	}
+	let ownerReservationCandidate: IRpcRetainedBytesReservation | undefined;
+	try {
+		ownerReservationCandidate = reserveOwner(bytes);
+	} catch (error) {
+		sessionReservation.release();
+		throw error;
+	}
+	if (ownerReservationCandidate === undefined) {
+		sessionReservation.release();
+		return undefined;
+	}
+	const ownerReservation = ownerReservationCandidate;
+	let released = false;
+	return Object.freeze<IRpcRetainedBytesReservation>({
+		release: () => {
+			if (released) {
+				return;
+			}
+			released = true;
+			sessionReservation.release();
+			ownerReservation.release();
+		},
+	});
 }
 
 type RpcSessionRetainedBytesReserve = (

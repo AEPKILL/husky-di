@@ -8,15 +8,20 @@ import {
 	type CreateRpcPeerOptions,
 	RpcPeerImpl,
 } from "@/modules/peer/impls/rpc-peer.impl";
-import { RpcPeerCallLifecycleImpl } from "@/modules/peer/impls/rpc-peer-call-lifecycle.impl";
+import { RpcPeerIncomingCallsImpl } from "@/modules/peer/impls/rpc-peer-incoming-calls.impl";
+import { RpcPeerOutgoingCallsImpl } from "@/modules/peer/impls/rpc-peer-outgoing-calls.impl";
 import type { IRpcPeerHost } from "@/modules/peer/interfaces/rpc-peer-host.interface";
 
 /** Creates a stable Peer behind the private Protocol host contract. */
 export function createRpcPeer(options: CreateRpcPeerOptions): IRpcPeerHost {
-	const peer = new RpcPeerImpl(
-		options,
-		(lifecycleOptions) => new RpcPeerCallLifecycleImpl(lifecycleOptions),
-	);
+	const peer = new RpcPeerImpl(options, (lifecycleOptions) => {
+		const outgoing = new RpcPeerOutgoingCallsImpl(lifecycleOptions);
+		const incoming = new RpcPeerIncomingCallsImpl(lifecycleOptions);
+		return Object.freeze({
+			invoke: outgoing.invoke.bind(outgoing),
+			reserveIncomingCall: incoming.reserveIncomingCall.bind(incoming),
+		});
+	});
 	return Object.freeze<IRpcPeerHost>({
 		peer,
 		reserveIncomingCall: (request, consume) =>

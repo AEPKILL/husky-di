@@ -4,13 +4,14 @@
  * @created 2026-08-19 00:00:00
  */
 
-import type { Observable, Subscription } from "rxjs";
+import type { Observable } from "rxjs";
+import { createRpcConnectorAttempt } from "@/modules/owner/factories/rpc-startup-attempt.factory";
 import type { IRpcConnector } from "@/modules/owner/interfaces/rpc-connector.interface";
 import type {
 	IRpcOwnerCustody,
-	RpcOwnedCleanup,
-	RpcOwnedConnection,
+	RpcOwnerCustodyFactory,
 } from "@/modules/owner/interfaces/rpc-owner-custody.interface";
+import type { RpcOwnerProtocolConnectorFactory } from "@/modules/owner/interfaces/rpc-owner-protocol.interface";
 import type { IRpcConnectorPublisher } from "@/modules/owner/interfaces/rpc-owner-publisher.interface";
 import type {
 	IRpcOwnerTermination,
@@ -21,15 +22,14 @@ import type {
 	IRpcConnectorSessionOwnership,
 	RpcConnectorSessionOwnershipFactory,
 } from "@/modules/owner/interfaces/rpc-session-ownership.interface";
-import {
-	type RpcConnectorConnectOptions,
-	type RpcConnectorState,
-	rpcConnectorAdapterMembersSchema,
-	rpcConnectorCallableSchema,
-	rpcConnectorConnectOptionsSchema,
-	rpcConnectorObservableSchema,
+import type {
+	RpcConnectorClosedState,
+	RpcConnectorConnectOptions,
+	RpcConnectorState,
 } from "@/modules/owner/types/rpc-caller.type";
 import type { RpcEvent } from "@/modules/owner/types/rpc-event.type";
+import type { RpcConnectorAttempt } from "@/modules/owner/types/rpc-startup-attempt.type";
+import { parseRpcConnectorStartup } from "@/modules/owner/utils/parse-rpc-startup.util";
 import type { IRpcHandlerScheduler, IRpcPeer } from "@/modules/peer";
 import type {
 	IRpcProtocolConnector,
@@ -39,7 +39,6 @@ import type {
 	IRpcRetainedBytesReservation,
 	RpcProtocolFaultReason,
 } from "@/modules/protocol";
-import type { IRpcConnection, IRpcConnectorAdapter } from "@/modules/transport";
 import { RpcExceptionCodeEnum } from "@/shared/enums/rpc-exception-code.enum";
 import { RpcStateStatusEnum } from "@/shared/enums/rpc-state-status.enum";
 import { createRpcException } from "@/shared/factories/rpc-exception.factory";
@@ -49,12 +48,12 @@ import { installRpcAbortListener } from "@/shared/utils/rpc-cancellation.util";
 export type CreateRpcConnectorImplOptions = Readonly<{
 	readonly policy: IRpcProtocolRuntimePolicy;
 	readonly retainedBytesLedger: IRpcRetainedBytesLedger;
-	readonly custody: IRpcOwnerCustody;
+	readonly createCustody: RpcOwnerCustodyFactory;
 	readonly handlerScheduler: IRpcHandlerScheduler;
 	readonly createSessionOwnership: RpcConnectorSessionOwnershipFactory;
 	readonly createTermination: RpcOwnerTerminationFactory<RpcConnectorClosedState>;
 	readonly publisher: IRpcConnectorPublisher;
-	readonly protocol: IRpcProtocolConnector;
+	readonly createProtocol: RpcOwnerProtocolConnectorFactory;
 }>;
 
 /** Owns one stable Connector peer and one owner-scoped Protocol role. */
@@ -76,20 +75,26 @@ export class RpcConnectorImpl implements IRpcConnector {
 		const {
 			createSessionOwnership,
 			createTermination,
-			custody,
+			createCustody,
 			handlerScheduler,
 			publisher,
 			policy,
 			retainedBytesLedger,
-			protocol,
+			createProtocol,
 		} = options;
-		this.#protocol = protocol;
-		this.#custody = custody;
 		this.#publisher = publisher;
 		this.#retainedBytesLedger = retainedBytesLedger;
 		this.#connectionLimit = policy.maxSessions + 2 * policy.maxHandshakes;
 		this.state$ = publisher.state$;
 		this.event$ = publisher.event$;
+		const protocol = createProtocol({
+			reserveRetainedBytes: (bytes) => this.reserveRetainedBytes(bytes),
+			fault: (reason, error) => this.protocolFault(reason, error),
+			attachSession: (session) => this.attachSession(session),
+		});
+		this.#protocol = protocol;
+		const custody = createCustody(() => protocol.cleanup());
+		this.#custody = custody;
 		const termination = createTermination({
 			deadlineMs: policy.shutdownDeadlineMs,
 			gateNewWork: () => {
@@ -161,36 +166,12 @@ export class RpcConnectorImpl implements IRpcConnector {
 				createRpcException(RpcExceptionCodeEnum.unavailable),
 			);
 		}
-		const optionsResult = rpcConnectorConnectOptionsSchema.safeParse(options);
-		if (!optionsResult.success) {
-			throw new TypeError(optionsResult.error.message, {
-				cause: optionsResult.error,
-			});
-		}
-		const optionRecord = optionsResult.data;
-		const signal = optionRecord.signal?.signal;
-		if (optionRecord.signal?.aborted === true) {
-			return Promise.reject(
-				new DOMException("The connection attempt was aborted.", "AbortError"),
-			);
-		}
-		const adapterResult = rpcConnectorAdapterMembersSchema.safeParse(
-			optionRecord.adapter,
-		);
-		if (!adapterResult.success) {
-			return Promise.reject(new TypeError("adapter has an invalid shape."));
-		}
-		const { connect, connection$ } = adapterResult.data;
-		const connectionSourceIsInvalid =
-			!rpcConnectorObservableSchema.safeParse(connection$).success;
-		const connectIsInvalid =
-			!rpcConnectorCallableSchema.safeParse(connect).success;
-		if (connectionSourceIsInvalid || connectIsInvalid) {
-			return Promise.reject(new TypeError("adapter has an invalid shape."));
-		}
-		const adapter = optionRecord.adapter as IRpcConnectorAdapter;
-		const validConnectionSource = connection$ as Observable<IRpcConnection>;
-		const validConnect = connect as IRpcConnectorAdapter["connect"];
+		const {
+			adapter,
+			signal,
+			connection$: validConnectionSource,
+			connect: validConnect,
+		} = parseRpcConnectorStartup(options);
 
 		const fresh = this.peer.state.status === RpcStateStatusEnum.unbound;
 		let attempt!: RpcConnectorAttempt;
@@ -231,37 +212,10 @@ export class RpcConnectorImpl implements IRpcConnector {
 				admissionError ?? createRpcException(RpcExceptionCodeEnum.unavailable),
 			);
 		}
-		const { promise: ownerAbort, reject: rejectOwnerAbort } =
-			Promise.withResolvers<never>();
-		void ownerAbort.catch(() => {});
-		const {
-			promise: adapterStartup,
-			resolve: resolveAdapterStartup,
-			reject: rejectAdapterStartup,
-		} = Promise.withResolvers<void>();
-		const startupCleanupTask = adapterStartup.then(
-			() => undefined,
-			(error: unknown) => {
-				// Cleanup suppresses only the AbortError produced by its own cancellation.
-				const cleanupFailed =
-					attempt.cleanupRequested &&
-					!(error instanceof DOMException && error.name === "AbortError");
-				if (cleanupFailed) {
-					throw error;
-				}
-			},
-		);
-		void startupCleanupTask.catch(() => {});
-		const startupCleanup = this.#custody.ownCleanup(() => startupCleanupTask);
-		attempt = {
-			abortController: new AbortController(),
-			ownerAbort,
-			rejectOwnerAbort,
-			startupCleanup,
-			insideHandoff: false,
-			cleanupRequested: false,
-			fenced: false,
-		};
+		const created = createRpcConnectorAttempt(this.#custody);
+		const { adapterStartup, resolveAdapterStartup, rejectAdapterStartup } =
+			created;
+		attempt = created.attempt;
 		attemptInitialized = true;
 		this.#attempt = attempt;
 
@@ -533,24 +487,4 @@ export class RpcConnectorImpl implements IRpcConnector {
 		);
 		this.#attempt = undefined;
 	}
-}
-
-type RpcConnectorClosedState = Extract<
-	RpcConnectorState,
-	{ readonly status: RpcStateStatusEnum.closed }
->;
-
-interface RpcConnectorAttempt {
-	readonly abortController: AbortController;
-	readonly ownerAbort: Promise<never>;
-	readonly rejectOwnerAbort: (error: Error) => void;
-	readonly startupCleanup: RpcOwnedCleanup;
-	removeExternalAbortListener?: () => void;
-	subscription?: Subscription;
-	connection?: RpcOwnedConnection;
-	attachment?: IRpcConnectorSessionAttachment;
-	insideHandoff: boolean;
-	cleanupRequested: boolean;
-	fenced: boolean;
-	ownerAbortError?: Error;
 }

@@ -12,10 +12,7 @@ import { RpcDecodePhaseEnum } from "@/modules/protocol/enums/rpc-decode-phase.en
 import { RpcProtocolSessionTransitionTypeEnum } from "@/modules/protocol/enums/rpc-protocol-session-transition-type.enum";
 import { RpcResumeRejectCodeEnum } from "@/modules/protocol/enums/rpc-resume-reject-code.enum";
 import { RpcWireRecordKindEnum } from "@/modules/protocol/enums/rpc-wire-record-kind.enum";
-import {
-	closeUnboundConnection,
-	RpcBindingAttempt,
-} from "@/modules/protocol/impls/rpc-binding-attempt.impl";
+import { RpcBindingAttempt } from "@/modules/protocol/impls/rpc-binding-attempt.impl";
 import type { IRpcCodec } from "@/modules/protocol/interfaces/rpc-codec.interface";
 import type {
 	IRpcProtocolAcceptor,
@@ -32,6 +29,7 @@ import type {
 	RpcResumeReject,
 	RpcResumeRequest,
 } from "@/modules/protocol/types/rpc-wire-record.type";
+import { closeUnboundConnection } from "@/modules/protocol/utils/rpc-direct-close.util";
 import type { IRpcConnection } from "@/modules/transport";
 import { RpcCloseReasonEnum } from "@/shared/enums/rpc-close-reason.enum";
 
