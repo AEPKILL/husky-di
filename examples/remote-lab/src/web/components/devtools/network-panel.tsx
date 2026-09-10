@@ -1,5 +1,5 @@
 /**
- * @overview Selectable request list, JSON payload previews, and measured application timing.
+ * @overview Selectable application calls, full handshake frames, and RPC lifecycle observations.
  * @author AEPKILL
  * @created 2026-09-10 00:00:00
  */
@@ -8,6 +8,7 @@ import { ChevronDown } from "lucide-react";
 import { Fragment } from "react";
 import type { LabCallRecord } from "@/types/lab-recording.type";
 import { EndpointBadge } from "@/web/components/devtools/endpoint-badge";
+import { HandshakeDetails } from "@/web/components/devtools/handshake-details";
 import { RecordProperty } from "@/web/components/devtools/record-property";
 import { Button } from "@/web/components/ui/button";
 import {
@@ -22,19 +23,24 @@ import {
 	TabsTrigger,
 } from "@/web/components/ui/tabs";
 import { DevtoolsDetailEnum } from "@/web/enums/devtools.enum";
-import type { DevtoolsView } from "@/web/types/devtools.type";
+import type {
+	DevtoolsView,
+	RenderDevtoolsOptions,
+} from "@/web/types/devtools.type";
 import { formatDevtoolsJson } from "@/web/utils/format-devtools-json.util";
 import { formatDevtoolsService } from "@/web/utils/format-devtools-service.util";
 import { getCallRecordKey } from "@/web/utils/get-call-record-key.util";
 
 export function NetworkPanel({
 	calls,
+	entries,
 	selected,
 	view,
 	vertical,
 	onViewChange,
 }: {
 	readonly calls: readonly LabCallRecord[];
+	readonly entries: RenderDevtoolsOptions["entries"];
 	readonly selected: LabCallRecord | undefined;
 	readonly view: DevtoolsView;
 	readonly vertical: boolean;
@@ -44,6 +50,32 @@ export function NetworkPanel({
 	const now = Date.now();
 	const endAt = Math.max(...calls.map((call) => call.finishedAt ?? now));
 	const total = Math.max(1, endAt - firstAt);
+	const handshakes = entries.flatMap((entry) => {
+		const observation = entry.handshakeFrame ?? entry.handshake;
+		return observation ? [{ ...entry, observation }] : [];
+	});
+	const filteredHandshakes = handshakes.filter((entry) => {
+		const handshake = entry.observation;
+		const context =
+			"connectionId" in handshake
+				? `${handshake.connectionId} ${handshake.direction}`
+				: `${handshake.peerId} ${handshake.reason ?? ""}`;
+		return (
+			`handshake 握手 ${handshake.type} ${context}`
+				.toLowerCase()
+				.includes(view.filter.toLowerCase()) &&
+			(view.side === "all" || entry.side === view.side) &&
+			(view.status === "all" ||
+				getOutcomeClass(handshake.outcome) === view.status)
+		);
+	});
+	const selectedHandshake =
+		handshakes.find((entry) => `${entry.side}:${entry.id}` === view.selected) ??
+		(calls.length === 0 ? filteredHandshakes[0] : undefined);
+	const records = [
+		...calls.map((call) => ({ call, at: call.startedAt })),
+		...filteredHandshakes.map((entry) => ({ entry, at: entry.at })),
+	].sort((left, right) => right.at - left.at);
 	return (
 		<ResizablePanelGroup
 			key={vertical ? "stacked" : "columns"}
@@ -66,10 +98,73 @@ export function NetworkPanel({
 							</tr>
 						</thead>
 						<tbody>
-							{calls.map((call) => {
+							{records.map((record) => {
+								if ("entry" in record) {
+									const { entry } = record;
+									const handshake = entry.observation;
+									const key = `${entry.side}:${entry.id}`;
+									const isSelected = entry === selectedHandshake;
+									return (
+										<tr
+											key={key}
+											data-handshake={handshake.type}
+											data-direction={entry.handshakeFrame?.direction}
+											className={isSelected ? "selected" : ""}
+											onClick={() =>
+												onViewChange({
+													selected: key,
+													detail: DevtoolsDetailEnum.payload,
+												})
+											}
+										>
+											<td>
+												<Button
+													variant="ghost"
+													className="call-link mono"
+													aria-pressed={isSelected}
+												>
+													Handshake · {handshake.type}
+												</Button>
+												<small className="request-meta">
+													<EndpointBadge side={entry.side} />
+													<span>
+														{entry.side} ·{" "}
+														{"connectionId" in handshake
+															? `${handshake.connectionId} · ${handshake.direction}`
+															: handshake.peerId}{" "}
+														· {entry.source}
+													</span>
+												</small>
+											</td>
+											<td
+												className={`mono outcome ${getOutcomeClass(handshake.outcome)}`}
+											>
+												{handshake.outcome}
+											</td>
+											<td className="mono">
+												<time
+													dateTime={new Date(entry.at).toISOString()}
+													title="本端观察时间"
+												>
+													{new Date(entry.at).toLocaleTimeString("en-GB", {
+														hour12: false,
+													})}
+												</time>
+											</td>
+											<td className="muted">
+												{entry.handshakeFrame
+													? `${entry.handshakeFrame.bytes} B`
+													: "RPC event"}
+											</td>
+										</tr>
+									);
+								}
+								const { call } = record;
 								const key = getCallRecordKey(call);
 								const isSelected =
-									selected !== undefined && key === getCallRecordKey(selected);
+									selectedHandshake === undefined &&
+									selected !== undefined &&
+									key === getCallRecordKey(selected);
 								const elapsed = Math.max(
 									0,
 									(call.finishedAt ?? now) - call.startedAt,
@@ -124,9 +219,9 @@ export function NetworkPanel({
 						</tbody>
 					</table>
 					<p className="empty-state">
-						{calls.length
-							? `${calls.length} 条符合筛选条件 · 点击调用查看详情。两端时钟独立。`
-							: "尚无匹配调用。运行上方业务场景，查看真实 APP 调用记录。"}
+						{records.length
+							? `${records.length} 条符合筛选条件 · 点击调用或握手查看详情。两端时钟独立。`
+							: "尚无匹配记录。连接或运行业务场景后查看调用与握手。"}
 					</p>
 				</div>
 			</ResizablePanel>
@@ -140,11 +235,19 @@ export function NetworkPanel({
 				defaultSize={vertical ? "65%" : "40%"}
 				minSize="20%"
 			>
-				<RequestDetails
-					call={selected}
-					view={view}
-					onViewChange={onViewChange}
-				/>
+				{selectedHandshake ? (
+					<HandshakeDetails
+						entry={selectedHandshake}
+						view={view}
+						onViewChange={onViewChange}
+					/>
+				) : (
+					<RequestDetails
+						call={selected}
+						view={view}
+						onViewChange={onViewChange}
+					/>
+				)}
 			</ResizablePanel>
 		</ResizablePanelGroup>
 	);
@@ -245,7 +348,7 @@ function RequestDetails({
 function getOutcomeClass(outcome: string): string {
 	return outcome === "pending"
 		? "pending"
-		: outcome === "fulfilled"
+		: outcome === "fulfilled" || outcome === "normal"
 			? "fulfilled"
 			: "failed";
 }

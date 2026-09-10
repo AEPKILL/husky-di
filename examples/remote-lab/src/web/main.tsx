@@ -29,7 +29,10 @@ import labHostSource from "@/factories/lab-host.factory.ts?raw";
 import { createLabRecorder } from "@/factories/lab-recorder.factory";
 import { createObservedConnectorAdapter } from "@/factories/observed-connector-adapter.factory";
 import { createRpcDiagnostics } from "@/factories/rpc-diagnostics.factory";
-import type { LabServerSnapshot } from "@/types/lab-server.type";
+import type {
+	LabClearResult,
+	LabServerSnapshot,
+} from "@/types/lab-server.type";
 import type { NodeDiagnosticsSnapshot } from "@/types/rpc-diagnostics.type";
 import { formatLabValue } from "@/utils/format-lab-value.util";
 import {
@@ -64,8 +67,11 @@ const view: DevtoolsView = {
 };
 let blockReconnections = false;
 let peerId = "this-browser";
+let peerServerInstanceId: string | undefined;
 let server: LabServerSnapshot | undefined;
 let nodeDiagnostics: NodeDiagnosticsSnapshot | undefined;
+let clearingRecords = false;
+let snapshotGeneration = 0;
 let shutdownTask: Promise<void> | undefined;
 let forceTask: Promise<void> | undefined;
 let stopTask: Promise<void> | undefined;
@@ -336,9 +342,7 @@ function handleAction(event: MouseEvent<HTMLButtonElement>): void {
 			window.location.reload();
 			break;
 		case "clear-records":
-			recorder.clear();
-			view.selected = undefined;
-			scheduleRender();
+			void clearRecords();
 			break;
 	}
 }
@@ -353,6 +357,37 @@ function handleSubmit(event: FormEvent<HTMLFormElement>): void {
 function changeView(patch: Partial<DevtoolsView>): void {
 	Object.assign(view, patch);
 	scheduleRender();
+}
+
+async function clearRecords(): Promise<void> {
+	if (clearingRecords) return;
+	clearingRecords = true;
+	const generation = ++snapshotGeneration;
+	scheduleRender();
+	try {
+		const response = await fetch("/api/lab/records", {
+			method: "DELETE",
+			signal: AbortSignal.timeout(5_000),
+		});
+		if (!response.ok) throw new Error("Could not clear Lab records.");
+		const cleared = (await response.json()) as LabClearResult;
+		if (generation !== snapshotGeneration) return;
+		server = cleared.lab;
+		if (nodeDiagnostics)
+			nodeDiagnostics = { ...nodeDiagnostics, ...cleared.diagnostics };
+		recorder.clear();
+		diagnostics.clear();
+		view.selected = undefined;
+		setText("#notice", "已清空全部记录；在途调用保留。");
+	} catch {
+		if (generation === snapshotGeneration)
+			setText("#notice", "清空记录失败，请重试。");
+	} finally {
+		// Also invalidate polls started while the DELETE request was in flight.
+		snapshotGeneration += 1;
+		clearingRecords = false;
+		scheduleRender();
+	}
 }
 
 function debug(action: string): void {
@@ -370,7 +405,10 @@ import.meta.hot?.dispose(() => {
 void client.reconnection.connect().then(
 	async () => {
 		try {
-			peerId = await lab.identify();
+			[peerId, peerServerInstanceId] = await Promise.all([
+				lab.identify(),
+				lab.identifyServer(),
+			]);
 			setText("#peer-name", `${peerId} · Browser ⇄ Node`);
 			setText("#notice", "已连接。执行一个场景，在下方检查真实调用。");
 			await run("example.greeting.v1", "ready", [], () => greeter.ready());
@@ -777,6 +815,13 @@ function scheduleRender(): void {
 				onDebug={debug}
 				devtools={{
 					view: { ...view },
+					clearingRecords,
+					peerId:
+						peerServerInstanceId !== undefined &&
+						peerServerInstanceId === server?.instanceId
+							? peerId
+							: undefined,
+					sessionId: browser.sessionId,
 					calls,
 					entries,
 					server,
@@ -792,6 +837,7 @@ function scheduleRender(): void {
 }
 
 async function pollNode(): Promise<void> {
+	const generation = snapshotGeneration;
 	try {
 		const responses = await Promise.allSettled(
 			["/api/lab", "/api/snapshot"].map(async (path) => {
@@ -803,7 +849,12 @@ async function pollNode(): Promise<void> {
 				return response.json();
 			}),
 		);
-		if (polling.signal.aborted) return;
+		if (
+			polling.signal.aborted ||
+			clearingRecords ||
+			generation !== snapshotGeneration
+		)
+			return;
 		if (
 			responses[0].status !== "fulfilled" ||
 			responses[1].status !== "fulfilled"
@@ -817,7 +868,11 @@ async function pollNode(): Promise<void> {
 		);
 		scheduleRender();
 	} catch {
-		if (!polling.signal.aborted)
+		if (
+			!polling.signal.aborted &&
+			!clearingRecords &&
+			generation === snapshotGeneration
+		)
 			setText("#node-state", "Node snapshot unavailable · last observed data");
 	} finally {
 		if (!polling.signal.aborted)
@@ -841,6 +896,7 @@ function later(
 
 function shutdown(force: boolean): Promise<void> {
 	closing = true;
+	snapshotGeneration += 1;
 	forceRequested ||= force;
 	polling.abort();
 	for (const timer of timers) clearTimeout(timer);

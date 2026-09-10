@@ -10,4 +10,5 @@ import type { RpcDiagnosticsSnapshot } from "@/types/rpc-diagnostics.type";
 export interface IRpcDiagnostics {
 	record(event: RpcEvent): void;
 	snapshot(): RpcDiagnosticsSnapshot;
+	clear(): void;
 }

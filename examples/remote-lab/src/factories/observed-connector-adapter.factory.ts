@@ -1,5 +1,5 @@
 /**
- * @overview Adds byte-count observations at example Adapter boundaries without inspecting wire payloads.
+ * @overview Observes byte counts and complete handshake frames at example Adapter boundaries.
  * @author AEPKILL
  * @created 2026-09-10 00:00:00
  */
@@ -10,7 +10,10 @@ import type {
 	IRpcConnectorAdapter,
 } from "@husky-di/remote";
 import { map, type Observable, share, tap } from "rxjs";
+import { LabTransportDirectionEnum } from "@/enums/lab-recording.enum";
 import type { ILabRecorder } from "@/interfaces/lab-recorder.interface";
+import type { LabHandshakeFrame } from "@/types/lab-recording.type";
+import { parseLabHandshakeFrame } from "@/utils/parse-lab-handshake-frame.util";
 
 export function createObservedConnectorAdapter(
 	adapter: IRpcConnectorAdapter,
@@ -41,10 +44,37 @@ function observeConnections(
 		map((connection) => {
 			let observed = connections.get(connection);
 			if (observed) return observed;
+			const connectionId = recorder.allocateConnectionId();
+			let sessionId: string | undefined;
+			function parseFrame(
+				message: Uint8Array,
+				direction: LabTransportDirectionEnum,
+			): LabHandshakeFrame | undefined {
+				const frame = parseLabHandshakeFrame(message, connectionId, direction);
+				sessionId ??= frame?.sessionId;
+				return frame;
+			}
+			function recordFrame(
+				phase: string,
+				bytes: number,
+				frame?: LabHandshakeFrame,
+			): void {
+				recorder.recordTransport(
+					phase,
+					bytes,
+					frame && sessionId !== undefined
+						? { ...frame, sessionId: frame.sessionId ?? sessionId }
+						: frame,
+				);
+			}
 			observed = {
 				message$: connection.message$.pipe(
 					tap((message) =>
-						recorder.recordTransport("Message received", message.byteLength),
+						recordFrame(
+							"Message received",
+							message.byteLength,
+							parseFrame(message, LabTransportDirectionEnum.received),
+						),
 					),
 					share({
 						resetOnError: false,
@@ -54,14 +84,25 @@ function observeConnections(
 				),
 				async send(message) {
 					const bytes = message.byteLength;
+					const handshakeFrame = parseFrame(
+						message,
+						LabTransportDirectionEnum.sent,
+					);
 					try {
 						await connection.send(message);
-						recorder.recordTransport(
+						recordFrame(
 							"Send locally admitted (not remote receipt)",
 							bytes,
+							handshakeFrame,
 						);
 					} catch (error) {
-						recorder.recordTransport("Send rejected", bytes);
+						recordFrame(
+							"Send rejected",
+							bytes,
+							handshakeFrame
+								? { ...handshakeFrame, outcome: "failed" }
+								: undefined,
+						);
 						throw error;
 					}
 				},

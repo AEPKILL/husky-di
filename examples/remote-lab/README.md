@@ -65,7 +65,9 @@ record refreshes and tab changes. At narrow widths the inner panes stack vertica
 
 The dock offers:
 
-- **Network**: select real example calls, filter them, and inspect arguments,
+- **Network**: view only this browser Connector's communication with its Acceptor
+  counterpart, including recovered connections. Other tabs and previous page
+  Sessions are excluded. Select real example calls or complete handshake frames, filter them, and inspect arguments,
   results as indented JSON, outcomes, and measured boundary timing. Selecting a
   request opens Payload directly. Browser and Node remain identified by source,
   without outgoing/incoming labels in the request list or details. Invalid values can fail before
@@ -86,13 +88,25 @@ The dock offers:
 
 `/api/snapshot` remains payload-free. The separate `/api/lab` endpoint deliberately
 publishes sample application records and pause state for this local development
-workbench. Use sample inputs: these records may contain the arguments and results
-you enter. It never exposes raw wire frames, Session credentials, or raw errors.
+workbench. It also records complete `fresh`, `accept`, `resume`, and `reject`
+handshake JSON at the Transport boundary, including `resumeToken`, Session IDs,
+binding epochs, recovery cursors, and extension fields. Select a Handshake row in
+Network to inspect its full Payload or its connection, direction, and byte count
+in Overview. Public RPC observations and `/api/snapshot` remain payload-free.
+Use sample inputs: application records may contain the arguments and results you
+enter; raw errors are not recorded.
 Each recorder keeps the latest 100 completed calls and 200 log entries, plus live
-calls independently. Payload previews are bounded to 4096 characters (depth 8,
+calls independently. Application payload previews are bounded to 4096 characters (depth 8,
 64 properties per object); getters and serialization hooks are not executed.
-The payload visibility checkbox controls presentation, not collection. Clearing
-history preserves live calls. Process restart clears all in-memory records.
+Handshake frames retain all fields up to the Protocol's 1 MiB message limit.
+The payload visibility checkbox controls presentation, not collection.
+**清空全部记录** clears this browser's completed calls, logs, recent events, and
+event counters together with the shared Node history for all Peers, through
+`DELETE /api/lab/records`. Pending calls and paused handlers remain live and can
+produce new records. Other tabs keep their own browser history. A failed clear
+is reported without discarding browser history. Session and server identity
+remain associated independently of the cleared rows. Process restart clears all
+in-memory records.
 
 The Adapter page gives the real package test commands and extension points.
 It does not claim to execute the framework's conformance runners in the browser.

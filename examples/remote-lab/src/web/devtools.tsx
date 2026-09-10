@@ -18,6 +18,7 @@ import type {
 } from "@/web/types/devtools.type";
 import { formatDevtoolsService } from "@/web/utils/format-devtools-service.util";
 import { getCallRecordKey } from "@/web/utils/get-call-record-key.util";
+import { selectNetworkRecords } from "@/web/utils/select-network-records.util";
 
 export type { DevtoolsView, RenderDevtoolsOptions };
 
@@ -33,6 +34,7 @@ export function Devtools(
 		isNarrowViewport,
 		() => false,
 	);
+	const network = selectNetworkRecords(options);
 	const filtered = calls.filter((call) => {
 		const nameMatches =
 			`${call.service}.${call.method} ${formatDevtoolsService(call.service)}.${call.method}`
@@ -46,9 +48,14 @@ export function Devtools(
 				: call.outcome === view.status);
 		return nameMatches && sideMatches && outcomeMatches;
 	});
+	const networkCalls = new Set(network.calls);
+	const filteredNetwork = filtered.filter((call) => networkCalls.has(call));
 	const selected =
 		calls.find((call) => getCallRecordKey(call) === view.selected) ??
 		filtered[0];
+	const selectedNetwork =
+		network.calls.find((call) => getCallRecordKey(call) === view.selected) ??
+		filteredNetwork[0];
 	return (
 		<>
 			<TabsContent
@@ -59,8 +66,9 @@ export function Devtools(
 				aria-label="Network"
 			>
 				<NetworkPanel
-					calls={filtered}
-					selected={selected}
+					calls={filteredNetwork}
+					entries={network.entries}
+					selected={selectedNetwork}
 					view={view}
 					vertical={vertical}
 					onViewChange={onViewChange}

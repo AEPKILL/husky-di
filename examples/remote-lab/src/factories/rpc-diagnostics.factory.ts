@@ -40,5 +40,9 @@ export function createRpcDiagnostics(): IRpcDiagnostics {
 				recentEvents: [...recent],
 			};
 		},
+		clear() {
+			totalEvents = 0;
+			recent.length = 0;
+		},
 	};
 }

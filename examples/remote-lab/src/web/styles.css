@@ -252,12 +252,14 @@ small {
 	letter-spacing: -0.03em;
 }
 .logo {
+	display: grid;
+	place-items: center;
+	width: 32px;
+	height: 32px;
+	flex-shrink: 0;
 	background: #1967d2;
 	color: #fff;
-	padding: 1px 7px 4px;
-	font-weight: 700;
 	border-radius: 5px;
-	font-size: 21px;
 }
 .connection {
 	font-size: 11px;

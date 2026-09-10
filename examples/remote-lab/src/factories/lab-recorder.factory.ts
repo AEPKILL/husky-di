@@ -1,5 +1,5 @@
 /**
- * @overview Records real example calls separately from safe RPC events and connection-level byte observations.
+ * @overview Records example calls and full handshake frames separately from safe public RPC events.
  * @author AEPKILL
  * @created 2026-09-10 00:00:00
  */
@@ -11,11 +11,16 @@ import {
 } from "@husky-di/remote";
 import {
 	LabCallOutcomeEnum,
-	type LabSideEnum,
+	LabSideEnum,
 	LabSourceEnum,
 } from "@/enums/lab-recording.enum";
 import type { ILabRecorder } from "@/interfaces/lab-recorder.interface";
-import type { LabCallRecord, LabLogEntry } from "@/types/lab-recording.type";
+import type {
+	LabCallRecord,
+	LabHandshakeFrame,
+	LabHandshakeObservation,
+	LabLogEntry,
+} from "@/types/lab-recording.type";
 import { formatLabValue } from "@/utils/format-lab-value.util";
 
 export function createLabRecorder(side: LabSideEnum): ILabRecorder {
@@ -23,12 +28,21 @@ export function createLabRecorder(side: LabSideEnum): ILabRecorder {
 	const completed: LabCallRecord[] = [];
 	const entries: LabLogEntry[] = [];
 	let ordinal = 0;
-	function log(source: LabSourceEnum, summary: string): void {
+	let connectionOrdinal = 0;
+	let sessionId: string | undefined;
+	function log(
+		source: LabSourceEnum,
+		summary: string,
+		handshake?: LabHandshakeObservation,
+		handshakeFrame?: LabHandshakeFrame,
+	): void {
 		entries.unshift({
 			id: `${side}-${++ordinal}`,
 			at: Date.now(),
 			source,
 			summary,
+			...(handshake ? { handshake } : {}),
+			...(handshakeFrame ? { handshakeFrame: { ...handshakeFrame } } : {}),
 		});
 		entries.length = Math.min(entries.length, 200);
 	}
@@ -115,6 +129,27 @@ export function createLabRecorder(side: LabSideEnum): ILabRecorder {
 		},
 		recordEvent(event, peerId = side) {
 			let summary = `${peerId} · ${event.type}`;
+			let handshake: LabHandshakeObservation | undefined;
+			if (
+				event.type === RpcEventTypeEnum.peerOpened ||
+				event.type === RpcEventTypeEnum.peerRecovering ||
+				event.type === RpcEventTypeEnum.peerRecovered ||
+				event.type === RpcEventTypeEnum.peerClosed
+			) {
+				handshake = {
+					type: event.type,
+					peerId,
+					outcome:
+						event.type === RpcEventTypeEnum.peerClosed
+							? event.outcome
+							: event.type === RpcEventTypeEnum.peerRecovering
+								? LabCallOutcomeEnum.pending
+								: LabCallOutcomeEnum.fulfilled,
+					...(event.type === RpcEventTypeEnum.peerClosed
+						? { reason: event.reason }
+						: {}),
+				};
+			}
 			if (
 				event.type === RpcEventTypeEnum.callStarted ||
 				event.type === RpcEventTypeEnum.callFinished
@@ -123,23 +158,54 @@ export function createLabRecorder(side: LabSideEnum): ILabRecorder {
 				if (event.type === RpcEventTypeEnum.callFinished)
 					summary += ` · ${"code" in event ? event.code : event.outcome} · ${event.durationMs} ms`;
 			} else if ("reason" in event) summary += ` · ${event.reason}`;
-			log(LabSourceEnum.rpc, summary);
+			log(LabSourceEnum.rpc, summary, handshake);
 		},
-		recordTransport(phase, bytes) {
+		allocateConnectionId() {
+			return `${side}-connection-${++connectionOrdinal}`;
+		},
+		recordTransport(phase, bytes, handshakeFrame) {
+			if (handshakeFrame?.sessionId !== undefined) {
+				if (side === LabSideEnum.browser)
+					sessionId ??= handshakeFrame.sessionId;
+				for (const [index, entry] of entries.entries()) {
+					if (
+						entry.handshakeFrame?.connectionId ===
+							handshakeFrame.connectionId &&
+						entry.handshakeFrame.sessionId === undefined
+					) {
+						entries[index] = {
+							...entry,
+							handshakeFrame: {
+								...entry.handshakeFrame,
+								sessionId: handshakeFrame.sessionId,
+							},
+						};
+					}
+				}
+			}
 			log(
 				LabSourceEnum.transport,
-				`${side} · ${phase} · ${bytes} B · connection-level`,
+				`${side} · ${phase} · ${bytes} B · connection-level${handshakeFrame ? ` · ${handshakeFrame.connectionId} · ${handshakeFrame.type}` : ""}`,
+				undefined,
+				handshakeFrame,
 			);
 		},
 		snapshot() {
 			return {
+				...(sessionId === undefined ? {} : { sessionId }),
 				calls: [...pending.values(), ...completed]
 					.sort((left, right) => right.startedAt - left.startedAt)
 					.map((call) => ({
 						...call,
 						phases: call.phases.map((phase) => ({ ...phase })),
 					})),
-				entries: entries.map((entry) => ({ ...entry })),
+				entries: entries.map((entry) => ({
+					...entry,
+					...(entry.handshake ? { handshake: { ...entry.handshake } } : {}),
+					...(entry.handshakeFrame
+						? { handshakeFrame: { ...entry.handshakeFrame } }
+						: {}),
+				})),
 			};
 		},
 		clear() {

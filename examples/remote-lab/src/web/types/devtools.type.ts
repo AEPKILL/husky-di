@@ -25,6 +25,9 @@ export type DevtoolsView = {
 
 export type RenderDevtoolsOptions = {
 	readonly view: DevtoolsView;
+	readonly clearingRecords: boolean;
+	readonly peerId: string | undefined;
+	readonly sessionId: string | undefined;
 	readonly calls: readonly LabCallRecord[];
 	readonly entries: readonly (LabLogEntry & { readonly side: LabSideEnum })[];
 	readonly server: LabServerSnapshot | undefined;

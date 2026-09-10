@@ -28,6 +28,7 @@ export interface ILabService {
 	): Promise<LabReport>;
 	resume(traceId: string): boolean;
 	identify(): string;
+	identifyServer(): string;
 	setGlobalExposure(enabled: boolean): boolean;
 	setPeerExposure(peerId: string, enabled: boolean): boolean;
 	conflict(): string;

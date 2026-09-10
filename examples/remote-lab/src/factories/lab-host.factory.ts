@@ -36,6 +36,7 @@ export function createLabHost({
 	acceptor,
 	recorder,
 }: CreateLabHostOptions): ILabHost {
+	const instanceId = crypto.randomUUID();
 	const peers = new Map<IRpcPeer, PeerEntry>();
 	const pausedReports = new Map<string, PausedReport>();
 	let nextPeerId = 0;
@@ -156,6 +157,7 @@ export function createLabHost({
 				);
 			const service: ILabService = {
 				identify: () => entry.id,
+				identifyServer: () => instanceId,
 				quote: (traceId, from, to, kg) =>
 					run("quote", traceId, [from, to, kg], () => quote(from, to, kg)),
 				echo: (traceId, value) => run("echo", traceId, [value], () => value),
@@ -274,6 +276,7 @@ export function createLabHost({
 		},
 		peerId: (peer) => peers.get(peer)?.id,
 		snapshot: () => ({
+			instanceId,
 			peers: [...peers.values()].map((entry) => ({
 				id: entry.id,
 				status: entry.peer.state.status,

@@ -4,7 +4,7 @@
  * @created 2026-09-10 00:00:00
  */
 
-import { MoonStar } from "lucide-react";
+import { FlaskConical, MoonStar } from "lucide-react";
 import { Button } from "@/web/components/ui/button";
 import type { WorkbenchProps } from "@/web/types/workbench.type";
 
@@ -16,7 +16,9 @@ export function WorkbenchHeader({
 	return (
 		<header className="app-header">
 			<div className="brand">
-				<span className="logo">h/</span>
+				<span className="logo" aria-hidden="true">
+					<FlaskConical size={22} />
+				</span>
 				<strong>remote lab</strong>
 				<span className="muted">/ WebSocket</span>
 			</div>

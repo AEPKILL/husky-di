@@ -26,6 +26,7 @@ export const LAB_METHODS = {
 	report: { cancelable: true },
 	resume: true,
 	identify: true,
+	identifyServer: true,
 	setGlobalExposure: true,
 	setPeerExposure: true,
 	conflict: true,

@@ -42,7 +42,7 @@ Shutdown MUST stop the supervisor before shutting down its Connector.
 ## Observations
 
 **EXAMPLE-WS-OBSERVE-001 — Pending and recent observations.** Browser and Node
-MUST show current pending calls, cumulative event counts, and the latest 24
+MUST show current pending calls, event counts since the most recent Clear, and the latest 24
 payload-free event summaries. Pending calls MUST correlate start and finish by
 observation ID independently of the bounded recent list: aging a start event out
 MUST NOT remove an unfinished call. HTTP diagnostics at `/api/snapshot` MUST expose Node's Owner,
@@ -122,8 +122,8 @@ separately from payload-free `/api/snapshot`. It MUST include Peers, exposure
 flags, paused reports, and the Node recorder snapshot. Browser and Node
 recorders MUST retain the latest 100 completed calls plus all pending calls
 independently, and the latest 200 APP/RPC/TRANSPORT log entries. Clear MUST
-remove completed history while preserving pending calls. Payload previews MUST
-be limited to 4096 characters, depth 8, and 64 members per collection; getters
+remove completed history while preserving pending calls. Application payload
+previews MUST be limited to 4096 characters, depth 8, and 64 members per collection; getters
 and `toJSON` MUST NOT be invoked. Error records MUST use only safe error
 names/codes, never raw errors, stacks, causes, or credentials. Call and handler
 wrappers MUST explicitly pass a shared trace ID; Owner `observationId` MUST
@@ -132,6 +132,23 @@ Acceptor handlers MUST use an Acceptor label rather than inventing a caller
 Peer identity. Flow MUST distinguish observed application phases from
 connection-level byte observations; byte counts MUST NOT claim remote receipt
 or per-call Protocol internals.
+
+**EXAMPLE-LAB-CLEAR-001 — Clear all recorded history.** The dock control MUST read
+`清空全部记录`. A successful action MUST clear completed calls, APP/RPC/TRANSPORT
+logs, recent diagnostic events, and event counters in this Browser and the shared
+Node recorder, including Node history for other Peers. It MUST reset the selected
+record while preserving pending application and RPC calls, paused handlers,
+Peers, exposure state, Session and Connection association, and server identity.
+Pending work MUST remain observable and MAY produce new records when it advances
+or settles. Other browsers retain their own local history.
+`DELETE /api/lab/records` MUST clear Node recording and diagnostic history and
+return `{ lab, diagnostics }` containing their post-clear snapshots. The response
+MUST use `Cache-Control: no-store`. Browser history MUST clear only after a
+successful response; failure MUST be shown honestly without claiming completion.
+Repeated clicks during an active clear MUST share that operation. Poll responses
+started before or during clear MUST NOT repopulate cleared rows or counters.
+A clear response superseded by connection shutdown MUST NOT overwrite final
+observations. Clearing records after shutdown MUST remain available.
 
 ## Run and cleanup
 
@@ -158,14 +175,16 @@ remain application responsibilities described in the Remote documentation.
 ## Workbench
 
 **EXAMPLE-LAB-WORKBENCH-001 — Business scenarios and docked DevTools.** The page
-MUST provide the nine capability categories: bidirectional calls, cancellation,
+header MUST use Lucide's `flask-conical` icon as the decorative Lab logo, retaining the
+visible `remote lab` brand text. The page MUST provide the nine capability
+categories: bidirectional calls, cancellation,
 Recovery, multiple Peers, exposure, values, errors, termination/resources, and
 Adapter/conformance. Scenario controls MUST invoke real RPC or explicit example
 instrumentation. The business area MUST sit above a dock containing Network,
 Flow, Sources, Services, and Console panels. Network MUST support selection and
 name, side, and outcome filters; details MUST show actual example arguments,
 results, terminal outcome, and measured boundary timestamps. The payload toggle
-MUST hide or show previews without claiming to disable collection. Clearing local
+MUST hide or show previews without claiming to disable collection. Clearing all
 history MUST preserve live calls. Flow MUST correlate example caller/handler
 records only by their explicitly propagated application trace label. It MUST NOT
 equate local RPC observation IDs across endpoints, infer remote execution from
@@ -193,13 +212,77 @@ expose its selected state; the selected row MUST be visually distinguished.
 Valid JSON argument and result previews MUST display with line breaks and
 two-space indentation; bounded non-JSON previews MUST remain readable without
 fabricating JSON values.
-Network and Flow MUST show Browser/Node provenance without incoming/outgoing
-direction labels. Removing these display labels MUST NOT merge the endpoints'
+Application call records in Network and Flow MUST show Browser/Node provenance
+without incoming/outgoing direction labels. Removing these display labels MUST NOT merge the endpoints'
 records or change the recorded outcomes and measured phases.
 Network rows MUST identify their topology owner with a labeled icon and distinct
 colors in both light and dark themes: Browser records belong to the Connector,
 and Node records belong to the Acceptor. These labels MUST follow the endpoint,
 including reverse callbacks, rather than the call's sending or receiving role.
+
+**EXAMPLE-LAB-NETWORK-001 — Current Connector and Acceptor counterpart only.**
+Network MUST scope its list and selected details to this page's Connector and
+its corresponding Acceptor Peer before applying name, side, or outcome filters.
+Peer labels MUST be scoped to the observed server instance so a Node restart
+cannot associate this page with a different Session reusing the same Peer label.
+The initial connected page MUST obtain its Peer label through `identify()` and
+the stable server instance ID through `identifyServer()` on that same established
+Lab RPC relationship. Instance association MUST remain independent of retained
+handshake history; clearing or aging out rows MUST NOT lose it, and a `resume`
+request or rejection alone MUST NOT establish it.
+It MUST exclude other browser Peers and previous page Sessions. Browser records
+belong to the current page; Node calls and lifecycle events MUST belong to its
+example Peer ID. A globally exposed handler labeled `acceptor` MUST appear only
+when its trace ID, service, and method match this page's recorded outgoing call.
+Node handshake frames MUST match the current Connector's observed Session ID,
+including earlier `fresh` frames and later `reject` frames on the same physical
+Connection. Records without proven Node Session association MUST be omitted.
+This display association MUST NOT alter the captured raw handshake JSON.
+The Browser recorder MUST retain its observed Session ID independently of bounded
+history and Clear. Node frames MUST retain their per-Connection Session association
+when other frames age out. Recovery MUST retain both original and replacement
+Connection records for this Session. Clearing all history MUST remove both
+endpoints' recorded rows without expanding Network to unrelated Acceptor history
+or losing association for new records on the retained Session.
+
+**EXAMPLE-LAB-HANDSHAKE-001 — Full handshake frames and lifecycle in Network.**
+Browser and Node Adapter instrumentation MUST record the actual `fresh`,
+`accept`, `resume`, and `reject` handshake frames observed at their Transport
+boundaries. Network MUST list each frame as a selectable Handshake row and show
+its Browser/Node side, Connector/Acceptor owner, local Connection ID,
+sent/received direction, byte count, local observation time, and outcome.
+Selecting a frame MUST open Payload with the complete decoded JSON, including
+all actual Protocol fields and extension members: `fresh.profiles`; fresh
+`accept.profile`, `sessionId`, `bindingEpoch`, and `resumeToken`; `resume.profile`,
+`sessionId`, `resumeToken`, `receivedThrough`, and `resumeAttempt`; recovery
+`accept.profile`, `sessionId`, `bindingEpoch`, and `receivedThrough`; and
+`reject.code`. These handshake payloads MUST retain actual Session credentials
+without redaction or the application preview's 4096-character truncation.
+Payload MUST offer indented JSON and the original Raw JSON text. Overview MUST
+identify the Transport source and frame metadata. The payload
+toggle MUST hide or show the decoded JSON without changing collection.
+Send observations MUST retain local admission or rejection as their boundary;
+they MUST NOT claim remote receipt or measured handshake duration.
+
+Network MUST also retain initial establishment (`peer-opened`), recovery (`peer-recovering`
+and `peer-recovered`), and closure (`peer-closed`) observations from both public
+Owner `event$` streams. Each observation MUST appear as a selectable Handshake
+row with its Browser/Node side, Connector/Acceptor owner, example Peer label
+known at observation time, local observation timestamp, and outcome. The initial
+Browser label MAY be `this-browser` before its assigned ID is known. Recovering MUST show `pending`,
+opened and recovered MUST show `fulfilled`, and closed MUST preserve the public
+event's `normal` or `failed` outcome and safe close reason. Name, side, and
+outcome filters MUST apply to these rows, with a normal closure included among
+fulfilled outcomes. Details MUST identify the actual lifecycle event and MUST
+NOT substitute lifecycle events for captured frames or invent Protocol fields
+or handshake duration. Public Owner `event$` streams and `/api/snapshot` MUST
+remain payload- and credential-free; complete wire handshake recordings belong
+only to the example recorders and local `/api/lab` snapshot. Frame and lifecycle
+rows MUST both support name, side, and outcome filters and share the recorder's
+bounded 200 log entries. Snapshots MUST detach their metadata without retaining
+a raw Peer, state, event object, or mutable byte buffer. Clearing all history
+MUST remove both endpoints' handshake rows while preserving live calls and
+Session/Connection association.
 
 **EXAMPLE-LAB-RECOVERY-001 — Reproducible physical fault injection.** Recovery
 controls MUST close the active browser WebSocket, retaining the same Connector,

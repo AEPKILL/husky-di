@@ -22,6 +22,7 @@ import { createLabRecorder } from "@/factories/lab-recorder.factory";
 import { createObservedAcceptorAdapter } from "@/factories/observed-connector-adapter.factory";
 import { createRpcDiagnostics } from "@/factories/rpc-diagnostics.factory";
 import type { IExampleServer } from "@/interfaces/example-server.interface";
+import type { LabClearResult } from "@/types/lab-server.type";
 import type { NodeDiagnosticsSnapshot } from "@/types/rpc-diagnostics.type";
 
 export type CreateExampleServerOptions = { readonly port?: number };
@@ -58,6 +59,17 @@ export async function createExampleServer(
 			response.end(JSON.stringify({ status: "ok" }));
 		} else if (request.method === "GET" && request.url === "/api/lab") {
 			response.end(JSON.stringify(lab.snapshot()));
+		} else if (
+			request.method === "DELETE" &&
+			request.url === "/api/lab/records"
+		) {
+			recorder.clear();
+			diagnostics.clear();
+			const result: LabClearResult = {
+				lab: lab.snapshot(),
+				diagnostics: diagnostics.snapshot(),
+			};
+			response.end(JSON.stringify(result));
 		} else if (request.method === "GET" && request.url === "/api/snapshot") {
 			const state = acceptor.state;
 			const snapshot: NodeDiagnosticsSnapshot = {

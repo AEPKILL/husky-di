@@ -6,6 +6,7 @@
 
 import type { RpcCallStatusEnum, RpcStateStatusEnum } from "@husky-di/remote";
 import type { LabRecordingSnapshot } from "@/types/lab-recording.type";
+import type { RpcDiagnosticsSnapshot } from "@/types/rpc-diagnostics.type";
 
 export type ShippingQuote = {
 	readonly from: string;
@@ -29,6 +30,7 @@ export type LabFanoutResult = {
 };
 
 export type LabServerSnapshot = {
+	readonly instanceId: string;
 	readonly peers: readonly {
 		readonly id: string;
 		readonly status: RpcStateStatusEnum;
@@ -42,4 +44,9 @@ export type LabServerSnapshot = {
 		readonly aborted: boolean;
 	}[];
 	readonly recording: LabRecordingSnapshot;
+};
+
+export type LabClearResult = {
+	readonly lab: LabServerSnapshot;
+	readonly diagnostics: RpcDiagnosticsSnapshot;
 };

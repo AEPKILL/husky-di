@@ -15,6 +15,18 @@ export enum LabSourceEnum {
 	transport = "TRANSPORT",
 }
 
+export enum LabHandshakeKindEnum {
+	fresh = "fresh",
+	accept = "accept",
+	resume = "resume",
+	reject = "reject",
+}
+
+export enum LabTransportDirectionEnum {
+	sent = "sent",
+	received = "received",
+}
+
 export enum LabCallOutcomeEnum {
 	pending = "pending",
 	fulfilled = "fulfilled",

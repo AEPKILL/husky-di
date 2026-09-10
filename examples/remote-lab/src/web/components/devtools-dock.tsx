@@ -53,11 +53,11 @@ export function DevtoolsDock({
 				<div className="toolbar">
 					<span className="recording">● 记录中</span>
 					<label>
-						<span className="sr-only">按名称筛选调用</span>
+						<span className="sr-only">按名称筛选调用或握手</span>
 						<input
 							id="call-filter"
 							type="search"
-							placeholder="Filter service / method"
+							placeholder="Filter calls / handshake"
 							autoComplete="off"
 							value={view.filter}
 							onChange={(event) => onViewChange({ filter: event.target.value })}
@@ -99,10 +99,11 @@ export function DevtoolsDock({
 						onClick={onAction}
 						variant="ghost"
 						id="clear-records"
-						title="清空浏览器已完成历史；在途调用保留"
+						disabled={devtools.clearingRecords}
+						title="清空 Browser 和 Node 的调用历史、握手与事件；在途调用保留"
 					>
 						<Trash2 aria-hidden="true" />
-						清空本地记录
+						清空全部记录
 					</Button>
 					<span className="toolbar-note">
 						APP 示例调用 · RPC observationId 仅端内关联

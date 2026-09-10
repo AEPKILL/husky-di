@@ -7,6 +7,7 @@
 import type { RpcEvent } from "@husky-di/remote";
 import type {
 	LabCallContext,
+	LabHandshakeFrame,
 	LabRecordingSnapshot,
 } from "@/types/lab-recording.type";
 
@@ -18,7 +19,12 @@ export interface ILabRecorder {
 	): Promise<T>;
 	mark(traceId: string, phase: string, detail?: unknown): void;
 	recordEvent(event: RpcEvent, peerId?: string): void;
-	recordTransport(phase: string, bytes: number): void;
+	allocateConnectionId(): string;
+	recordTransport(
+		phase: string,
+		bytes: number,
+		handshakeFrame?: LabHandshakeFrame,
+	): void;
 	snapshot(): LabRecordingSnapshot;
 	clear(): void;
 }
