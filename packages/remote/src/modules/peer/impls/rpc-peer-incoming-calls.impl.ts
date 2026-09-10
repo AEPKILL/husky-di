@@ -47,6 +47,8 @@ import type {
 	RpcUnknownCallFailure,
 } from "@/modules/protocol";
 import {
+	RPC_ENTRY_OVERHEAD_BYTES,
+	RPC_MAX_INCOMING_JOBS,
 	RpcCallTerminalTypeEnum,
 	RpcIncomingCallKindEnum,
 } from "@/modules/protocol";
@@ -96,11 +98,11 @@ export class RpcPeerIncomingCallsImpl
 			this.#onProtocolFault(error);
 			throw error;
 		}
-		const charge = request.args.weight + 256;
+		const charge = request.args.weight + RPC_ENTRY_OVERHEAD_BYTES;
 		// Incoming admission must fit the Peer count and retained-byte budgets.
 		const cannotReserveIncomingCall =
 			this.#peer.state.status !== RpcStateStatusEnum.connected ||
-			this.#incomingReservationCount >= 256 ||
+			this.#incomingReservationCount >= RPC_MAX_INCOMING_JOBS ||
 			charge > this.#maximumIncomingBytes - this.#incomingReservationBytes;
 		if (cannotReserveIncomingCall) {
 			return false;

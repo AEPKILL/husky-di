@@ -31,13 +31,15 @@ import type { RpcEvent } from "@/modules/owner/types/rpc-event.type";
 import type { RpcConnectorAttempt } from "@/modules/owner/types/rpc-startup-attempt.type";
 import { parseRpcConnectorStartup } from "@/modules/owner/utils/parse-rpc-startup.util";
 import type { IRpcHandlerScheduler, IRpcPeer } from "@/modules/peer";
-import type {
-	IRpcProtocolConnector,
-	IRpcProtocolRuntimePolicy,
-	IRpcProtocolSession,
-	IRpcProtocolSessionHost,
-	IRpcRetainedBytesReservation,
-	RpcProtocolFaultReason,
+import {
+	type IRpcProtocolConnector,
+	type IRpcProtocolRuntimePolicy,
+	type IRpcProtocolSession,
+	type IRpcProtocolSessionHost,
+	type IRpcRetainedBytesReservation,
+	RPC_CONNECTIONS_PER_HANDSHAKE,
+	RPC_SESSION_BYTE_SUBCAP_DIVISOR,
+	type RpcProtocolFaultReason,
 } from "@/modules/protocol";
 import { RpcExceptionCodeEnum } from "@/shared/enums/rpc-exception-code.enum";
 import { RpcStateStatusEnum } from "@/shared/enums/rpc-state-status.enum";
@@ -84,7 +86,8 @@ export class RpcConnectorImpl implements IRpcConnector {
 		} = options;
 		this.#publisher = publisher;
 		this.#retainedBytesLedger = retainedBytesLedger;
-		this.#connectionLimit = policy.maxSessions + 2 * policy.maxHandshakes;
+		this.#connectionLimit =
+			policy.maxSessions + RPC_CONNECTIONS_PER_HANDSHAKE * policy.maxHandshakes;
 		this.state$ = publisher.state$;
 		this.event$ = publisher.event$;
 		const protocol = createProtocol({
@@ -125,7 +128,9 @@ export class RpcConnectorImpl implements IRpcConnector {
 					!this.#terminationRequested &&
 					this.state.status === RpcStateStatusEnum.active,
 				handlerScheduler,
-				maximumIncomingBytes: Math.floor(policy.maxRetainedBytesPerSession / 4),
+				maximumIncomingBytes: Math.floor(
+					policy.maxRetainedBytesPerSession / RPC_SESSION_BYTE_SUBCAP_DIVISOR,
+				),
 				reserveOwnerRetainedBytes: (bytes) => this.reserveRetainedBytes(bytes),
 			},
 			lifecycle: {

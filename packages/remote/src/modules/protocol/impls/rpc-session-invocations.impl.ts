@@ -4,6 +4,11 @@
  * @created 2026-09-05 00:00:00
  */
 
+import {
+	RPC_ENTRY_OVERHEAD_BYTES,
+	RPC_MAX_COUNTER,
+	RPC_SESSION_BYTE_SUBCAP_DIVISOR,
+} from "@/modules/protocol/constants/rpc-limits.const";
 import { RpcCallTerminalTypeEnum } from "@/modules/protocol/enums/rpc-call-terminal-type.enum";
 import { RpcWireRecordKindEnum } from "@/modules/protocol/enums/rpc-wire-record-kind.enum";
 import type { IRpcCodec } from "@/modules/protocol/interfaces/rpc-codec.interface";
@@ -61,7 +66,8 @@ export class RpcSessionInvocationsImpl implements IRpcSessionInvocations {
 		this._codec = options.codec;
 		this._maximumInvocations = options.policy.maxPendingInvocationsPerSession;
 		this._maximumPendingBytes = Math.floor(
-			options.policy.maxRetainedBytesPerSession / 4,
+			options.policy.maxRetainedBytesPerSession /
+				RPC_SESSION_BYTE_SUBCAP_DIVISOR,
 		);
 		this._reserveRetainedBytes = options.reserveRetainedBytes;
 		this._reserveReplay = options.reserveReplay;
@@ -86,7 +92,7 @@ export class RpcSessionInvocationsImpl implements IRpcSessionInvocations {
 		request: IRpcProtocolCallRequest,
 		finish: (outcome: RpcCallOutcome) => void,
 	): IRpcProtocolInvocation | undefined {
-		const pendingCharge = request.args.weight + 256;
+		const pendingCharge = request.args.weight + RPC_ENTRY_OVERHEAD_BYTES;
 		// Preparation owns count and byte capacity without assigning a Call Identity.
 		const cannotReserveInvocation =
 			this._closed ||
@@ -223,7 +229,7 @@ export class RpcSessionInvocationsImpl implements IRpcSessionInvocations {
 		}
 
 		this._pendingInvocations.shift();
-		if (this._nextOutgoingCallOrdinal === Number.MAX_SAFE_INTEGER) {
+		if (this._nextOutgoingCallOrdinal === RPC_MAX_COUNTER) {
 			this._outgoingCallOrdinalExhausted = true;
 		} else {
 			this._nextOutgoingCallOrdinal += 1;

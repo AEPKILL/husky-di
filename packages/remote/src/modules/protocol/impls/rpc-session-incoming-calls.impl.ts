@@ -4,6 +4,7 @@
  * @created 2026-09-05 00:00:00
  */
 
+import { RPC_MAX_UNRETIRED_CALLS_PER_DIRECTION } from "@/modules/protocol/constants/rpc-limits.const";
 import { RpcCallTerminalTypeEnum } from "@/modules/protocol/enums/rpc-call-terminal-type.enum";
 import { RpcIncomingCallKindEnum } from "@/modules/protocol/enums/rpc-incoming-call-kind.enum";
 import { RpcWireRecordKindEnum } from "@/modules/protocol/enums/rpc-wire-record-kind.enum";
@@ -59,7 +60,10 @@ export class RpcSessionIncomingCallsImpl implements IRpcSessionIncomingCalls {
 			throw new Error("Default RPC Call Ordinal is not contiguous.");
 		}
 		this._highestCallOrdinal = ordinal;
-		if (this._isDraining() || this._retention.incomingCount >= 256) {
+		if (
+			this._isDraining() ||
+			this._retention.incomingCount >= RPC_MAX_UNRETIRED_CALLS_PER_DIRECTION
+		) {
 			this._rejectForCapacity(message.callId);
 			return;
 		}

@@ -2,7 +2,8 @@
 
 A runnable browser ↔ Node workbench for `@husky-di/remote` over
 `@husky-di/remote-websocket`. Business scenarios sit above a docked DevTools
-workspace. It uses native browser UI, Vite, and Node HTTP.
+workspace. The UI uses React, shadcn/ui, Tailwind CSS, and Lucide icons, with
+Vite and Node HTTP.
 
 From the repository root (Node.js 23.6+):
 
@@ -40,7 +41,8 @@ not start Node. The browser build is `build:web` and still needs the `/rpc` and
 The browser entrypoint imports the browser-safe WebSocket root. Node imports
 `@husky-di/remote-websocket/node`. Shared descriptors explicitly allowlist methods.
 The server validates names and delay bounds, and all untrusted text is rendered
-with `textContent`. There are no React, Hono, query-cache, or UI-library dependencies.
+as escaped React text. RPC ownership and business instrumentation remain
+independent of the UI components.
 The example binds only to loopback; it does not implement production authentication.
 
 The scenario navigation covers unary and reverse calls, cancellation and
@@ -55,10 +57,18 @@ replacement attempts to exercise expiry. The capacity drill starts 12 greetings
 and reports each actual fulfillment or `unavailable` outcome. These are example
 settings, not changes to Remote's defaults.
 
+The dock stays at the bottom of the viewport while the business area scrolls
+independently. Drag the shadcn Resizable separators to change the dock and Console
+heights or the Network, Sources, and Flow pane sizes. Focus a separator to resize
+with the arrow keys; Home and End move to its size limits. Pane sizes survive
+record refreshes and tab changes. At narrow widths the inner panes stack vertically.
+
 The dock offers:
 
 - **Network**: select real example calls, filter them, and inspect arguments,
-  results, outcomes, and measured boundary timing. Invalid values can fail before
+  results as indented JSON, outcomes, and measured boundary timing. Selecting a
+  request opens Payload directly. Browser and Node remain identified by source,
+  without outgoing/incoming labels in the request list or details. Invalid values can fail before
   any RPC event; the example caller record still shows the attempted invocation.
 - **Flow**: compare caller and handler records sharing an explicit application
   trace label. Local `observationId` values are only for pairing one side's public
@@ -106,3 +116,9 @@ injection, and light/dark layouts at desktop and mobile widths.
 
 See the [normative specification](docs/SPECIFICATION.md) and
 [executable specification coverage](tests/specification.test.ts).
+
+UI composition lives in `src/web/workbench.tsx`, with separate business scenario
+components under `src/web/components/scenarios/` and DevTools panels under
+`src/web/components/devtools/`. The checked-in shadcn components under
+`src/web/components/ui/` come from the official registry; `components.json`
+configures their paths. Tailwind is integrated through the Vite plugin.

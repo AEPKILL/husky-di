@@ -5,6 +5,10 @@
  */
 
 import { z } from "zod";
+import {
+	RPC_SECURITY_CARRIER_BYTES,
+	RPC_SECURITY_CARRIER_LENGTH,
+} from "@/modules/protocol/constants/rpc-limits.const";
 
 export { rpcBase64Url32Schema };
 
@@ -14,7 +18,9 @@ export function createRpcSecurityCarrier(): string {
 	if (crypto === undefined) {
 		throw new Error("The Default RPC Protocol requires Web Crypto.");
 	}
-	const bytes = crypto.getRandomValues(new Uint8Array(32));
+	const bytes = crypto.getRandomValues(
+		new Uint8Array(RPC_SECURITY_CARRIER_BYTES),
+	);
 	try {
 		let binary = "";
 		for (const byte of bytes) {
@@ -32,12 +38,13 @@ export function createRpcSecurityCarrier(): string {
 /** Compares canonical carriers without data-dependent early exit. */
 export function rpcSecurityCarriersEqual(left: string, right: string): boolean {
 	let difference = left.length ^ right.length;
-	for (let index = 0; index < base64Url32Length; index += 1) {
+	for (let index = 0; index < RPC_SECURITY_CARRIER_LENGTH; index += 1) {
 		difference |= left.charCodeAt(index) ^ right.charCodeAt(index);
 	}
 	return difference === 0;
 }
 
-const base64Url32Pattern = /^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$/;
-const base64Url32Length = 43;
+const base64Url32Pattern = new RegExp(
+	`^[A-Za-z0-9_-]{${RPC_SECURITY_CARRIER_LENGTH - 1}}[AEIMQUYcgkosw048]$`,
+);
 const rpcBase64Url32Schema = z.string().regex(base64Url32Pattern);

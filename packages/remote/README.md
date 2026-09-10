@@ -123,6 +123,11 @@ errors, and credentials.
 
 ## Limits, errors, and termination
 
+In a source checkout, the built-in Protocol's size, length, count, resource,
+and policy definitions are collected in
+`src/modules/protocol/constants/rpc-limits.const.ts`, with units and derived
+capacity formulas alongside the constants.
+
 Owner factories accept role-specific `runtimePolicy` and an optional
 `protocolFactory`:
 

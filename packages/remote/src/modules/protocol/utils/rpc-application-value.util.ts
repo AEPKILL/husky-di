@@ -4,6 +4,16 @@
  * @created 2026-08-19 00:00:00
  */
 
+import {
+	RPC_MAX_APPLICATION_DEPTH,
+	RPC_MAX_APPLICATION_NODES,
+	RPC_MAX_APPLICATION_WEIGHT_BYTES,
+	RPC_MAX_ARRAY_ELEMENTS,
+	RPC_MAX_MEMBER_NAME_BYTES,
+	RPC_MAX_OBJECT_MEMBERS,
+	RPC_MAX_STRING_BYTES,
+} from "@/modules/protocol/constants/rpc-limits.const";
+
 import type {
 	IRpcApplicationArgumentsSnapshot,
 	IRpcApplicationRecord,
@@ -81,13 +91,6 @@ interface NormalizedValue {
 	readonly weight: number;
 }
 
-const maximumDepth = 64;
-const maximumStringBytes = 512 * 1024;
-const maximumMemberNameBytes = 256;
-const maximumRecordMembers = 1024;
-const maximumArrayElements = 8192;
-const maximumNodes = 65_536;
-const maximumWeight = 1_000_000;
 const textEncoder = new TextEncoder();
 const applicationSnapshots = new WeakSet<object>();
 
@@ -120,18 +123,18 @@ function stringWeight(
 }
 
 function boundedWeight(weight: number): number {
-	if (weight > maximumWeight) {
+	if (weight > RPC_MAX_APPLICATION_WEIGHT_BYTES) {
 		invalidValue("Application Value exceeds its compact-JSON weight limit.");
 	}
 	return weight;
 }
 
 function countNode(state: NormalizationState, depth: number): void {
-	if (depth > maximumDepth) {
+	if (depth > RPC_MAX_APPLICATION_DEPTH) {
 		invalidValue("Application Value exceeds its depth limit.");
 	}
 	state.nodes += 1;
-	if (state.nodes > maximumNodes) {
+	if (state.nodes > RPC_MAX_APPLICATION_NODES) {
 		invalidValue("Application Value exceeds its node limit.");
 	}
 }
@@ -169,7 +172,7 @@ function normalizeArray(
 		return invalidValue("Application Value array has an invalid length.");
 	}
 	const length = lengthDescriptor.value;
-	if (length > maximumArrayElements) {
+	if (length > RPC_MAX_ARRAY_ELEMENTS) {
 		return invalidValue("Application Value array exceeds its element limit.");
 	}
 
@@ -257,14 +260,14 @@ function normalizeRecord(
 			}
 
 			memberCount += 1;
-			if (memberCount > maximumRecordMembers) {
+			if (memberCount > RPC_MAX_OBJECT_MEMBERS) {
 				return invalidValue(
 					"Application Value record exceeds its member limit.",
 				);
 			}
 			const keyWeight = stringWeight(
 				key,
-				maximumMemberNameBytes,
+				RPC_MAX_MEMBER_NAME_BYTES,
 				"Application Value member name",
 			);
 			const child = normalizeValue(descriptor.value, state, depth + 1);
@@ -296,7 +299,7 @@ function normalizeValue(
 				value: input,
 				weight: stringWeight(
 					input,
-					maximumStringBytes,
+					RPC_MAX_STRING_BYTES,
 					"Application Value string",
 				),
 			};

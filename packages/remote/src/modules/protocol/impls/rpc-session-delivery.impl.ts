@@ -4,6 +4,10 @@
  * @created 2026-09-10 00:00:00
  */
 
+import {
+	RPC_LAST_ORDINARY_SEQUENCE,
+	RPC_MAX_COUNTER,
+} from "@/modules/protocol/constants/rpc-limits.const";
 import { RpcWireRecordKindEnum } from "@/modules/protocol/enums/rpc-wire-record-kind.enum";
 import type { IRpcCodec } from "@/modules/protocol/interfaces/rpc-codec.interface";
 import type {
@@ -291,7 +295,7 @@ export class RpcSessionDeliveryImpl implements IRpcSessionDelivery {
 			);
 			return;
 		}
-		if (sequence === Number.MAX_SAFE_INTEGER) {
+		if (sequence === RPC_MAX_COUNTER) {
 			this._outgoingSequenceExhausted = true;
 		} else {
 			this._nextOutgoingSequence += 1;
@@ -416,5 +420,3 @@ export class RpcSessionDeliveryImpl implements IRpcSessionDelivery {
 		this._controlQueue.length = 0;
 	}
 }
-
-const RPC_LAST_ORDINARY_SEQUENCE = Number.MAX_SAFE_INTEGER - 512;

@@ -176,6 +176,31 @@ example-owned exposure state. All untrusted values MUST render as text. The page
 MUST remain usable with keyboard controls, light/dark themes, and widths of 360,
 736, and 1024 CSS pixels without document-level horizontal overflow.
 
+**EXAMPLE-LAB-DEVTOOLS-001 — Resizable bottom dock and JSON inspection.** The
+DevTools dock MUST remain at the viewport bottom while the business workspace
+scrolls independently. Users MUST be able to resize the dock and Console drawer
+heights and the Network, Sources, and Flow pane splits with pointer and keyboard
+controls. Pane splits MUST resize widths on desktop and heights at widths of
+736 CSS pixels or less. Sizes MUST remain bounded by the available viewport,
+leaving both sides usable, and retain their proportions across polling updates,
+scenario changes, and panel switches during the page lifetime. Panel and request
+detail navigation MUST expose accessible tabs; resize controls MUST expose named,
+focusable separators and their orientation and current value.
+Clicking anywhere in a Network request row, including its metadata, outcome,
+time, waterfall, and cell padding, MUST select that request and open Payload
+details. The request-name button MUST retain Enter/Space keyboard selection and
+expose its selected state; the selected row MUST be visually distinguished.
+Valid JSON argument and result previews MUST display with line breaks and
+two-space indentation; bounded non-JSON previews MUST remain readable without
+fabricating JSON values.
+Network and Flow MUST show Browser/Node provenance without incoming/outgoing
+direction labels. Removing these display labels MUST NOT merge the endpoints'
+records or change the recorded outcomes and measured phases.
+Network rows MUST identify their topology owner with a labeled icon and distinct
+colors in both light and dark themes: Browser records belong to the Connector,
+and Node records belong to the Acceptor. These labels MUST follow the endpoint,
+including reverse callbacks, rather than the call's sending or receiving role.
+
 **EXAMPLE-LAB-RECOVERY-001 — Reproducible physical fault injection.** Recovery
 controls MUST close the active browser WebSocket, retaining the same Connector,
 Peer, and resolved facades. A paused report MUST survive replacement under the

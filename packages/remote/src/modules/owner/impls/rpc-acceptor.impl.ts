@@ -41,13 +41,15 @@ import type {
 	RpcMethodDefinitions,
 } from "@/modules/peer";
 import { installRpcExposure } from "@/modules/peer";
-import type {
-	IRpcProtocolAcceptor,
-	IRpcProtocolRuntimePolicy,
-	IRpcProtocolSession,
-	IRpcProtocolSessionHost,
-	IRpcRetainedBytesReservation,
-	RpcProtocolFaultReason,
+import {
+	type IRpcProtocolAcceptor,
+	type IRpcProtocolRuntimePolicy,
+	type IRpcProtocolSession,
+	type IRpcProtocolSessionHost,
+	type IRpcRetainedBytesReservation,
+	RPC_CONNECTIONS_PER_HANDSHAKE,
+	RPC_SESSION_BYTE_SUBCAP_DIVISOR,
+	type RpcProtocolFaultReason,
 } from "@/modules/protocol";
 import type { IRpcAcceptorAdapter, IRpcConnection } from "@/modules/transport";
 import { RpcCloseOutcomeEnum } from "@/shared/enums/rpc-close-outcome.enum";
@@ -135,7 +137,9 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 					!this.#termination.requested &&
 					this.state.status === RpcStateStatusEnum.active,
 				handlerScheduler,
-				maximumIncomingBytes: Math.floor(policy.maxRetainedBytesPerSession / 4),
+				maximumIncomingBytes: Math.floor(
+					policy.maxRetainedBytesPerSession / RPC_SESSION_BYTE_SUBCAP_DIVISOR,
+				),
 				reserveOwnerRetainedBytes: (bytes) => this.reserveRetainedBytes(bytes),
 			},
 			lifecycle: {
@@ -146,7 +150,7 @@ export class RpcAcceptorImpl implements IRpcAcceptor {
 			},
 		});
 		this.#ordinaryConnectionLimit =
-			policy.maxSessions + 2 * policy.maxHandshakes;
+			policy.maxSessions + RPC_CONNECTIONS_PER_HANDSHAKE * policy.maxHandshakes;
 		this.state$ = publisher.state$;
 		this.peers$ = publisher.peers$;
 		this.event$ = publisher.event$;

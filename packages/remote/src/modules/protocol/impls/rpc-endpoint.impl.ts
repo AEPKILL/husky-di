@@ -10,7 +10,7 @@ import {
 	RPC_MAX_INGRESS_BYTES,
 	RPC_MAX_INGRESS_RECORDS,
 	RPC_MAX_MESSAGE_BYTES,
-} from "@/modules/protocol/constants/rpc-profile.const";
+} from "@/modules/protocol/constants/rpc-limits.const";
 import { RpcEndpointFailureEnum } from "@/modules/protocol/enums/rpc-endpoint-failure.enum";
 import type { IRpcEndpoint } from "@/modules/protocol/interfaces/rpc-endpoint.interface";
 import type { IRpcRetainedBytesReservation } from "@/modules/protocol/interfaces/rpc-protocol.interface";

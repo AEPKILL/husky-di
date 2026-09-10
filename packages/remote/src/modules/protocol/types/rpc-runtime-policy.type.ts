@@ -5,13 +5,16 @@
  */
 
 import { type input, type output, z } from "zod";
-import { RPC_PROTECTED_SESSION_BYTES } from "@/modules/protocol/constants/rpc-profile.const";
 import {
 	DEFAULT_RPC_RUNTIME_POLICY,
+	RPC_CONNECTIONS_PER_HANDSHAKE,
 	RPC_HANDSHAKE_TRANSIENT_BYTES,
+	RPC_MAX_PLATFORM_TIMER_DELAY_MS,
 	RPC_MIN_RETAINED_BYTES_PER_SESSION,
-} from "@/modules/protocol/constants/rpc-runtime-policy.const";
-import { RPC_MAX_PLATFORM_TIMER_DELAY_MS } from "@/shared/constants/rpc-timer.const";
+	RPC_MIN_SILENCE_PROBE_INTERVALS,
+	RPC_PROTECTED_SESSION_BYTES,
+	RPC_REPLAY_ENTRIES_PER_PENDING_INVOCATION,
+} from "@/modules/protocol/constants/rpc-limits.const";
 
 export type RpcAcceptorRuntimePolicyOptions = Readonly<
 	input<typeof rpcAcceptorRuntimePolicyOptionsSchema>
@@ -152,10 +155,11 @@ const rpcProtocolRuntimePolicySchema = z
 		shutdownDeadlineMs: rpcTimerOptionSchema,
 	})
 	.superRefine((policy, context) => {
-		const threeProbeIntervals = policy.activityProbeIntervalMs * 3;
+		const minimumSilenceTimeoutMs =
+			policy.activityProbeIntervalMs * RPC_MIN_SILENCE_PROBE_INTERVALS;
 		if (
-			!Number.isSafeInteger(threeProbeIntervals) ||
-			policy.silenceTimeoutMs < threeProbeIntervals
+			!Number.isSafeInteger(minimumSilenceTimeoutMs) ||
+			policy.silenceTimeoutMs < minimumSilenceTimeoutMs
 		) {
 			context.addIssue({
 				code: "custom",
@@ -195,14 +199,24 @@ const rpcProtocolRuntimePolicySchema = z
 				message: "maxRetainedBytesPerSession must be at least 4 MiB.",
 			});
 		}
-		if (!Number.isSafeInteger(policy.maxPendingInvocationsPerSession * 4)) {
+		if (
+			!Number.isSafeInteger(
+				policy.maxPendingInvocationsPerSession *
+					RPC_REPLAY_ENTRIES_PER_PENDING_INVOCATION,
+			)
+		) {
 			context.addIssue({
 				code: "custom",
 				path: ["maxPendingInvocationsPerSession"],
 				message: "replay entry limit exceeds safe-integer arithmetic.",
 			});
 		}
-		if (!Number.isSafeInteger(policy.maxSessions + policy.maxHandshakes * 2)) {
+		if (
+			!Number.isSafeInteger(
+				policy.maxSessions +
+					policy.maxHandshakes * RPC_CONNECTIONS_PER_HANDSHAKE,
+			)
+		) {
 			context.addIssue({
 				code: "custom",
 				path: ["maxHandshakes"],

@@ -88,6 +88,15 @@ cancellation, failed admission, Endpoint close, or Session terminal winner.
 
 ## Verification
 
+In a source checkout of this package, the built-in implementation's numeric
+size, length, count, retained-byte, and runtime policy limits are collected in
+`src/modules/protocol/constants/rpc-limits.const.ts`.
+The constants document units, wrapper allowances, resource charges, derived
+capacity formulas, and policy defaults; the Codec, value normalizer, schemas,
+and runtime use the same definitions. These are package-private implementation
+constants. The normative contracts remain `RPC-VALUE-004`, `RPC-RESOURCE-*`,
+`RPC-POLICY-*`, and `RPC-COUNTER-*` in [SPECIFICATION.md](SPECIFICATION.md).
+
 Run `runRpcProtocolConformance()` from `@husky-di/remote/conformance` with a
 candidate fixture. Its `protocol` and `counterExhaustionProtocol` values each
 pair compatible role factories:

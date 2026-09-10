@@ -5,6 +5,10 @@
  */
 
 import { z } from "zod";
+import {
+	RPC_MAX_CALL_ORDINAL_DIGITS,
+	RPC_MIN_PROFILE_OFFERS,
+} from "@/modules/protocol/constants/rpc-limits.const";
 
 import { RPC_PROFILE } from "@/modules/protocol/constants/rpc-profile.const";
 import { RpcResumeRejectCodeEnum } from "@/modules/protocol/enums/rpc-resume-reject-code.enum";
@@ -48,7 +52,9 @@ export {
 	rpcWireErrorCodeSchema,
 };
 
-const callOrdinalPattern = /^(?:[1-9][0-9]{0,15})$/;
+const callOrdinalPattern = new RegExp(
+	`^(?:[1-9][0-9]{0,${RPC_MAX_CALL_ORDINAL_DIGITS - 1}})$`,
+);
 const closeForbiddenMembers = new Set([
 	"seq",
 	"ackThrough",
@@ -107,7 +113,7 @@ const rpcCallOrdinalSchema = z
 	.refine((value) => Number.isSafeInteger(Number(value)));
 const rpcProfileOfferSchema = z
 	.array(rpcWireIdentifierSchema)
-	.min(1)
+	.min(RPC_MIN_PROFILE_OFFERS)
 	.refine((profiles) => new Set(profiles).size === profiles.length);
 
 const rpcJsonRecordSchema = z.custom<IRpcApplicationRecord>(

@@ -82,7 +82,7 @@ export {
 	createRpcSessionInvocations,
 } from "./factories/rpc-protocol.factory";
 export { createRpcSecurityCarrier } from "./utils/rpc-base64-url-32-schema.util";
-export { DEFAULT_RPC_RUNTIME_POLICY } from "./constants/rpc-runtime-policy.const";
+
 export {
 	isRpcApplicationArgumentsSnapshot,
 	isRpcApplicationSnapshot,
@@ -95,12 +95,17 @@ export {
 	reserveRpcSessionRetainedBytes,
 	unregisterRpcSessionRetainedBytes,
 } from "./utils/rpc-session-retained-bytes.util";
+export { RPC_PROFILE } from "./constants/rpc-profile.const";
 export {
+	DEFAULT_RPC_RUNTIME_POLICY,
 	RPC_MAX_WIRE_DEPTH,
 	RPC_MAX_WIRE_NODES,
-	RPC_PROFILE,
 	RPC_PROTECTED_SESSION_BYTES,
-} from "./constants/rpc-profile.const";
+	RPC_CONNECTIONS_PER_HANDSHAKE,
+	RPC_SESSION_BYTE_SUBCAP_DIVISOR,
+	RPC_ENTRY_OVERHEAD_BYTES,
+	RPC_MAX_INCOMING_JOBS,
+} from "./constants/rpc-limits.const";
 export {
 	rpcAcceptorRuntimePolicyOptionsSchema,
 	rpcConnectorRuntimePolicyOptionsSchema,

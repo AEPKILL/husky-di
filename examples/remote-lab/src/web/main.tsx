@@ -13,6 +13,8 @@ import {
 	RpcStateStatusEnum,
 } from "@husky-di/remote";
 import { createWebSocketConnectorAdapter } from "@husky-di/remote-websocket";
+import type { FormEvent, MouseEvent } from "react";
+import { createRoot } from "react-dom/client";
 import {
 	LAB_SERVICE_NAMES,
 	REMOTE_LAB_BROWSER_SERVICE,
@@ -35,14 +37,17 @@ import {
 	DevtoolsPanelEnum,
 	type DevtoolsView,
 	recordKey,
-	renderDevtools,
 } from "@/web/devtools";
 import { getPeerStatusLabel } from "@/web/utils/get-peer-status-label.util";
-import { WORKBENCH_HTML } from "@/web/workbench";
+import { Workbench } from "@/web/workbench";
 import "@/web/styles.css";
 
 const root = element("#root");
-root.innerHTML = WORKBENCH_HTML;
+const reactRoot = createRoot(root);
+const texts: Record<string, string> = {};
+let scenario = "unary";
+let capacityPending = false;
+const greetings: { id: number; text: string }[] = [];
 const recorder = createLabRecorder(LabSideEnum.browser);
 const diagnostics = createRpcDiagnostics();
 const sockets = new Set<WebSocket>();
@@ -109,7 +114,7 @@ const client = createExampleClient({
 		showMessage(message) {
 			if (typeof message !== "string" || message.length > 160)
 				throw new TypeError("Invalid display message.");
-			element("#callback").textContent = message;
+			setText("#callback", message);
 			return document.title;
 		},
 	},
@@ -129,8 +134,8 @@ client.connector.peer.expose(REMOTE_LAB_BROWSER_SERVICE, {
 			() => {
 				if (typeof message !== "string" || message.length > 500)
 					throw new TypeError("Invalid Lab message.");
-				element("#callback").textContent = message;
-				element("#notice").textContent = `Node → ${peerId}: ${message}`;
+				setText("#callback", message);
+				setText("#notice", `Node → ${peerId}: ${message}`);
 				scheduleRender();
 				return `${peerId}: ${document.title}`;
 			},
@@ -155,10 +160,8 @@ const missingMethod = client.connector.peer.resolve(
 );
 const subscriptions = [
 	client.connector.peer.state$.subscribe((state) => {
-		element("#transport").textContent = getPeerStatusLabel(state.status);
-		element("#transport").dataset.state = state.status;
-		element("#recovery-state").textContent = state.status;
-		updateButtons();
+		setText("#transport", getPeerStatusLabel(state.status));
+		setText("#recovery-state", state.status);
 		scheduleRender();
 	}),
 	client.reconnection.state$.subscribe((state) => {
@@ -169,13 +172,14 @@ const subscriptions = [
 			label += ` · ${state.delayMs} ms → attempt ${state.nextAttempt}`;
 		if (state.status === RpcStateStatusEnum.stopped)
 			label += ` · ${state.reason}`;
-		element("#supervisor").textContent = element(
-			"#recovery-supervisor",
-		).textContent = label;
+		setText("#supervisor", label);
+		setText("#recovery-supervisor", label);
 	}),
 	client.reconnection.event$.subscribe((event) => {
-		element("#notice").textContent =
-			`Replacement attempt ${event.attempt} failed during ${event.stage}.`;
+		setText(
+			"#notice",
+			`Replacement attempt ${event.attempt} failed during ${event.stage}.`,
+		);
 	}),
 	client.connector.event$.subscribe((event) => {
 		diagnostics.record(event);
@@ -184,7 +188,7 @@ const subscriptions = [
 	}),
 ];
 
-root.addEventListener("click", (event) => {
+function handleAction(event: MouseEvent<HTMLButtonElement>): void {
 	const target =
 		event.target instanceof Element
 			? event.target.closest<HTMLButtonElement>("button")
@@ -192,32 +196,6 @@ root.addEventListener("click", (event) => {
 	if (!target || target.disabled) return;
 	if (target.dataset.scenario) {
 		selectScenario(target.dataset.scenario);
-		return;
-	}
-	if (target.dataset.panel) {
-		const panel = Object.values(DevtoolsPanelEnum).find(
-			(value) => value === target.dataset.panel,
-		);
-		if (panel) selectPanel(panel);
-		return;
-	}
-	if (target.dataset.detail) {
-		const detail = Object.values(DevtoolsDetailEnum).find(
-			(value) => value === target.dataset.detail,
-		);
-		if (detail) view.detail = detail;
-		scheduleRender();
-		return;
-	}
-	if (target.dataset.call) {
-		view.selected = target.dataset.call;
-		scheduleRender();
-		return;
-	}
-	if (target.dataset.debug) {
-		if (target.dataset.debug === "pause") startReport(true, getReportDelay());
-		if (target.dataset.debug === "cancel") cancelReport();
-		if (target.dataset.debug === "resume") void resumeReport();
 		return;
 	}
 	if (target.dataset.value) {
@@ -272,8 +250,10 @@ root.addEventListener("click", (event) => {
 			break;
 		case "allow-reconnect":
 			blockReconnections = false;
-			element("#notice").textContent =
-				"后续监督器尝试已允许；若 Peer 已 closed，请重新加载。";
+			setText(
+				"#notice",
+				"后续监督器尝试已允许；若 Peer 已 closed，请重新加载。",
+			);
 			break;
 		case "open-peer":
 			window.open(window.location.href, "_blank", "noopener");
@@ -361,32 +341,26 @@ root.addEventListener("click", (event) => {
 			scheduleRender();
 			break;
 	}
-});
-element<HTMLFormElement>("#quote-form").addEventListener("submit", (event) => {
-	event.preventDefault();
-	void sendQuote();
-});
-element<HTMLFormElement>("#greeting-form").addEventListener(
-	"submit",
-	(event) => {
-		event.preventDefault();
-		void sendGreeting();
-	},
-);
-for (const id of [
-	"call-filter",
-	"side-filter",
-	"status-filter",
-	"show-payload",
-]) {
-	element(`#${id}`).addEventListener("input", () => {
-		view.filter = input("#call-filter");
-		view.side = input("#side-filter");
-		view.status = input("#status-filter");
-		view.payload = element<HTMLInputElement>("#show-payload").checked;
-		scheduleRender();
-	});
 }
+
+function handleSubmit(event: FormEvent<HTMLFormElement>): void {
+	event.preventDefault();
+	if (!(event.target instanceof HTMLFormElement)) return;
+	if (event.target.id === "quote-form") void sendQuote();
+	if (event.target.id === "greeting-form") void sendGreeting();
+}
+
+function changeView(patch: Partial<DevtoolsView>): void {
+	Object.assign(view, patch);
+	scheduleRender();
+}
+
+function debug(action: string): void {
+	if (action === "pause") startReport(true, getReportDelay());
+	if (action === "cancel") cancelReport();
+	if (action === "resume") void resumeReport();
+}
+
 window.addEventListener("pagehide", () => {
 	void shutdown(false).catch(reportCleanupError);
 });
@@ -397,19 +371,19 @@ void client.reconnection.connect().then(
 	async () => {
 		try {
 			peerId = await lab.identify();
-			element("#peer-name").textContent = `${peerId} · Browser ⇄ Node`;
-			element("#notice").textContent =
-				"已连接。执行一个场景，在下方检查真实调用。";
+			setText("#peer-name", `${peerId} · Browser ⇄ Node`);
+			setText("#notice", "已连接。执行一个场景，在下方检查真实调用。");
 			await run("example.greeting.v1", "ready", [], () => greeter.ready());
 		} catch (error) {
-			element("#notice").textContent =
-				`连接已建立，ready 握手未完成：${errorLabel(error)}`;
+			setText("#notice", `连接已建立，ready 握手未完成：${errorLabel(error)}`);
 		}
-		updateButtons();
+		scheduleRender();
 	},
 	() => {
-		element("#notice").textContent =
-			"首次连接失败。请启动 Node 服务后重新加载；首次失败不会自动重试。";
+		setText(
+			"#notice",
+			"首次连接失败。请启动 Node 服务后重新加载；首次失败不会自动重试。",
+		);
 	},
 );
 void pollNode();
@@ -483,16 +457,20 @@ async function execute<T>(
 	service: string = LAB_SERVICE_NAMES.lab,
 	traceId = nextTrace(),
 ): Promise<T | undefined> {
-	element(selector).textContent = `${method} · pending…`;
+	setText(selector, `${method} · pending…`);
 	const start = performance.now();
 	try {
 		const value = await run(service, method, args, operation, traceId);
-		element(selector).textContent =
-			`${method} · fulfilled · ${Math.round(performance.now() - start)} ms\n${formatLabValue(value)}`;
+		setText(
+			selector,
+			`${method} · fulfilled · ${Math.round(performance.now() - start)} ms\n${formatLabValue(value)}`,
+		);
 		return value;
 	} catch (error) {
-		element(selector).textContent =
-			`${method} · ${errorLabel(error)} · ${Math.round(performance.now() - start)} ms`;
+		setText(
+			selector,
+			`${method} · ${errorLabel(error)} · ${Math.round(performance.now() - start)} ms`,
+		);
 		return undefined;
 	}
 }
@@ -512,8 +490,7 @@ async function sendQuote(selector?: string): Promise<void> {
 		LAB_SERVICE_NAMES.shipping,
 		traceId,
 	);
-	if (value)
-		element("#quote-result").textContent = `¥ ${value.amount.toFixed(2)}`;
+	if (value) setText("#quote-result", `¥ ${value.amount.toFixed(2)}`);
 }
 
 async function sendGreeting(): Promise<void> {
@@ -521,11 +498,10 @@ async function sendGreeting(): Promise<void> {
 	const count = ++greetingOrdinal;
 	const name = input("#name");
 	const delay = Number(input("#delay"));
-	const row = document.createElement("li");
-	row.textContent = `#${count} · Waiting for Node…`;
-	const results = element("#results");
-	results.prepend(row);
-	while (results.childElementCount > 12) results.lastElementChild?.remove();
+	const row = { id: count, text: `#${count} · Waiting for Node…` };
+	greetings.unshift(row);
+	greetings.length = Math.min(greetings.length, 12);
+	scheduleRender();
 	const start = performance.now();
 	try {
 		const greeting = await run(
@@ -534,9 +510,11 @@ async function sendGreeting(): Promise<void> {
 			[name, delay],
 			() => greeter.greet(name, delay),
 		);
-		row.textContent = `#${count} · ${greeting} · ${Math.round(performance.now() - start)} ms round trip`;
+		row.text = `#${count} · ${greeting} · ${Math.round(performance.now() - start)} ms round trip`;
 	} catch (error) {
-		row.textContent = `#${count} · ${errorLabel(error)}`;
+		row.text = `#${count} · ${errorLabel(error)}`;
+	} finally {
+		scheduleRender();
 	}
 }
 
@@ -552,7 +530,7 @@ function startReport(
 	timeout?: number,
 ): string | undefined {
 	if (closing || report?.pending || report?.pause) {
-		element("#notice").textContent = "先结束或继续当前报表，再启动下一份。";
+		setText("#notice", "先结束或继续当前报表，再启动下一份。");
 		return undefined;
 	}
 	const active = {
@@ -593,10 +571,9 @@ function startReport(
 			clearTimeout(timer);
 			timers.delete(timer);
 		}
-		updateButtons();
 		scheduleRender();
 	});
-	updateButtons();
+	scheduleRender();
 	return active.traceId;
 }
 
@@ -604,7 +581,6 @@ function cancelReport(): void {
 	if (!report?.pending) return;
 	recorder.mark(report.traceId, "Caller requested cancellation");
 	report.controller.abort();
-	updateButtons();
 	scheduleRender();
 }
 
@@ -617,9 +593,8 @@ async function resumeReport(): Promise<void> {
 		);
 		active.pause = false;
 	} catch (error) {
-		element("#notice").textContent = errorLabel(error);
+		setText("#notice", errorLabel(error));
 	}
-	updateButtons();
 	scheduleRender();
 }
 
@@ -627,9 +602,12 @@ function disconnect(): void {
 	for (const socket of sockets)
 		if (socket.readyState === WebSocket.OPEN)
 			socket.close(4001, "Remote Lab fault injection");
-	element("#notice").textContent = blockReconnections
-		? "真实 WebSocket 已断开；替换连接被阻断，等待 5 秒恢复期限。"
-		: "真实 WebSocket 已断开；监督器正在尝试恢复原 Session。";
+	setText(
+		"#notice",
+		blockReconnections
+			? "真实 WebSocket 已断开；替换连接被阻断，等待 5 秒恢复期限。"
+			: "真实 WebSocket 已断开；监督器正在尝试恢复原 Session。",
+	);
 }
 
 async function recoveryDrill(expire: boolean): Promise<void> {
@@ -645,8 +623,10 @@ async function recoveryDrill(expire: boolean): Promise<void> {
 		await waitForSnapshot();
 	}
 	if (!polling.signal.aborted)
-		element("#notice").textContent =
-			"未观测到处理器进入，未执行断线；检查 Node 快照后重试。";
+		setText(
+			"#notice",
+			"未观测到处理器进入，未执行断线；检查 Node 快照后重试。",
+		);
 }
 
 async function echoPreset(preset: string): Promise<void> {
@@ -672,8 +652,7 @@ async function echoPreset(preset: string): Promise<void> {
 				value = JSON.parse(input("#value-json"));
 		}
 	} catch {
-		element("#value-result").textContent =
-			"Invalid JSON · 本地解析失败，未调用 RPC。";
+		setText("#value-result", "Invalid JSON · 本地解析失败，未调用 RPC。");
 		return;
 	}
 	const traceId = nextTrace();
@@ -687,16 +666,9 @@ async function echoPreset(preset: string): Promise<void> {
 	);
 }
 
-function selectScenario(scenario: string): void {
-	for (const section of root.querySelectorAll<HTMLElement>("[data-scene]"))
-		section.hidden = section.dataset.scene !== scenario;
-	for (const button of root.querySelectorAll<HTMLButtonElement>(
-		"[data-scenario]",
-	))
-		button.setAttribute(
-			"aria-pressed",
-			String(button.dataset.scenario === scenario),
-		);
+function selectScenario(nextScenario: string): void {
+	scenario = nextScenario;
+	scheduleRender();
 	if (scenario === "cancel") selectPanel(DevtoolsPanelEnum.sources);
 	if (scenario === "exposure") selectPanel(DevtoolsPanelEnum.services);
 	if (scenario === "adapter" || scenario === "errors")
@@ -704,10 +676,8 @@ function selectScenario(scenario: string): void {
 }
 
 async function runCapacity(): Promise<void> {
-	const button = element<HTMLButtonElement>("#capacity-run");
-	button.disabled = true;
-	element("#capacity-result").textContent =
-		"12 concurrent invocations · pending…";
+	capacityPending = true;
+	setText("#capacity-result", "12 concurrent invocations · pending…");
 	try {
 		const outcomes = await Promise.allSettled(
 			Array.from({ length: 12 }, (_, index) =>
@@ -719,14 +689,18 @@ async function runCapacity(): Promise<void> {
 				),
 			),
 		);
-		element("#capacity-result").textContent = outcomes
-			.map(
-				(outcome, index) =>
-					`#${index + 1} · ${outcome.status === "fulfilled" ? "fulfilled" : errorLabel(outcome.reason)}`,
-			)
-			.join("\n");
+		setText(
+			"#capacity-result",
+			outcomes
+				.map(
+					(outcome, index) =>
+						`#${index + 1} · ${outcome.status === "fulfilled" ? "fulfilled" : errorLabel(outcome.reason)}`,
+				)
+				.join("\n"),
+		);
 	} finally {
-		updateButtons();
+		capacityPending = false;
+		scheduleRender();
 	}
 }
 
@@ -746,32 +720,12 @@ function waitForSnapshot(): Promise<void> {
 
 function selectPanel(panel: DevtoolsPanelEnum): void {
 	view.panel = panel;
-	for (const button of root.querySelectorAll<HTMLButtonElement>("[data-panel]"))
-		button.setAttribute("aria-pressed", String(button.dataset.panel === panel));
 	scheduleRender();
 }
 
-function updateButtons(): void {
-	const unavailable =
-		closing ||
-		client.connector.peer.state.status !== RpcStateStatusEnum.connected;
-	for (const button of root.querySelectorAll<HTMLButtonElement>(
-		"[data-needs-peer]",
-	))
-		button.disabled = unavailable;
-	for (const id of [
-		"report-start",
-		"report-timeout",
-		"report-pause",
-		"recovery-report",
-		"expire",
-	])
-		element<HTMLButtonElement>(`#${id}`).disabled =
-			unavailable || Boolean(report?.pending || report?.pause);
-	element<HTMLButtonElement>("#report-cancel").disabled =
-		!report?.pending || report.controller.signal.aborted;
-	element<HTMLButtonElement>("#report-resume").disabled =
-		unavailable || !report?.pause;
+function setText(selector: string, value: string): void {
+	texts[selector] = value;
+	scheduleRender();
 }
 
 function scheduleRender(): void {
@@ -800,17 +754,40 @@ function scheduleRender(): void {
 			.split("\n")
 			.map((line) => line.replace(/^\t{6}/, ""))
 			.join("\n");
-		renderDevtools({
-			view,
-			calls,
-			entries,
-			server,
-			reportTrace: report?.traceId,
-			pauseRequested: Boolean(report?.pause),
-			source,
-			browserDiagnostics: diagnostics.snapshot(),
-			nodeDiagnostics,
-		});
+		const unavailable =
+			closing ||
+			client.connector.peer.state.status !== RpcStateStatusEnum.connected;
+		reactRoot.render(
+			<Workbench
+				texts={{ ...texts }}
+				scenario={scenario}
+				peerId={peerId}
+				transportStatus={client.connector.peer.state.status}
+				unavailable={unavailable}
+				reportBusy={Boolean(report?.pending || report?.pause)}
+				reportCancelable={Boolean(
+					report?.pending && !report.controller.signal.aborted,
+				)}
+				reportResumable={!unavailable && Boolean(report?.pause)}
+				capacityPending={capacityPending}
+				greetings={greetings}
+				onAction={handleAction}
+				onSubmit={handleSubmit}
+				onViewChange={changeView}
+				onDebug={debug}
+				devtools={{
+					view: { ...view },
+					calls,
+					entries,
+					server,
+					reportTrace: report?.traceId,
+					pauseRequested: Boolean(report?.pause),
+					source,
+					browserDiagnostics: diagnostics.snapshot(),
+					nodeDiagnostics,
+				}}
+			/>,
+		);
 	});
 }
 
@@ -834,71 +811,19 @@ async function pollNode(): Promise<void> {
 			throw new Error("Node snapshot unavailable.");
 		server = responses[0].value as LabServerSnapshot;
 		nodeDiagnostics = responses[1].value as NodeDiagnosticsSnapshot;
-		element("#node-state").textContent =
-			`${nodeDiagnostics.listenerStatus} · ${server.peers.length} Peers · RPC pending ${diagnostics.snapshot().pendingCalls.length} Browser / ${nodeDiagnostics.pendingCalls.length} Node`;
-		updatePeerControls();
+		setText(
+			"#node-state",
+			`${nodeDiagnostics.listenerStatus} · ${server.peers.length} Peers · RPC pending ${diagnostics.snapshot().pendingCalls.length} Browser / ${nodeDiagnostics.pendingCalls.length} Node`,
+		);
 		scheduleRender();
 	} catch {
 		if (!polling.signal.aborted)
-			element("#node-state").textContent =
-				"Node snapshot unavailable · last observed data";
+			setText("#node-state", "Node snapshot unavailable · last observed data");
 	} finally {
 		if (!polling.signal.aborted)
 			later(() => {
 				void pollNode();
 			}, 500);
-	}
-}
-
-function updatePeerControls(): void {
-	if (!server) return;
-	const focusedPeer =
-		document.activeElement instanceof HTMLButtonElement
-			? document.activeElement.dataset.exposurePeer
-			: undefined;
-	const select = element<HTMLSelectElement>("#peer-select");
-	const previous = select.value;
-	const peers = server.peers.filter(
-		(peer) => peer.status === RpcStateStatusEnum.connected,
-	);
-	select.replaceChildren(
-		...peers.map((peer) => {
-			const option = document.createElement("option");
-			option.value = peer.id;
-			option.textContent = `${peer.id}${peer.id === peerId ? " (this tab)" : ""}`;
-			return option;
-		}),
-	);
-	if (peers.some((peer) => peer.id === previous)) select.value = previous;
-	element("#handler-entries").textContent = String(
-		server.peers.find((peer) => peer.id === peerId)?.handlerEntries ?? 0,
-	);
-	element("#toggle-global").textContent = server.globalExposure
-		? "撤销全局 shipping"
-		: "恢复全局 shipping";
-	element("#peer-exposures").replaceChildren(
-		...server.peers.map((peer) => {
-			const row = document.createElement("div");
-			row.className = "peer-exposure";
-			const label = document.createElement("span");
-			label.textContent = `${peer.id} · ${peer.status} · inspect ${peer.peerExposure ? "exposed" : "revoked"}`;
-			const button = document.createElement("button");
-			button.textContent = peer.peerExposure ? "撤销此 Peer" : "恢复此 Peer";
-			button.dataset.exposurePeer = peer.id;
-			button.disabled =
-				closing ||
-				client.connector.peer.state.status !== RpcStateStatusEnum.connected;
-			row.append(label, button);
-			return row;
-		}),
-	);
-	if (focusedPeer) {
-		[...root.querySelectorAll<HTMLButtonElement>("[data-exposure-peer]")]
-			.find(
-				(button) =>
-					button.dataset.exposurePeer === focusedPeer && !button.disabled,
-			)
-			?.focus({ preventScroll: true });
 	}
 }
 
@@ -920,9 +845,8 @@ function shutdown(force: boolean): Promise<void> {
 	polling.abort();
 	for (const timer of timers) clearTimeout(timer);
 	timers.clear();
-	element("#node-state").textContent =
-		"HTTP polling stopped · last observed snapshot";
-	updateButtons();
+	setText("#node-state", "HTTP polling stopped · last observed snapshot");
+	scheduleRender();
 	stopTask ??= client.reconnection.stop();
 	if (force) {
 		forceTask ??= stopTask.then(() => client.connector.close());
@@ -935,8 +859,7 @@ function shutdown(force: boolean): Promise<void> {
 				forceTask ??= client.connector.close();
 				await forceTask;
 			} else await client.connector.shutdown();
-			element("#notice").textContent =
-				"Session closed. Reload to create a new Session.";
+			setText("#notice", "Session closed. Reload to create a new Session.");
 		} finally {
 			for (const subscription of subscriptions) subscription.unsubscribe();
 			scheduleRender();
@@ -946,6 +869,5 @@ function shutdown(force: boolean): Promise<void> {
 }
 
 function reportCleanupError(): void {
-	element("#notice").textContent =
-		"Session cleanup failed. Reload before continuing.";
+	setText("#notice", "Session cleanup failed. Reload before continuing.");
 }

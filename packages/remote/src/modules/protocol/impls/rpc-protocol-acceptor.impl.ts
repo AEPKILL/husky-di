@@ -5,9 +5,11 @@
  */
 
 import {
-	RPC_PROFILE,
+	RPC_MAX_SESSION_ID_ATTEMPTS,
 	RPC_PROTECTED_SESSION_BYTES,
-} from "@/modules/protocol/constants/rpc-profile.const";
+} from "@/modules/protocol/constants/rpc-limits.const";
+
+import { RPC_PROFILE } from "@/modules/protocol/constants/rpc-profile.const";
 import { RpcDecodePhaseEnum } from "@/modules/protocol/enums/rpc-decode-phase.enum";
 import { RpcProtocolSessionTransitionTypeEnum } from "@/modules/protocol/enums/rpc-protocol-session-transition-type.enum";
 import { RpcResumeRejectCodeEnum } from "@/modules/protocol/enums/rpc-resume-reject-code.enum";
@@ -340,7 +342,11 @@ export class RpcProtocolAcceptorImpl implements IRpcProtocolAcceptor {
 		}
 
 		let sessionId: string | undefined;
-		for (let candidateIndex = 0; candidateIndex < 8; candidateIndex += 1) {
+		for (
+			let candidateIndex = 0;
+			candidateIndex < RPC_MAX_SESSION_ID_ATTEMPTS;
+			candidateIndex += 1
+		) {
 			const candidate = this._createSecurityCarrier();
 			if (
 				!this._sessions.has(candidate) &&

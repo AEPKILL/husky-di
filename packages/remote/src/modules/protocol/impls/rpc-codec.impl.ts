@@ -6,10 +6,14 @@
 
 import type { ZodType } from "zod";
 import {
+	RPC_MAX_ARRAY_ELEMENTS,
+	RPC_MAX_MEMBER_NAME_BYTES,
 	RPC_MAX_MESSAGE_BYTES,
+	RPC_MAX_OBJECT_MEMBERS,
+	RPC_MAX_STRING_BYTES,
 	RPC_MAX_WIRE_DEPTH,
 	RPC_MAX_WIRE_NODES,
-} from "@/modules/protocol/constants/rpc-profile.const";
+} from "@/modules/protocol/constants/rpc-limits.const";
 import { RpcDecodePhaseEnum } from "@/modules/protocol/enums/rpc-decode-phase.enum";
 import type {
 	IRpcCodec,
@@ -117,7 +121,7 @@ class BoundedJsonParser {
 			case "[":
 				return this._parseArray(depth);
 			case '"':
-				return this._parseString(524_288, "string");
+				return this._parseString(RPC_MAX_STRING_BYTES, "string");
 			case "t":
 				this._consumeLiteral("true");
 				return true;
@@ -143,13 +147,13 @@ class BoundedJsonParser {
 		}
 
 		for (let memberCount = 1; ; memberCount += 1) {
-			if (memberCount > 1_024) {
+			if (memberCount > RPC_MAX_OBJECT_MEMBERS) {
 				throw new Error("RPC JSON object exceeds the member limit.");
 			}
 			if (this._text[this._index] !== '"') {
 				throw new Error("RPC JSON object member name is missing.");
 			}
-			const name = this._parseString(256, "member name");
+			const name = this._parseString(RPC_MAX_MEMBER_NAME_BYTES, "member name");
 			if (names.has(name)) {
 				throw new Error("RPC JSON contains a duplicate object member.");
 			}
@@ -186,7 +190,7 @@ class BoundedJsonParser {
 		}
 
 		for (;;) {
-			if (result.length >= 8_192) {
+			if (result.length >= RPC_MAX_ARRAY_ELEMENTS) {
 				throw new Error("RPC JSON array exceeds the element limit.");
 			}
 			result.push(this._parseValue(depth + 1));

@@ -4,10 +4,9 @@
  * @created 2026-09-04 00:00:00
  */
 
-import {
-	RPC_PROFILE,
-	RPC_PROTECTED_SESSION_BYTES,
-} from "@/modules/protocol/constants/rpc-profile.const";
+import { RPC_PROTECTED_SESSION_BYTES } from "@/modules/protocol/constants/rpc-limits.const";
+
+import { RPC_PROFILE } from "@/modules/protocol/constants/rpc-profile.const";
 import { RpcDecodePhaseEnum } from "@/modules/protocol/enums/rpc-decode-phase.enum";
 import { RpcResumeRejectCodeEnum } from "@/modules/protocol/enums/rpc-resume-reject-code.enum";
 import { RpcWireRecordKindEnum } from "@/modules/protocol/enums/rpc-wire-record-kind.enum";

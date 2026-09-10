@@ -4,6 +4,17 @@
  * @created 2026-09-05 15:00:00
  */
 
+import {
+	RPC_CANCEL_RESERVE_BYTES,
+	RPC_ENTRY_OVERHEAD_BYTES,
+	RPC_MAX_COUNTER,
+	RPC_MAX_TERMINAL_PAYLOADS,
+	RPC_MAX_UNRETIRED_CALLS_PER_DIRECTION,
+	RPC_REPLAY_BYTE_SUBCAP_DIVISOR,
+	RPC_REPLAY_ENTRIES_PER_PENDING_INVOCATION,
+	RPC_SESSION_BYTE_SUBCAP_DIVISOR,
+	RPC_TERMINAL_RESERVE_BYTES,
+} from "@/modules/protocol/constants/rpc-limits.const";
 import { RpcCallTerminalTypeEnum } from "@/modules/protocol/enums/rpc-call-terminal-type.enum";
 import { RpcWireRecordKindEnum } from "@/modules/protocol/enums/rpc-wire-record-kind.enum";
 import type {
@@ -271,16 +282,13 @@ export class RpcSessionCallRetentionImpl implements IRpcSessionCallRetention {
 		let maximumEnvelope: Uint8Array;
 		try {
 			maximumEnvelope = this._codec.encode(
-				createRpcMessageEnvelope(
-					Number.MAX_SAFE_INTEGER,
-					message,
-					Number.MAX_SAFE_INTEGER,
-				),
+				createRpcMessageEnvelope(RPC_MAX_COUNTER, message, RPC_MAX_COUNTER),
 			);
 		} catch {
 			return undefined;
 		}
-		const ordinaryCharge = maximumEnvelope.byteLength + 256;
+		const ordinaryCharge =
+			maximumEnvelope.byteLength + RPC_ENTRY_OVERHEAD_BYTES;
 		const resourceClass =
 			message.kind === RpcWireRecordKindEnum.error
 				? "terminal"
@@ -289,16 +297,18 @@ export class RpcSessionCallRetentionImpl implements IRpcSessionCallRetention {
 					: "ordinary";
 		const charge =
 			resourceClass === "terminal"
-				? 768
+				? RPC_TERMINAL_RESERVE_BYTES
 				: resourceClass === "cancel"
-					? 384
+					? RPC_CANCEL_RESERVE_BYTES
 					: ordinaryCharge;
-		const maximumEntries = this._policy.maxPendingInvocationsPerSession * 4;
+		const maximumEntries =
+			this._policy.maxPendingInvocationsPerSession *
+			RPC_REPLAY_ENTRIES_PER_PENDING_INVOCATION;
 		const maximumBytes = Math.floor(
-			this._policy.maxRetainedBytesPerSession / 2,
+			this._policy.maxRetainedBytesPerSession / RPC_REPLAY_BYTE_SUBCAP_DIVISOR,
 		);
 		const maximumTerminalBytes = Math.floor(
-			this._policy.maxRetainedBytesPerSession / 4,
+			this._policy.maxRetainedBytesPerSession / RPC_SESSION_BYTE_SUBCAP_DIVISOR,
 		);
 		const isTerminalPayload = message.kind === RpcWireRecordKindEnum.result;
 		let retainedBytesReservation: IRpcRetainedBytesReservation | undefined;
@@ -306,15 +316,21 @@ export class RpcSessionCallRetentionImpl implements IRpcSessionCallRetention {
 			this._ordinaryReplayCount >= maximumEntries ||
 			charge > maximumBytes - this._replayBytes ||
 			(isTerminalPayload &&
-				(this._terminalPayloadCount >= 256 ||
+				(this._terminalPayloadCount >= RPC_MAX_TERMINAL_PAYLOADS ||
 					charge > maximumTerminalBytes - this._terminalReplayBytes));
 		if (resourceClass === "terminal") {
-			if (ordinaryCharge > charge || this._terminalReplayCount >= 256) {
+			if (
+				ordinaryCharge > charge ||
+				this._terminalReplayCount >= RPC_MAX_UNRETIRED_CALLS_PER_DIRECTION
+			) {
 				return undefined;
 			}
 			this._terminalReplayCount += 1;
 		} else if (resourceClass === "cancel") {
-			if (ordinaryCharge > charge || this._cancelReplayCount >= 256) {
+			if (
+				ordinaryCharge > charge ||
+				this._cancelReplayCount >= RPC_MAX_UNRETIRED_CALLS_PER_DIRECTION
+			) {
 				return undefined;
 			}
 			this._cancelReplayCount += 1;

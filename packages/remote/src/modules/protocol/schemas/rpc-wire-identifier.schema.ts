@@ -5,9 +5,16 @@
  */
 
 import { z } from "zod";
+import {
+	RPC_MAX_IDENTIFIER_BYTES,
+	RPC_MIN_IDENTIFIER_BYTES,
+} from "@/modules/protocol/constants/rpc-limits.const";
 
 export const rpcWireIdentifierSchema = z
 	.string()
-	.min(1)
-	.max(256)
-	.refine((value) => new TextEncoder().encode(value).byteLength <= 256);
+	.min(RPC_MIN_IDENTIFIER_BYTES)
+	.max(RPC_MAX_IDENTIFIER_BYTES)
+	.refine(
+		(value) =>
+			new TextEncoder().encode(value).byteLength <= RPC_MAX_IDENTIFIER_BYTES,
+	);

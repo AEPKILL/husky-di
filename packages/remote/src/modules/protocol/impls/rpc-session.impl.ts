@@ -4,7 +4,7 @@
  * @created 2026-08-19 00:00:00
  */
 
-import { RPC_PROTECTED_SESSION_BYTES } from "@/modules/protocol/constants/rpc-profile.const";
+import { RPC_PROTECTED_SESSION_BYTES } from "@/modules/protocol/constants/rpc-limits.const";
 import { RpcProtocolSessionTransitionTypeEnum } from "@/modules/protocol/enums/rpc-protocol-session-transition-type.enum";
 import { RpcWireRecordKindEnum } from "@/modules/protocol/enums/rpc-wire-record-kind.enum";
 import type { IRpcCodec } from "@/modules/protocol/interfaces/rpc-codec.interface";

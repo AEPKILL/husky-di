@@ -4,6 +4,7 @@
  * @created 2026-09-10 00:00:00
  */
 
+import { RPC_MAX_COUNTER } from "@/modules/protocol/constants/rpc-limits.const";
 import { RPC_PROFILE } from "@/modules/protocol/constants/rpc-profile.const";
 import { RpcPeerCursorClassificationEnum } from "@/modules/protocol/enums/rpc-peer-cursor-classification.enum";
 import type { IRpcEndpoint } from "@/modules/protocol/interfaces/rpc-endpoint.interface";
@@ -95,7 +96,7 @@ export class RpcSessionContinuityImpl implements IRpcSessionContinuity {
 		if (sessionIsNotRecoverable) {
 			throw new Error("Default RPC Session is not recoverable.");
 		}
-		if (this._resumeAttempt >= Number.MAX_SAFE_INTEGER) {
+		if (this._resumeAttempt >= RPC_MAX_COUNTER) {
 			throw new Error("Default RPC resumeAttempt counter is exhausted.");
 		}
 		this._resumeAttempt += 1;
@@ -380,7 +381,7 @@ export class RpcSessionContinuityImpl implements IRpcSessionContinuity {
 				state.binding !== undefined ||
 				(state.recoveryDeadline !== undefined &&
 					Date.now() < state.recoveryDeadline)) &&
-			this._bindingEpoch < Number.MAX_SAFE_INTEGER
+			this._bindingEpoch < RPC_MAX_COUNTER
 		);
 	}
 

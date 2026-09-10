@@ -19,17 +19,60 @@ import {
 	RpcStateStatusEnum,
 } from "@husky-di/remote";
 import { createWebSocketConnectorAdapter } from "@husky-di/remote-websocket";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { NEVER } from "rxjs";
 import { REMOTE_GREETING_SERVICE } from "@/consts/remote-services.const";
+import { LabSideEnum } from "@/enums/lab-recording.enum";
 import { createExampleClient } from "@/factories/example-client.factory";
 import { createExampleServer } from "@/factories/example-server.factory";
 import { createRpcDiagnostics } from "@/factories/rpc-diagnostics.factory";
 import type { NodeDiagnosticsSnapshot } from "@/types/rpc-diagnostics.type";
+import { EndpointBadge } from "@/web/components/devtools/endpoint-badge";
+import { formatDevtoolsJson } from "@/web/utils/format-devtools-json.util";
 import { getPeerStatusLabel } from "@/web/utils/get-peer-status-label.util";
 import "./lab/lab-scenarios.test";
 import "./recording/recording.test";
 
 describe("Remote Lab specification", () => {
+	it("EXAMPLE-LAB-DEVTOOLS-001 identifies endpoint owners with text and decorative icons", () => {
+		for (const [side, owner] of [
+			[LabSideEnum.browser, "Connector"],
+			[LabSideEnum.node, "Acceptor"],
+		] as const) {
+			const badge = renderToStaticMarkup(
+				createElement(EndpointBadge, { side }),
+			);
+			assert.ok(badge.includes(`data-owner="${owner.toLowerCase()}"`));
+			assert.ok(badge.includes(owner));
+			assert.match(badge, /<svg[^>]*aria-hidden="true"/);
+			assert.doesNotMatch(badge, /outgoing|incoming/);
+		}
+	});
+
+	it("EXAMPLE-LAB-DEVTOOLS-001 formats recorded JSON and preserves bounded non-JSON previews", () => {
+		const preview =
+			'[{"message":"<script>sample</script>","items":[1,true,null]}]';
+		const formatted = formatDevtoolsJson(preview);
+		assert.deepEqual(JSON.parse(formatted), JSON.parse(preview));
+		assert.ok(formatted.includes('\n  {\n    "message":'));
+		assert.ok(
+			formatted.includes(
+				'\n    "items": [\n      1,\n      true,\n      null\n    ]',
+			),
+		);
+		for (const marker of [
+			"[unsupported object]",
+			'[{"value": undefined}]',
+			"[cycle]",
+			"handler-failed",
+			'["truncated…',
+		])
+			assert.equal(formatDevtoolsJson(marker), marker);
+		for (const primitive of ["null", "true", "12.5", '"hello"'])
+			assert.equal(formatDevtoolsJson(primitive), primitive);
+	});
+
 	it("EXAMPLE-WS-STATE-001 labels actual disconnection separately from reconnection attempts", () => {
 		const labels = [
 			[RpcStateStatusEnum.unbound, "Not connected"],
