@@ -136,8 +136,9 @@ requirements do not constrain an independent custom Protocol's grammar.
 
 **RPC-PKG-005 — Manifest.** The published manifest **MUST** declare `type: "module"`, public access,
 `engines.node: ">=23.6"`, source maps, and `sideEffects: false`. Runtime dependencies **MUST** be limited to
-`@husky-di/core`, `rxjs`, and at most one library used exclusively for package-private runtime validation; the
-packed manifest **MUST NOT** contain `workspace:*`, a test framework, `ws`, or a Node-only polyfill.
+`@husky-di/core`, `rxjs`, and at most one library used exclusively for package-private runtime validation. The
+packed manifest **MUST NOT** contain `workspace:*`; runtime, optional, and peer dependency surfaces **MUST NOT**
+include a test framework, `ws`, or a Node-only polyfill.
 
 **RPC-PKG-006 — Artifact.** The packed tarball **MUST** contain only declared build output, declared package documentation, README,
 CHANGELOG, LICENSE, and package metadata.

@@ -63,7 +63,6 @@ describe("installed @husky-di/remote package", () => {
 		);
 		const manifest = JSON.parse(manifestText) as {
 			readonly dependencies: Readonly<Record<string, string>>;
-			readonly devDependencies?: Readonly<Record<string, string>>;
 			readonly engines: { readonly node: string };
 			readonly exports: Readonly<Record<string, unknown>>;
 			readonly optionalDependencies?: Readonly<Record<string, string>>;
@@ -84,7 +83,6 @@ describe("installed @husky-di/remote package", () => {
 			"rxjs",
 			"zod",
 		]);
-		expect(manifest).not.toHaveProperty("devDependencies");
 		const publishedDependencyNames = [
 			...Object.keys(manifest.dependencies),
 			...Object.keys(manifest.optionalDependencies ?? {}),

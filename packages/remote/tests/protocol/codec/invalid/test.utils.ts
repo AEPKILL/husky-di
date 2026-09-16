@@ -275,7 +275,7 @@ export const invalidRecordCases = [
 				kind: "call",
 				callId: "1",
 				service: "service",
-				method: "x".repeat(86),
+				method: "x".repeat(257),
 				args: [],
 			},
 		},
