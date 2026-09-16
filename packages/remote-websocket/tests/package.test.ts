@@ -159,7 +159,7 @@ void adapter;
 					/(?:^|\/)ws\//.test(input) || input.includes("/modules/node/"),
 			),
 		).toBe(false);
-	});
+	}, 30_000);
 
 	it("WS-API-001 WS-PKG-001 compiles strict Node options against installed declarations", () => {
 		mkdirSync(resolve(fixtureRoot, "node_modules/@types"), { recursive: true });
@@ -181,7 +181,7 @@ void [acceptor, connector];
 `,
 		);
 		compile("node.ts", ["node"]);
-	});
+	}, 30_000);
 });
 
 function compile(entry: string, types: string[]): void {

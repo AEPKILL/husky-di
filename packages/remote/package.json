@@ -43,9 +43,10 @@
 	"scripts": {
 		"build": "rslib build",
 		"dev": "rslib build --watch",
-		"test": "pnpm run typecheck && pnpm run test:types && vitest run && pnpm run test:browser && pnpm run test:package",
+		"test": "pnpm run typecheck && pnpm run test:types && vitest run && pnpm run test:browser && pnpm run test:package:built",
 		"test:browser": "playwright test --config playwright.config.ts --pass-with-no-tests",
-		"test:package": "pnpm --filter @husky-di/core build && pnpm run build && RPC_PACKAGE_TEST=1 vitest run tests/package",
+		"test:package": "pnpm --filter @husky-di/core build && pnpm run build && pnpm run test:package:built",
+		"test:package:built": "RPC_PACKAGE_TEST=1 vitest run tests/package",
 		"test:types": "vitest run --typecheck --typecheck.only",
 		"typecheck": "tsc -p tsconfig.json && tsc -p tests/tsconfig.json"
 	},
