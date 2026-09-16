@@ -6,7 +6,7 @@
  * These values can be overridden by passing a custom configuration.
  *
  * @author AEPKILL
- * @created 2026-03-31 17:30:00
+ * @created 2026-03-31 17:38:42 17:30:00
  */
 
 import type { CodeStandardConfig } from "@/types/config.type";
@@ -21,6 +21,10 @@ export const DEFAULT_CONFIG: CodeStandardConfig = {
 		"node_modules",
 	],
 	packageRootNames: ["packages", "examples", "scripts"],
+	moduleSourceRoots: [
+		"packages/remote/src/modules",
+		"packages/remote-websocket/src/modules",
+	],
 	sourceDirectoryNames: [
 		"constants",
 		"consts",
@@ -31,6 +35,7 @@ export const DEFAULT_CONFIG: CodeStandardConfig = {
 		"impls",
 		"interfaces",
 		"middlewares",
+		"schemas",
 		"shared",
 		"types",
 		"typings",
@@ -46,6 +51,7 @@ export const DEFAULT_CONFIG: CodeStandardConfig = {
 		["impls", [".impl.ts"]],
 		["interfaces", [".interface.ts"]],
 		["middlewares", [".middleware.ts"]],
+		["schemas", [".schema.ts"]],
 		["types", [".type.ts", ".d.ts"]],
 		["typings", [".d.ts"]],
 		["utils", [".util.ts"]],

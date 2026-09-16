@@ -6,7 +6,7 @@
  * All enums must end with the "Enum" suffix.
  *
  * @author AEPKILL
- * @created 2026-03-30 20:54:00
+ * @created 2026-03-31 11:16:58 20:54:00
  */
 
 import * as ts from "typescript";

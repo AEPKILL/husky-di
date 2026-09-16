@@ -1,20 +1,20 @@
 /**
  * @overview Module implementation.
  * @author AEPKILL
- * @created 2025-08-09 14:51:09
+ * @created 2025-08-09 15:56:11 14:51:09
  */
 
 import {
-	type Cleanup,
 	createContainer,
+	getServiceIdentifierName,
 	type IContainer,
 	type IsRegisteredOptions,
 	type ResolveInstance,
-	type ResolveMiddleware,
 	type ResolveOptions,
 	type ServiceIdentifier,
 } from "@husky-di/core";
-import { createExportedGuardMiddleware } from "@/factories/exported-guard-middleware.factory";
+import { ModuleErrorCodeEnum } from "@/enums/module-error-code.enum";
+import { ModuleException } from "@/exceptions/module.exception";
 import { createImportScope } from "@/factories/import-scope.factory";
 import type {
 	Alias,
@@ -81,8 +81,7 @@ export class ModuleImpl implements IModule {
 
 		this.validateConfiguration();
 
-		this.container = this.buildContainer();
-		this.container.use(createExportedGuardMiddleware(this.exports ?? []));
+		this.container = this.createPublicContainer(this.buildContainer());
 	}
 
 	public resolve<T, O extends ResolveOptions<T>>(
@@ -106,16 +105,6 @@ export class ModuleImpl implements IModule {
 		return this.container.getServiceIdentifiers();
 	}
 
-	// biome-ignore lint/suspicious/noExplicitAny: should use any type
-	use(...middleware: ResolveMiddleware<any, any>[]): Cleanup {
-		return this.container.use(...middleware);
-	}
-
-	// biome-ignore lint/suspicious/noExplicitAny: should use any type
-	unused(...middleware: ResolveMiddleware<any, any>[]): void {
-		this.container.unused(...middleware);
-	}
-
 	withAliases(aliases: Alias[]): ModuleWithAliases {
 		validateAliases(this.displayName, aliases, this._exports);
 		return {
@@ -129,6 +118,40 @@ export class ModuleImpl implements IModule {
 		this.registerDeclarations(container);
 		this.registerImports(container);
 		return container;
+	}
+
+	private createPublicContainer(container: IContainer): IContainer {
+		const exported = new Set(this._exports ?? []);
+		const guardedResolve = ((
+			serviceIdentifier: ServiceIdentifier<unknown>,
+			options?: ResolveOptions<unknown>,
+		) => {
+			// Core auto-instantiates unregistered classes in the active container.
+			// Reject caller-supplied classes before they enter this module's private context.
+			const serviceIsPrivate =
+				!exported.has(serviceIdentifier) &&
+				(container.isRegistered(serviceIdentifier) ||
+					(typeof serviceIdentifier === "function" &&
+						!container.isRegistered(serviceIdentifier, { recursive: true })));
+			if (serviceIsPrivate) {
+				throw new ModuleException(
+					ModuleErrorCodeEnum.E_EXPORT_NOT_FOUND,
+					`Service identifier "${getServiceIdentifierName(serviceIdentifier)}" is not exported from ${container.displayName}.`,
+				);
+			}
+
+			return options === undefined
+				? container.resolve(serviceIdentifier)
+				: container.resolve(serviceIdentifier, options);
+		}) as IContainer["resolve"];
+
+		return new Proxy(container, {
+			get(target, property, receiver) {
+				return property === "resolve"
+					? guardedResolve
+					: Reflect.get(target, property, receiver);
+			},
+		});
 	}
 
 	private validateConfiguration(): void {

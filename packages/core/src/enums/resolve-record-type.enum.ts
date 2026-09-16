@@ -7,7 +7,7 @@
  * circular dependency detection and resolution path visualization.
  *
  * @author AEPKILL
- * @created 2025-04-27 22:54:43
+ * @created 2025-06-24 23:33:19 22:54:43
  */
 export enum ResolveRecordTypeEnum {
 	/** Root node representing the start of a resolution chain. */

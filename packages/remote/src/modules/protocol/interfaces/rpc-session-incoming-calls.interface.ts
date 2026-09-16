@@ -1,0 +1,47 @@
+/**
+ * @overview Private ownership of incoming Call Ordinals, scoped admission, and terminal publication.
+ * @author AEPKILL
+ * @created 2026-09-09 23:33:27
+ */
+
+import type {
+	IRpcProtocolHost,
+	IRpcProtocolSessionHost,
+} from "@/modules/protocol/interfaces/rpc-protocol.interface";
+import type {
+	IRpcReplayReservation,
+	IRpcSessionCallRetention,
+} from "@/modules/protocol/interfaces/rpc-session-call-retention.interface";
+import type { RpcCallMessage } from "@/modules/protocol/types/rpc-wire-record.type";
+
+/** Owns incoming work for the full Session Incarnation, across binding replacement. */
+export interface IRpcSessionIncomingCalls {
+	readonly hasActive: boolean;
+	/** Accepts a sequence-validated call using the Session's current drain cutoff. */
+	receiveCall(message: RpcCallMessage): void;
+	receiveCancel(callId: string): void;
+	/** Terminalizes Framework work synchronously; delivery retains its replay custody. */
+	terminate(): void;
+}
+
+export type RpcSessionIncomingCallsFactory = (options: {
+	readonly retention: Pick<
+		IRpcSessionCallRetention,
+		| "incomingCount"
+		| "hasActiveIncoming"
+		| "retainIncoming"
+		| "rejectIncoming"
+		| "cancelIncoming"
+		| "reserveReplay"
+		| "terminateIncoming"
+	>;
+	readonly normalizeApplicationArguments: IRpcProtocolHost["normalizeApplicationArguments"];
+	readonly normalizeApplicationValue: IRpcProtocolHost["normalizeApplicationValue"];
+	/** Read after normalization so reentrant shutdown preserves the admission cutoff. */
+	readonly isDraining: () => boolean;
+	readonly getIncomingStreamCount?: () => number;
+	readonly reserveIncomingCall: IRpcProtocolSessionHost["reserveIncomingCall"];
+	/** Transfers the selected terminal's replay custody synchronously to delivery. */
+	readonly onTerminal: (replay: IRpcReplayReservation) => void;
+	readonly onFault: (error: Error) => void;
+}) => IRpcSessionIncomingCalls;

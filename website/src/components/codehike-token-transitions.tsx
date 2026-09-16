@@ -2,7 +2,7 @@
  * @overview Code Hike token transition handler adapted from the official
  * Code Hike demo implementation.
  * @author AEPKILL
- * @created 2026-06-30 12:08:00
+ * @created 2026-06-30 13:53:17 12:08:00
  */
 
 import {
@@ -18,6 +18,8 @@ import {
 	type TokenTransitionsSnapshot,
 } from "codehike/utils/token-transitions";
 import { Component } from "react";
+
+export { CODEHIKE_TOKEN_TRANSITIONS };
 
 const MAX_TRANSITION_DURATION_MS = 900;
 
@@ -68,7 +70,7 @@ class CodehikeTokenTransitionsPreWithRef extends Component<CustomPreProps> {
 	}
 }
 
-export const CODEHIKE_TOKEN_TRANSITIONS: AnnotationHandler = {
+const CODEHIKE_TOKEN_TRANSITIONS: AnnotationHandler = {
 	name: "token-transitions",
 	PreWithRef: CodehikeTokenTransitionsPreWithRef,
 	Token: (props) => (

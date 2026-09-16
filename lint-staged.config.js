@@ -8,10 +8,21 @@ import path from "node:path";
  * Only handles files in the repository root, excluding files under packages/
  * Each package keeps its own configuration file
  */
+export default {
+	// Handle root-level TypeScript and JavaScript files
+	"*.{js,ts,jsx,tsx}": createBiomeTask,
+
+	// Handle root-level JSON files
+	"*.json": createBiomeTask,
+
+	// Handle CSS-related files
+	"*.{css,scss,sass,less}": createBiomeTask,
+};
+
 const toRelativePath = (file) =>
 	path.isAbsolute(file) ? path.relative(process.cwd(), file) : file;
 
-const createBiomeTask = (files) => {
+function createBiomeTask(files) {
 	const scopedFiles = files.filter((file) => {
 		const relativeFile = toRelativePath(file).replaceAll("\\", "/");
 		return !relativeFile.includes("/") && !relativeFile.startsWith(".agents/");
@@ -24,15 +35,4 @@ const createBiomeTask = (files) => {
 	return [
 		`biome check --write --no-errors-on-unmatched ${scopedFiles.join(" ")}`,
 	];
-};
-
-export default {
-	// Handle root-level TypeScript and JavaScript files
-	"*.{js,ts,jsx,tsx}": createBiomeTask,
-
-	// Handle root-level JSON files
-	"*.json": createBiomeTask,
-
-	// Handle CSS-related files
-	"*.{css,scss,sass,less}": createBiomeTask,
-};
+}

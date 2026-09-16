@@ -7,7 +7,7 @@
  * or if instances are reused within specific scopes.
  *
  * @author AEPKILL
- * @created 2023-05-24 10:39:21
+ * @created 2025-06-24 23:33:19 10:39:21
  */
 export enum LifecycleEnum {
 	/**

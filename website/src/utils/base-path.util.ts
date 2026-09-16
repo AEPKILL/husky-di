@@ -7,7 +7,7 @@
  * such as a GitHub Pages project site.
  *
  * @author AEPKILL
- * @created 2026-06-25 17:10:00
+ * @created 2026-06-25 01:02:01 17:10:00
  */
 
 export function getNormalizedWebsiteBasePath(rawBasePath: string): string {

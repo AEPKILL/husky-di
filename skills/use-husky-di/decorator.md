@@ -146,14 +146,9 @@ The `decoratorMiddleware` reads injection metadata and performs constructor inje
 
 ```typescript
 import { decoratorMiddleware } from "@husky-di/decorator";
-import { globalMiddleware, createContainer } from "@husky-di/core";
+import { middleware } from "@husky-di/core";
 
-// Global — all containers get decorator injection
-globalMiddleware.use(decoratorMiddleware);
-
-// Or local — only this container
-const container = createContainer();
-container.use(decoratorMiddleware);
+middleware.use(decoratorMiddleware);
 ```
 
 Without `decoratorMiddleware`, `@injectable()` classes can still be registered and resolved manually, but constructor parameters won't be auto-wired.
@@ -163,7 +158,7 @@ Without `decoratorMiddleware`, `@injectable()` classes can still be registered a
 ```typescript
 import "reflect-metadata";
 import { injectable, inject, decoratorMiddleware } from "@husky-di/decorator";
-import { createContainer, createServiceIdentifier, globalMiddleware, LifecycleEnum } from "@husky-di/core";
+import { createContainer, createServiceIdentifier, middleware, LifecycleEnum } from "@husky-di/core";
 
 // 1. Service identifiers
 const ILogger = createServiceIdentifier<ILogger>("ILogger");
@@ -194,7 +189,7 @@ class UserService {
 }
 
 // 3. Setup
-globalMiddleware.use(decoratorMiddleware);
+middleware.use(decoratorMiddleware);
 const container = createContainer();
 
 container.register(ILogger, { useClass: ConsoleLogger, lifecycle: LifecycleEnum.singleton });

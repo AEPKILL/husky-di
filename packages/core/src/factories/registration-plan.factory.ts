@@ -2,7 +2,7 @@
  * @overview Registration plan factory.
  *
  * @author AEPKILL
- * @created 2026-06-25 00:00:00
+ * @created 2026-06-25 00:22:11
  */
 
 import type { CreateRegistrationOptions } from "@/interfaces/registration.interface";

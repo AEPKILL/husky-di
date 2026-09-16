@@ -7,7 +7,7 @@
  * semantics of `container.resolve()`.
  *
  * @author AEPKILL
- * @created 2026-06-26 00:00:00
+ * @created 2026-06-26 15:43:27
  */
 
 import type { ResolveContainerScopeEnum } from "@/enums/resolve-container-scope.enum";

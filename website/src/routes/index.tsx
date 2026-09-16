@@ -1,7 +1,7 @@
 /**
  * @overview Root homepage route that mounts the home page module.
  * @author AEPKILL
- * @created 2026-06-30 19:05:00
+ * @created 2026-06-25 00:56:55 19:05:00
  */
 
 import { createFileRoute } from "@tanstack/react-router";

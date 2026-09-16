@@ -7,7 +7,7 @@
  * - Files must end with .interface.ts suffix
  *
  * @author AEPKILL
- * @created 2026-03-31 11:45:00
+ * @created 2026-03-31 11:45:03 11:45:00
  */
 
 import * as ts from "typescript";

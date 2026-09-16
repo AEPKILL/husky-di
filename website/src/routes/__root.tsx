@@ -1,7 +1,7 @@
 /**
  * @overview Root route for the minimal Husky DI website.
  * @author AEPKILL
- * @created 2026-06-26 10:20:00
+ * @created 2026-06-25 00:56:55 10:20:00
  */
 
 import {
@@ -12,8 +12,6 @@ import {
 } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 import "@/styles/globals.css";
-
-const faviconHref = `${import.meta.env.BASE_URL}favicon.svg`;
 
 export const Route = createRootRoute({
 	head: () => ({
@@ -54,6 +52,8 @@ export const Route = createRootRoute({
 	}),
 	component: RootComponent,
 });
+
+const faviconHref = `${import.meta.env.BASE_URL}favicon.svg`;
 
 function RootComponent() {
 	return (

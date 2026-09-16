@@ -1,7 +1,7 @@
 /**
  * @overview Registration class implementation
  * @author AEPKILL
- * @created 2025-07-29 22:27:57
+ * @created 2025-07-29 22:50:54 22:27:57
  */
 
 import { CoreErrorCodeEnum } from "@/enums/core-error-code.enum";
@@ -17,7 +17,10 @@ import type {
 	IRegistration,
 } from "@/interfaces/registration.interface";
 import type { ServiceIdentifier } from "@/types/service-identifier.type";
-import { isValidServiceIdentifier } from "@/utils/registration.util";
+import {
+	isConstructor,
+	isValidServiceIdentifier,
+} from "@/utils/registration.util";
 import { createRegistrationId } from "@/utils/uuid.util";
 
 /**
@@ -70,7 +73,7 @@ export class RegistrationImpl<T>
 	/**
 	 * Optional container getter function (used for alias registrations)
 	 */
-	public readonly getContainer?: () => IContainer;
+	public readonly getContainer?: (() => IContainer) | undefined;
 
 	/**
 	 * Display name for debugging purposes
@@ -139,19 +142,19 @@ export class RegistrationImpl<T>
 	}
 }
 
+type RegistrationProviderDefinition<T> = {
+	getContainer?: (() => IContainer) | undefined;
+	lifecycle: LifecycleEnum;
+	provider: IRegistration<T>["provider"];
+	type: RegistrationTypeEnum;
+};
+
 const REGISTRATION_PROVIDER_KEYS = [
 	"useClass",
 	"useFactory",
 	"useValue",
 	"useAlias",
 ] as const;
-
-type RegistrationProviderDefinition<T> = {
-	getContainer?: () => IContainer;
-	lifecycle: LifecycleEnum;
-	provider: IRegistration<T>["provider"];
-	type: RegistrationTypeEnum;
-};
 
 function resolveProviderDefinition<T>(
 	options: CreateRegistrationOptions<T>,
@@ -167,7 +170,7 @@ function resolveProviderDefinition<T>(
 	}
 
 	if ("useClass" in options) {
-		if (typeof options.useClass !== "function") {
+		if (!isConstructor(options.useClass)) {
 			throw new CoreException(
 				CoreErrorCodeEnum.E_INVALID_PROVIDER,
 				"useClass must be a constructor function.",
@@ -213,10 +216,11 @@ function resolveProviderDefinition<T>(
 			);
 		}
 
-		if (
+		// An optional alias container selector must be callable when present.
+		const getContainerIsInvalid =
 			aliasOptions.getContainer !== undefined &&
-			typeof aliasOptions.getContainer !== "function"
-		) {
+			typeof aliasOptions.getContainer !== "function";
+		if (getContainerIsInvalid) {
 			throw new CoreException(
 				CoreErrorCodeEnum.E_INVALID_PROVIDER,
 				"getContainer must be a function.",

@@ -6,7 +6,7 @@
  * Executes the validator and outputs diagnostics or success message.
  *
  * @author AEPKILL
- * @created 2026-03-29 21:35:00
+ * @created 2026-03-29 21:49:50 21:35:00
  */
 
 import { existsSync } from "node:fs";

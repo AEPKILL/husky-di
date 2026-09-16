@@ -6,7 +6,7 @@
  * Uses Node.js path module for cross-platform compatibility.
  *
  * @author AEPKILL
- * @created 2026-03-31 16:45:00
+ * @created 2026-03-31 16:49:38 16:45:00
  */
 
 import { posix } from "node:path";

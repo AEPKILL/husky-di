@@ -8,7 +8,7 @@
  * per identifier.
  *
  * @author AEPKILL
- * @created 2023-10-10 10:58:30
+ * @created 2025-07-23 18:19:20 10:58:30
  */
 
 import type { ServiceIdentifier } from "@/types/service-identifier.type";

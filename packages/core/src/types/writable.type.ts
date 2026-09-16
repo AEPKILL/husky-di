@@ -20,7 +20,7 @@
  * ```
  *
  * @author AEPKILL
- * @created 2025-07-23 19:55:00
+ * @created 2025-07-23 18:19:20 19:55:00
  */
 export type Writable<T> = {
 	-readonly [P in keyof T]: T[P];

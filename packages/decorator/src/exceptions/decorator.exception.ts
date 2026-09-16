@@ -1,7 +1,7 @@
 /**
  * @overview Decorator package exception.
  * @author AEPKILL
- * @created 2026-05-09 00:00:00
+ * @created 2026-05-09 11:26:00
  */
 
 import { CodedException } from "@husky-di/core";

@@ -5,7 +5,7 @@
  * Defines the read-side contract for retrieving user profiles in the example.
  *
  * @author AEPKILL
- * @created 2026-07-08 10:48:48
+ * @created 2026-07-08 11:02:43 10:48:48
  */
 
 import { createServiceIdentifier } from "@husky-di/core";

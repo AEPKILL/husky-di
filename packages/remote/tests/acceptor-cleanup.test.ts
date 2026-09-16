@@ -1,0 +1,460 @@
+/**
+ * @overview Verifies acceptor cleanup.
+ * @author AEPKILL
+ * @created 2026-08-19 09:27:48
+ */
+
+import { Subject } from "rxjs";
+import { describe, expect, it, vi } from "vitest";
+import {
+	createRpcAcceptor,
+	type RpcProtocolAcceptorFactory,
+} from "../src/index";
+import type { IRpcConnection, IRpcProtocolSession } from "../src/protocol";
+
+describe("Acceptor termination cleanup", () => {
+	it("RPC-SHUTDOWN-001 gates a forced listener abort before reentrant handoff", async () => {
+		const connectionSource = new Subject<IRpcConnection>();
+		let acceptCalls = 0;
+		let stateDuringAbort: string | undefined;
+		const protocolFactory: RpcProtocolAcceptorFactory = () => {
+			return {
+				async accept() {
+					acceptCalls += 1;
+				},
+				async shutdown() {},
+				close() {},
+				async cleanup() {},
+			};
+		};
+		const acceptor = createRpcAcceptor({ protocolFactory });
+		const connection: IRpcConnection = {
+			message$: new Subject<Uint8Array>().asObservable(),
+			async send() {},
+			async close() {},
+		};
+		await acceptor.listen({
+			connection$: connectionSource.asObservable(),
+			async listen(signal) {
+				signal.addEventListener(
+					"abort",
+					() => {
+						stateDuringAbort = acceptor.state.status;
+						connectionSource.next(connection);
+					},
+					{ once: true },
+				);
+			},
+		});
+
+		await acceptor.close();
+
+		expect(stateDuringAbort).toBe("closing");
+		expect(acceptCalls).toBe(0);
+	});
+
+	it("RPC-TRANSPORT-011 reserves one overflow-close slot and stops a ready listener", async () => {
+		const connectionSource = new Subject<IRpcConnection>();
+		let acceptCalls = 0;
+		let listenerSignal: AbortSignal | undefined;
+		const protocolFactory: RpcProtocolAcceptorFactory = () => {
+			return {
+				accept(connection) {
+					acceptCalls += 1;
+					connection.message$.subscribe();
+					return new Promise<void>(() => {});
+				},
+				async shutdown() {},
+				close() {},
+				async cleanup() {},
+			};
+		};
+		const acceptor = createRpcAcceptor({
+			protocolFactory,
+			runtimePolicy: { maxSessions: 1, maxHandshakes: 1 },
+		});
+		await acceptor.listen({
+			connection$: connectionSource.asObservable(),
+			async listen(signal) {
+				listenerSignal = signal;
+			},
+		});
+		const closeCalls = [0, 0, 0, 0];
+		for (let index = 0; index < 4; index += 1) {
+			const messageSource = new Subject<Uint8Array>();
+			connectionSource.next({
+				message$: messageSource.asObservable(),
+				async send() {},
+				async close() {
+					closeCalls[index] += 1;
+					messageSource.complete();
+				},
+			});
+		}
+		await Promise.resolve();
+
+		expect(acceptCalls).toBe(3);
+		expect(closeCalls).toEqual([0, 0, 0, 1]);
+		expect(listenerSignal?.aborted).toBe(true);
+		expect(acceptor.state).toEqual({
+			status: "active",
+			listener: {
+				status: "stopped",
+				outcome: "normal",
+				reason: "resource-pressure",
+			},
+		});
+	});
+
+	it("RPC-START-003 RPC-TRANSPORT-011 rejects restart until the overflow close settles", async () => {
+		const connectionSource = new Subject<IRpcConnection>();
+		let resolveOverflowClose!: () => void;
+		const overflowClose = new Promise<void>((resolve) => {
+			resolveOverflowClose = resolve;
+		});
+		let acceptCalls = 0;
+		let restartCalls = 0;
+		const protocolFactory: RpcProtocolAcceptorFactory = () => {
+			return {
+				accept() {
+					acceptCalls += 1;
+					return new Promise<void>(() => {});
+				},
+				async shutdown() {},
+				close() {},
+				async cleanup() {},
+			};
+		};
+		const acceptor = createRpcAcceptor({
+			protocolFactory,
+			runtimePolicy: { maxSessions: 1, maxHandshakes: 1 },
+		});
+		await acceptor.listen({
+			connection$: connectionSource.asObservable(),
+			async listen(signal) {
+				signal.addEventListener(
+					"abort",
+					() => {
+						connectionSource.next({
+							message$: new Subject<Uint8Array>().asObservable(),
+							async send() {},
+							async close() {},
+						});
+					},
+					{ once: true },
+				);
+			},
+		});
+		for (let index = 0; index < 4; index += 1) {
+			connectionSource.next({
+				message$: new Subject<Uint8Array>().asObservable(),
+				async send() {},
+				close: index === 3 ? () => overflowClose : async () => {},
+			});
+		}
+		await Promise.resolve();
+
+		await expect(
+			acceptor.listen({
+				connection$: new Subject<IRpcConnection>().asObservable(),
+				async listen() {
+					restartCalls += 1;
+				},
+			}),
+		).rejects.toMatchObject({ code: "unavailable" });
+		expect(acceptCalls).toBe(3);
+		expect(restartCalls).toBe(0);
+
+		resolveOverflowClose();
+		await Promise.resolve();
+		await acceptor.close();
+	});
+
+	it("RPC-START-003 RPC-CLEANUP-002 rejects listener restart after cleanup failure", async () => {
+		let observer:
+			| {
+					complete(): void;
+			  }
+			| undefined;
+		const listenerCleanupFailure = new Error("listener cleanup failed");
+		const protocolFactory: RpcProtocolAcceptorFactory = () => {
+			return {
+				async accept() {},
+				async shutdown() {},
+				close() {},
+				async cleanup() {},
+			};
+		};
+		const acceptor = createRpcAcceptor({ protocolFactory });
+		await acceptor.listen({
+			connection$: {
+				subscribe(nextObserver: { complete(): void }) {
+					observer = nextObserver;
+					return {
+						unsubscribe() {
+							throw listenerCleanupFailure;
+						},
+					};
+				},
+			} as never,
+			async listen() {},
+		});
+		observer?.complete();
+		await Promise.resolve();
+		expect(acceptor.state).toMatchObject({
+			status: "active",
+			listener: { status: "stopped" },
+		});
+
+		let restartCalls = 0;
+		await expect(
+			acceptor.listen({
+				connection$: new Subject<IRpcConnection>().asObservable(),
+				async listen() {
+					restartCalls += 1;
+				},
+			}),
+		).rejects.toMatchObject({ code: "unavailable" });
+		expect(restartCalls).toBe(0);
+		await expect(acceptor.close()).rejects.toBe(listenerCleanupFailure);
+	});
+
+	it("RPC-RESOURCE-006 RPC-CLEANUP-002 keeps a failed Direct Close inside the Connection cap", async () => {
+		const connectionSource = new Subject<IRpcConnection>();
+		const messageSources = [
+			new Subject<Uint8Array>(),
+			new Subject<Uint8Array>(),
+			new Subject<Uint8Array>(),
+			new Subject<Uint8Array>(),
+		];
+		let acceptCalls = 0;
+		let listenerSignal: AbortSignal | undefined;
+		const closeCalls = [0, 0, 0, 0];
+		const closeFailure = new Error("native close did not release the socket");
+		const protocolFactory: RpcProtocolAcceptorFactory = () => {
+			return {
+				accept() {
+					acceptCalls += 1;
+					return new Promise<void>(() => {});
+				},
+				async shutdown() {},
+				close() {},
+				async cleanup() {},
+			};
+		};
+		const acceptor = createRpcAcceptor({
+			protocolFactory,
+			runtimePolicy: { maxSessions: 1, maxHandshakes: 1 },
+		});
+		await acceptor.listen({
+			connection$: connectionSource.asObservable(),
+			async listen(signal) {
+				listenerSignal = signal;
+			},
+		});
+		for (let index = 0; index < 4; index += 1) {
+			const messageSource = messageSources[index];
+			if (messageSource === undefined) {
+				throw new Error("Expected a complete Connection fixture.");
+			}
+			const connection: IRpcConnection = {
+				message$: messageSource.asObservable(),
+				async send() {},
+				async close() {
+					closeCalls[index] += 1;
+					if (index === 0) {
+						throw closeFailure;
+					}
+				},
+			};
+			if (index === 3) {
+				messageSources[0]?.complete();
+				await Promise.resolve();
+				await Promise.resolve();
+			}
+			connectionSource.next(connection);
+		}
+		await Promise.resolve();
+
+		expect(closeCalls[0]).toBe(1);
+		expect(acceptCalls).toBe(3);
+		expect(closeCalls[3]).toBe(1);
+		expect(listenerSignal?.aborted).toBe(true);
+	});
+
+	it("RPC-CLEANUP-002 waits once for each handed-off Connection", async () => {
+		const connectionSource = new Subject<IRpcConnection>();
+		const messageSource = new Subject<Uint8Array>();
+		let resolveClose!: () => void;
+		const closeTask = new Promise<void>((resolve) => {
+			resolveClose = resolve;
+		});
+		let closeCalls = 0;
+		const connection: IRpcConnection = {
+			message$: messageSource.asObservable(),
+			async send() {},
+			close() {
+				closeCalls += 1;
+				return closeTask;
+			},
+		};
+		const session: IRpcProtocolSession = {
+			prepareInvocation: () => undefined,
+			forceClose() {},
+		};
+		const protocolFactory: RpcProtocolAcceptorFactory = (host) => {
+			return {
+				accept(ownedConnection) {
+					ownedConnection.message$.subscribe();
+					return Promise.resolve().then(() => {
+						if (host.admitSession(session) === undefined) {
+							throw new Error("Expected Session admission.");
+						}
+					});
+				},
+				async shutdown() {},
+				close() {},
+				async cleanup() {},
+			};
+		};
+		const acceptor = createRpcAcceptor({ protocolFactory });
+		await acceptor.listen({
+			connection$: connectionSource.asObservable(),
+			async listen() {
+				connectionSource.next(connection);
+			},
+		});
+		await Promise.resolve();
+
+		let settled = false;
+		const termination = acceptor.close().finally(() => {
+			settled = true;
+		});
+		await Promise.resolve();
+		expect(closeCalls).toBe(1);
+		expect(settled).toBe(false);
+
+		resolveClose();
+		await termination;
+		expect(closeCalls).toBe(1);
+	});
+
+	it("RPC-CLEANUP-002 RPC-CLEANUP-003 retains listener and startup cleanup failures in admission order", async () => {
+		const listenerFailure = new Error("listener unsubscribe failed");
+		const startupFailure = new Error("listener startup cleanup failed");
+		const protocolFactory: RpcProtocolAcceptorFactory = () => {
+			return {
+				async accept() {},
+				async shutdown() {},
+				close() {},
+				async cleanup() {},
+			};
+		};
+		const acceptor = createRpcAcceptor({ protocolFactory });
+		const startup = acceptor.listen({
+			connection$: {
+				subscribe() {
+					return {
+						unsubscribe() {
+							throw listenerFailure;
+						},
+					};
+				},
+			} as never,
+			listen(signal) {
+				return new Promise<void>((_resolve, reject) => {
+					signal.addEventListener("abort", () => reject(startupFailure), {
+						once: true,
+					});
+				});
+			},
+		});
+
+		const termination = acceptor.close();
+		await expect(startup).rejects.toMatchObject({ name: "AbortError" });
+		const failure = await termination.then(
+			() => undefined,
+			(error: unknown) => error,
+		);
+
+		expect(failure).toBeInstanceOf(AggregateError);
+		expect((failure as AggregateError).errors).toEqual([
+			listenerFailure,
+			startupFailure,
+		]);
+	});
+
+	it("RPC-CLEANUP-001 RPC-CLEANUP-003 aggregates early Connection failures with deadline timeout in admission order", async () => {
+		vi.useFakeTimers();
+		try {
+			const connectionSource = new Subject<IRpcConnection>();
+			const messageSources = [
+				new Subject<Uint8Array>(),
+				new Subject<Uint8Array>(),
+				new Subject<Uint8Array>(),
+			];
+			const firstFailure = new Error("first Connection close failed");
+			const secondFailure = new Error("second Connection close failed");
+			let resolveLastClose!: () => void;
+			const lastClose = new Promise<void>((resolve) => {
+				resolveLastClose = resolve;
+			});
+			const protocolFactory: RpcProtocolAcceptorFactory = () => {
+				return {
+					async accept() {},
+					async shutdown() {},
+					close() {},
+					async cleanup() {},
+				};
+			};
+			const acceptor = createRpcAcceptor({
+				protocolFactory,
+				runtimePolicy: { shutdownDeadlineMs: 10 },
+			});
+			await acceptor.listen({
+				connection$: connectionSource.asObservable(),
+				async listen() {},
+			});
+			const closeTasks = [
+				() => Promise.reject(firstFailure),
+				() => Promise.reject(secondFailure),
+				() => lastClose,
+			];
+			for (let index = 0; index < closeTasks.length; index += 1) {
+				const messageSource = messageSources[index];
+				const close = closeTasks[index];
+				if (messageSource === undefined || close === undefined) {
+					throw new Error("Expected a complete Connection fixture.");
+				}
+				connectionSource.next({
+					message$: messageSource.asObservable(),
+					async send() {},
+					close,
+				});
+			}
+			messageSources[1]?.complete();
+			messageSources[0]?.complete();
+			await Promise.resolve();
+			await Promise.resolve();
+
+			const outcome = acceptor.close().then(
+				() => undefined,
+				(error: unknown) => error,
+			);
+			await vi.advanceTimersByTimeAsync(10);
+			const failure = await outcome;
+
+			expect(failure).toBeInstanceOf(AggregateError);
+			const errors = (failure as AggregateError).errors;
+			expect(errors.slice(0, 2)).toEqual([firstFailure, secondFailure]);
+			expect(errors[2]).toMatchObject({
+				message: "RPC Owner cleanup exceeded its deadline.",
+			});
+
+			resolveLastClose();
+			await Promise.resolve();
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+});

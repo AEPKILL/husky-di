@@ -2,16 +2,41 @@
 
 This repository uses a single-context domain documentation layout.
 
-## Authoritative entry point
+## Authoritative sources
 
-- The authoritative source for the repository-level domain context is the root `CONTEXT.md`.
-- `docs/agents/domain.md` exists to provide a stable entry point for people and agents, not to duplicate and maintain a separate copy of the context.
+- `CONTEXT.md` is the authoritative repository-level domain context.
+- `docs/adr/` contains long-lived architectural decisions.
+- This file defines how agents consume those sources.
 
-## Usage conventions
+## Before exploring
 
-- Before doing diagnosis, design, TDD, architecture analysis, issue breakdown, or documentation work, read the root `CONTEXT.md` first.
-- If `domain.md` and `CONTEXT.md` ever disagree, `CONTEXT.md` takes precedence.
-- If you add a long-lived architectural decision, prefer documenting it in `docs/adr/` and update `CONTEXT.md` when needed.
+Before diagnosis, design, TDD, architecture analysis, issue breakdown, or documentation work:
+
+1. Read the root `CONTEXT.md`.
+2. Read ADRs relevant to the affected area.
+
+If a source does not exist, proceed without proposing it preemptively.
+
+## Vocabulary
+
+Use domain terms as defined in `CONTEXT.md`. Avoid synonyms that its terminology guidance rejects.
+
+If a required concept is missing, reconsider whether it belongs to the project or record the gap for `domain-modeling`.
+
+## ADR conflicts
+
+Surface any conflict with an existing ADR explicitly instead of silently overriding it.
+
+## Layout
+
+```text
+/
+├── CONTEXT.md
+├── docs/
+│   ├── agents/
+│   └── adr/
+└── packages/
+```
 
 ## Related documents
 

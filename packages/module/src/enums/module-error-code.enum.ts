@@ -1,7 +1,7 @@
 /**
  * @overview Module error code enum.
  * @author AEPKILL
- * @created 2026-05-09 00:00:00
+ * @created 2026-03-30 10:41:40
  */
 
 export enum ModuleErrorCodeEnum {

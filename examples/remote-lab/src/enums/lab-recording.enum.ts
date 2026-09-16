@@ -1,0 +1,36 @@
+/**
+ * @overview Labels for example-owned recording sources and endpoints.
+ * @author AEPKILL
+ * @created 2026-09-10 00:38:10
+ */
+
+export enum LabSideEnum {
+	browser = "Browser",
+	node = "Node",
+}
+
+export enum LabSourceEnum {
+	application = "APP",
+	rpc = "RPC",
+	transport = "TRANSPORT",
+	stream = "STREAM",
+}
+
+export enum LabHandshakeKindEnum {
+	fresh = "fresh",
+	accept = "accept",
+	resume = "resume",
+	reject = "reject",
+}
+
+export enum LabTransportDirectionEnum {
+	sent = "sent",
+	received = "received",
+}
+
+export enum LabCallOutcomeEnum {
+	pending = "pending",
+	fulfilled = "fulfilled",
+	typeError = "TypeError",
+	handlerFailed = "handler-failed",
+}

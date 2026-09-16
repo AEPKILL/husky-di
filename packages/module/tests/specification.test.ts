@@ -1,10 +1,18 @@
 /**
  * @overview Module package behavior and integration tests.
  * @author AEPKILL
- * @created 2025-08-06 21:39:35
+ * @created 2025-08-06 21:39:35 21:39:35
  */
 
-import { createServiceIdentifier, resolve } from "@husky-di/core";
+import {
+	createServiceIdentifier,
+	LifecycleEnum,
+	middleware,
+	type ResolveMiddleware,
+	type ResolveOptions,
+	resolve,
+	rootContainer,
+} from "@husky-di/core";
 import { describe, expect, it } from "vitest";
 import { createImportScope } from "../src/factories/import-scope.factory";
 import {
@@ -23,25 +31,20 @@ interface IDatabaseConfig {
 	username: string;
 	password: string;
 }
-const IDatabaseConfig =
-	createServiceIdentifier<IDatabaseConfig>("IDatabaseConfig");
 
 interface IUser {
 	readonly name: string;
 	getUser(): { id: number; name: string };
 }
-const IUser = createServiceIdentifier<IUser>("IUser");
 
 interface IDatabase {
 	readonly config: IDatabaseConfig;
 	connect(): string;
 }
-const IDatabase = createServiceIdentifier<IDatabase>("IDatabase");
 
 interface IAuthService {
 	authenticate(): { authenticated: boolean; token: string };
 }
-const IAuthService = createServiceIdentifier<IAuthService>("IAuthService");
 
 interface IApp {
 	readonly userService: IUser;
@@ -49,6 +52,11 @@ interface IApp {
 	readonly authService: IAuthService;
 	bootstrap(): string;
 }
+const IDatabaseConfig =
+	createServiceIdentifier<IDatabaseConfig>("IDatabaseConfig");
+const IUser = createServiceIdentifier<IUser>("IUser");
+const IDatabase = createServiceIdentifier<IDatabase>("IDatabase");
+const IAuthService = createServiceIdentifier<IAuthService>("IAuthService");
 const IApp = createServiceIdentifier<IApp>("IApp");
 
 class UserService implements IUser {
@@ -99,9 +107,9 @@ function expectModuleException(
 
 /**
  * Comprehensive test suite for the Module System
- * Based on SPECIFICATION.md v1.0.0
+ * Based on SPECIFICATION.md v1.1.1
  */
-describe("Module System - SPECIFICATION.md v1.0.0", () => {
+describe("Module System - SPECIFICATION.md v1.1.1", () => {
 	describe("Import Scope", () => {
 		it("should treat aliases as renames while preserving unaliased exports", () => {
 			const SharedModule = createModule({
@@ -1018,7 +1026,7 @@ describe("Module System - SPECIFICATION.md v1.0.0", () => {
 
 			const app = AppModule.resolve(IApp);
 
-			// Verify export guards work correctly
+			// Verify export boundaries work correctly
 			expect(() => DatabaseModule.resolve(IDatabaseConfig)).toThrow(
 				/Service identifier "IDatabaseConfig" is not exported from DatabaseModule\/CONTAINER-\d+/,
 			);
@@ -1111,30 +1119,136 @@ describe("Module System - SPECIFICATION.md v1.0.0", () => {
 			expect(SharedModule.resolve("config")).toEqual({ env: "production" });
 		});
 
-		it("should return a cleanup function that unregisters module middleware", () => {
+		it("should expose container capabilities without local middleware management", () => {
 			const TestModule = createModule({
 				name: "TestModule",
 				declarations: [{ serviceIdentifier: "value", useValue: "ok" }],
 				exports: ["value"],
 			});
-			let middlewareHits = 0;
 
-			const cleanup = TestModule.use({
-				name: "count-module-middleware",
-				executor: (params, next) => {
-					middlewareHits++;
-					return next(params);
-				},
+			expect(TestModule.resolve("value")).toBe("ok");
+			expect(TestModule.container).toBeDefined();
+			expect(TestModule).not.toHaveProperty("use");
+			expect(TestModule).not.toHaveProperty("unused");
+			expect(TestModule.container).not.toHaveProperty("use");
+			expect(TestModule.container).not.toHaveProperty("unused");
+		});
+
+		it("should keep a private singleton hidden after resolving it internally", () => {
+			const PrivateService = createServiceIdentifier<object>("PrivateService");
+			const PublicService = createServiceIdentifier<object>("PublicService");
+			const privateService = {};
+			const TestModule = createModule({
+				name: "TestModule",
+				declarations: [
+					{
+						serviceIdentifier: PrivateService,
+						useValue: privateService,
+						lifecycle: LifecycleEnum.singleton,
+					},
+					{
+						serviceIdentifier: PublicService,
+						useFactory: (container) => container.resolve(PrivateService),
+					},
+				],
+				exports: [PublicService],
 			});
 
-			expect(TestModule.resolve("value")).toBe("ok");
-			expect(middlewareHits).toBe(1);
+			expect(TestModule.resolve(PublicService)).toBe(privateService);
+			expect(() => TestModule.resolve(PrivateService)).toThrow(
+				/Service identifier "PrivateService" is not exported from TestModule\/CONTAINER-\d+\./,
+			);
+			expect(() => TestModule.container.resolve(PrivateService)).toThrow(
+				/Service identifier "PrivateService" is not exported from TestModule\/CONTAINER-\d+\./,
+			);
+		});
 
-			cleanup();
+		it("should reject undeclared classes before they can resolve private services", () => {
+			const PrivateService = createServiceIdentifier<object>(
+				"PrivateAutoInstantiationService",
+			);
+			const privateService = {};
+			class UndeclaredService {
+				readonly privateService = resolve(PrivateService);
+			}
+			const TestModule = createModule({
+				name: "TestModule",
+				declarations: [
+					{ serviceIdentifier: PrivateService, useValue: privateService },
+				],
+			});
 
-			expect(TestModule.resolve("value")).toBe("ok");
-			expect(middlewareHits).toBe(1);
-			expect(() => cleanup()).not.toThrow();
+			for (const resolveUndeclaredService of [
+				() => TestModule.resolve(UndeclaredService),
+				() => TestModule.container.resolve(UndeclaredService),
+			]) {
+				expectModuleException(
+					resolveUndeclaredService,
+					ModuleErrorCodeEnum.E_EXPORT_NOT_FOUND,
+					/Service identifier "UndeclaredService" is not exported/,
+				);
+			}
+		});
+
+		it("should enforce exports before a global middleware can short-circuit resolution", () => {
+			const PrivateService = createServiceIdentifier<object>("GuardedPrivate");
+			const TestModule = createModule({
+				name: "TestModule",
+				declarations: [{ serviceIdentifier: PrivateService, useValue: {} }],
+			});
+			const bypassMiddlewares: ResolveMiddleware<
+				unknown,
+				ResolveOptions<unknown>
+			>[] = [
+				{
+					name: "shortCircuitPrivateService",
+					executor: () => ({}),
+				},
+				{
+					name: "redirectPrivateService",
+					executor: (params, next) =>
+						next({ ...params, container: rootContainer }),
+				},
+			];
+
+			for (const bypassMiddleware of bypassMiddlewares) {
+				const cleanup = middleware.use(bypassMiddleware);
+				try {
+					expectModuleException(
+						() => TestModule.resolve(PrivateService),
+						ModuleErrorCodeEnum.E_EXPORT_NOT_FOUND,
+						/Service identifier "GuardedPrivate" is not exported/,
+					);
+					expectModuleException(
+						() => TestModule.container.resolve(PrivateService),
+						ModuleErrorCodeEnum.E_EXPORT_NOT_FOUND,
+						/Service identifier "GuardedPrivate" is not exported/,
+					);
+				} finally {
+					cleanup();
+				}
+			}
+		});
+
+		it("should allow a module container to fall back to the root container", () => {
+			const RootService = createServiceIdentifier<string>("RootService");
+			class RootClassService {}
+			const rootClassService = new RootClassService();
+			const cleanupRootService = rootContainer.register(RootService, {
+				useValue: "from-root",
+			});
+			const cleanupRootClassService = rootContainer.register(RootClassService, {
+				useValue: rootClassService,
+			});
+			const TestModule = createModule({ name: "TestModule" });
+
+			try {
+				expect(TestModule.resolve(RootService)).toBe("from-root");
+				expect(TestModule.resolve(RootClassService)).toBe(rootClassService);
+			} finally {
+				cleanupRootClassService();
+				cleanupRootService();
+			}
 		});
 	});
 });

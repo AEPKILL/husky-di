@@ -1,7 +1,7 @@
 /**
  * @overview Shared Vitest configuration factory for workspace packages.
  * @author AEPKILL
- * @created 2026-07-15 22:15:00
+ * @created 2026-07-15 22:11:34 22:15:00
  */
 
 import { fileURLToPath } from "node:url";

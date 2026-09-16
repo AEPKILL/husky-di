@@ -1,15 +1,17 @@
 /**
  * @overview Shared lint-staged configuration for workspace packages.
  * @author AEPKILL
- * @created 2026-07-15 22:15:00
+ * @created 2026-05-10 12:30:15 22:15:00
  */
 
 import type { Configuration } from "lint-staged";
 
-const lintStagedConfiguration: Configuration = {
-	"*.{js,ts,jsx,tsx}": ["biome check --write --no-errors-on-unmatched"],
-	"*.json": ["biome check --write --no-errors-on-unmatched"],
-	"*.{css,scss,sass,less}": ["biome check --write --no-errors-on-unmatched"],
-};
+export default createLintStagedConfiguration();
 
-export default lintStagedConfiguration;
+function createLintStagedConfiguration(): Configuration {
+	return {
+		"*.{js,ts,jsx,tsx}": ["biome check --write --no-errors-on-unmatched"],
+		"*.json": ["biome check --write --no-errors-on-unmatched"],
+		"*.{css,scss,sass,less}": ["biome check --write --no-errors-on-unmatched"],
+	};
+}

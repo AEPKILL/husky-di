@@ -1,7 +1,7 @@
 /**
  * @overview
  * @author AEPKILL
- * @created 2022-03-11 16:02:58
+ * @created 2025-08-06 22:47:46 16:02:58
  */
 
 import type { Constructor, ServiceIdentifier } from "@husky-di/core";
@@ -13,15 +13,6 @@ import { DecoratorErrorCodeEnum } from "@/enums/decorator-error-code.enum";
 import { DecoratorException } from "@/exceptions/decorator.exception";
 import { injectionMetadataMap } from "@/shared/instances";
 import type { InjectionMetadata } from "@/types/injection-metadata.type";
-
-const NON_CLASS_PARAMETER_TYPES = new Set<unknown>([
-	String,
-	Number,
-	Boolean,
-	BigInt,
-	Symbol,
-	Object,
-]);
 
 /**
  * @description
@@ -54,10 +45,11 @@ export const injectable: () => ClassDecorator = () =>
 
 			const serviceIdentifier = parametersServiceIdentifiers[index];
 
-			if (
+			// Implicit constructor injection accepts only class parameter types.
+			const isNotClassParameter =
 				typeof serviceIdentifier !== "function" ||
-				NON_CLASS_PARAMETER_TYPES.has(serviceIdentifier)
-			) {
+				NON_CLASS_PARAMETER_TYPES.has(serviceIdentifier);
+			if (isNotClassParameter) {
 				throw new DecoratorException(
 					DecoratorErrorCodeEnum.E_NON_CLASS_PARAMETER,
 					`Constructor '${target.name}' parameter #${index} must be a class type`,
@@ -77,3 +69,12 @@ export const injectable: () => ClassDecorator = () =>
 
 		injectionMetadataMap.set(target, metadata);
 	}) as ClassDecorator;
+
+const NON_CLASS_PARAMETER_TYPES = new Set<unknown>([
+	String,
+	Number,
+	Boolean,
+	BigInt,
+	Symbol,
+	Object,
+]);

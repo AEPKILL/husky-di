@@ -1,7 +1,7 @@
 /**
  * @overview Visibility state hook for the homepage hero coin scene.
  * @author AEPKILL
- * @created 2026-07-01 10:38:00
+ * @created 2026-07-01 19:15:03 10:38:00
  */
 
 import { useState } from "react";

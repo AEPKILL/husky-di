@@ -6,7 +6,7 @@
  * Each type represents a different provider strategy for creating service instances.
  *
  * @author AEPKILL
- * @created 2025-07-27 22:47:00
+ * @created 2025-07-29 22:25:24 22:47:00
  */
 export enum RegistrationTypeEnum {
 	/** Register a service using a class constructor. */

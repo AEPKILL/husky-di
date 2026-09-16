@@ -6,7 +6,7 @@
  * Used by all validator utilities to report issues.
  *
  * @author AEPKILL
- * @created 2026-03-30 20:28:59
+ * @created 2026-03-31 11:16:58 20:28:59
  */
 
 import type * as ts from "typescript";

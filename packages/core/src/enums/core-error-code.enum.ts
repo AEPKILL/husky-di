@@ -1,7 +1,7 @@
 /**
  * @overview Core package error code enum.
  * @author AEPKILL
- * @created 2026-05-09 00:00:00
+ * @created 2026-05-09 11:26:00
  */
 
 export enum CoreErrorCodeEnum {
@@ -34,6 +34,12 @@ export enum CoreErrorCodeEnum {
 	 * @see SPECIFICATION.md Section 5.2 V6
 	 */
 	E_INVALID_OPTIONS = "E_INVALID_OPTIONS",
+
+	/**
+	 * A value outside the supported ServiceIdentifier types was provided.
+	 * @see SPECIFICATION.md Section 5.2 V5
+	 */
+	E_INVALID_SERVICE_IDENTIFIER = "E_INVALID_SERVICE_IDENTIFIER",
 
 	/**
 	 * Resolution failed while constructing or invoking a provider.

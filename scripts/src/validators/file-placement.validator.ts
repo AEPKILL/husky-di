@@ -6,7 +6,7 @@
  * repository code standard conventions.
  *
  * @author AEPKILL
- * @created 2026-03-30 20:22:20
+ * @created 2026-03-31 11:16:58 20:22:20
  */
 
 import type * as ts from "typescript";
@@ -36,7 +36,11 @@ export function validateFilePlacement(
 
 	const packageArea = pathSegments[sourceIndex];
 	if (packageArea === getTestsDirectoryName(config.sourceDirectories)) {
-		if (fileName === "test.utils.ts" || fileName.endsWith(".test.ts")) {
+		if (
+			fileName === "test.utils.ts" ||
+			fileName.endsWith(".test.ts") ||
+			fileName.endsWith(".test-d.ts")
+		) {
 			return [];
 		}
 
@@ -46,7 +50,7 @@ export function validateFilePlacement(
 				relativeFilePath,
 				sourceFile,
 				0,
-				`Files in package tests must be named *.test.ts or test.utils.ts.`,
+				`Files in package tests must be named *.test.ts, *.test-d.ts, or test.utils.ts.`,
 			),
 		];
 	}
@@ -55,7 +59,20 @@ export function validateFilePlacement(
 		return [];
 	}
 
-	const sourceDirectoryName = pathSegments[sourceIndex + 1];
+	const moduleSourceRoot = config.moduleSourceRoots?.find((root) =>
+		pathSegments.join("/").startsWith(`${root}/`),
+	);
+	const roleIndex = moduleSourceRoot
+		? getPathSegments(moduleSourceRoot).length + 1
+		: sourceIndex + 1;
+	if (
+		moduleSourceRoot &&
+		pathSegments.length === roleIndex + 1 &&
+		fileName === "index.ts"
+	) {
+		return [];
+	}
+	const sourceDirectoryName = pathSegments[roleIndex];
 	if (!config.sourceDirectoryNames.includes(sourceDirectoryName)) {
 		return [
 			createDiagnostic(
@@ -79,7 +96,7 @@ export function validateFilePlacement(
 				relativeFilePath,
 				sourceFile,
 				0,
-				`${getSourceDirectoryName(config.sourceDirectories)}/${sourceDirectoryName} may only contain files with suffix ${formatSuffixList(allowedSuffixes)}.`,
+				`${pathSegments.slice(sourceIndex, roleIndex + 1).join("/")} may only contain files with suffix ${formatSuffixList(allowedSuffixes)}.`,
 			),
 		];
 	}
@@ -98,10 +115,6 @@ function findFirstSegmentIndex(
 		}
 	}
 	return -1;
-}
-
-function getSourceDirectoryName(names: readonly string[]): string {
-	return names[0] ?? "src";
 }
 
 function getTestsDirectoryName(names: readonly string[]): string | undefined {

@@ -1,7 +1,7 @@
 /**
  * @overview Route that showcases a Code Hike powered scrollycoding example.
  * @author AEPKILL
- * @created 2026-06-30 11:38:00
+ * @created 2026-06-30 13:53:17 11:38:00
  */
 
 import { createFileRoute } from "@tanstack/react-router";

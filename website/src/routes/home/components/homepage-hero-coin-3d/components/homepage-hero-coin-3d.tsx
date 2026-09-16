@@ -1,7 +1,7 @@
 /**
  * @overview Three.js coin animation used in the homepage hero section.
  * @author AEPKILL
- * @created 2026-07-01 10:38:00
+ * @created 2026-07-01 19:15:03 10:38:00
  */
 
 import { Canvas } from "@react-three/fiber";
@@ -12,8 +12,6 @@ import styles from "../../../styles/homepage.module.css";
 
 import { useHomepageHeroCoinSceneVisibility } from "../hooks/use-homepage-hero-coin-scene-visibility";
 import { HomepageHeroCoinScene } from "./homepage-hero-coin-scene";
-
-const HOMEPAGE_HERO_COIN_TONE_MAPPING_EXPOSURE = 1.15;
 
 export function HomepageHeroCoin3d() {
 	const { handleSceneReady, isSceneVisible } =
@@ -44,3 +42,5 @@ export function HomepageHeroCoin3d() {
 		</div>
 	);
 }
+
+const HOMEPAGE_HERO_COIN_TONE_MAPPING_EXPOSURE = 1.15;

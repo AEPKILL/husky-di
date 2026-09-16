@@ -1,7 +1,7 @@
 /**
  * @overview
  * @author AEPKILL
- * @created 2025-08-09 14:42:25
+ * @created 2025-08-09 15:56:11 14:42:25
  */
 import type {
 	CreateRegistrationOptions,
@@ -35,10 +35,7 @@ export type ModuleWithAliases = {
 export interface IModule
 	extends IUnique,
 		IDisplayName,
-		Pick<
-			IContainer,
-			"resolve" | "isRegistered" | "getServiceIdentifiers" | "use" | "unused"
-		> {
+		Pick<IContainer, "resolve" | "isRegistered" | "getServiceIdentifiers"> {
 	readonly name: string;
 	readonly declarations?: ReadonlyArray<Declaration<unknown>>;
 	readonly imports?: ReadonlyArray<IModule | ModuleWithAliases>;

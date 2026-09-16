@@ -1,7 +1,7 @@
 /**
  * @overview Lighting rig for the homepage hero coin scene.
  * @author AEPKILL
- * @created 2026-07-01 10:38:00
+ * @created 2026-07-01 19:15:03 10:38:00
  */
 
 export function HomepageHeroCoinLighting() {

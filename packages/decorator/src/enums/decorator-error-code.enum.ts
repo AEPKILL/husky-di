@@ -1,7 +1,7 @@
 /**
  * @overview Decorator package error code enum.
  * @author AEPKILL
- * @created 2026-05-09 00:00:00
+ * @created 2026-05-09 11:26:00
  */
 
 export enum DecoratorErrorCodeEnum {

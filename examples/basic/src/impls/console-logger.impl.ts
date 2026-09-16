@@ -5,7 +5,7 @@
  * Implements the logger contract by writing tagged messages to stdout.
  *
  * @author AEPKILL
- * @created 2026-07-08 10:48:48
+ * @created 2026-07-08 11:02:43 10:48:48
  */
 
 import type { ILogger } from "@/interfaces/logger.interface";

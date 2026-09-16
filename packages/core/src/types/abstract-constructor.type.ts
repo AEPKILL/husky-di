@@ -8,7 +8,7 @@
  * @typeParam T - The instance type that the abstract constructor produces
  *
  * @author AEPKILL
- * @created 2025-08-14 21:09:52
+ * @created 2025-08-14 21:12:44 21:09:52
  */
 
 // biome-ignore lint/suspicious/noExplicitAny: here is a generic type

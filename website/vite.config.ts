@@ -6,7 +6,7 @@
  * file-based routing plugin and React integration on top of Vite.
  *
  * @author AEPKILL
- * @created 2026-06-25 16:25:00
+ * @created 2026-06-25 00:56:55 16:25:00
  */
 
 import mdx from "@mdx-js/rollup";
@@ -14,6 +14,8 @@ import tailwindcss from "@tailwindcss/vite";
 import { tanstackStart } from "@tanstack/react-start/plugin/vite";
 import viteReact from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
+
+export { websiteConfig as default };
 
 const mdxPlugin = {
 	...mdx(),
@@ -36,7 +38,7 @@ function getWebsiteBasePath(): string {
 		: `${normalizedBasePath}/`;
 }
 
-export default defineConfig({
+const websiteConfig = defineConfig({
 	base: getWebsiteBasePath(),
 	server: {
 		port: 3000,

@@ -6,7 +6,7 @@
  * Used to ensure consistency across validators and prevent typos.
  *
  * @author AEPKILL
- * @created 2026-03-30 20:36:00
+ * @created 2026-03-31 11:16:58 20:36:00
  */
 
 export enum CodeStandardRuleIdEnum {
@@ -21,6 +21,8 @@ export enum CodeStandardRuleIdEnum {
 	ExportsNoDefaultExport = "exports/no-default-export",
 	EntrypointExportOnly = "entrypoint/export-only",
 	ImportsNoInternalPackagePath = "imports/no-internal-package-path",
+	ImportsNoInternalModulePath = "imports/no-internal-module-path",
 	CommentsBiomeIgnoreReason = "comments/biome-ignore-reason",
 	TypeFileExportsOnly = "type-file/exports-only",
+	SchemaFileExportsOnly = "schema-file/exports-only",
 }

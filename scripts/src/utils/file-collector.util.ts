@@ -6,7 +6,7 @@
  * Handles directory traversal and file filtering based on repository rules.
  *
  * @author AEPKILL
- * @created 2026-03-30 20:22:20
+ * @created 2026-03-31 11:16:58 20:22:20
  */
 
 import { existsSync, readdirSync, statSync } from "node:fs";
@@ -94,6 +94,9 @@ export function isInScopeFile(
 		}
 
 		return (
+			config.moduleSourceRoots?.some((root) =>
+				relativeFilePath.startsWith(`${root}/`),
+			) === true ||
 			config.sourceDirectories.includes(nextSegment) ||
 			config.sourceDirectoryNames.includes(nextSegment)
 		);

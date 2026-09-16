@@ -2,11 +2,11 @@
  * Import specifiers validator.
  *
  * @overview
- * Validates that cross-package imports use package root entrypoints.
+ * Validates that cross-package imports use public package entrypoints.
  * Prevents direct imports from internal package source paths.
  *
  * @author AEPKILL
- * @created 2026-03-30 20:22:20
+ * @created 2026-03-31 11:16:58 20:22:20
  */
 
 import * as ts from "typescript";
@@ -20,6 +20,7 @@ export function validateImportSpecifiers(
 	relativeFilePath: string,
 	sourceFile: ts.SourceFile,
 	config: CodeStandardConfig = DEFAULT_CONFIG,
+	publicPackageImportSpecifiers: ReadonlySet<string> = new Set(),
 ): CodeStandardDiagnostic[] {
 	const diagnostics: CodeStandardDiagnostic[] = [];
 
@@ -40,6 +41,9 @@ export function validateImportSpecifiers(
 		if (packagePathSegments.length <= 1) {
 			continue;
 		}
+		if (publicPackageImportSpecifiers.has(normalizedSpecifierText)) {
+			continue;
+		}
 
 		diagnostics.push(
 			createDiagnostic(
@@ -47,7 +51,7 @@ export function validateImportSpecifiers(
 				relativeFilePath,
 				sourceFile,
 				statement.moduleSpecifier.getStart(sourceFile),
-				"Cross-package imports must use the package root entrypoint, not internal source paths.",
+				"Cross-package imports must use a public package entrypoint, not internal source paths.",
 			),
 		);
 	}

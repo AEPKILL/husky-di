@@ -15,6 +15,14 @@ It focuses on type safety, predictable runtime behavior, and clear package bound
   [packages/decorator/README.md](./packages/decorator/README.md)
 - `@husky-di/module`: ESM-like module boundaries, imports, exports, aliases, and validation
   [packages/module/README.md](./packages/module/README.md)
+- `@husky-di/remote`: descriptor-driven bidirectional RPC and connection recovery
+  [packages/remote/README.md](./packages/remote/README.md)
+- `@husky-di/remote-websocket`: browser and Node WebSocket Transport Adapters
+  [packages/remote-websocket/README.md](./packages/remote-websocket/README.md)
+
+Run [Remote Lab](./examples/remote-lab/README.md) with
+`pnpm --filter @husky-di/example-remote-lab start` to explore browser ↔ Node
+calls, connection recovery, and RPC lifecycle observations.
 
 ## License
 

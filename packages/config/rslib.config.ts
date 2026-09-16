@@ -1,12 +1,12 @@
 /**
  * @overview Shared Rslib configuration for publishable packages.
  * @author AEPKILL
- * @created 2026-07-15 22:15:00
+ * @created 2025-06-23 23:47:22 22:15:00
  */
 
 import { defineConfig } from "@rslib/core";
 
-const rslibConfiguration = defineConfig({
+export default defineConfig({
 	resolve: {
 		alias: {
 			"@": "./src",
@@ -21,6 +21,7 @@ const rslibConfiguration = defineConfig({
 			format: "esm",
 			syntax: ["node 18"],
 			dts: true,
+			redirect: { dts: { extension: true } },
 		},
 		{
 			bundle: false,
@@ -29,5 +30,3 @@ const rslibConfiguration = defineConfig({
 		},
 	],
 });
-
-export default rslibConfiguration;

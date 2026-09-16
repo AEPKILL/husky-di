@@ -6,7 +6,7 @@
  * Enforces named exports only according to repository standards.
  *
  * @author AEPKILL
- * @created 2026-03-30 20:22:20
+ * @created 2026-03-31 11:16:58 20:22:20
  */
 
 import * as ts from "typescript";

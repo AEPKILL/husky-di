@@ -119,7 +119,7 @@ src/
 │   ├── postgres-database.impl.ts  # @injectable(), @inject(ILogger)
 │   └── user-service.impl.ts       # @injectable(), @inject(ILogger, IDatabase)
 ├── di/
-│   ├── container.ts               # Also calls globalMiddleware.use(decoratorMiddleware)
+│   ├── container.ts               # Also calls middleware.use(decoratorMiddleware)
 │   └── middleware.ts
 └── main.ts
 ```
@@ -150,7 +150,7 @@ export class UserService {
 ```typescript
 import {
   createContainer,
-  globalMiddleware,
+  middleware,
   LifecycleEnum,
 } from "@husky-di/core";
 import { decoratorMiddleware } from "@husky-di/decorator";
@@ -161,7 +161,7 @@ import { ConsoleLogger } from "../impls/console-logger.impl";
 import { PostgresDatabase } from "../impls/postgres-database.impl";
 import { UserService } from "../impls/user-service.impl";
 
-globalMiddleware.use(decoratorMiddleware);
+middleware.use(decoratorMiddleware);
 
 export const container = createContainer("AppContainer");
 
@@ -331,7 +331,6 @@ export class UserService implements IUserService {
 
 ```typescript
 import { createModule } from "@husky-di/module";
-import { decoratorMiddleware } from "@husky-di/decorator";
 import { LifecycleEnum } from "@husky-di/core";
 import { IDatabase } from "../../interfaces/database.interface";
 import { IUserRepository } from "./interfaces/user-repository.interface";
@@ -349,9 +348,6 @@ export const userModule = createModule({
   ],
   exports: [IUserService],
 });
-
-// Enable decorator-based injection within this module
-userModule.use(decoratorMiddleware);
 ```
 
 **di/modules/app.module.ts**
@@ -371,9 +367,12 @@ export const appModule = createModule({
 **main.ts**
 
 ```typescript
+import { middleware } from "@husky-di/core";
+import { decoratorMiddleware } from "@husky-di/decorator";
 import { appModule } from "./di/modules/app.module";
 import { IUserService } from "./features/user/interfaces/user-service.interface";
 
+middleware.use(decoratorMiddleware);
 const userService = appModule.resolve(IUserService);
 console.log(userService.getUsers());
 ```

@@ -5,7 +5,7 @@
  * Models the user data returned by the in-memory repository implementation.
  *
  * @author AEPKILL
- * @created 2026-07-08 10:48:48
+ * @created 2026-07-08 11:02:43 10:48:48
  */
 
 export type UserProfile = {

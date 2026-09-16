@@ -1,0 +1,50 @@
+{
+	"name": "@husky-di/example-remote-lab",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"build:web": "vite build",
+		"start": "node --import tsx src/server/dev.ts",
+		"start:web": "vite",
+		"test": "node --import tsx --test tests/*.test.ts",
+		"test:browser": "playwright test --config playwright.config.ts",
+		"typecheck": "tsc -p tsconfig.json --noEmit",
+		"start:server": "node --import tsx src/server/main.ts",
+		"lab": "node --import tsx src/server/cli.ts",
+		"test:platform": "node --import tsx --test tests/platform/*.test.ts"
+	},
+	"devDependencies": {
+		"@husky-di/config": "workspace:*",
+		"@playwright/test": "1.62.1",
+		"@tailwindcss/vite": "^4.3.1",
+		"@types/node": "^25.5.0",
+		"@types/react": "^19.2.17",
+		"@types/react-dom": "^19.2.7",
+		"@vitejs/plugin-react": "^6.0.3",
+		"tailwindcss": "^4.3.1",
+		"tsx": "^4.20.5",
+		"typescript": "^6.0.3",
+		"vite": "^8.1.0"
+	},
+	"dependencies": {
+		"@husky-di/core": "workspace:*",
+		"@husky-di/remote": "workspace:*",
+		"@husky-di/remote-websocket": "workspace:*",
+		"class-variance-authority": "^0.7.1",
+		"clsx": "^2.1.1",
+		"esbuild": "0.27.4",
+		"lucide-react": "^1.43.0",
+		"monaco-editor": "^0.56.0",
+		"radix-ui": "^1.6.7",
+		"react": "^19.2.7",
+		"react-dom": "^19.2.7",
+		"react-resizable-panels": "^4.12.4",
+		"rxjs": "^7.8.2",
+		"tailwind-merge": "^3.6.0"
+	},
+	"exports": {
+		"./sdk": {
+			"types": "./src/interfaces/platform/lab-case.interface.ts"
+		}
+	}
+}

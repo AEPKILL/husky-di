@@ -1,7 +1,7 @@
 /**
  * @overview Core container reference resolution behavior tests.
  * @author AEPKILL
- * @created 2025-08-07 21:50:50
+ * @created 2025-08-07 21:50:50 21:50:50
  */
 
 import { describe, expect, it } from "vitest";

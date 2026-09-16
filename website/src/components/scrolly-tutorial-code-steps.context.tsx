@@ -2,16 +2,11 @@
  * @overview Context for scrolly tutorial code steps so MDX-authored sections
  * can resolve highlighted code without importing loader data directly.
  * @author AEPKILL
- * @created 2026-07-02 18:20:00
+ * @created 2026-07-02 17:21:03 18:20:00
  */
 
 import { createContext, type ReactNode, useContext } from "react";
 import type { ScrollyTutorialStep } from "@/types/scrolly-tutorial-step.type";
-
-type ScrollyTutorialCodeStepsMap = ReadonlyMap<string, ScrollyTutorialStep>;
-
-const ScrollyTutorialCodeStepsContext =
-	createContext<ScrollyTutorialCodeStepsMap | null>(null);
 
 export type ScrollyTutorialCodeStepsProviderProps = Readonly<{
 	children: ReactNode;
@@ -55,6 +50,11 @@ export function useScrollyTutorialCodeStepsMap(): ScrollyTutorialCodeStepsMap {
 
 	return codeSteps;
 }
+
+type ScrollyTutorialCodeStepsMap = ReadonlyMap<string, ScrollyTutorialStep>;
+
+const ScrollyTutorialCodeStepsContext =
+	createContext<ScrollyTutorialCodeStepsMap | null>(null);
 
 function createCodeStepsMap(
 	steps: readonly ScrollyTutorialStep[],

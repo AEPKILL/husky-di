@@ -1,7 +1,7 @@
 /**
  * @overview Homepage component for the Husky DI website.
  * @author AEPKILL
- * @created 2026-06-30 12:35:00
+ * @created 2026-06-30 18:34:10 12:35:00
  */
 
 import type { ScrollyTutorialStep } from "@/types/scrolly-tutorial-step.type";

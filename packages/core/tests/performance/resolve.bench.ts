@@ -5,7 +5,7 @@
  * mean time maps directly to a fixed local comparison batch.
  *
  * @author AEPKILL
- * @created 2026-06-25 15:58:49
+ * @created 2026-06-25 17:18:34 15:58:49
  */
 
 import { bench, describe } from "vitest";
@@ -14,8 +14,14 @@ import {
 	createContainer,
 	createServiceIdentifier,
 	LifecycleEnum,
+	middleware,
 	resolve,
 } from "../../src/index";
+
+type BenchResolver = () => number;
+type BenchValue = {
+	readonly value: number;
+};
 
 const RESOLVE_BATCH_SIZE = 1_000_00;
 
@@ -27,11 +33,6 @@ const BENCH_OPTIONS = {
 };
 
 let _sink = 0;
-
-type BenchResolver = () => number;
-type BenchValue = {
-	readonly value: number;
-};
 
 const IUseValueService = createServiceIdentifier<BenchValue>(
 	"IUseValueBenchService",
@@ -205,24 +206,35 @@ function createParentChildResolver(): BenchResolver {
 	return () => child.resolve(IParentValueService).value;
 }
 
-function createMiddlewareResolver(middlewareCount: number): BenchResolver {
-	const container = createContainer(
-		`MiddlewareBenchContainer${middlewareCount}`,
-	);
+function createMiddlewareResolver(): BenchResolver {
+	const container = createContainer("MiddlewareBenchContainer");
 	container.register(IUseValueService, {
 		useValue: {
 			value: 1,
 		},
 	});
 
+	return () => container.resolve(IUseValueService).value;
+}
+
+function runMiddlewareResolveBatch(
+	resolver: BenchResolver,
+	middlewareCount: number,
+): void {
+	const middlewares: Parameters<typeof middleware.use> = [];
 	for (let index = 0; index < middlewareCount; index += 1) {
-		container.use({
+		middlewares.push({
 			name: `middleware-bench-${middlewareCount}-${index}`,
 			executor: (params, next) => next(params),
 		});
 	}
 
-	return () => container.resolve(IUseValueService).value;
+	const cleanup = middleware.use(...middlewares);
+	try {
+		runResolveBatch(resolver);
+	} finally {
+		cleanup();
+	}
 }
 
 function createDepthOneResolver(): BenchResolver {
@@ -320,23 +332,21 @@ describe("resolve throughput: provider and topology scenarios", () => {
 });
 
 describe("resolve throughput: middleware overhead", () => {
-	const zeroMiddlewareResolver = createMiddlewareResolver(0);
-	const oneMiddlewareResolver = createMiddlewareResolver(1);
-	const threeMiddlewareResolver = createMiddlewareResolver(3);
+	const middlewareResolver = createMiddlewareResolver();
 
 	bench(
-		"0 local middleware (1,000,000 resolves)",
-		() => runResolveBatch(zeroMiddlewareResolver),
+		"0 middleware (1,000,000 resolves)",
+		() => runMiddlewareResolveBatch(middlewareResolver, 0),
 		BENCH_OPTIONS,
 	);
 	bench(
-		"1 local middleware (1,000,000 resolves)",
-		() => runResolveBatch(oneMiddlewareResolver),
+		"1 middleware (1,000,000 resolves)",
+		() => runMiddlewareResolveBatch(middlewareResolver, 1),
 		BENCH_OPTIONS,
 	);
 	bench(
-		"3 local middleware (1,000,000 resolves)",
-		() => runResolveBatch(threeMiddlewareResolver),
+		"3 middleware (1,000,000 resolves)",
+		() => runMiddlewareResolveBatch(middlewareResolver, 3),
 		BENCH_OPTIONS,
 	);
 });

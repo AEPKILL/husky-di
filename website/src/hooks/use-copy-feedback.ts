@@ -1,16 +1,10 @@
 /**
  * @overview Clipboard copy hook with timed feedback state and timeout cleanup.
  * @author AEPKILL
- * @created 2026-07-02 10:25:00
+ * @created 2026-07-02 10:41:02 10:25:00
  */
 
 import { useEffect, useRef, useState } from "react";
-
-const DEFAULT_COPY_FEEDBACK_HIDE_DELAY_MS = 1600;
-
-type UseCopyFeedbackOptions = {
-	hideDelayMs?: number;
-};
 
 export function useCopyFeedback(
 	options: Readonly<UseCopyFeedbackOptions> = {},
@@ -58,3 +52,9 @@ export function useCopyFeedback(
 		isCopied,
 	};
 }
+
+type UseCopyFeedbackOptions = {
+	hideDelayMs?: number;
+};
+
+const DEFAULT_COPY_FEEDBACK_HIDE_DELAY_MS = 1600;

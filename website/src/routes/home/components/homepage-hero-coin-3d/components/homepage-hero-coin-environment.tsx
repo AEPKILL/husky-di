@@ -1,15 +1,13 @@
 /**
  * @overview Environment setup for the homepage hero coin scene.
  * @author AEPKILL
- * @created 2026-07-01 10:38:00
+ * @created 2026-07-01 19:15:03 10:38:00
  */
 
 import { useThree } from "@react-three/fiber";
 import { useEffect } from "react";
 import { PMREMGenerator } from "three";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
-
-const HOMEPAGE_HERO_COIN_ENVIRONMENT_BLUR = 0.06;
 
 export function HomepageHeroCoinEnvironment() {
 	const { gl, scene } = useThree();
@@ -36,3 +34,5 @@ export function HomepageHeroCoinEnvironment() {
 
 	return null;
 }
+
+const HOMEPAGE_HERO_COIN_ENVIRONMENT_BLUR = 0.06;

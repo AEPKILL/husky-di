@@ -4,15 +4,15 @@
  * Test suite for @husky-di/decorator based on SPECIFICATION.md.
  *
  * @author AEPKILL
- * @created 2025-08-06 21:39:35
+ * @created 2025-08-06 21:39:35 21:39:35
  */
 
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 import "reflect-metadata";
 import {
 	createContainer,
-	globalMiddleware,
 	type IContainer,
+	middleware,
 	type Ref,
 	ResolveContainerScopeEnum,
 	ResolveException,
@@ -45,7 +45,7 @@ function expectDecoratorException(
 
 describe("Decorator Module - Specification Compliance", () => {
 	beforeAll(() => {
-		globalMiddleware.use(decoratorMiddleware);
+		middleware.use(decoratorMiddleware);
 	});
 
 	let container: IContainer;

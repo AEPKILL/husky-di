@@ -9,7 +9,7 @@
  * @typeParam Args - The tuple type of constructor arguments (defaults to any[])
  *
  * @author AEPKILL
- * @created 2021-10-02 09:18:13
+ * @created 2025-06-24 23:33:19 09:18:13
  */
 
 // biome-ignore lint/suspicious/noExplicitAny: here is a generic type

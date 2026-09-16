@@ -6,15 +6,13 @@
  * Exported constants must use SCREAMING_SNAKE_CASE naming.
  *
  * @author AEPKILL
- * @created 2026-03-30 21:09:00
+ * @created 2026-03-31 11:16:58 21:09:00
  */
 
 import * as ts from "typescript";
 import { CodeStandardRuleIdEnum } from "@/enums/code-standard-rule-id.enum";
 import type { CodeStandardDiagnostic } from "@/types/code-standard-diagnostic.type";
 import { createDiagnostic } from "@/utils/create-diagnostic.util";
-
-const SCREAMING_SNAKE_CASE_REGEX = /^[A-Z][A-Z0-9]*(_[A-Z0-9]+)*$/;
 
 export function validateConstantNaming(
 	relativeFilePath: string,
@@ -62,3 +60,5 @@ export function validateConstantNaming(
 
 	return diagnostics;
 }
+
+const SCREAMING_SNAKE_CASE_REGEX = /^[A-Z][A-Z0-9]*(_[A-Z0-9]+)*$/;

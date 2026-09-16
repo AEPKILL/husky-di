@@ -6,7 +6,7 @@
  * Allows customization of paths, rules, and validation behavior.
  *
  * @author AEPKILL
- * @created 2026-03-31 17:30:00
+ * @created 2026-03-31 17:38:42 17:30:00
  */
 
 export type CodeStandardConfig = {
@@ -24,6 +24,11 @@ export type CodeStandardConfig = {
 	 * Directory names that contain source files to validate.
 	 */
 	readonly sourceDirectoryNames: readonly string[];
+
+	/**
+	 * Repository-relative source roots that also allow module/role directories.
+	 */
+	readonly moduleSourceRoots?: readonly string[];
 
 	/**
 	 * Map of source directory names to required file suffixes.

@@ -2,14 +2,12 @@
  * @overview Shared component that renders the dependency injection ASCII
  * workflow animation.
  * @author AEPKILL
- * @created 2026-06-30 10:24:50
+ * @created 2026-06-30 10:36:51 10:24:50
  */
 
 import { useAnimationTick } from "@/hooks/use-animation-tick";
 import { cn } from "@/utils/class-name.util";
 import { getDiWorkflowAnimationFrame } from "@/utils/di-workflow-animation.utils";
-
-const FRAME_INTERVAL_MS = 95;
 
 export type DiWorkflowAnimationProps = Readonly<{
 	className?: string;
@@ -52,3 +50,5 @@ export function DiWorkflowAnimation({ className }: DiWorkflowAnimationProps) {
 		</section>
 	);
 }
+
+const FRAME_INTERVAL_MS = 95;

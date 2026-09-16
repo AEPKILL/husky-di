@@ -13,6 +13,7 @@ This project uses a monorepo structure. The main workspaces that currently exist
 - `@husky-di/core`: The core DI container, registration, resolution, lifecycle, middleware, reference, and disposal capabilities.
 - `@husky-di/decorator`: Constructor injection support built on TypeScript experimental decorators and `reflect-metadata`.
 - `@husky-di/module`: A modular DI system inspired by ESM `import` / `export` semantics.
+- `@husky-di/remote`: Descriptor-driven bidirectional unary and RxJS Observable RPC over application-supplied Transport Adapters.
 - `@husky-di/website`: A documentation workspace located at the top-level `website/` directory.
 
 ## Core design principles
@@ -30,7 +31,7 @@ This project uses a monorepo structure. The main workspaces that currently exist
 
 - **Dependency Injection / DI**: Objects receive dependencies from the outside instead of creating them on their own.
 - **IoC**: Inversion of Control. DI is the IoC mechanism adopted by this project.
-- **Container**: A dependency injection container. It registers services, resolves services, manages lifecycles, executes middleware, and disposes resources.
+- **Container**: A dependency injection container. It registers services, resolves services, manages lifecycles, participates in its loaded core module instance's middleware pipeline, and disposes resources.
 - **Root Container**: The root container exposed through the `rootContainer` constant. `createContainer()` attaches to it when `parent` is not passed explicitly; the `resolve` helper uses the current resolution context or the root container to perform resolution.
 - **Parent Container / Child Container**: The parent-child container relationship. Resolution checks the current container first and then falls back to the parent; registrations in a child do not affect the parent.
 
@@ -61,10 +62,9 @@ This project uses a monorepo structure. The main workspaces that currently exist
 
 ### Middleware
 
-- **Middleware**: A function object that intercepts resolution. It can inspect arguments, transform results, perform side effects, or short-circuit resolution by not calling `next()`.
-- **Global Middleware**: Registered through `globalMiddleware` and applies to all containers.
-- **Local Middleware**: Registered through `container.use()` or `module.use()` and only applies to the current container or module container.
-- **Middleware Order**: Middleware runs in LIFO order. Local middleware wraps the outside, then global middleware runs, and finally the provider executes.
+- **Middleware**: A function object registered through the current core module instance's `middleware` export. It can inspect arguments, transform results, perform side effects, or short-circuit resolution by not calling `next()`.
+- **Middleware Cleanup**: `middleware.use()` returns the sole idempotent cleanup for the middleware added by that call.
+- **Middleware Order**: Middleware runs in LIFO order before the provider executes.
 - **onContainerDispose**: An optional disposal hook on middleware. It is called when a container is disposed; exceptions should be swallowed and must not interrupt disposal.
 
 ### Decorator package
@@ -74,7 +74,7 @@ This project uses a monorepo structure. The main workspaces that currently exist
 - **`@injectable()`**: A class decorator that merges constructor parameter metadata and marks the class as injectable.
 - **`@inject()`**: A parameter decorator that declares the service identifier and resolution options for a constructor parameter.
 - **`@tagged()`**: The lower-level parameter metadata decorator. `@inject()` can be treated as its convenience wrapper.
-- **`decoratorMiddleware`**: Middleware that reads injection metadata and participates in constructor injection. When using decorator-based injection, register it in `globalMiddleware` or on the container.
+- **`decoratorMiddleware`**: Middleware that reads injection metadata and participates in constructor injection. Register it through `middleware` when using decorator-based injection.
 - **Reflection Metadata**: TypeScript compile-time parameter type information read through the Reflect API. This package depends on `reflect-metadata` or a compatible implementation.
 
 The decorator package supports only TypeScript experimental decorators, not ES decorators. The reason is that the current ES decorators specification does not include parameter decorators, so it cannot express the constructor parameter injection model required by this project.
@@ -87,9 +87,54 @@ The decorator package supports only TypeScript experimental decorators, not ES d
 - **Export**: A service exposed from the current module, either from a local declaration or by forwarding an import.
 - **Alias**: Renaming a service identifier on import, similar to `import { foo as bar }`.
 - **Import Scope**: The visible set of services a module receives from its imports. `alias` only renames mapped imports; imported exports that are not aliased still enter the import scope under their original service identifiers.
-- **Export Guard**: A protective middleware on the module container that prevents external resolution of non-exported services.
+- **Export Guard**: A module's public container facade rejects direct resolution of non-exported declarations before entering the global middleware pipeline.
 
 The module system is inspired by ESM semantics: imports must be explicit, export boundaries must be explicit, and naming conflicts should surface when a module is created instead of turning into ambiguity at runtime.
+
+### Remote RPC
+
+- **RPC Topology Owner**: The owner of a remote relationship and its lifecycle. A Connector owns one Peer; an Acceptor owns a listener and a collection of Peers.
+- **RPC Peer / `IRpcPeer`**: The remote counterpart participating in a bidirectional RPC relationship. It is the subject of service exposure and remote resolution.
+- **RPC Connection / `IRpcConnection`**: A finite-lived, ordered, full-duplex byte-message channel between two Peers.
+- **Transport Adapter**: An application-supplied connection source. A Connector Adapter establishes one outgoing Connection; an Acceptor Adapter supplies accepted Connections while listening.
+- **Local Admission**: Completion of a Connection's `send()` operation, after which the Transport owns the submitted bytes. It does not establish remote receipt or handler execution.
+- **RPC Protocol**: A role-specific semantic engine that governs Session establishment, remote calls, continuity, and termination independently of the physical Transport.
+- **Logical Session**: A retained bidirectional RPC relationship that backs one stable Peer across replacement physical Connections.
+- **Session Incarnation**: One retained lifetime of a Logical Session; loss of its continuity evidence ends that lifetime.
+- **Binding Epoch**: A monotonically increasing generation selecting the one current Connection for a Session.
+- **Pending Invocation**: A locally queued invocation that has not acquired a Logical Call identity or reached outgoing admission.
+- **Receipt Acknowledgment**: Evidence that a message has a durable disposition that suppresses replay, without claiming handler completion.
+- **Recovery**: Rebinding a retained Session to a replacement Connection after proving continuity authority.
+- **Resume Token**: The bearer credential granting continuity with one retained Session Incarnation; it is not an application identity.
+- **Connector Reconnection**: Optional supervision of initial and replacement Connector attempts under a finite retry policy.
+- **Application Value**: Data passed as remote arguments or results, within the serializable value domain defined by the Remote specification.
+- **Remote Service Descriptor**: An opaque, typed description relating one local `ServiceIdentifier` to an explicit Wire Service Name and a non-empty explicit member map. Its local identifier and wire metadata are not exposed through the Descriptor's public surface.
+- **Wire Identifier**: A bounded, explicit peer-visible name used for remote services and methods.
+- **Wire Service Name**: The stable name by which Peers identify a remote service, independent of local `ServiceIdentifier` equality or metadata.
+- **Service Exposure**: A local association between a Remote Service Descriptor and an implementation made callable by the opposite Peer. Acceptor exposures apply to its Peers; Peer exposures belong to that individual relationship.
+- **Remote Facade**: A locally resolved object containing the Descriptor's selected Promise-returning unary methods, Observable-returning methods, and readonly static Observable properties. The reserved property `then` prevents it from becoming a JavaScript thenable.
+- **Lab Service Definition**: A Lab-owned description of a custom service's callable methods and application behavior, with an identity distinct from its Wire Service Name. Saving a definition is distinct from DI Registration and Service Exposure.
+- **Lab Project**: A local collection of developer-owned Lab Test Case modules and the source files they use, shared by Lab and the developer's editing tools.
+- **Lab Test Case**: A reusable definition of Remote interaction behavior and expected outcomes that a developer can load or customize for debugging and automated execution in Lab. It is distinct from a Lab Service Definition and from the results and records of any one execution.
+- **Lab Test Step**: An explicit unit of a Lab Test Case's behavior that provides a boundary for pausing a debugging execution, inspecting its observed state, and continuing execution.
+- **Lab Test Run**: One execution of Lab Test Cases, with its own observed activity and test results. The reusable case definitions remain distinct from this execution and its records.
+- **Lab Source Snapshot**: A retained, immutable view of the source code used by one Lab Test Run, allowing its results to be interpreted independently of later edits to the Lab Project.
+- **Lab E2E Run**: A specialized Lab Test Run executing `@husky-di/remote` and `@husky-di/remote-websocket` behavior tests through a Lab-observable runtime. The packages are the subjects under test; the run and its aggregate result remain distinct from its individual RPC Calls.
+- **RPC Call / Logical Call**: One admitted unary remote invocation with a Session-scoped identity and one caller-visible terminal outcome. Its identity survives Connection replacement and is not an application idempotency key.
+- **Call Metadata**: Application-owned context associated with one remote invocation and conveyed from caller to callee separately from business arguments. It may inform application behavior such as trace correlation, tenancy, authorization, or idempotency.
+- **Call Cancellation**: A request to stop waiting for a Call and cooperatively abort a cancelable remote handler. It does not establish that application effects were rolled back.
+- **Handler Settlement**: The fulfillment, rejection, or synchronous throw of a dispatched handler computation. Canceling its signal does not itself settle the computation.
+- **Definite Non-Execution**: An evidence-backed conclusion that an invocation did not reach remote handler execution.
+- **Outcome Unknown**: A terminal caller-visible failure for an admitted invocation whose authoritative remote outcome is no longer provable. Reissuing that invocation can duplicate application effects.
+- **Graceful RPC Shutdown**: Owner termination that stops new work and allows admitted work to settle within a finite grace interval.
+- **Forced RPC Close**: Owner termination that immediately ends outstanding calls and requests Connection cleanup.
+- **Payload-Free RPC Events**: Owner observations containing lifecycle, locally known service/method metadata, call correlation, timing, and safe outcome codes. Application payloads and raw errors are outside this event surface.
+- **Remote Observable Stream**: A remote service route that emits an ordered sequence of application values and ends with exactly one completion or error outcome. It is distinct from a unary RPC result even when both are exposed by the same Peer.
+- **Remote Stream Subscription**: One caller-owned subscription to a Remote Observable Stream. Each subscription has its own remote execution and cancellation lifecycle; unsubscribing requests cooperative termination of that subscription.
+- **Remote Stream Identity**: The stable identity of one Remote Stream Subscription, scoped to a Session Incarnation and originating direction; it is distinct from unary RPC Call identity and is not reused by a new Session Incarnation.
+- **Stream Terminal**: The first durable completion, error, or cancellation disposition for a Remote Stream Subscription. Local unsubscribe is silent to the RxJS observer while requesting cooperative remote termination.
+- **Static Observable Member**: A service-exposed Observable value addressed as a stable remote member rather than invoked as a method. The captured source is shared lazily by instance identity within one Peer, including across routes; different Peers hold separate source subscriptions. Each remote subscription retains its own stream identity, interception, and teardown.
+- **Remote Member Kind**: The explicit kind assigned to one exposed service member: `function` for unary methods, `observable-function` for methods whose result is an Observable stream, or `observable` for a static Observable member. The kind determines whether the member is invoked or subscribed to remotely.
 
 ## Behavioral constraints
 
@@ -102,7 +147,7 @@ The module system is inspired by ESM semantics: imports must be explicit, export
 - `ref` and `dynamic` are mutually exclusive and cannot both be `true`.
 - Circular dependencies are detected through `ResolveRecord`. Error messages should include a readable resolution path and suggest `ref` or `dynamic` when appropriate.
 - Service lookup follows current-container-first order and falls back to the parent container hierarchy unless `recursive: false` disables that fallback for the current resolution.
-- Local middleware does not inherit through parent-child container relationships; service registration lookup can walk up to the parent container, but middleware chains do not inherit through the container hierarchy.
+- Resolution middleware applies across parent-child relationships for containers created by the same loaded core module instance and runs on every resolution.
 - Module declarations, imports, and exports must each be unique.
 - The module import graph must not contain circular dependencies.
 - When multiple imported modules export the same service name, the conflict must be resolved with aliases.
@@ -141,4 +186,5 @@ The module system is inspired by ESM semantics: imports must be explicit, export
 - `packages/core/docs/SPECIFICATION.md` is the primary source for the core behavioral contract, with status `Stable`.
 - `packages/decorator/docs/SPECIFICATION.md` is the primary source for the decorator behavioral contract, with status `Final`.
 - `packages/module/docs/SPECIFICATION.md` is the primary source for the module behavioral contract, with status `Proposal`.
-- `docs/adr/0001-registration-plan.md` already exists with status `Accepted`; when working on `RegistrationPlan` design motivation, naming, or rollback semantics, consult both that ADR and the core specification.
+- `packages/remote/docs/SPECIFICATION.md` is the normative source for Remote contracts and runtime behavior.
+- `docs/adr/0003-complete-recoverable-rpc.md` records the complete recoverable Remote scope, superseding the Connection-only scope in ADR 0002.

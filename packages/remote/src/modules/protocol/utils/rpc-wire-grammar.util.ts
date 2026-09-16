@@ -1,0 +1,380 @@
+/**
+ * @overview Defines the package-private Zod grammar for decoded husky-di-rpc/1 records.
+ * @author AEPKILL
+ * @created 2026-09-09 23:33:27 11:36:44
+ */
+
+import { z } from "zod";
+import {
+	RPC_MAX_CALL_ORDINAL_DIGITS,
+	RPC_MIN_PROFILE_OFFERS,
+} from "@/modules/protocol/constants/rpc-limits.const";
+
+import {
+	RPC_PROFILE,
+	RPC_UNARY_PROFILE,
+} from "@/modules/protocol/constants/rpc-profile.const";
+import { RpcResumeRejectCodeEnum } from "@/modules/protocol/enums/rpc-resume-reject-code.enum";
+import { RpcWireRecordKindEnum } from "@/modules/protocol/enums/rpc-wire-record-kind.enum";
+import type {
+	IRpcApplicationRecord,
+	RpcApplicationValue,
+} from "@/modules/protocol/interfaces/rpc-protocol.interface";
+import { rpcWireIdentifierSchema } from "@/modules/protocol/schemas/rpc-wire-identifier.schema";
+import {
+	normalizeRpcApplicationArguments,
+	normalizeRpcApplicationValue,
+} from "@/modules/protocol/utils/rpc-application-value.util";
+import { rpcBase64Url32Schema } from "@/modules/protocol/utils/rpc-base64-url-32-schema.util";
+import { RpcExceptionCodeEnum } from "@/shared/enums/rpc-exception-code.enum";
+import {
+	isArray,
+	isNonNegativeSafeInteger,
+	isNonNullObject,
+	isPositiveSafeInteger,
+} from "@/shared/utils/type-guard.util";
+
+export {
+	rpcAckRecordSchema,
+	rpcActiveRecordSchema,
+	rpcBootstrapRequestSchema,
+	rpcCallMessageSchema,
+	rpcCancelMessageSchema,
+	rpcControlRecordSchema,
+	rpcErrorMessageSchema,
+	rpcFreshAcceptSchema,
+	rpcFreshRequestSchema,
+	rpcJsonRecordSchema,
+	rpcMessageEnvelopeSchema,
+	rpcResultMessageSchema,
+	rpcResumeAcceptSchema,
+	rpcResumeOutcomeSchema,
+	rpcResumeRejectSchema,
+	rpcResumeRequestSchema,
+	rpcSemanticMessageSchema,
+	rpcStreamCancelMessageSchema,
+	rpcStreamCompleteMessageSchema,
+	rpcStreamErrorMessageSchema,
+	rpcStreamNextMessageSchema,
+	rpcStreamOpenMessageSchema,
+	rpcWireErrorCodeSchema,
+};
+
+const callOrdinalPattern = new RegExp(
+	`^(?:[1-9][0-9]{0,${RPC_MAX_CALL_ORDINAL_DIGITS - 1}})$`,
+);
+const closeForbiddenMembers = new Set([
+	"seq",
+	"ackThrough",
+	"profile",
+	"profiles",
+	"sessionId",
+	"bindingEpoch",
+	"resumeAttempt",
+	"receivedThrough",
+	"resumeToken",
+	"callId",
+	"streamId",
+	"member",
+	"service",
+	"method",
+	"args",
+	"metadata",
+	"value",
+	"error",
+	"code",
+	"message",
+	"reason",
+]);
+function applicationValueIsValid(value: unknown): value is RpcApplicationValue {
+	try {
+		normalizeRpcApplicationValue(value);
+		return true;
+	} catch {
+		return false;
+	}
+}
+
+function applicationArgumentsAreValid(
+	value: unknown,
+): value is readonly RpcApplicationValue[] {
+	try {
+		normalizeRpcApplicationArguments(value);
+		return true;
+	} catch {
+		return false;
+	}
+}
+
+const decodedJsonValueSchema = z.json();
+const rpcJsonValueSchema = z.custom<RpcApplicationValue>(
+	(value) => decodedJsonValueSchema.safeParse(value).success,
+);
+const rpcApplicationValueSchema = z.custom<RpcApplicationValue>(
+	applicationValueIsValid,
+);
+const rpcApplicationArgumentsSchema = z.custom<readonly RpcApplicationValue[]>(
+	applicationArgumentsAreValid,
+);
+const rpcApplicationRecordSchema = z.custom<IRpcApplicationRecord>(
+	(value) =>
+		isNonNullObject(value) && !isArray(value) && applicationValueIsValid(value),
+);
+const positiveSafeIntegerSchema = z.custom<number>(isPositiveSafeInteger);
+const nonNegativeSafeIntegerSchema = z.custom<number>(isNonNegativeSafeInteger);
+const rpcCallOrdinalSchema = z
+	.string()
+	.regex(callOrdinalPattern)
+	.refine((value) => Number.isSafeInteger(Number(value)));
+const rpcProfileOfferSchema = z
+	.array(rpcWireIdentifierSchema)
+	.min(RPC_MIN_PROFILE_OFFERS)
+	.refine((profiles) => new Set(profiles).size === profiles.length);
+
+const rpcJsonRecordSchema = z.custom<IRpcApplicationRecord>(
+	(value) => isNonNullObject(value) && !isArray(value),
+);
+
+const rpcWireErrorCodeSchema = z.enum([
+	RpcExceptionCodeEnum.canceled,
+	RpcExceptionCodeEnum.unavailable,
+	RpcExceptionCodeEnum.handlerFailed,
+	RpcExceptionCodeEnum.unknownService,
+	RpcExceptionCodeEnum.unknownMethod,
+]);
+
+const rpcWireErrorShapeSchema = z.object({
+	code: rpcWireErrorCodeSchema,
+	message: z.string(),
+	details: rpcApplicationValueSchema.optional(),
+});
+const wireErrorMemberNames = new Set(
+	Object.keys(rpcWireErrorShapeSchema.shape),
+);
+
+const rpcWireErrorSchema = z
+	.custom<z.output<typeof rpcWireErrorShapeSchema>>(
+		(value) =>
+			typeof value === "object" && value !== null && !Array.isArray(value),
+		{ error: "RPC error payload must be an object." },
+	)
+	.superRefine((value, context) => {
+		const containsUnknownMember = Reflect.ownKeys(value).some(
+			(key) => typeof key !== "string" || !wireErrorMemberNames.has(key),
+		);
+		if (containsUnknownMember) {
+			context.addIssue({
+				code: "custom",
+				message: "RPC error payload contains an unknown member.",
+			});
+			return;
+		}
+
+		const result = rpcWireErrorShapeSchema.safeParse(value);
+		if (!result.success) {
+			for (const issue of result.error.issues) {
+				context.addIssue({
+					code: "custom",
+					message: issue.message,
+					path: issue.path,
+				});
+			}
+		}
+	});
+
+const rpcFreshRequestSchema = z
+	.object({
+		kind: z.literal(RpcWireRecordKindEnum.fresh),
+		profiles: rpcProfileOfferSchema,
+	})
+	.catchall(rpcJsonValueSchema);
+
+const rpcFreshAcceptSchema = z
+	.object({
+		kind: z.literal(RpcWireRecordKindEnum.accept),
+		profile: z.enum([RPC_PROFILE, RPC_UNARY_PROFILE]),
+		sessionId: rpcBase64Url32Schema,
+		bindingEpoch: z.literal(1),
+		resumeToken: rpcBase64Url32Schema,
+	})
+	.catchall(rpcJsonValueSchema)
+	.refine((record) => !Object.hasOwn(record, "receivedThrough"));
+
+const rpcResumeRequestSchema = z
+	.object({
+		kind: z.literal(RpcWireRecordKindEnum.resume),
+		profile: rpcWireIdentifierSchema,
+		sessionId: rpcBase64Url32Schema,
+		resumeToken: rpcBase64Url32Schema,
+		receivedThrough: nonNegativeSafeIntegerSchema,
+		resumeAttempt: positiveSafeIntegerSchema,
+	})
+	.catchall(rpcJsonValueSchema);
+
+const rpcResumeAcceptSchema = z
+	.object({
+		kind: z.literal(RpcWireRecordKindEnum.accept),
+		profile: rpcWireIdentifierSchema,
+		sessionId: rpcBase64Url32Schema,
+		bindingEpoch: positiveSafeIntegerSchema,
+		receivedThrough: nonNegativeSafeIntegerSchema,
+	})
+	.catchall(rpcJsonValueSchema)
+	.refine((record) => !Object.hasOwn(record, "resumeToken"));
+
+const rpcResumeRejectSchema = z
+	.object({
+		kind: z.literal(RpcWireRecordKindEnum.reject),
+		code: z.enum([
+			RpcResumeRejectCodeEnum.resumeRejected,
+			RpcResumeRejectCodeEnum.continuityFailure,
+			RpcResumeRejectCodeEnum.sessionTerminated,
+		]),
+	})
+	.catchall(rpcJsonValueSchema)
+	.refine((record) => !Object.hasOwn(record, "message"));
+
+const rpcCallMessageSchema = z
+	.object({
+		kind: z.literal(RpcWireRecordKindEnum.call),
+		callId: rpcCallOrdinalSchema,
+		service: rpcWireIdentifierSchema,
+		method: rpcWireIdentifierSchema.refine((method) => method !== "then"),
+		args: rpcApplicationArgumentsSchema,
+		metadata: rpcApplicationRecordSchema.optional(),
+	})
+	.catchall(rpcJsonValueSchema);
+
+const rpcCancelMessageSchema = z
+	.object({
+		kind: z.literal(RpcWireRecordKindEnum.cancel),
+		callId: rpcCallOrdinalSchema,
+	})
+	.catchall(rpcJsonValueSchema);
+
+const rpcResultMessageSchema = z
+	.object({
+		kind: z.literal(RpcWireRecordKindEnum.result),
+		callId: rpcCallOrdinalSchema,
+		value: rpcApplicationValueSchema.optional(),
+	})
+	.catchall(rpcJsonValueSchema);
+
+const rpcErrorMessageSchema = z
+	.object({
+		kind: z.literal(RpcWireRecordKindEnum.error),
+		callId: rpcCallOrdinalSchema,
+		error: rpcWireErrorSchema,
+	})
+	.catchall(rpcJsonValueSchema);
+
+const rpcStreamOpenMessageSchema = z
+	.object({
+		kind: z.literal(RpcWireRecordKindEnum.streamOpen),
+		streamId: rpcCallOrdinalSchema,
+		service: rpcWireIdentifierSchema,
+		member: rpcWireIdentifierSchema.refine((member) => member !== "then"),
+		args: rpcApplicationArgumentsSchema.optional(),
+		metadata: rpcApplicationRecordSchema.optional(),
+	})
+	.catchall(rpcJsonValueSchema);
+
+const rpcStreamNextMessageSchema = z
+	.object({
+		kind: z.literal(RpcWireRecordKindEnum.streamNext),
+		streamId: rpcCallOrdinalSchema,
+		value: rpcApplicationValueSchema,
+	})
+	.catchall(rpcJsonValueSchema);
+
+const rpcStreamCompleteMessageSchema = z
+	.object({
+		kind: z.literal(RpcWireRecordKindEnum.streamComplete),
+		streamId: rpcCallOrdinalSchema,
+	})
+	.catchall(rpcJsonValueSchema);
+
+const rpcStreamErrorMessageSchema = z
+	.object({
+		kind: z.literal(RpcWireRecordKindEnum.streamError),
+		streamId: rpcCallOrdinalSchema,
+		error: rpcWireErrorSchema,
+	})
+	.catchall(rpcJsonValueSchema);
+
+const rpcStreamCancelMessageSchema = z
+	.object({
+		kind: z.literal(RpcWireRecordKindEnum.streamCancel),
+		streamId: rpcCallOrdinalSchema,
+	})
+	.catchall(rpcJsonValueSchema);
+
+const rpcSemanticMessageSchema = z.discriminatedUnion("kind", [
+	rpcCallMessageSchema,
+	rpcCancelMessageSchema,
+	rpcResultMessageSchema,
+	rpcErrorMessageSchema,
+	rpcStreamOpenMessageSchema,
+	rpcStreamNextMessageSchema,
+	rpcStreamCompleteMessageSchema,
+	rpcStreamErrorMessageSchema,
+	rpcStreamCancelMessageSchema,
+]);
+
+const rpcMessageEnvelopeSchema = z
+	.object({
+		kind: z.literal(RpcWireRecordKindEnum.message),
+		seq: positiveSafeIntegerSchema,
+		ackThrough: nonNegativeSafeIntegerSchema.optional(),
+		message: rpcSemanticMessageSchema,
+	})
+	.catchall(rpcJsonValueSchema);
+
+const rpcAckRecordSchema = z
+	.object({
+		kind: z.literal(RpcWireRecordKindEnum.ack),
+		ackThrough: nonNegativeSafeIntegerSchema,
+	})
+	.catchall(rpcJsonValueSchema);
+
+const rpcPingRecordSchema = z
+	.object({ kind: z.literal(RpcWireRecordKindEnum.ping) })
+	.catchall(rpcJsonValueSchema);
+const rpcPongRecordSchema = z
+	.object({ kind: z.literal(RpcWireRecordKindEnum.pong) })
+	.catchall(rpcJsonValueSchema);
+const rpcCloseRecordSchema = z
+	.object({ kind: z.literal(RpcWireRecordKindEnum.close) })
+	.catchall(rpcJsonValueSchema)
+	.superRefine((record, context) => {
+		if (Object.keys(record).some((key) => closeForbiddenMembers.has(key))) {
+			context.addIssue({
+				code: "custom",
+				message: "RPC close contains a forbidden control member.",
+			});
+		}
+	});
+
+const rpcControlRecordSchema = z.discriminatedUnion("kind", [
+	rpcPingRecordSchema,
+	rpcPongRecordSchema,
+	rpcCloseRecordSchema,
+]);
+
+const rpcBootstrapRequestSchema = z.discriminatedUnion("kind", [
+	rpcFreshRequestSchema,
+	rpcResumeRequestSchema,
+]);
+
+const rpcResumeOutcomeSchema = z.discriminatedUnion("kind", [
+	rpcResumeAcceptSchema,
+	rpcResumeRejectSchema,
+]);
+
+const rpcActiveRecordSchema = z.discriminatedUnion("kind", [
+	rpcMessageEnvelopeSchema,
+	rpcAckRecordSchema,
+	rpcPingRecordSchema,
+	rpcPongRecordSchema,
+	rpcCloseRecordSchema,
+]);

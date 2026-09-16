@@ -7,15 +7,16 @@
  * and extracting human-readable names from identifiers.
  *
  * @author AEPKILL
- * @created 2025-06-24 23:06:55
+ * @created 2025-07-31 23:15:27 23:06:55
  */
 
-import type { ServiceIdentifier } from "@/types/service-identifier.type";
-
-const serviceIdentifierMetadataRegistry = new Map<
-	ServiceIdentifier<unknown>,
-	unknown
->();
+import { CoreErrorCodeEnum } from "@/enums/core-error-code.enum";
+import { CoreException } from "@/exceptions/core.exception";
+import type {
+	CreatedServiceIdentifier,
+	ServiceIdentifier,
+} from "@/types/service-identifier.type";
+import { assertValidServiceIdentifier } from "@/utils/registration.util";
 
 /**
  * Options for creating a service identifier.
@@ -31,7 +32,7 @@ export type CreateServiceIdentifierOptions<Metadata = unknown> = {
 	 * resolution behavior. It is intended for external consumers such as
 	 * tooling, adapters, or documentation helpers.
 	 */
-	readonly metadata?: Metadata;
+	readonly metadata?: Metadata | undefined;
 };
 
 /**
@@ -55,8 +56,15 @@ export type CreateServiceIdentifierOptions<Metadata = unknown> = {
 export function createServiceIdentifier<T, Metadata = unknown>(
 	id: string | symbol,
 	options?: CreateServiceIdentifierOptions<Metadata>,
-): ServiceIdentifier<T> {
-	const serviceIdentifier = id as ServiceIdentifier<T>;
+): CreatedServiceIdentifier<T> {
+	if (typeof id !== "string" && typeof id !== "symbol") {
+		throw new CoreException(
+			CoreErrorCodeEnum.E_INVALID_SERVICE_IDENTIFIER,
+			"A created service identifier must be a string or symbol.",
+		);
+	}
+
+	const serviceIdentifier = id as CreatedServiceIdentifier<T>;
 
 	if (options && "metadata" in options) {
 		serviceIdentifierMetadataRegistry.set(
@@ -125,6 +133,8 @@ export function hasServiceIdentifierMetadata(
 export function getServiceIdentifierName(
 	serviceIdentifier: ServiceIdentifier<unknown>,
 ): string {
+	assertValidServiceIdentifier(serviceIdentifier);
+
 	if (typeof serviceIdentifier === "function") {
 		return serviceIdentifier.name || "Anonymous";
 	}
@@ -135,3 +145,8 @@ export function getServiceIdentifierName(
 
 	return serviceIdentifier;
 }
+
+const serviceIdentifierMetadataRegistry = new Map<
+	ServiceIdentifier<unknown>,
+	unknown
+>();

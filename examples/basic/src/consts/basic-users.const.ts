@@ -5,7 +5,7 @@
  * Provides a tiny static dataset used by the repository implementation.
  *
  * @author AEPKILL
- * @created 2026-07-08 10:48:48
+ * @created 2026-07-08 11:02:43 10:48:48
  */
 
 import type { UserProfile } from "@/types/user-profile.type";

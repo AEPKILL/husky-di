@@ -49,7 +49,7 @@ import { ScrollyTutorial } from "@/components/scrolly-tutorial"
   };
 
   const fixedClock: IClock = {
-    now: () => new Date("2026-01-01T00:00:00.000Z"),
+    now: () => new Date("2026-01-01T12:34:56.000Z"),
   };
 
   createReportTitle(systemClock);
@@ -167,7 +167,7 @@ import { ScrollyTutorial } from "@/components/scrolly-tutorial"
   prodReportService.create("user-1");
 
   const fixedClock: IClock = {
-    now: () => new Date("2026-01-01T00:00:00.000Z"),
+    now: () => new Date("2026-01-01T12:34:56.000Z"),
   };
 
   const memoryLogger: ILogger = {
@@ -337,7 +337,7 @@ import { ScrollyTutorial } from "@/components/scrolly-tutorial"
 
   testContainer.register(IClock, {
     useValue: {
-      now: () => new Date("2026-01-01T00:00:00.000Z"),
+      now: () => new Date("2026-01-01T12:34:56.000Z"),
     },
   });
 

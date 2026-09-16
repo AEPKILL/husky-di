@@ -273,6 +273,8 @@ const SharedModule = createModule({
 `SharedModule` has no local declarations here.
 It simply re-exposes services exported by its imported modules.
 
+Keep every module in an import graph on the same loaded `@husky-di/core` instance. Modules backed by duplicate core copies or mixed ESM/CJS core entry points do not share active resolution state and should not be combined.
+
 ## `withAliases()`: Renaming Imports
 
 If multiple modules export the same identifier, or if you want a different local name in the current module, use `withAliases()`.
@@ -336,32 +338,32 @@ Here, `"config"` is available internally, but it is not public API.
 
 There are two layers to keep in mind:
 
-- external callers using `module.resolve()` can only get services listed in `exports`
+- external callers using `module.resolve()` or `module.container.resolve()` can only get services listed in `exports`
 - the internal resolution flow can still access local declarations and imported internal dependencies
 
 That gives you room to compose internal details without exposing them as public surface area.
 
 ## What A Module Instance Can Do
 
-The object returned by `createModule()` is also a container facade with export-boundary protection.
+The object returned by `createModule()` is a focused container facade with export-boundary protection.
 
 You can call:
 
 - `module.resolve()`
 - `module.isRegistered()`
 - `module.getServiceIdentifiers()`
-- `module.use()`
-- `module.unused()`
 - `module.withAliases()`
 
 You can also inspect:
 
-- `module.container`
+- `module.container` (an export-guarded `IContainer` facade)
 - `module.name`
 - `module.displayName`
 - `module.declarations`
 - `module.imports`
 - `module.exports`
+
+Resolution middleware belongs to the loaded core module instance rather than an individual module. Register it through `middleware` from `@husky-di/core`; it applies to permitted module resolutions as well as ordinary containers created by that instance. The module export check runs at the public facade first, so a short-circuiting middleware cannot expose a private declaration.
 
 ## What Gets Validated At Creation Time
 

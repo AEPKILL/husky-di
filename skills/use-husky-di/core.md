@@ -231,7 +231,9 @@ This pattern is especially useful when:
 #### Inside middleware
 
 ```typescript
-container.use({
+import { middleware } from "@husky-di/core";
+
+middleware.use({
   name: "profiling",
   executor(params, next) {
     const start = Date.now();
@@ -271,16 +273,12 @@ container.register(ISvc, { useClass: Svc, lifecycle: LifecycleEnum.resolution })
 ### Registration
 
 ```typescript
-import { globalMiddleware } from "@husky-di/core";
+import { middleware } from "@husky-di/core";
 
-// Global — applies to ALL containers
-const unuse = globalMiddleware.use(myMiddleware);
-
-// Local — applies only to this container
-const unuseLocal = container.use(myMiddleware);
+const cleanup = middleware.use(myMiddleware);
 ```
 
-Each `use()` returns a disposer. `unuse()` removes the middleware. Calling it again is a no-op.
+Middleware applies to every container created by the current loaded core module instance. The same middleware object can be active only once; different objects may share a diagnostic `name`. `use()` returns the sole cleanup for middleware added by that call, and that cleanup is idempotent.
 
 ### Middleware Shape
 
@@ -293,7 +291,7 @@ const loggingMiddleware = {
     console.log("resolved:", params.serviceIdentifier);
     return result;
   },
-  // Optional: called when a container using this middleware is disposed
+  // Optional: called whenever a container is disposed
   onContainerDispose(container) {
     // cleanup resources, unsubscribe, etc.
     // Exceptions here are swallowed — they must not interrupt disposal.
@@ -304,22 +302,16 @@ const loggingMiddleware = {
 ### Execution Order (LIFO)
 
 ```
-Local middlewares (outermost) → Global middlewares → Provider (innermost)
+Middleware → Provider
 ```
 
-If local middlewares are registered as `[L1, L2]` and global as `[G1, G2]`, the execution order is:
+If middleware is registered as `[M1, M2]`, the execution order is:
 
 ```
-L2 → L1 → G2 → G1 → Provider
+M2 → M1 → Provider
 ```
 
-Local middlewares can short-circuit (not call `next()`) to bypass global logic — useful for mocking.
-
-### Middleware Isolation
-
-- Local middlewares do **not** inherit through parent-child relationships.
-- A child container has its own independent local middleware chain.
-- Global middlewares apply to all containers regardless of hierarchy.
+Middleware can short-circuit by not calling `next()`.
 
 ### Disposal Hook
 

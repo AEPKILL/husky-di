@@ -1,0 +1,1597 @@
+@import "tailwindcss";
+
+:root {
+	font-family:
+		Roboto, -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+	font-synthesis: none;
+}
+.platform-shell {
+	color-scheme: light;
+	--lab-canvas: #f5f5f5;
+	--lab-panel: #ffffff;
+	--lab-surface: #f5f5f5;
+	--lab-input: #ffffff;
+	--lab-button: #ffffff;
+	--lab-hover: rgba(0, 0, 0, 0.04);
+	--lab-editor: #ffffff;
+	--lab-editor-foreground: #212121;
+	--lab-editor-line-number: #757575;
+	--lab-editor-selection: #1976d233;
+	--lab-editor-line: #f5f5f5;
+	--lab-selection: rgba(25, 118, 210, 0.08);
+	--lab-border: rgba(0, 0, 0, 0.12);
+	--lab-accent-border: rgba(25, 118, 210, 0.5);
+	--lab-accent: #1976d2;
+	--lab-primary: #1976d2;
+	--lab-primary-hover: #1565c0;
+	--lab-primary-text: #ffffff;
+	--lab-foreground: rgba(0, 0, 0, 0.87);
+	--lab-muted: rgba(0, 0, 0, 0.6);
+	--lab-warning: #b45309;
+	--lab-warning-background: #fff4e5;
+	--lab-warning-border: #ffcc80;
+	--lab-error: #d32f2f;
+	--lab-error-background: #fdeded;
+	--lab-error-border: #ef9a9a;
+	--lab-success: #2e7d32;
+	--lab-success-background: #edf7ed;
+	--lab-success-border: #a5d6a7;
+	color: var(--lab-foreground);
+	background: var(--lab-canvas);
+}
+.platform-shell[data-theme="dark"] {
+	color-scheme: dark;
+	--lab-canvas: #121212;
+	--lab-panel: #1e1e1e;
+	--lab-surface: #242424;
+	--lab-input: #121212;
+	--lab-button: #1e1e1e;
+	--lab-hover: rgba(255, 255, 255, 0.08);
+	--lab-editor: #121212;
+	--lab-editor-foreground: #ffffff;
+	--lab-editor-line-number: #9e9e9e;
+	--lab-editor-selection: #90caf933;
+	--lab-editor-line: #1e1e1e;
+	--lab-selection: rgba(144, 202, 249, 0.16);
+	--lab-border: rgba(255, 255, 255, 0.12);
+	--lab-accent-border: rgba(144, 202, 249, 0.5);
+	--lab-accent: #90caf9;
+	--lab-primary: #90caf9;
+	--lab-primary-hover: #42a5f5;
+	--lab-primary-text: #121212;
+	--lab-foreground: #ffffff;
+	--lab-muted: rgba(255, 255, 255, 0.7);
+	--lab-warning: #ffb74d;
+	--lab-warning-background: #2e261b;
+	--lab-warning-border: #664d2c;
+	--lab-error: #e57373;
+	--lab-error-background: #321e1e;
+	--lab-error-border: #74302e;
+	--lab-success: #81c784;
+	--lab-success-background: #1d2a1e;
+	--lab-success-border: #3d6440;
+}
+* {
+	box-sizing: border-box;
+}
+body {
+	margin: 0;
+}
+button,
+input,
+textarea,
+select {
+	font: inherit;
+}
+button {
+	cursor: pointer;
+}
+button:disabled {
+	cursor: default;
+	opacity: 0.38;
+}
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+	outline: 2px solid var(--lab-accent);
+	outline-offset: -2px;
+}
+.platform-shell {
+	--border: var(--lab-border);
+	display: flex;
+	flex-direction: column;
+	height: 100dvh;
+	min-height: 420px;
+	font-size: 0.8125rem;
+	line-height: 1.5;
+	overflow: hidden;
+}
+.platform-compact-navigation {
+	display: none;
+}
+.platform-shell button {
+	color: inherit;
+	border: 1px solid var(--lab-border);
+	background: var(--lab-button);
+	border-radius: 4px;
+	padding: 5px 9px;
+}
+.platform-shell button:hover:not(:disabled) {
+	background: var(--lab-hover);
+}
+.platform-shell input,
+.platform-shell select,
+.platform-shell textarea {
+	min-width: 0;
+	color: var(--lab-foreground);
+	background: var(--lab-input);
+	border: 1px solid var(--lab-border);
+	border-radius: 4px;
+	padding: 6px 8px;
+}
+.platform-shell h2,
+.platform-shell h3,
+.platform-shell p {
+	margin: 0;
+}
+.platform-shell h2 {
+	font-size: 11px;
+	font-weight: 600;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+}
+.platform-shell h3 {
+	font-size: 11px;
+	color: var(--lab-muted);
+	margin: 14px 0 8px;
+}
+.platform-shell small {
+	display: block;
+	color: var(--lab-muted);
+	font-size: 11px;
+}
+.platform-shell pre {
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+	font:
+		11px / 1.6 "SFMono-Regular",
+		Consolas,
+		monospace;
+	margin: 0;
+}
+
+.platform-connection {
+	color: var(--lab-muted);
+	font-size: 11px;
+}
+.platform-connection i {
+	display: inline-block;
+	width: 6px;
+	height: 6px;
+	border-radius: 50%;
+	background: var(--lab-success);
+	margin-right: 6px;
+}
+.platform-main {
+	display: flex;
+	flex: 1;
+	min-height: 0;
+	min-width: 0;
+}
+.platform-scroll {
+	overflow: auto;
+	scrollbar-width: thin;
+	scrollbar-color: var(--lab-border) transparent;
+}
+.platform-scroll::-webkit-scrollbar {
+	width: 8px;
+	height: 10px;
+}
+.platform-scroll::-webkit-scrollbar:horizontal {
+	height: 3px;
+}
+.platform-scroll::-webkit-scrollbar-thumb {
+	background: var(--lab-border);
+}
+.platform-sidebar {
+	height: 100%;
+	background: var(--lab-panel);
+	padding-bottom: 20px;
+}
+.platform-panel-title {
+	height: 36px;
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	border-bottom: 1px solid var(--border);
+	padding: 0 12px;
+	color: var(--lab-foreground);
+	flex-shrink: 0;
+}
+.platform-panel-title > span {
+	font-size: 9px;
+	color: var(--lab-muted);
+	letter-spacing: 0.12em;
+}
+.platform-project-form {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	padding: 10px;
+}
+.platform-project-form input {
+	font-size: 10px;
+}
+.platform-project-item {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	width: calc(100% - 16px);
+	margin: 4px 8px;
+	text-align: left;
+	overflow: hidden;
+}
+.platform-project-item small {
+	max-width: 100%;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.platform-shell .selected,
+.platform-shell [aria-selected="true"] {
+	color: var(--lab-accent);
+	background: var(--lab-selection);
+	border-color: var(--lab-accent-border);
+}
+.platform-section-title {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 0 10px;
+	gap: 6px;
+}
+.platform-section-title h3 {
+	margin: 13px 0 6px;
+}
+.platform-section-title > span {
+	font-size: 10px;
+	color: var(--lab-muted);
+}
+.platform-section-title > button {
+	font-size: 10px;
+	padding: 2px 5px;
+}
+.platform-case-list,
+.platform-sidebar [aria-label="Project files"] {
+	padding: 0 6px;
+}
+.platform-shell .platform-case-list button,
+.platform-shell .platform-tree-file {
+	display: flex;
+	justify-content: space-between;
+	width: 100%;
+	text-align: left;
+	border: 0;
+	background: transparent;
+	border-radius: 2px;
+	padding: 5px 7px;
+	overflow-wrap: anywhere;
+	font-size: 11px;
+}
+.platform-shell .platform-tree-file {
+	color: var(--lab-muted);
+	font-size: 10px;
+}
+.platform-shell .platform-tree-file .platform-file-status {
+	color: var(--lab-warning);
+}
+.platform-shell .platform-case-list button.selected,
+.platform-shell .platform-tree-file[aria-pressed="true"],
+.platform-shell .platform-history-item.selected {
+	background: var(--lab-selection);
+	color: var(--lab-foreground);
+}
+.platform-shell .platform-tree-file[aria-pressed="true"]:hover,
+.platform-shell .platform-case-list button.selected:hover {
+	background: var(--lab-selection);
+}
+.platform-file-label {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	min-width: 0;
+}
+.platform-material-icon {
+	display: block;
+	flex: 0 0 18px;
+}
+.platform-file-name {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.platform-shell .platform-run-toolbar button {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 6px;
+}
+.platform-history-row {
+	display: flex;
+	margin: 3px 8px;
+	gap: 3px;
+}
+.platform-shell .platform-history-item {
+	text-align: left;
+	padding: 5px 7px;
+	display: block;
+	width: 100%;
+	border: 0;
+	background: transparent;
+}
+.platform-history-item > span {
+	display: block;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.platform-history-row > button:last-child {
+	border: 0;
+	padding: 2px 4px;
+	background: transparent;
+	color: var(--lab-muted);
+}
+.platform-source {
+	height: 100%;
+	display: flex;
+	flex-direction: column;
+	min-width: 0;
+	background: var(--lab-editor);
+}
+.platform-run-toolbar {
+	display: flex;
+	gap: 5px;
+	align-items: center;
+	padding: 4px 8px;
+	background: var(--lab-surface);
+	border-bottom: 1px solid var(--border);
+	flex-wrap: wrap;
+}
+.platform-run-toolbar select {
+	flex: 1;
+	width: 110px;
+	font-size: 11px;
+}
+.platform-run-toolbar button {
+	height: 28px;
+	font-size: 11px;
+	white-space: nowrap;
+}
+.platform-run-toolbar select {
+	height: 28px;
+	padding-block: 3px;
+}
+.platform-shell .platform-primary:hover:not(:disabled) {
+	background: var(--lab-primary-hover);
+}
+.platform-shell .platform-primary {
+	background: var(--lab-primary);
+	border-color: var(--lab-accent-border);
+	color: var(--lab-primary-text);
+}
+.platform-parameters {
+	padding: 4px 10px;
+	color: var(--lab-muted);
+	background: var(--lab-surface);
+	border-bottom: 1px solid var(--border);
+}
+.platform-parameters textarea {
+	display: block;
+	width: 100%;
+	min-height: 54px;
+	margin-top: 4px;
+	font-family: monospace;
+}
+.platform-parameters summary {
+	cursor: pointer;
+	font-size: 10px;
+}
+.platform-source-context {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+	min-height: 28px;
+	padding: 4px 10px;
+	color: var(--lab-muted);
+	background: var(--lab-surface);
+	font-size: 10px;
+}
+.platform-source-context > span {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.platform-source-context.historical {
+	color: var(--lab-warning);
+	background: var(--lab-warning-background);
+}
+.platform-source-context button {
+	font-size: 9px;
+	padding: 2px 5px;
+	flex-shrink: 0;
+}
+
+.platform-editor {
+	flex: 1;
+	min-height: 100px;
+	min-width: 0;
+}
+.platform-editor-status {
+	min-height: 25px;
+	padding: 3px 9px;
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 10px;
+	font-size: 10px;
+	background: var(--lab-surface);
+	color: var(--lab-muted);
+	border-top: 1px solid var(--border);
+}
+.platform-editor-status button {
+	font-size: 9px;
+	border: 0;
+	background: transparent;
+	padding: 1px 3px;
+}
+.platform-diagnostics {
+	max-height: 130px;
+	flex-shrink: 0;
+	border-top: 1px solid var(--border);
+	background: var(--lab-surface);
+	padding: 6px;
+}
+.platform-diagnostics button {
+	display: block;
+	border: 0;
+	text-align: left;
+	color: var(--lab-warning);
+	background: transparent;
+	font-size: 10px;
+}
+.platform-conflict {
+	background: var(--lab-warning-background);
+	padding: 10px;
+	color: var(--lab-warning);
+	border-bottom: 1px solid var(--lab-warning-border);
+	max-height: 260px;
+	overflow: auto;
+}
+.platform-conflict p {
+	font-size: 10px;
+	margin: 5px 0;
+}
+.platform-conflict pre {
+	max-height: 100px;
+	overflow: auto;
+	border: 1px solid var(--lab-warning-border);
+	padding: 5px;
+	color: var(--lab-warning);
+	margin-bottom: 6px;
+}
+.platform-conflict > div {
+	display: flex;
+	gap: 6px;
+}
+.platform-conflict button {
+	font-size: 10px;
+}
+.platform-run {
+	height: 100%;
+	background: var(--lab-panel);
+	padding-bottom: 14px;
+}
+.platform-run-id {
+	font: 9px / 1.4 monospace;
+	color: var(--lab-muted);
+	margin: 10px 12px 5px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.platform-state-grid {
+	display: grid;
+	grid-template-columns: 42px 1fr 42px 1fr;
+	padding: 10px;
+	gap: 7px 5px;
+	margin: 0 8px 8px;
+	background: var(--lab-input);
+	border: 1px solid var(--border);
+	border-radius: 5px;
+	font-size: 10px;
+}
+.platform-state-grid dt {
+	color: var(--lab-muted);
+}
+.platform-state-grid dd {
+	margin: 0;
+	color: var(--lab-foreground);
+}
+.platform-state-grid dd[data-result="passed"] {
+	color: var(--lab-success);
+}
+.platform-state-grid dd[data-result="failed"],
+.platform-state-grid dd[data-result="error"] {
+	color: var(--lab-error);
+}
+.platform-state-grid dd[data-result="unverified"] {
+	color: var(--lab-warning);
+}
+.platform-controls {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 5px;
+	padding: 0 10px 10px;
+}
+.platform-controls button {
+	font-size: 10px;
+	padding: 4px 7px;
+}
+.platform-shell .platform-danger {
+	color: var(--lab-error);
+	border-color: var(--lab-error-border);
+}
+.platform-note {
+	color: var(--lab-muted);
+	font-size: 10px;
+	padding: 2px 10px 8px;
+}
+.platform-run > .platform-note {
+	padding: 0 0 10px;
+}
+.platform-empty {
+	color: var(--lab-muted);
+	padding: 18px 12px;
+	font-size: 11px;
+}
+.platform-empty p + p {
+	margin-top: 10px;
+}
+.platform-step-list {
+	list-style: none;
+	margin: 0;
+	padding: 0 8px;
+}
+.platform-step-list button {
+	display: flex;
+	align-items: flex-start;
+	gap: 8px;
+	width: 100%;
+	border: 0;
+	background: transparent;
+	text-align: left;
+	margin: 3px 0;
+}
+.platform-step-number {
+	width: 19px;
+	height: 19px;
+	flex-shrink: 0;
+	border: 1px solid var(--lab-accent-border);
+	border-radius: 4px;
+	color: var(--lab-muted);
+	display: grid;
+	place-items: center;
+	font-size: 10px;
+}
+.platform-assertions {
+	padding: 0 10px;
+}
+.platform-assertions button {
+	display: block;
+	width: 100%;
+	text-align: left;
+	margin: 4px 0;
+	border-color: var(--lab-success-border);
+	background: var(--lab-success-background);
+}
+.platform-assertions button[data-passed="false"] {
+	border-color: var(--lab-error-border);
+	background: var(--lab-error-background);
+}
+.platform-assertions strong {
+	display: block;
+	font-size: 10px;
+}
+.platform-assertions button > span {
+	display: block;
+	color: var(--lab-muted);
+	font: 10px / 1.6 monospace;
+	overflow-wrap: anywhere;
+}
+.platform-evidence {
+	height: 100%;
+	display: flex;
+	flex-direction: column;
+	background: var(--lab-panel);
+}
+.platform-evidence-toolbar {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	min-height: 38px;
+	padding: 0 10px;
+	border-bottom: 1px solid var(--border);
+	flex-wrap: wrap;
+}
+.platform-evidence-toolbar [role="tablist"] {
+	display: flex;
+	height: 38px;
+	gap: 4px;
+}
+.platform-evidence-toolbar [role="tab"] {
+	border: 0;
+	border-radius: 0;
+	background: transparent;
+	border-bottom: 2px solid transparent;
+	font-size: 10px;
+}
+.platform-evidence-toolbar [aria-selected="true"] {
+	border-bottom-color: var(--lab-accent);
+	color: var(--lab-accent);
+}
+.platform-evidence-toolbar input {
+	margin-left: auto;
+	font-size: 10px;
+	width: 160px;
+	padding: 3px 7px;
+}
+.platform-context {
+	color: var(--lab-muted);
+	font-size: 10px;
+}
+.platform-evidence-body {
+	flex: 1;
+	min-height: 0;
+	display: flex;
+}
+.platform-evidence-body > .platform-scroll:first-child {
+	flex: 1;
+	min-width: 0;
+}
+.platform-records {
+	border-collapse: collapse;
+	width: 100%;
+	font-size: 10px;
+	table-layout: fixed;
+}
+.platform-records th {
+	color: var(--lab-muted);
+	background: var(--lab-surface);
+	font-weight: 400;
+	text-align: left;
+	position: sticky;
+	top: 0;
+	z-index: 1;
+}
+.platform-records td,
+.platform-records th {
+	border-bottom: 1px solid var(--lab-border);
+	padding: 4px 9px;
+}
+.platform-records th:nth-child(1) {
+	width: 90px;
+}
+.platform-records th:nth-child(2) {
+	width: 145px;
+}
+.platform-records td {
+	color: var(--lab-muted);
+	vertical-align: top;
+}
+.platform-records button {
+	border: 0;
+	background: transparent;
+	padding: 0;
+	font-size: 10px;
+	text-align: left;
+}
+.platform-records small {
+	font-size: 9px;
+}
+.platform-records tr[data-selected="true"] {
+	background: var(--lab-selection);
+}
+.platform-record-summary {
+	display: block;
+	width: 100%;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.platform-record-detail {
+	width: 43%;
+	min-width: 200px;
+	border-left: 1px solid var(--border);
+	background: var(--lab-surface);
+	padding: 8px;
+}
+.platform-record-detail pre {
+	font-size: 10px;
+	padding: 6px;
+}
+.platform-banner {
+	padding: 7px 16px;
+	display: flex;
+	justify-content: space-between;
+	flex-shrink: 0;
+}
+.platform-error {
+	color: var(--lab-error);
+	background: var(--lab-error-background);
+	padding: 7px;
+	border: 1px solid var(--lab-error-border);
+	overflow-wrap: anywhere;
+}
+.platform-warning {
+	background: var(--lab-warning-background);
+	color: var(--lab-warning);
+	font-size: 10px;
+	padding: 5px 10px;
+}
+.platform-footer {
+	flex-shrink: 0;
+	min-height: 25px;
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 15px;
+	padding: 3px 14px;
+	border-top: 1px solid var(--border);
+	color: var(--lab-muted);
+	background: var(--lab-panel);
+	font-size: 9px;
+}
+
+@media (max-width: 900px) {
+	.platform-connection,
+	.platform-footer > span:first-child:not(.platform-run-status) {
+		display: none;
+	}
+
+	.platform-state-grid {
+		grid-template-columns: 40px 1fr;
+	}
+	.platform-source-context {
+		flex-wrap: wrap;
+	}
+	.platform-evidence-toolbar {
+		gap: 3px;
+	}
+	.platform-evidence-toolbar input {
+		width: 100px;
+	}
+	.platform-shell {
+		font-size: 11px;
+	}
+	.platform-footer {
+		font-size: 8px;
+	}
+}
+.platform-run-metadata {
+	margin: 0 10px 10px;
+	color: var(--lab-muted);
+	font-size: 10px;
+}
+.platform-run-metadata summary {
+	cursor: pointer;
+}
+.platform-run-metadata pre {
+	margin-top: 6px;
+	padding: 6px;
+	max-height: 200px;
+	overflow: auto;
+	background: var(--lab-surface);
+	border: 1px solid var(--lab-border);
+}
+
+.platform-run > h3,
+.platform-run > .platform-note,
+.platform-run > .platform-empty,
+.platform-run > [role="status"],
+.platform-run > .platform-error {
+	margin-left: 12px;
+	margin-right: 12px;
+}
+
+@media (max-width: 760px) {
+	.platform-compact-navigation {
+		display: flex;
+		gap: 4px;
+		padding: 6px;
+		background: var(--lab-panel);
+		border-bottom: 1px solid var(--border);
+		flex-shrink: 0;
+	}
+	.platform-compact-navigation button {
+		flex: 1;
+		padding: 6px 2px;
+		font-size: 10px;
+		white-space: nowrap;
+	}
+	.platform-compact-navigation button[aria-pressed="true"] {
+		color: var(--lab-accent);
+		background: var(--lab-selection);
+		border-color: var(--lab-accent-border);
+	}
+
+	.platform-source-context {
+		flex-wrap: nowrap;
+	}
+	.platform-record-detail {
+		width: 100%;
+		min-width: 0;
+		border-left: 0;
+		border-top: 1px solid var(--border);
+		flex: 1;
+	}
+	.platform-evidence-body:has(.platform-record-detail) {
+		flex-direction: column;
+	}
+	.platform-footer {
+		line-height: 1.4;
+	}
+}
+
+.platform-shell [hidden] {
+	display: none;
+}
+
+.platform-activity-bar {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 4px;
+	width: 48px;
+	flex-shrink: 0;
+	padding: 8px 4px;
+	background: var(--lab-surface);
+	border-right: 1px solid var(--lab-border);
+}
+.platform-shell .platform-activity-bar button {
+	display: grid;
+	place-items: center;
+	width: 40px;
+	min-height: 52px;
+	padding: 6px 4px;
+	border: 0;
+	border-radius: 4px;
+	background: transparent;
+	color: var(--lab-muted);
+}
+.platform-activity-bar button span {
+	font-size: 10px;
+}
+.platform-shell .platform-activity-bar button[aria-pressed="true"] {
+	color: var(--lab-accent);
+	background: var(--lab-selection);
+	box-shadow: inset 3px 0 var(--lab-accent);
+}
+
+.platform-shell .platform-run-status {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	color: var(--lab-foreground);
+	flex-shrink: 0;
+	border: 0;
+	background: transparent;
+	padding: 2px 4px;
+	font-size: 10px;
+}
+.platform-shell .platform-tree-file,
+.platform-shell .platform-case-list button {
+	min-height: 28px;
+	font-size: 12px;
+	align-items: center;
+}
+
+@media (max-width: 760px) {
+	.platform-activity-bar {
+		width: 44px;
+		padding: 6px 2px;
+	}
+	.platform-run-toolbar select {
+		flex-basis: 100%;
+		width: 100%;
+	}
+
+	.platform-shell .platform-run-status {
+		flex-wrap: wrap;
+		gap: 4px;
+		font-size: 9px;
+	}
+	.platform-footer {
+		flex-wrap: wrap;
+		gap: 4px 8px;
+		padding: 3px 8px;
+	}
+}
+
+/* Atom Material palette: deep blue-grey surfaces, teal focus accents and
+ * compact editor chrome keep the workbench visually aligned with VS Code. */
+.platform-shell {
+	font-family:
+		-apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", sans-serif;
+	letter-spacing: 0.01em;
+}
+.platform-shell[data-theme="dark"] {
+	--lab-canvas: #20292e;
+	--lab-panel: #232e33;
+	--lab-surface: #273237;
+	--lab-input: #20292e;
+	--lab-button: #29363d;
+	--lab-hover: #2c383d;
+	--lab-editor: #263238;
+	--lab-editor-foreground: #d4d4d4;
+	--lab-editor-line-number: #708284;
+	--lab-editor-selection: #3b4d56;
+	--lab-editor-line: #212b30;
+	--lab-selection: #076b61;
+	--lab-border: #333d42;
+	--lab-accent-border: #009688;
+	--lab-accent: #009688;
+	--lab-primary: #0e639c;
+	--lab-primary-hover: #1177bb;
+	--lab-primary-text: #ffffff;
+	--lab-foreground: #eeffff;
+	--lab-muted: #a7b6b8;
+	--lab-warning: #ffcb43;
+	--lab-warning-background: #3d3521;
+	--lab-warning-border: #806d32;
+	--lab-error: #ef5350;
+	--lab-error-background: #3b2729;
+	--lab-error-border: #854044;
+	--lab-success: #cddc39;
+	--lab-success-background: #29351f;
+	--lab-success-border: #61762c;
+}
+
+.platform-shell[data-theme="dark"] .platform-activity-bar {
+	background: #20292e;
+	border-color: #263238;
+	padding-top: 3px;
+	width: 48px;
+	gap: 0;
+	padding-inline: 6px;
+}
+.platform-shell[data-theme="dark"] .platform-sidebar,
+.platform-shell[data-theme="dark"] .platform-evidence,
+.platform-shell[data-theme="dark"] .platform-run {
+	background: #232e33;
+}
+.platform-shell[data-theme="dark"] .platform-source {
+	background: #263238;
+}
+.platform-shell[data-theme="dark"] .platform-source-context,
+.platform-shell[data-theme="dark"] .platform-run-toolbar,
+.platform-shell[data-theme="dark"] .platform-editor-status,
+.platform-shell[data-theme="dark"] .platform-records th {
+	background: #273237;
+}
+
+.platform-shell[data-theme="dark"]
+	.platform-activity-bar
+	button[aria-pressed="true"],
+.platform-shell[data-theme="dark"] .selected,
+.platform-shell[data-theme="dark"] [aria-selected="true"] {
+	color: #e6f5f3;
+	background: #076b61;
+}
+.platform-shell[data-theme="dark"]
+	.platform-activity-bar
+	button[aria-pressed="true"] {
+	background: transparent;
+	box-shadow: inset 2px 0 #009688;
+}
+.platform-shell[data-theme="dark"] .platform-primary {
+	box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+	border-color: transparent;
+}
+.platform-shell[data-theme="dark"] button:hover:not(:disabled) {
+	background: #2c383d;
+}
+.platform-shell[data-theme="dark"] .platform-primary:hover:not(:disabled) {
+	background: #1177bb;
+}
+.platform-shell[data-theme="dark"] .platform-footer {
+	background: #232e33;
+	border: 0;
+}
+.platform-shell .platform-panel-title {
+	text-transform: uppercase;
+	letter-spacing: 0.14em;
+}
+.platform-shell .platform-panel-title h2 {
+	font-size: 10px;
+}
+.platform-shell .platform-section-title h3 {
+	font-size: 10px;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+}
+
+.platform-shell .platform-run-toolbar {
+	min-height: 36px;
+	padding: 4px 8px;
+}
+.platform-shell[data-theme="dark"] .platform-main {
+	padding: 0 4px 4px;
+	background: #23292d;
+}
+.platform-shell[data-theme="dark"] .platform-activity-bar {
+	width: 44px;
+	border: 1px solid #333d42;
+	border-radius: 8px 0 0 8px;
+	padding-inline: 3px;
+}
+.platform-shell[data-theme="dark"] .platform-sidebar {
+	border: 1px solid #333d42;
+	border-left-color: transparent;
+	border-radius: 0 8px 8px 0;
+}
+.platform-shell[data-theme="dark"] .platform-source,
+.platform-shell[data-theme="dark"] .platform-evidence,
+.platform-shell[data-theme="dark"] .platform-run {
+	border: 1px solid #333d42;
+	border-radius: 8px;
+}
+.platform-shell[data-theme="dark"] .platform-source,
+.platform-shell[data-theme="dark"] .platform-evidence {
+	overflow: hidden;
+}
+/* Insets belong to the content roots; native split geometry and sashes stay intact. */
+.platform-shell[data-theme="dark"] :is(#source-editor, #execution-inspector) {
+	padding-left: 4px;
+}
+.platform-shell[data-theme="dark"] #run-evidence {
+	padding: 4px 0 0 4px;
+}
+.platform-shell[data-theme="dark"][data-sidebar-open="false"]
+	.platform-activity-bar {
+	border-radius: 8px;
+}
+@media (max-width: 760px) {
+	.platform-shell[data-theme="dark"][data-compact-view="evidence"]
+		#run-evidence {
+		padding-top: 0;
+	}
+}
+.platform-shell[data-theme="dark"] .platform-footer {
+	min-height: 28px;
+	height: 28px;
+	padding: 2px 6px;
+	font-size: 12px;
+	line-height: 22px;
+}
+.platform-shell[data-theme="dark"] .platform-footer > * {
+	height: 24px;
+	display: inline-flex;
+	align-items: center;
+	padding-inline: 0;
+}
+.platform-shell[data-theme="dark"] .platform-footer > :first-child {
+	padding-left: 4px;
+}
+.platform-shell[data-theme="dark"] .platform-run-toolbar select {
+	background: #20292e;
+	border-color: #3a4b51;
+}
+.platform-shell[data-theme="dark"] .platform-run-toolbar button {
+	font-size: 12px;
+}
+.platform-shell[data-theme="dark"] .platform-run-toolbar select {
+	font-size: 12px;
+}
+.platform-shell[data-theme="dark"] button,
+.platform-shell[data-theme="dark"] input,
+.platform-shell[data-theme="dark"] select,
+.platform-shell[data-theme="dark"] textarea {
+	border-radius: 2px;
+}
+.platform-shell[data-theme="dark"] button:focus-visible,
+.platform-shell[data-theme="dark"] input:focus-visible,
+.platform-shell[data-theme="dark"] select:focus-visible,
+.platform-shell[data-theme="dark"] textarea:focus-visible {
+	outline: 1px solid #2c383d;
+	outline-offset: -1px;
+}
+.platform-shell[data-theme="dark"] .platform-project-form input,
+.platform-shell[data-theme="dark"] .platform-project-form button {
+	height: 28px;
+	padding-block: 3px;
+}
+
+.platform-shell .platform-run-toolbar button {
+	border-radius: 2px;
+}
+.platform-shell .platform-activity-bar button {
+	width: 36px;
+	height: 36px;
+	min-height: 36px;
+	padding: 0;
+	border-radius: 0;
+	border-left: 2px solid transparent;
+	color: rgba(167, 182, 184, 0.4);
+	transition:
+		color 120ms ease,
+		background 120ms ease;
+}
+.platform-shell[data-theme="dark"]
+	.platform-activity-bar
+	button[aria-pressed="true"] {
+	color: #dff5f3;
+}
+.platform-shell .platform-tree-file,
+.platform-shell .platform-case-list button {
+	border-left: 2px solid transparent;
+}
+.platform-shell .platform-tree-file[aria-pressed="true"],
+.platform-shell .platform-case-list button.selected {
+	border-left-color: var(--lab-accent);
+}
+.platform-shell[data-theme="dark"] .platform-tree-file[aria-pressed="true"],
+.platform-shell[data-theme="dark"] .platform-case-list button.selected {
+	background: #2d4147;
+}
+
+.platform-shell[data-theme="dark"] .platform-scroll {
+	scrollbar-color: rgba(120, 120, 120, 0.6) transparent;
+}
+.platform-shell[data-theme="dark"] .platform-scroll::-webkit-scrollbar-thumb {
+	background: rgba(120, 120, 120, 0.6);
+}
+.platform-shell[data-theme="dark"]
+	.platform-scroll::-webkit-scrollbar-thumb:hover {
+	background: rgba(32, 41, 46, 0.75);
+}
+.platform-shell[data-theme="dark"] .platform-editor-status {
+	min-height: 24px;
+	font-size: 10px;
+}
+
+/* VS Code modern tabs: a 24px rounded fill inside a 32px tab, with an
+ * independent 22px icon slot and 24px action slot. Keep generic button and
+ * selection styles out of this chrome. */
+.platform-shell .platform-editor-tabs {
+	--tab-active-background: var(--lab-hover);
+	--tab-active-foreground: var(--lab-foreground);
+	--tab-inactive-foreground: var(--lab-muted);
+	--tab-hover-foreground: var(--lab-foreground);
+	--tab-action-hover: rgba(90, 93, 94, 0.16);
+	display: flex;
+	flex-shrink: 0;
+	height: 32px;
+	min-height: 32px;
+	padding: 0;
+	border: 0;
+	background: var(--lab-panel);
+	overflow: auto hidden;
+	scrollbar-width: none;
+	font-family:
+		-apple-system, system-ui, "PingFang SC", "Hiragino Sans GB", sans-serif;
+	font-size: 13px;
+	font-weight: 400;
+	line-height: 18.2px;
+	letter-spacing: normal;
+}
+.platform-shell[data-theme="dark"] .platform-editor-tabs {
+	--tab-active-background: #2c383d;
+	--tab-active-foreground: #dff5f3;
+	--tab-inactive-foreground: rgba(204, 204, 204, 0.5);
+	--tab-hover-foreground: #a7b6b8;
+	--tab-action-hover: rgba(90, 93, 94, 0.31);
+}
+.platform-editor-tabs::-webkit-scrollbar {
+	display: none;
+}
+.platform-editor-tabs .platform-editor-tab-spacer {
+	flex: 0 0 8px;
+	height: 32px;
+}
+.platform-editor-tabs .platform-editor-tab {
+	position: relative;
+	display: flex;
+	flex: 0 0 auto;
+	height: 32px;
+	padding: 0 28px 0 6px;
+	border: 0;
+	border-block: 4px solid transparent;
+	border-radius: 4px;
+	scroll-margin-inline: 8px;
+	white-space: nowrap;
+	color: var(--tab-inactive-foreground);
+}
+.platform-editor-tab .tab-fill {
+	position: absolute;
+	inset: 0 2px;
+	border-block: 1px solid transparent;
+	border-radius: 4px;
+	pointer-events: none;
+}
+.platform-editor-tab:is(.active, :hover) .tab-fill {
+	background: var(--tab-active-background);
+}
+.platform-editor-tabs .platform-editor-tab:hover {
+	color: var(--tab-hover-foreground);
+}
+.platform-editor-tabs .platform-editor-tab.active {
+	color: var(--tab-active-foreground);
+}
+.platform-shell .platform-editor-tabs .platform-editor-tab button {
+	position: relative;
+	border: 0;
+	border-radius: 0;
+	padding: 0;
+	background: transparent;
+	color: inherit;
+	font: inherit;
+	letter-spacing: inherit;
+	box-shadow: none;
+}
+.platform-shell .platform-editor-tabs .platform-editor-tab button.tab-label {
+	display: flex;
+	flex: 1;
+	box-sizing: content-box;
+	height: 24px;
+	line-height: 24px;
+	text-align: left;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.platform-shell
+	.platform-editor-tabs
+	.platform-editor-tab
+	button.tab-label:hover {
+	background: transparent;
+}
+.platform-editor-tabs .monaco-icon-label::before {
+	content: "";
+	box-sizing: content-box;
+	display: block;
+	flex-shrink: 0;
+	width: 16px;
+	height: 24px;
+	padding-right: 6px;
+	background: var(--tab-file-icon) left center / 16px 16px no-repeat;
+}
+.platform-editor-tabs .monaco-icon-label-container {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.platform-editor-tabs .label-name {
+	white-space: nowrap;
+}
+.platform-editor-tab .tab-actions {
+	position: absolute;
+	right: 0;
+	top: 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 24px;
+	height: 24px;
+	margin-inline: 2px;
+	visibility: hidden;
+}
+.platform-editor-tab:is(.active, :hover, :focus-within) .tab-actions {
+	visibility: visible;
+}
+.platform-shell .platform-editor-tabs .platform-editor-tab button.tab-close {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 20px;
+	height: 20px;
+	padding: 2px;
+	border-radius: 4px;
+}
+.platform-shell
+	.platform-editor-tabs
+	.platform-editor-tab
+	button.tab-close:hover {
+	background: var(--tab-action-hover);
+}
+.platform-editor-tabs .codicon-close-small {
+	display: block;
+	width: 16px;
+	height: 16px;
+	background: currentColor;
+	mask: url("./icons/vscode/close-small.svg") center / 16px 16px no-repeat;
+}
+
+/* VS Code titlebar-container.has-center, including the macOS 2px content offset. */
+.platform-shell .platform-header {
+	--titlebar-foreground: var(--lab-muted);
+	--titlebar-border: var(--lab-border);
+	--titlebar-hover: var(--lab-hover);
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	flex-shrink: 0;
+	height: 35px;
+	min-height: 35px;
+	padding: 0;
+	border: 0;
+	background: var(--lab-panel);
+	color: var(--titlebar-foreground);
+	font:
+		13px / 22px -apple-system,
+		system-ui,
+		"PingFang SC",
+		"Hiragino Sans GB",
+		sans-serif;
+	letter-spacing: normal;
+	user-select: none;
+	overflow: hidden;
+}
+.platform-shell[data-theme="dark"] .platform-header {
+	--titlebar-foreground: #cccccc;
+	--titlebar-border: rgba(204, 204, 204, 0.2);
+	--titlebar-hover: rgba(90, 93, 94, 0.31);
+	background: #222d32;
+}
+.platform-header > :is(.titlebar-left, .titlebar-center, .titlebar-right) {
+	display: flex;
+	align-items: center;
+	box-sizing: content-box;
+	height: 100%;
+	padding-top: 2px;
+}
+.platform-header .titlebar-left,
+.platform-header .titlebar-right {
+	width: 20%;
+	flex-grow: 2;
+}
+.platform-header .titlebar-center {
+	width: 60%;
+	max-width: fit-content;
+	min-width: 0;
+	margin: 0 10px;
+	justify-content: center;
+}
+.platform-header .titlebar-right {
+	min-width: min-content;
+	justify-content: flex-end;
+}
+.platform-header .command-center {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	min-width: 0;
+	height: 24px;
+	font-size: 12px;
+}
+.platform-header .titlebar-project-center {
+	display: flex;
+	align-items: center;
+	flex-shrink: 1;
+	width: 38vw;
+	max-width: 600px;
+	min-width: 0;
+	height: 24px;
+	border: 1px solid var(--titlebar-border);
+	border-radius: 4px;
+}
+.platform-shell .platform-header button {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	flex-shrink: 0;
+	width: 22px;
+	height: 22px;
+	padding: 3px;
+	border: 0;
+	border-radius: 4px;
+	background: transparent;
+	color: inherit;
+	font: inherit;
+	letter-spacing: normal;
+}
+.platform-shell .platform-header button:hover:not(:disabled),
+.platform-header .titlebar-theme:hover {
+	background: var(--titlebar-hover);
+}
+.platform-shell .platform-header button:disabled {
+	opacity: 0.5;
+}
+.platform-shell .platform-header .titlebar-project-input {
+	flex: 1;
+	min-width: 0;
+	width: auto;
+	padding: 0 10px;
+	border-radius: 4px 0 0 4px;
+	justify-content: flex-start;
+}
+.platform-header .titlebar-project-name {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	opacity: 0.6;
+}
+.platform-header .titlebar-file-count {
+	position: relative;
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	flex-shrink: 0;
+	height: 22px;
+	padding: 0 8px 0 6px;
+	font-size: 11px;
+	font-weight: 600;
+}
+.platform-header :is(.titlebar-file-count, .titlebar-theme)::before {
+	content: "";
+	position: absolute;
+	left: 0;
+	top: 4px;
+	bottom: 4px;
+	width: 1px;
+	background: var(--titlebar-border);
+}
+.platform-header .titlebar-theme {
+	position: relative;
+	display: flex;
+	align-items: center;
+	justify-content: space-around;
+	flex: 0 0 51px;
+	height: 22px;
+	border-radius: 0 4px 4px 0;
+}
+.platform-shell .platform-header .titlebar-theme select {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	min-width: 0;
+	height: 100%;
+	padding: 0;
+	border: 0;
+	border-radius: inherit;
+	appearance: none;
+	background: transparent;
+	color: transparent;
+	cursor: pointer;
+}
+.platform-header .titlebar-theme option {
+	color: var(--lab-foreground);
+	background: var(--lab-panel);
+}
+.platform-shell .platform-header :is(button, select):focus-visible {
+	outline: 1px solid var(--lab-accent);
+	outline-offset: -1px;
+}
+.platform-header .platform-header-actions {
+	position: relative;
+	right: 8px;
+	display: flex;
+	align-items: center;
+	box-sizing: content-box;
+	flex-shrink: 0;
+	gap: 4px;
+	height: 100%;
+	margin-left: auto;
+	padding-right: 4px;
+}
+.platform-header .titlebar-icon {
+	display: block;
+	flex-shrink: 0;
+	width: 16px;
+	height: 16px;
+	background: currentColor;
+	mask: var(--titlebar-icon) center / 16px 16px no-repeat;
+	pointer-events: none;
+}
+.platform-header .icon-arrow-left {
+	--titlebar-icon: url("./icons/vscode/arrow-left.svg");
+}
+.platform-header .icon-arrow-right {
+	--titlebar-icon: url("./icons/vscode/arrow-right.svg");
+}
+.platform-header .icon-layout {
+	--titlebar-icon: url("./icons/vscode/layout.svg");
+}
+.platform-header .icon-layout-sidebar-left {
+	--titlebar-icon: url("./icons/vscode/layout-sidebar-left.svg");
+}
+.platform-header .icon-layout-sidebar-right {
+	--titlebar-icon: url("./icons/vscode/layout-sidebar-right.svg");
+}
+.platform-header .icon-layout-panel {
+	--titlebar-icon: url("./icons/vscode/layout-panel.svg");
+}
+.platform-header .icon-color-mode {
+	--titlebar-icon: url("./icons/vscode/color-mode.svg");
+}
+.platform-header .icon-chevron-down {
+	--titlebar-icon: url("./icons/vscode/chevron-down.svg");
+}
+.platform-header .icon-circle-filled {
+	--titlebar-icon: url("./icons/vscode/circle-filled.svg");
+}
+.platform-header [aria-expanded="false"] .icon-layout-sidebar-left {
+	--titlebar-icon: url("./icons/vscode/layout-sidebar-left-off.svg");
+}
+.platform-header [aria-expanded="false"] .icon-layout-panel {
+	--titlebar-icon: url("./icons/vscode/layout-panel-off.svg");
+}
+.platform-header [aria-expanded="false"] .icon-layout-sidebar-right {
+	--titlebar-icon: url("./icons/vscode/layout-sidebar-right-off.svg");
+}
+
+@media (max-width: 760px) {
+	.platform-header .titlebar-left {
+		display: none;
+	}
+	.platform-header .titlebar-center {
+		flex: 1;
+		width: auto;
+		max-width: none;
+		margin: 0 6px;
+	}
+	.platform-header .command-center {
+		width: 100%;
+	}
+	.platform-header .titlebar-project-center {
+		flex: 1;
+		width: auto;
+	}
+	.platform-header .titlebar-right {
+		flex: 0;
+		width: auto;
+	}
+	.platform-header .platform-header-actions {
+		right: 2px;
+	}
+}
+
+/* Monaco owns pixel positions and sash hit areas; React owns each stable view's contents. */
+.platform-split-view {
+	position: relative;
+	width: 100%;
+	height: 100%;
+	min-width: 0;
+	min-height: 0;
+	overflow: hidden;
+	--vscode-sash-size: 4px;
+	--vscode-sash-hover-size: 4px;
+	--vscode-sash-hoverBorder: var(--lab-accent);
+}
+.platform-main > .platform-split-view {
+	flex: 1;
+}
+.platform-split-view .split-view {
+	display: flex;
+	flex-direction: column;
+	width: 100%;
+	height: 100%;
+	min-width: 0;
+	min-height: 0;
+	overflow: hidden;
+}
+.platform-split-view .split-view[hidden] {
+	display: none;
+}
+.platform-split-view .monaco-sash.vertical {
+	cursor: ew-resize;
+}
+.platform-split-view .monaco-sash.horizontal {
+	cursor: ns-resize;
+}
+.platform-split-view .monaco-sash:focus-visible {
+	outline: 1px solid var(--lab-accent);
+	outline-offset: -1px;
+}
+.platform-split-view .monaco-sash:focus-visible::before {
+	background: var(--lab-accent);
+}

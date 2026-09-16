@@ -7,7 +7,7 @@
  * service instantiation until the reference is actually accessed.
  *
  * @author AEPKILL
- * @created 2021-10-11 11:28:03
+ * @created 2025-06-26 00:45:04 11:28:03
  */
 
 /**
@@ -30,5 +30,5 @@ export type Ref<T> = {
  */
 export type MutableRef<T> = {
 	/** The current service instance (optional). */
-	current?: T;
+	current?: T | undefined;
 };

@@ -1,7 +1,7 @@
 /**
  * @overview Base exception for coded errors.
  * @author AEPKILL
- * @created 2026-05-09 00:00:00
+ * @created 2026-05-09 11:26:00
  */
 
 export abstract class CodedException<TCode extends string> extends Error {

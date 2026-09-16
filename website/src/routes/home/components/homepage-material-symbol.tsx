@@ -1,7 +1,7 @@
 /**
  * @overview Material Symbols wrapper used by the homepage sections.
  * @author AEPKILL
- * @created 2026-06-30 17:45:00
+ * @created 2026-06-30 18:34:10 17:45:00
  */
 
 import { cn } from "@/utils/class-name.util";

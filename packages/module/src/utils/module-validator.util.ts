@@ -1,7 +1,7 @@
 /**
  * @overview Module validation utilities.
  * @author AEPKILL
- * @created 2025-03-30
+ * @created 2026-03-30 10:41:40
  */
 
 import {

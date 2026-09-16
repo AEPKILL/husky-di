@@ -2,14 +2,37 @@
  * @overview Builds the highlighted step data for the Code Hike scrollycoding
  * demo route.
  * @author AEPKILL
- * @created 2026-06-30 11:38:00
+ * @created 2026-06-30 13:53:17 11:38:00
  */
 
 import type { RawCode } from "codehike/code";
 import { highlight } from "codehike/code";
 import type { ScrollyTutorialStep } from "@/types/scrolly-tutorial-step.type";
 
-const CODEHIKE_SCROLLY_DEMO_THEME = "slack-dark";
+export async function createCodehikeScrollyDemoSteps(): Promise<
+	ScrollyTutorialStep[]
+> {
+	const highlightedSteps = await Promise.all(
+		CODEHIKE_SCROLLY_DEMO_DEFINITIONS.map(async (definition) => {
+			const code = await highlight(
+				definition.codeblock,
+				CODEHIKE_SCROLLY_DEMO_THEME,
+			);
+
+			return {
+				id: definition.id,
+				eyebrow: definition.eyebrow,
+				fileName: definition.fileName,
+				title: definition.title,
+				summary: definition.summary,
+				details: definition.details,
+				code,
+			} satisfies ScrollyTutorialStep;
+		}),
+	);
+
+	return highlightedSteps;
+}
 
 type CodehikeScrollyDemoDefinition = Readonly<{
 	id: string;
@@ -20,6 +43,8 @@ type CodehikeScrollyDemoDefinition = Readonly<{
 	details: readonly string[];
 	codeblock: RawCode;
 }>;
+
+const CODEHIKE_SCROLLY_DEMO_THEME = "slack-dark";
 
 const CODEHIKE_SCROLLY_DEMO_DEFINITIONS: readonly CodehikeScrollyDemoDefinition[] =
 	[
@@ -218,28 +243,3 @@ console.log(userService.getUser("u-1"));`,
 			},
 		},
 	];
-
-export async function createCodehikeScrollyDemoSteps(): Promise<
-	ScrollyTutorialStep[]
-> {
-	const highlightedSteps = await Promise.all(
-		CODEHIKE_SCROLLY_DEMO_DEFINITIONS.map(async (definition) => {
-			const code = await highlight(
-				definition.codeblock,
-				CODEHIKE_SCROLLY_DEMO_THEME,
-			);
-
-			return {
-				id: definition.id,
-				eyebrow: definition.eyebrow,
-				fileName: definition.fileName,
-				title: definition.title,
-				summary: definition.summary,
-				details: definition.details,
-				code,
-			} satisfies ScrollyTutorialStep;
-		}),
-	);
-
-	return highlightedSteps;
-}

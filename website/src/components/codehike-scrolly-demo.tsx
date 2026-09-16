@@ -1,7 +1,7 @@
 /**
  * @overview Code Hike based scrollycoding demo for the website workspace.
  * @author AEPKILL
- * @created 2026-06-30 11:38:00
+ * @created 2026-06-30 13:53:17 11:38:00
  */
 
 import { Pre } from "codehike/code";
@@ -14,6 +14,10 @@ import { CODEHIKE_TOKEN_TRANSITIONS } from "@/components/codehike-token-transiti
 import type { ScrollyTutorialStep } from "@/types/scrolly-tutorial-step.type";
 
 export type CodehikeScrollyDemoProps = Readonly<{
+	steps: readonly ScrollyTutorialStep[];
+}>;
+
+export type CodePanelProps = Readonly<{
 	steps: readonly ScrollyTutorialStep[];
 }>;
 
@@ -78,10 +82,6 @@ export function CodehikeScrollyDemo({ steps }: CodehikeScrollyDemoProps) {
 		</section>
 	);
 }
-
-export type CodePanelProps = Readonly<{
-	steps: readonly ScrollyTutorialStep[];
-}>;
 
 function CodePanel({ steps }: CodePanelProps) {
 	const [selectedIndex] = useSelectedIndex();

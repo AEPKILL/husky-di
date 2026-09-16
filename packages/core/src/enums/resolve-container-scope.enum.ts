@@ -6,7 +6,7 @@
  * should use when continuing nested resolution inside an active resolve chain.
  *
  * @author AEPKILL
- * @created 2026-06-26 00:00:00
+ * @created 2026-06-26 15:43:27
  */
 export enum ResolveContainerScopeEnum {
 	/**

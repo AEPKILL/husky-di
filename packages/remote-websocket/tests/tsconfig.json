@@ -1,0 +1,8 @@
+{
+	"extends": "../tsconfig.json",
+	"compilerOptions": {
+		"rootDir": "..",
+		"lib": ["ES2024", "DOM"]
+	},
+	"include": ["../vitest.config.ts", "./**/*.ts"]
+}

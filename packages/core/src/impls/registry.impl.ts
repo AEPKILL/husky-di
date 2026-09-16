@@ -8,7 +8,7 @@
  * of the same service are registered.
  *
  * @author AEPKILL
- * @created 2025-07-27 21:03:11
+ * @created 2025-07-29 22:25:24 21:03:11
  */
 
 import type { IRegistration } from "@/interfaces/registration.interface";

@@ -1,15 +1,10 @@
 /**
  * @overview Tick-based animation hook for low-frequency website animations.
  * @author AEPKILL
- * @created 2026-06-30 10:57:00
+ * @created 2026-06-30 10:36:51 10:57:00
  */
 
 import { useEffect, useState } from "react";
-
-type UseAnimationTickOptions = {
-	intervalMs: number;
-	respectReducedMotion?: boolean;
-};
 
 export function useAnimationTick(
 	options: Readonly<UseAnimationTickOptions>,
@@ -34,3 +29,8 @@ export function useAnimationTick(
 
 	return tick;
 }
+
+type UseAnimationTickOptions = {
+	intervalMs: number;
+	respectReducedMotion?: boolean;
+};

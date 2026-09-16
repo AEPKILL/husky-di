@@ -1,0 +1,7 @@
+{
+	"root": false,
+	"extends": [
+		"../config/biome/base.json",
+		"../config/biome/package-config.json"
+	]
+}

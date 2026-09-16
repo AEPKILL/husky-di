@@ -30,7 +30,7 @@
  *    - Mainly used for internal implementation
  *
  * @author AEPKILL
- * @created 2025-07-29 22:55:24
+ * @created 2025-06-26 00:45:04 22:55:24
  */
 
 import type { ResolveRecordTypeEnum } from "@/enums/resolve-record-type.enum";
@@ -103,7 +103,7 @@ export type ResolveRecordData<T> =
  */
 export type ResolveRecordTreeNode<T> = {
 	/** The parent node in the resolution tree */
-	readonly parent?: ResolveRecordTreeNode<T>;
+	readonly parent?: ResolveRecordTreeNode<T> | undefined;
 	/** Child nodes representing dependent resolutions */
 	readonly children: Array<ResolveRecordTreeNode<T>>;
 	/** The resolution record data for this node */
