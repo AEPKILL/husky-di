@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.0.0
+
+### Major Changes
+
+- [`4b96648`](https://github.com/AEPKILL/husky-di/commit/4b9664833a759893188775c0298720c4556b3d17) Thanks [@AEPKILL](https://github.com/AEPKILL)! - Publish the first stable browser and Node WebSocket Transport Adapters with
+  finite native limits, shared conformance evidence, and secure-deployment
+  documentation.
+
+### Patch Changes
+
+- Updated dependencies [[`4b96648`](https://github.com/AEPKILL/husky-di/commit/4b9664833a759893188775c0298720c4556b3d17)]:
+  - @husky-di/remote@1.0.0
+
 ## Unreleased
 
 - Migrate browser and Node WebSocket Adapters to the public Remote transport seam.
