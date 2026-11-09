@@ -1,5 +1,12 @@
 # @husky-di/module
 
+## 1.5.0
+
+### Patch Changes
+
+- Updated dependencies [7d741d0]
+  - @husky-di/core@1.5.0
+
 ## 1.4.2
 
 ### Patch Changes
