@@ -31,7 +31,9 @@ import {
 	hasServiceIdentifierMetadata,
 	IContainer,
 	LifecycleEnum,
+	mergeRegistrationPlans,
 	middleware,
+	type RegistrationPlan,
 	ResolveContainerScopeEnum,
 	type ResolveContext,
 	ResolveException,
@@ -369,6 +371,149 @@ describe("SPEC 4.1: Service Registration", () => {
 				/E_INVALID_PROVIDER/,
 			);
 			expect(container.isRegistered(ITestValue)).toBe(false);
+		});
+	});
+
+	describe("R2.4: Registration Plan Composition", () => {
+		it("should preserve plan and entry order when resolving merged registrations", () => {
+			const ITestValue = createServiceIdentifier<number>("ITestValue");
+			const firstPlan = createRegistrationPlan((register) => {
+				register(ITestValue, { useValue: 1 });
+				register(ITestValue, { useValue: 2 });
+			});
+			const secondPlan = createRegistrationPlan((register) => {
+				register(ITestValue, { useValue: 3 });
+			});
+
+			container.applyRegistrationPlan(
+				mergeRegistrationPlans(firstPlan, secondPlan),
+			);
+
+			expect(container.resolve(ITestValue, { multiple: true })).toEqual([
+				1, 2, 3,
+			]);
+			expect(container.resolve(ITestValue)).toBe(3);
+		});
+
+		it("should freeze a new snapshot while preserving mutable input references", () => {
+			const ITestValue = createServiceIdentifier<{ id: number }>("ITestValue");
+			const value = { id: 1 };
+			const registration = { useValue: value };
+			const entry = { serviceIdentifier: ITestValue, registration };
+			const entries = [entry];
+			const plan: RegistrationPlan = { registrations: entries };
+
+			const merged = mergeRegistrationPlans(plan);
+
+			expectTypeOf(merged).toEqualTypeOf<RegistrationPlan>();
+			expect(merged).not.toBe(plan);
+			expect(merged.registrations).not.toBe(entries);
+			expect(Object.isFrozen(merged)).toBe(true);
+			expect(Object.isFrozen(merged.registrations)).toBe(true);
+			expect(merged.registrations[0]).toBe(entry);
+			expect(Object.isFrozen(plan)).toBe(false);
+			expect(Object.isFrozen(entries)).toBe(false);
+			expect(Object.isFrozen(entry)).toBe(false);
+			expect(Object.isFrozen(registration)).toBe(false);
+			expect(Object.isFrozen(value)).toBe(false);
+			expect(entries).toEqual([entry]);
+
+			entries.push({
+				serviceIdentifier: ITestValue,
+				registration: { useValue: { id: 2 } },
+			});
+			value.id = 3;
+			container.applyRegistrationPlan(merged);
+
+			expect(merged.registrations).toHaveLength(1);
+			expect(container.resolve(ITestValue)).toBe(value);
+			expect(container.resolve(ITestValue).id).toBe(3);
+		});
+
+		it("should return a fresh frozen empty plan when no plans are supplied", () => {
+			const plans: readonly RegistrationPlan[] = [];
+			const first = mergeRegistrationPlans(...plans);
+			const second = mergeRegistrationPlans();
+
+			expect(first.registrations).toEqual([]);
+			expect(first).not.toBe(second);
+			expect(first.registrations).not.toBe(second.registrations);
+			expect(Object.isFrozen(first)).toBe(true);
+			expect(Object.isFrozen(first.registrations)).toBe(true);
+			expect(() => container.applyRegistrationPlan(first)()).not.toThrow();
+		});
+
+		it("should compose nested and empty plans while retaining repeated inputs", () => {
+			const ITestValue = createServiceIdentifier<number>("ITestValue");
+			const firstPlan = createRegistrationPlan((register) => {
+				register(ITestValue, { useValue: 1 });
+			});
+			const secondPlan = createRegistrationPlan((register) => {
+				register(ITestValue, { useValue: 2 });
+			});
+			const basePlan = mergeRegistrationPlans(firstPlan, secondPlan);
+			const merged = mergeRegistrationPlans(
+				basePlan,
+				mergeRegistrationPlans(),
+				firstPlan,
+				firstPlan,
+			);
+
+			container.applyRegistrationPlan(merged);
+
+			expect(container.resolve(ITestValue, { multiple: true })).toEqual([
+				1, 2, 1, 1,
+			]);
+		});
+
+		it("should clean up one merged application without removing unrelated registrations", () => {
+			const ITestValue = createServiceIdentifier<number>("ITestValue");
+			container.register(ITestValue, { useValue: 0 });
+			const firstPlan = createRegistrationPlan((register) => {
+				register(ITestValue, { useValue: 1 });
+			});
+			const secondPlan = createRegistrationPlan((register) => {
+				register(ITestValue, { useValue: 2 });
+			});
+			const cleanup = container.applyRegistrationPlan(
+				mergeRegistrationPlans(firstPlan, secondPlan),
+			);
+			container.register(ITestValue, { useValue: 3 });
+
+			cleanup();
+			cleanup();
+
+			expect(container.resolve(ITestValue, { multiple: true })).toEqual([0, 3]);
+		});
+
+		it("should defer validation and roll back entries from every merged plan on application failure", () => {
+			const ITestValue = createServiceIdentifier<number>("ITestValue");
+			container.register(ITestValue, { useValue: 0 });
+			let providerCalls = 0;
+			const firstPlan = createRegistrationPlan((register) => {
+				register(ITestValue, {
+					useFactory: () => {
+						providerCalls++;
+						return 1;
+					},
+				});
+			});
+			const secondPlan = createRegistrationPlan((register) => {
+				register(ITestValue, { useValue: 2 });
+				register(IServiceA, {
+					useClass: ServiceA,
+					useValue: new ServiceA(),
+				});
+			});
+
+			const merged = mergeRegistrationPlans(firstPlan, secondPlan);
+
+			expect(providerCalls).toBe(0);
+			expect(() => container.applyRegistrationPlan(merged)).toThrow(
+				/E_INVALID_PROVIDER/,
+			);
+			expect(container.resolve(ITestValue, { multiple: true })).toEqual([0]);
+			expect(container.isRegistered(IServiceA)).toBe(false);
 		});
 	});
 

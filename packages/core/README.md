@@ -449,24 +449,29 @@ Key points:
 ## Registration Plans
 
 `RegistrationPlan` lets you group a set of registrations into a reusable plan.
+Use `mergeRegistrationPlans(...plans)` to combine plans declared by different modules.
 
 ```typescript
 import {
   createContainer,
   createRegistrationPlan,
   createServiceIdentifier,
+  mergeRegistrationPlans,
 } from "@husky-di/core";
 
 const ILogger = createServiceIdentifier<Logger>("ILogger");
 const IConfig = createServiceIdentifier<{ env: string }>("IConfig");
 
-const plan = createRegistrationPlan((register) => {
+const loggingPlan = createRegistrationPlan((register) => {
   register(ILogger, { useClass: ConsoleLogger });
+});
+const configPlan = createRegistrationPlan((register) => {
   register(IConfig, {
     useValue: { env: "production" },
   });
 });
 
+const plan = mergeRegistrationPlans(loggingPlan, configPlan);
 const container = createContainer("AppContainer");
 const cleanup = container.applyRegistrationPlan(plan);
 ```
@@ -477,6 +482,13 @@ Why this is useful:
 - you can apply the same plan multiple times to the same container, and each application returns its own cleanup
 - `applyRegistrationPlan()` returns a cleanup function
 - if one step fails while applying the plan, previously applied registrations are rolled back automatically
+
+Merging preserves argument order and duplicate registrations. For a shared service
+identifier, single resolution uses the last registration and multiple resolution
+returns all registrations. The merged plan and its array are new frozen objects;
+entries and service values retain their original references. See the
+[registration plan composition contract](docs/SPECIFICATION.md#41-service-registration)
+for the full guarantees.
 
 ## Middleware
 

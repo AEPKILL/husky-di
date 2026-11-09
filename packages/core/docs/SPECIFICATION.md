@@ -111,6 +111,7 @@ type RegistrationPlanEntry<T = unknown> = {
 type RegistrationPlan = {
   readonly registrations: ReadonlyArray<RegistrationPlanEntry<unknown>>;
 };
+```
 
 A registration plan is created through the `createRegistrationPlan` factory function:
 
@@ -126,6 +127,13 @@ function createRegistrationPlan(
   configure: RegistrationPlanConfigure,
 ): RegistrationPlan;
 ```
+
+The package root **MUST** export `mergeRegistrationPlans` to compose existing plans:
+
+```typescript
+function mergeRegistrationPlans(
+  ...plans: readonly RegistrationPlan[]
+): RegistrationPlan;
 ```
 
 ### 3.4 Lifecycle Strategies
@@ -221,6 +229,17 @@ A container **MUST** support applying a `RegistrationPlan`.
 - Calling the returned disposer after those registrations have already been removed **MUST** be a no-op.
 - The plan disposer **MUST NOT** remove unrelated registrations for the same `ServiceIdentifier`.
 - If any entry fails to register, the container **MUST** remove entries already registered by that plan and rethrow the failure.
+
+**R2.4 Registration Plan Composition**
+
+`mergeRegistrationPlans(...plans)` **MUST** compose zero or more registration plans.
+
+- Entries **MUST** retain argument order and their order within each input plan. Duplicate registrations, including entries from a repeated input plan, **MUST** be preserved. Resolution follows R2.
+- Every call **MUST** return a new frozen plan object and a new frozen registration array. Zero arguments **MUST** produce an empty plan; one argument **MUST** still produce a new plan and array.
+- The result's array **MUST** snapshot the input entries at merge time. Merging **MUST NOT** modify or freeze any input plan, array, entry, registration options, or service value.
+- Each result entry **MUST** retain the identity of the corresponding input entry, including its registration options and service value references. Merging **MUST NOT** deep-clone these values.
+- A merged plan **MUST** remain a `RegistrationPlan` that can be merged again or applied to a container.
+- Merging **MUST NOT** validate registrations or invoke providers. Validation occurs when the plan is applied. Applying a merged plan **MUST** follow R2.3 as one application: a failure rolls back all registrations created by that application, and a successful application returns one disposer for those registrations.
 
 **R3. Lifecycle Default**  
 If `lifecycle` is not specified, the container **MUST** default to `LifecycleEnum.transient`.

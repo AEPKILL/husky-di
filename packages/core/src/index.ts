@@ -80,6 +80,7 @@ export { IContainer } from "@/interfaces/container.interface";
 export { IDisposableRegistry } from "@/interfaces/disposable-registry.interface";
 export { middleware } from "@/shared/instances";
 export { resolve } from "@/utils/container.util";
+export { mergeRegistrationPlans } from "@/utils/registration-plan.util";
 export {
 	isEqualServiceIdentifierResolveRecord,
 	isResolveMessageRecord,
