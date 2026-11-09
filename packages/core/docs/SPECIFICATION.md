@@ -45,16 +45,8 @@ type ServiceIdentifier<T> =
   | string
   | symbol;
 
-type CreatedServiceIdentifier<T> = ServiceIdentifier<T> &
-  (string | symbol) &
-  { readonly [internalTypeBrand]: T };
-
 type ServiceIdentifierInstance<R extends ServiceIdentifier<unknown>> =
-  R extends CreatedServiceIdentifier<infer T>
-    ? T
-    : R extends AbstractConstructor<infer T>
-      ? T
-      : unknown;
+  [R] extends [ServiceIdentifier<infer T>] ? T : unknown;
 ```
 
 `createServiceIdentifier()` **MAY** associate out-of-band metadata with a
@@ -68,7 +60,7 @@ type CreateServiceIdentifierOptions<Metadata = unknown> = {
 function createServiceIdentifier<T, Metadata = unknown>(
   id: string | symbol,
   options?: CreateServiceIdentifierOptions<Metadata>,
-): CreatedServiceIdentifier<T>;
+): ServiceIdentifier<T>;
 
 function getServiceIdentifierMetadata<Metadata = unknown>(
   serviceIdentifier: ServiceIdentifier<unknown>,
@@ -79,10 +71,14 @@ function hasServiceIdentifierMetadata(
 ): boolean;
 ```
 
-`CreatedServiceIdentifier` **MUST** be exported from the package root so a
-downstream declaration emitter can name the factory's return type. Its type
-brand **MUST NOT** expose a readable runtime property on the primitive
-identifier.
+`createServiceIdentifier<T>()` **MUST** return the original string or symbol
+value with the declared type `ServiceIdentifier<T>`, preserving `T` for
+resolution inference.
+
+`ServiceIdentifierInstance<R>` **MUST** infer the service type from `R` as a
+whole, without distributing over its union members. It **MUST** preserve `T`
+from `ServiceIdentifier<T>` and the instance type of concrete or abstract
+constructors. A plain string or symbol type **MUST** yield `unknown`.
 
 `createServiceIdentifier()` **MUST** reject runtime inputs that are neither a
 string nor a symbol with `E_INVALID_SERVICE_IDENTIFIER`.

@@ -12,10 +12,7 @@
 
 import { CoreErrorCodeEnum } from "@/enums/core-error-code.enum";
 import { CoreException } from "@/exceptions/core.exception";
-import type {
-	CreatedServiceIdentifier,
-	ServiceIdentifier,
-} from "@/types/service-identifier.type";
+import type { ServiceIdentifier } from "@/types/service-identifier.type";
 import { assertValidServiceIdentifier } from "@/utils/registration.util";
 
 /**
@@ -56,7 +53,7 @@ export type CreateServiceIdentifierOptions<Metadata = unknown> = {
 export function createServiceIdentifier<T, Metadata = unknown>(
 	id: string | symbol,
 	options?: CreateServiceIdentifierOptions<Metadata>,
-): CreatedServiceIdentifier<T> {
+): ServiceIdentifier<T> {
 	if (typeof id !== "string" && typeof id !== "symbol") {
 		throw new CoreException(
 			CoreErrorCodeEnum.E_INVALID_SERVICE_IDENTIFIER,
@@ -64,13 +61,10 @@ export function createServiceIdentifier<T, Metadata = unknown>(
 		);
 	}
 
-	const serviceIdentifier = id as CreatedServiceIdentifier<T>;
+	const serviceIdentifier = id as ServiceIdentifier<T>;
 
 	if (options && "metadata" in options) {
-		serviceIdentifierMetadataRegistry.set(
-			serviceIdentifier as ServiceIdentifier<unknown>,
-			options.metadata,
-		);
+		serviceIdentifierMetadataRegistry.set(serviceIdentifier, options.metadata);
 	}
 
 	return serviceIdentifier;

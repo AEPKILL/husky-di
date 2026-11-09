@@ -22,7 +22,6 @@ import {
 } from "vitest";
 import {
 	CoreErrorCodeEnum,
-	type CreatedServiceIdentifier,
 	type CreateServiceIdentifierOptions,
 	createContainer,
 	createRegistrationPlan,
@@ -39,6 +38,7 @@ import {
 	type ResolveMiddleware,
 	type ResolveOptions,
 	resolve,
+	type ServiceIdentifier,
 	type ServiceIdentifierInstance,
 } from "../src/index";
 import { clearContainer, clearMiddleware, useMiddleware } from "./test.utils";
@@ -456,6 +456,14 @@ describe("SPEC 4.2: Service Resolution", () => {
 			);
 			const rawSymbol = Symbol("IInferredSymbolService");
 			const symbolIdentifier = createServiceIdentifier<ServiceA>(rawSymbol);
+			childContainer.register(stringIdentifier, {
+				useFactory: () => resolve(symbolIdentifier),
+			});
+			childContainer.register(symbolIdentifier, { useClass: ServiceA });
+
+			// Act
+			const stringInstance = childContainer.resolve(stringIdentifier);
+			const symbolInstance = childContainer.resolve(symbolIdentifier);
 
 			// Assert
 			expectTypeOf<
@@ -464,11 +472,44 @@ describe("SPEC 4.2: Service Resolution", () => {
 			expectTypeOf<
 				ServiceIdentifierInstance<typeof symbolIdentifier>
 			>().toEqualTypeOf<ServiceA>();
-			expectTypeOf(stringIdentifier).toMatchTypeOf<
-				CreatedServiceIdentifier<ServiceA>
+			expectTypeOf(stringIdentifier).toEqualTypeOf<
+				ServiceIdentifier<ServiceA>
 			>();
+			expectTypeOf(symbolIdentifier).toEqualTypeOf<
+				ServiceIdentifier<ServiceA>
+			>();
+			expectTypeOf(stringInstance).toEqualTypeOf<ServiceA>();
+			expectTypeOf(symbolInstance).toEqualTypeOf<ServiceA>();
+			expect(stringInstance).toBeInstanceOf(ServiceA);
+			expect(symbolInstance).toBeInstanceOf(ServiceA);
 			expect(stringIdentifier).toBe("IInferredStringService");
 			expect(symbolIdentifier).toBe(rawSymbol);
+		});
+
+		it("should infer service types from identifier unions as a whole", () => {
+			expectTypeOf<
+				ServiceIdentifierInstance<
+					ServiceIdentifier<ServiceA> | ServiceIdentifier<ServiceC>
+				>
+			>().toEqualTypeOf<ServiceA | ServiceC>();
+			expectTypeOf<
+				ServiceIdentifierInstance<ServiceIdentifier<string | undefined>>
+			>().toEqualTypeOf<string | undefined>();
+		});
+
+		it("should extract constructor instance types and leave untyped primitives unknown", () => {
+			expectTypeOf<
+				ServiceIdentifierInstance<typeof ServiceA>
+			>().toEqualTypeOf<ServiceA>();
+			expectTypeOf<
+				ServiceIdentifierInstance<typeof AbstractService>
+			>().toEqualTypeOf<AbstractService>();
+			expectTypeOf<
+				ServiceIdentifierInstance<string>
+			>().toEqualTypeOf<unknown>();
+			expectTypeOf<
+				ServiceIdentifierInstance<symbol>
+			>().toEqualTypeOf<unknown>();
 		});
 
 		it("should expose metadata options from the package root", () => {

@@ -55,7 +55,6 @@ export type {
 export type { ResolveContext } from "@/types/resolve-context.type";
 export type { ResolveHelperOptions } from "@/types/resolve-helper-options.type";
 export type {
-	CreatedServiceIdentifier,
 	ServiceIdentifier,
 	ServiceIdentifierInstance,
 } from "@/types/service-identifier.type";
