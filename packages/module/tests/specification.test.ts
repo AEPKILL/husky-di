@@ -1090,6 +1090,66 @@ describe("Module System - SPECIFICATION.md v1.1.1", () => {
 			});
 		});
 
+		it("should expand imported aliases through the source module's guarded facade", () => {
+			const ITarget = createServiceIdentifier<number>("IModuleMultipleTarget");
+			const IRenamed = createServiceIdentifier<number>(
+				"IModuleMultipleRenamed",
+			);
+			const IPrivate = createServiceIdentifier<number>(
+				"IModuleMultiplePrivate",
+			);
+			const IPrivateAlias = createServiceIdentifier<number>(
+				"IModulePrivateAlias",
+			);
+			const SourceModule = createModule({
+				name: "MultipleSource",
+				declarations: [
+					{ serviceIdentifier: ITarget, useValue: 1 },
+					{ serviceIdentifier: IPrivate, useValue: 9 },
+				],
+				exports: [ITarget],
+			});
+			SourceModule.container.register(ITarget, { useValue: 2 });
+			const MiddleModule = createModule({
+				name: "MultipleMiddle",
+				imports: [
+					SourceModule.withAliases([
+						{ serviceIdentifier: ITarget, as: IRenamed },
+					]),
+				],
+				exports: [IRenamed],
+			});
+			const ConsumerModule = createModule({
+				name: "MultipleConsumer",
+				imports: [MiddleModule],
+				declarations: [
+					{
+						serviceIdentifier: IPrivateAlias,
+						useAlias: IPrivate,
+						getContainer: () => SourceModule.container,
+					},
+				],
+				exports: [IRenamed, IPrivateAlias],
+			});
+
+			try {
+				expect(ConsumerModule.resolve(IRenamed)).toBe(2);
+				expect(ConsumerModule.resolve(IRenamed, { multiple: true })).toEqual([
+					1, 2,
+				]);
+				expect(() =>
+					ConsumerModule.resolve(IPrivateAlias, {
+						multiple: true,
+						optional: true,
+					}),
+				).toThrow(/E_EXPORT_NOT_FOUND/);
+			} finally {
+				ConsumerModule.container.dispose();
+				MiddleModule.container.dispose();
+				SourceModule.container.dispose();
+			}
+		});
+
 		it("should support re-exporting from multiple modules", () => {
 			const LoggerModule = createModule({
 				name: "LoggerModule",

@@ -174,8 +174,8 @@ The container is assembled internally during `createModule()`:
 1. **Register Locals**: Register all items from `declarations`.
 2. **Process Imports**:
    - Normalize all imports into a standard format.
-   - For un-aliased imports: Bridge the parent container or merge definitions.
-   - For aliased imports: Register a `useAlias` provider pointing to the source container's service.
+   - Register every import as a `useAlias` pointing to the source module's guarded container, using the mapped local identifier when renamed.
+   - Imported aliases **MUST** preserve the source's single and multiple resolution semantics. Multiple contributions **MUST** expand in target registration order, as specified by core S6.
 3. **Create Public Facade**: Wrap the internal container with the module's export check. Internal providers retain the internal container; callers and imported aliases receive the guarded facade.
 
 ### 6.3 Export Boundary

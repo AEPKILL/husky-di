@@ -211,6 +211,11 @@ container.register(IAppLogger, {
 const logger = container.resolve(IAppLogger);
 ```
 
+With `multiple: true`, an alias contributes all target results at its registration
+position, preserving order and repeated values. An optional missing target contributes
+no values; `defaultValue` applies only when the complete result is empty.
+Aliases redirect before middleware; middleware runs for the target registrations.
+
 You can also point an alias at another container through `getContainer`.
 
 ```typescript
@@ -495,7 +500,7 @@ Middleware runs in LIFO order:
 
 - the last registered middleware runs first
 - if `next()` is not called, resolution can be short-circuited
-- middleware runs on every resolution, while provider singleton and resolution lifecycles still apply behind `next()`
+- middleware runs whenever a non-alias registration is resolved, while provider singleton and resolution lifecycles still apply behind `next()`
 - transformed and short-circuit results are not cached by core
 - the cleanup returned by `use()` is the only way to remove that registration and is safe to call repeatedly
 

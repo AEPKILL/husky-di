@@ -979,37 +979,301 @@ describe("SPEC 4.2: Service Resolution", () => {
 	});
 
 	describe("S6: Alias Resolution", () => {
-		it("should keep multiple alias results flat and registration-shaped", () => {
+		it("should expand all target registrations at each alias position in order", () => {
 			// Arrange
-			const ITarget = createServiceIdentifier<string>("IMultipleAliasTarget");
-			const IAlias = createServiceIdentifier<string>("IMultipleAlias");
-			childContainer.register(ITarget, { useValue: "first" });
-			childContainer.register(ITarget, { useValue: "last" });
+			const ITarget = createServiceIdentifier<number>("IMultipleAliasTarget");
+			const IAlias = createServiceIdentifier<number>("IMultipleAlias");
+			const IContribution = createServiceIdentifier<number>("IContribution");
+			childContainer.register(ITarget, { useValue: 1 });
+			childContainer.register(ITarget, { useValue: 2 });
 			childContainer.register(IAlias, { useAlias: ITarget });
+			childContainer.register(IContribution, { useValue: 0 });
+			childContainer.register(IContribution, { useAlias: IAlias });
+			childContainer.register(IContribution, { useAlias: ITarget });
+			childContainer.register(IContribution, { useValue: 3 });
 
 			// Act
-			const instances = childContainer.resolve(IAlias, { multiple: true });
+			const instances = childContainer.resolve(IContribution, {
+				multiple: true,
+			});
 
 			// Assert
-			expect(instances).toEqual(["last"]);
+			expect(instances).toEqual([0, 1, 2, 1, 2, 3]);
+			expect(childContainer.resolve(IAlias, { multiple: true })).toEqual(
+				childContainer.resolve(ITarget, { multiple: true }),
+			);
 		});
 
-		it("should not forward outer multiple defaults to a missing alias target", () => {
+		it("should apply multiple defaults once only when all alias contributions are missing", () => {
 			// Arrange
-			const IMissingTarget = createServiceIdentifier<string>(
-				"IMissingMultipleAliasTarget",
-			);
+			const IMissingTarget = createServiceIdentifier<string>("IMissingTarget");
+			const IAliasChain = createServiceIdentifier<string>("IMissingAliasChain");
 			const IAlias = createServiceIdentifier<string>("IMissingMultipleAlias");
+			childContainer.register(IAliasChain, { useAlias: IMissingTarget });
+			childContainer.register(IAlias, { useAlias: IAliasChain });
 			childContainer.register(IAlias, { useAlias: IMissingTarget });
+			const fallback = ["fallback"];
+			const options = {
+				multiple: true,
+				optional: true,
+				defaultValue: fallback,
+			} satisfies ResolveOptions<string>;
 
 			// Act & Assert
-			expect(() =>
+			expect(childContainer.resolve(IAlias, options)).toBe(fallback);
+			expect(
+				childContainer.resolve(IAlias, { multiple: true, optional: true }),
+			).toEqual([]);
+			childContainer.register(IAlias, { useValue: "local" });
+			expect(childContainer.resolve(IAlias, options)).toEqual(["local"]);
+			expect(() => childContainer.resolve(IAlias, { multiple: true })).toThrow(
+				/E_SERVICE_NOT_FOUND/,
+			);
+		});
+
+		it("should preserve array and undefined service values as contributions", () => {
+			const ITarget = createServiceIdentifier<number[] | undefined>(
+				"IArrayAliasTarget",
+			);
+			const IAlias = createServiceIdentifier<number[] | undefined>(
+				"IArrayAlias",
+			);
+			const array = [1, 2];
+			const empty: number[] = [];
+			childContainer.register(ITarget, { useValue: array });
+			childContainer.register(ITarget, { useValue: empty });
+			childContainer.register(ITarget, { useValue: undefined });
+			childContainer.register(IAlias, { useAlias: ITarget });
+			childContainer.register(IAlias, { useValue: array });
+
+			const instances = childContainer.resolve(IAlias, {
+				multiple: true,
+				optional: true,
+				defaultValue: [[9]],
+			});
+
+			expect(instances).toEqual([array, empty, undefined, array]);
+			expect(instances[0]).toBe(array);
+			expect(instances[1]).toBe(empty);
+			expect(
+				childContainer.resolve(ITarget, { optional: true, defaultValue: [9] }),
+			).toBeUndefined();
+		});
+
+		it("should run middleware only for actual target registrations in single and multiple resolution", () => {
+			const ITarget = createServiceIdentifier<number>("IMiddlewareAliasTarget");
+			const IAlias = createServiceIdentifier<number>("IMiddlewareAlias");
+			childContainer.register(ITarget, { useValue: 1 });
+			childContainer.register(ITarget, { useValue: 2 });
+			childContainer.register(IAlias, { useAlias: ITarget });
+			const calls: Array<{ identifier: string; value: unknown }> = [];
+			useMiddleware({
+				name: "aliasTargetMiddleware",
+				executor: (params, next) => {
+					const value = next(params);
+					calls.push({
+						identifier: getServiceIdentifierName(params.serviceIdentifier),
+						value,
+					});
+					return value;
+				},
+			});
+
+			expect(childContainer.resolve(IAlias)).toBe(2);
+			expect(calls).toEqual([
+				{ identifier: "IMiddlewareAliasTarget", value: 2 },
+			]);
+			calls.length = 0;
+			expect(childContainer.resolve(IAlias, { multiple: true })).toEqual([
+				1, 2,
+			]);
+			expect(calls).toEqual([
+				{ identifier: "IMiddlewareAliasTarget", value: 1 },
+				{ identifier: "IMiddlewareAliasTarget", value: 2 },
+			]);
+		});
+
+		it("should select only the last outer registration for single alias resolution", () => {
+			const ITarget = createServiceIdentifier<number | undefined>(
+				"ISingleAliasTarget",
+			);
+			const IAlias = createServiceIdentifier<number | undefined>(
+				"ISingleAlias",
+			);
+			const ignoredProvider = vi.fn(() => 0);
+			const ignoredAliasContainer = vi.fn(() => childContainer);
+			childContainer.register(IAlias, {
+				useAlias: ITarget,
+				getContainer: ignoredAliasContainer,
+			});
+			childContainer.register(IAlias, { useFactory: ignoredProvider });
+			childContainer.register(ITarget, { useValue: 1 });
+			childContainer.register(ITarget, { useValue: 2 });
+			childContainer.register(IAlias, { useAlias: ITarget });
+
+			expect(childContainer.resolve(IAlias)).toBe(2);
+			expect(ignoredProvider).not.toHaveBeenCalled();
+			expect(ignoredAliasContainer).not.toHaveBeenCalled();
+			childContainer.register(ITarget, { useValue: undefined });
+			expect(
+				childContainer.resolve(IAlias, { optional: true, defaultValue: 9 }),
+			).toBeUndefined();
+			childContainer.unregisterAll(ITarget);
+			expect(
+				childContainer.resolve(IAlias, { optional: true, defaultValue: 9 }),
+			).toBe(9);
+			childContainer.register(IAlias, { useValue: 3 });
+			expect(childContainer.resolve(IAlias)).toBe(3);
+		});
+
+		it("should propagate provider failures even when the alias is optional", () => {
+			const ITarget = createServiceIdentifier<string>("IFailingAliasTarget");
+			const IAlias = createServiceIdentifier<string>("IFailingAlias");
+			const IMissing = createServiceIdentifier<string>(
+				"IMissingAliasDependency",
+			);
+			childContainer.register(ITarget, { useFactory: () => resolve(IMissing) });
+			childContainer.register(IAlias, { useValue: "local" });
+			childContainer.register(IAlias, { useAlias: ITarget });
+			const options = {
+				multiple: true,
+				optional: true,
+				defaultValue: ["fallback"],
+			} satisfies ResolveOptions<string>;
+
+			expect(() => childContainer.resolve(IAlias, options)).toThrow(
+				/E_SERVICE_NOT_FOUND.*IMissingAliasDependency/,
+			);
+			childContainer.unregisterAll(ITarget);
+			childContainer.register(ITarget, {
+				useFactory: () => {
+					throw new Error("target failed");
+				},
+			});
+			expect(() => childContainer.resolve(IAlias, options)).toThrow(
+				/E_RESOLUTION_FAILED.*target failed/,
+			);
+		});
+
+		it("should retain target ownership, nearest-container lookup, and recursive options", () => {
+			const ITarget = createServiceIdentifier<number>("IParentAliasTarget");
+			const IAlias = createServiceIdentifier<number>("IParentAlias");
+			parentContainer.register(ITarget, { useValue: 1 });
+			parentContainer.register(ITarget, { useValue: 2 });
+			parentContainer.register(IAlias, { useAlias: ITarget });
+			childContainer.register(ITarget, { useValue: 3 });
+
+			expect(childContainer.resolve(IAlias, { multiple: true })).toEqual([
+				1, 2,
+			]);
+			childContainer.register(IAlias, { useAlias: ITarget });
+			expect(childContainer.resolve(IAlias, { multiple: true })).toEqual([3]);
+			childContainer.unregisterAll(ITarget);
+			expect(
 				childContainer.resolve(IAlias, {
 					multiple: true,
 					optional: true,
-					defaultValue: ["fallback"],
+					recursive: false,
 				}),
-			).toThrow(/E_SERVICE_NOT_FOUND/);
+			).toEqual([]);
+			childContainer.register(IAlias, {
+				useAlias: ITarget,
+				getContainer: () => parentContainer,
+			});
+			expect(
+				childContainer.resolve(IAlias, {
+					multiple: true,
+					optional: true,
+					recursive: false,
+				}),
+			).toEqual([1, 2]);
+		});
+
+		it.each([
+			LifecycleEnum.transient,
+			LifecycleEnum.singleton,
+			LifecycleEnum.resolution,
+		])("should preserve target lifecycle %s across repeated alias contributions", (lifecycle) => {
+			const ITarget = createServiceIdentifier<object>("ILifecycleAliasTarget");
+			const IAlias = createServiceIdentifier<object>("ILifecycleAlias");
+			const createFirst = vi.fn(() => ({}));
+			const createSecond = vi.fn(() => ({}));
+			childContainer.register(ITarget, { useFactory: createFirst, lifecycle });
+			childContainer.register(ITarget, { useFactory: createSecond, lifecycle });
+			childContainer.register(IAlias, { useAlias: ITarget });
+			childContainer.register(IAlias, { useAlias: ITarget });
+
+			const first = childContainer.resolve(IAlias, { multiple: true });
+			const second = childContainer.resolve(IAlias, { multiple: true });
+
+			expect(first).toHaveLength(4);
+			expect(first[0]).not.toBe(first[1]);
+			if (lifecycle === LifecycleEnum.transient) {
+				expect(first[0]).not.toBe(first[2]);
+				expect(createFirst).toHaveBeenCalledTimes(4);
+			} else {
+				expect(first[0]).toBe(first[2]);
+				expect(first[1]).toBe(first[3]);
+				expect(createFirst).toHaveBeenCalledTimes(
+					lifecycle === LifecycleEnum.singleton ? 1 : 2,
+				);
+			}
+			if (lifecycle === LifecycleEnum.singleton) {
+				expect(second[0]).toBe(first[0]);
+			} else {
+				expect(second[0]).not.toBe(first[0]);
+			}
+			expect(createSecond).toHaveBeenCalledTimes(createFirst.mock.calls.length);
+		});
+
+		it("should defer alias expansion and preserve static and dynamic reference behavior", () => {
+			const ITarget = createServiceIdentifier<number>("IReferenceAliasTarget");
+			const IAlias = createServiceIdentifier<number>("IReferenceAlias");
+			const targetContainer = vi.fn(() => childContainer);
+			childContainer.register(ITarget, { useValue: 1 });
+			childContainer.register(IAlias, {
+				useAlias: ITarget,
+				getContainer: targetContainer,
+			});
+			const staticRef = childContainer.resolve(IAlias, {
+				multiple: true,
+				ref: true,
+			});
+			const dynamicRef = childContainer.resolve(IAlias, {
+				multiple: true,
+				dynamic: true,
+			});
+			expect(targetContainer).not.toHaveBeenCalled();
+			const removeSecond = childContainer.register(ITarget, { useValue: 2 });
+
+			expect(staticRef.current).toEqual([1, 2]);
+			expect(dynamicRef.current).toEqual([1, 2]);
+			removeSecond();
+			expect(staticRef.current).toEqual([1, 2]);
+			expect(dynamicRef.current).toEqual([1]);
+			expect(childContainer.resolve(IAlias, { multiple: true })).toEqual([1]);
+		});
+
+		it.each([
+			{ multiple: false, optional: true },
+			{ multiple: true, optional: true },
+		] satisfies ResolveOptions<number>[])("should reject alias cycles with multiple=$multiple and keep the alias path", (options) => {
+			const IFirst = createServiceIdentifier<number>("IAliasCycleFirst");
+			const ISecond = createServiceIdentifier<number>("IAliasCycleSecond");
+			childContainer.register(IFirst, { useAlias: ISecond });
+			childContainer.register(ISecond, { useAlias: IFirst });
+
+			expect(() => childContainer.resolve(IFirst, options)).toThrow(
+				/E_CIRCULAR_DEPENDENCY/,
+			);
+			expect(() => childContainer.resolve(IFirst, options)).toThrow(
+				/IAliasCycleFirst.*IAliasCycleSecond.*IAliasCycleFirst/,
+			);
+			childContainer.unregisterAll(IFirst);
+			childContainer.register(IFirst, { useAlias: IFirst });
+			expect(() => childContainer.resolve(IFirst, options)).toThrow(
+				/E_CIRCULAR_DEPENDENCY/,
+			);
 		});
 
 		it("should delegate resolution to target ServiceIdentifier", () => {

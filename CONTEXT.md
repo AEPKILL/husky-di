@@ -141,13 +141,14 @@ The module system is inspired by ESM semantics: imports must be explicit, export
 - The same `ServiceIdentifier` can be registered multiple times in the same container.
 - By default, resolving a single service uses last-write-wins and returns the most recent registration.
 - Using `multiple: true` returns all registrations for that identifier.
+- Aliases redirect before middleware. Multiple resolution expands all target contributions at each alias position, preserving order and repeated values.
 - A registration plan composes multiple `register()` calls; on success it returns a combined cleanup, and that cleanup can remove only the registrations created by that plan.
 - If applying a registration plan fails midway, already-created registrations must be rolled back so the container does not keep partial state.
 - When `optional: true` is set and the service is not found, resolution returns `undefined` or `defaultValue`; when the service is not optional, it throws `ResolveException`.
 - `ref` and `dynamic` are mutually exclusive and cannot both be `true`.
 - Circular dependencies are detected through `ResolveRecord`. Error messages should include a readable resolution path and suggest `ref` or `dynamic` when appropriate.
 - Service lookup follows current-container-first order and falls back to the parent container hierarchy unless `recursive: false` disables that fallback for the current resolution.
-- Resolution middleware applies across parent-child relationships for containers created by the same loaded core module instance and runs on every resolution.
+- Resolution middleware applies across parent-child relationships for containers created by the same loaded core module instance and runs whenever a non-alias registration is resolved.
 - Module declarations, imports, and exports must each be unique.
 - The module import graph must not contain circular dependencies.
 - When multiple imported modules export the same service name, the conflict must be resolved with aliases.

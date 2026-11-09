@@ -300,13 +300,34 @@ When `ref: true` or `dynamic: true` is specified:
 **S6. Alias Resolution**  
 For `useAlias` registrations, resolution **MUST** delegate to the target ServiceIdentifier. If `getContainer` is provided, resolution **MUST** use the returned container; otherwise, the current container **MUST** be used.
 
-When an alias registration contributes to a `multiple: true` result, it
-**MUST** contribute one value using the target identifier's ordinary single
-resolution semantics; the result **MUST NOT** contain nested arrays.
+Alias resolution **MUST** redirect through the target container's public
+`resolve()` before entering provider middleware or lifecycle handling.
+The alias itself **MUST NOT** execute middleware; the target's non-alias
+registrations **MUST** execute the ordinary middleware and lifecycle pipeline.
+The alias path **MUST** remain in `ResolveRecord` for errors and cycle detection.
 
-The outer multiple resolution's `optional` and `defaultValue` aggregation
-options **MUST NOT** be forwarded to an alias target. A registered alias whose
-target is missing is a provider failure and **MUST** still reject resolution.
+- For single resolution, the container **MUST** select the latest outer
+  registration before following an alias. Unselected registrations **MUST NOT**
+  execute. The target **MUST** use ordinary single resolution semantics.
+- For `multiple: true`, each alias **MUST** resolve all target contributions
+  and insert them at its registration position. Outer registration order and
+  target contribution order **MUST** be preserved, including across alias chains.
+  Repeated contributions **MUST NOT** be deduplicated.
+- Expansion **MUST** preserve each service value. An array, empty array, or
+  `undefined` provided as a service value **MUST** remain one contribution.
+- `optional` and `recursive` **MUST** apply to the target resolution. A missing
+  optional target **MUST** contribute zero values to a multiple result; a
+  required missing target **MUST** throw even when other contributions exist.
+  Provider execution failures, including missing dependencies, **MUST NOT**
+  be suppressed by the outer `optional` option.
+- An outer multiple `defaultValue` **MUST NOT** be forwarded to alias targets.
+  It **MUST** be returned once, and only when the final contribution list is
+  empty and `optional: true`. Single resolution **MUST** preserve ordinary
+  default handling, including an explicitly registered `undefined` value.
+- Alias resolution **MUST** retain target-container lookup rules and target
+  registration lifecycles. It **MUST** observe registration changes on each
+  ordinary resolution. `ref` and `dynamic` **MUST** defer alias expansion and
+  retain their ordinary caching semantics.
 
 - _Error Code:_ `E_SERVICE_NOT_FOUND`
 
@@ -418,8 +439,11 @@ Each middleware **MUST** receive:
 1. A `params` object containing resolution context.
 2. A `next()` function to continue the middleware chain.
 
-For `multiple: true`, middleware **MUST** execute once per registration and
-`next()` **MUST** return that registration's single `T` instance, not `T[]`.
+For `multiple: true`, middleware **MUST** execute once for each resolution of a
+non-alias registration. `next()` **MUST** return that registration's single `T`
+instance, not `T[]`.
+Alias registrations **MUST** redirect before the middleware pipeline in both
+single and multiple resolution, as specified in S6.
 
 For an optional single resolution without a required non-undefined default,
 `next()` **MUST** be typed as `T | undefined` and **MUST** preserve the runtime
@@ -429,8 +453,8 @@ For an optional single resolution without a required non-undefined default,
 
 The package **MUST** export one application-wide middleware manager named
 `middleware`. Middleware registered through `middleware.use(...middlewares)`
-**MUST** apply to resolutions performed by every container created by that
-loaded package module instance. Separately loaded package module instances
+**MUST** apply to non-alias registrations resolved by every container created
+by that loaded package module instance. Separately loaded package module instances
 own independent middleware state; sharing state across duplicate package
 copies or module formats is not part of this contract.
 
@@ -451,8 +475,8 @@ A middleware **MAY**:
 2. Transform the resolved instance.
 3. Short-circuit resolution by not calling `next()`.
 
-The middleware pipeline **MUST** execute whenever a registration is resolved,
-including provider lifecycle-cache hits. Core **MUST NOT** lifecycle-cache a
+The middleware pipeline **MUST** execute whenever a non-alias registration is
+resolved, including provider lifecycle-cache hits. Core **MUST NOT** lifecycle-cache a
 transformed or short-circuit result produced by middleware. Provider lifecycle
 values reached through `next()` **MUST** retain the identity guarantees of L2
 and L3 behind the middleware pipeline.

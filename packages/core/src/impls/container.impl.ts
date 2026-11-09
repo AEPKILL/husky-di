@@ -243,13 +243,47 @@ export class ContainerImpl implements IContainer {
 					);
 				}
 
-				if (multiple) {
-					const instances = registrations.map((registration, index) =>
-						this._withResolveRecord(serviceIdentifier, resolveRecord, () => {
-							resolveRecord.addRecordNode({
-								type: ResolveRecordTypeEnum.message,
-								message: `Service identifier "${getServiceIdentifierName(serviceIdentifier)}" is resolved as a multiple instance, resolve instance #${index}`,
-							});
+				const selectedRegistrations = multiple
+					? registrations
+					: [registrations[registrations.length - 1]];
+				const instances: T[] = [];
+				for (const [index, registration] of selectedRegistrations.entries()) {
+					const result = this._withResolveRecord(
+						serviceIdentifier,
+						resolveRecord,
+						() => {
+							if (multiple) {
+								resolveRecord.addRecordNode({
+									type: ResolveRecordTypeEnum.message,
+									message: `Service identifier "${getServiceIdentifierName(serviceIdentifier)}" is resolved as a multiple instance, resolve instance #${index}`,
+								});
+							}
+
+							if (registration.type === RegistrationTypeEnum.alias) {
+								const aliasServiceIdentifier =
+									registration.provider as CreateAliasRegistrationOptions<T>["useAlias"];
+								const identifierName =
+									getServiceIdentifierName(serviceIdentifier);
+								const aliasIdentifierName = getServiceIdentifierName(
+									aliasServiceIdentifier,
+								);
+								resolveRecord.addRecordNode({
+									type: ResolveRecordTypeEnum.message,
+									message: registration.getContainer
+										? `Resolving alias "${identifierName}" as "${aliasIdentifierName}" from configured container`
+										: `Resolving alias "${identifierName}" as "${aliasIdentifierName}" from current container`,
+								});
+								const containerRef: IContainer = registration.getContainer
+									? registration.getContainer()
+									: this;
+								const aliasResolveOptions = multiple
+									? { ...resolveOptions, defaultValue: undefined }
+									: resolveOptions;
+								return containerRef.resolve(
+									aliasServiceIdentifier,
+									aliasResolveOptions as ResolveOptions<T>,
+								);
+							}
 
 							return this._resolveInternal({
 								container: this,
@@ -259,20 +293,27 @@ export class ContainerImpl implements IContainer {
 								resolveContext,
 								resolveRecord,
 							});
-						}),
+						},
 					);
-
-					return instances as ResolveInstance<T, O>;
-				} else {
-					return this._resolveInternal({
-						container: this,
-						serviceIdentifier,
-						resolveOptions,
-						registration: registrations[registrations.length - 1],
-						resolveContext,
-						resolveRecord,
-					}) as ResolveInstance<T, O>;
+					if (multiple && registration.type === RegistrationTypeEnum.alias) {
+						for (const instance of result as T[]) {
+							instances.push(instance);
+						}
+					} else {
+						instances.push(result as T);
+					}
 				}
+
+				if (!multiple) {
+					return instances[0] as ResolveInstance<T, O>;
+				}
+				const shouldUseDefault =
+					instances.length === 0 &&
+					resolveOptions.optional &&
+					resolveOptions.defaultValue !== undefined;
+				return (
+					shouldUseDefault ? resolveOptions.defaultValue : instances
+				) as ResolveInstance<T, O>;
 			}) as ResolveInstance<T, O>;
 		} finally {
 			if (ownsResolveRecord) {
@@ -484,7 +525,6 @@ export class ContainerImpl implements IContainer {
 	 * - Class: Instantiates the class constructor
 	 * - Value: Returns the pre-configured value
 	 * - Factory: Invokes the factory function with container and context
-	 * - Alias: Delegates to another service identifier
 	 *
 	 * @template T - The type of the service
 	 * @template O - The resolve options type
@@ -497,7 +537,6 @@ export class ContainerImpl implements IContainer {
 	): T {
 		const {
 			serviceIdentifier,
-			resolveOptions,
 			resolveRecord,
 			registration,
 			container,
@@ -528,35 +567,6 @@ export class ContainerImpl implements IContainer {
 					});
 					return provider(container, resolveContext);
 				}
-				case RegistrationTypeEnum.alias: {
-					const aliasServiceIdentifier =
-						registration.provider as CreateAliasRegistrationOptions<T>["useAlias"];
-					const aliasIdentifierName = getServiceIdentifierName(
-						aliasServiceIdentifier,
-					);
-					resolveRecord.addRecordNode({
-						type: ResolveRecordTypeEnum.message,
-						message: registration.getContainer
-							? `Resolving alias "${identifierName}" as "${aliasIdentifierName}" from configured container`
-							: `Resolving alias "${identifierName}" as "${aliasIdentifierName}" from current container`,
-					});
-					const containerRef = registration.getContainer
-						? registration.getContainer()
-						: container;
-					const aliasResolveOptions = resolveOptions.multiple
-						? {
-								...resolveOptions,
-								defaultValue: undefined,
-								multiple: false,
-								optional: false,
-							}
-						: { ...resolveOptions, multiple: false };
-
-					return containerRef.resolve(
-						aliasServiceIdentifier,
-						aliasResolveOptions as ResolveOptions<T>,
-					) as T;
-				}
 				default:
 					throw new ResolveException(
 						CoreErrorCodeEnum.E_INVALID_PROVIDER,
@@ -575,17 +585,18 @@ export class ContainerImpl implements IContainer {
 	 * ensuring proper error tracking and circular dependency detection.
 	 *
 	 * @template T - The type of the service being resolved
+	 * @template R - The operation's result type
 	 * @param serviceIdentifier - The service identifier being resolved
 	 * @param resolveRecord - The resolve record tracking the resolution chain
 	 * @param operation - The resolution operation to execute
 	 * @returns The result of the operation
 	 * @throws {ResolveException} If the operation fails, wrapped with contextual information
 	 */
-	private _withResolveRecord<T>(
+	private _withResolveRecord<T, R>(
 		serviceIdentifier: ServiceIdentifier<T>,
 		resolveRecord: IInternalResolveRecord,
-		operation: () => T,
-	): T {
+		operation: () => R,
+	): R {
 		resolveRecord._internalStashCurrent();
 		try {
 			return operation();
