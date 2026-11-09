@@ -2439,7 +2439,10 @@ describe("SPEC 4.6: Middleware System", () => {
 			}
 		});
 
-		it("should isolate staged resolution instances by middleware context", () => {
+		it.each([
+			LifecycleEnum.singleton,
+			LifecycleEnum.resolution,
+		])("should apply the %s lifecycle across middleware contexts", (lifecycle) => {
 			// Arrange
 			const firstContext: ResolveContext = new Map();
 			const secondContext: ResolveContext = new Map();
@@ -2457,6 +2460,12 @@ describe("SPEC 4.6: Middleware System", () => {
 						...params,
 						resolveContext: secondContext,
 					});
+					expect(next({ ...params, resolveContext: firstContext })).toBe(
+						firstInstance,
+					);
+					expect(next({ ...params, resolveContext: secondContext })).toBe(
+						secondInstance,
+					);
 					return firstInstance;
 				},
 			});
@@ -2465,18 +2474,46 @@ describe("SPEC 4.6: Middleware System", () => {
 					providerCalls++;
 					return new ServiceA();
 				},
-				lifecycle: LifecycleEnum.resolution,
+				lifecycle,
 			});
 
 			// Act
 			container.resolve(IServiceA);
 
 			// Assert
-			expect(firstInstance).not.toBe(secondInstance);
-			expect(providerCalls).toBe(2);
+			expect(firstInstance === secondInstance).toBe(
+				lifecycle === LifecycleEnum.singleton,
+			);
+			expect(providerCalls).toBe(lifecycle === LifecycleEnum.singleton ? 1 : 2);
 		});
 
-		it("should roll back staged lifecycle commits when a context rejects a value", () => {
+		it.each([
+			LifecycleEnum.singleton,
+			LifecycleEnum.resolution,
+		])("should cache undefined provider values for the %s lifecycle", (lifecycle) => {
+			// Arrange
+			const IService = createServiceIdentifier<undefined>(
+				"IUndefinedLifecycle",
+			);
+			const context: ResolveContext = new Map();
+			const provider = vi.fn(() => undefined);
+			useMiddleware({
+				name: "undefinedLifecycleMiddleware",
+				executor: (params, next) => {
+					const instance = next({ ...params, resolveContext: context });
+					expect(next({ ...params, resolveContext: context })).toBeUndefined();
+					return instance;
+				},
+			});
+			container.register(IService, { useFactory: provider, lifecycle });
+
+			// Act & Assert
+			expect(container.resolve(IService)).toBeUndefined();
+			expect(container.resolve(IService)).toBeUndefined();
+			expect(provider).toHaveBeenCalledTimes(1);
+		});
+
+		it("should propagate context write errors without rolling back cache writes", () => {
 			// Arrange
 			const firstContext: ResolveContext = new Map();
 			const rejectingContext: ResolveContext = new Map();
@@ -2485,49 +2522,10 @@ describe("SPEC 4.6: Middleware System", () => {
 				setRejectingContext(registration, instance);
 				throw new Error("context rejected lifecycle value");
 			};
-			let providerCalls = 0;
 			useMiddleware({
 				name: "rejectLifecycleCommitMiddleware",
 				executor: (params, next) => {
 					next({ ...params, resolveContext: firstContext });
-					return next({ ...params, resolveContext: rejectingContext });
-				},
-			});
-			container.register(IServiceA, {
-				useFactory: () => {
-					providerCalls++;
-					return new ServiceA();
-				},
-				lifecycle: LifecycleEnum.resolution,
-			});
-
-			// Act & Assert
-			expect(() => container.resolve(IServiceA)).toThrow(
-				/context rejected lifecycle value/,
-			);
-			expect(firstContext.size).toBe(0);
-			expect(rejectingContext.size).toBe(0);
-			expect(() => container.resolve(IServiceA)).toThrow(
-				/context rejected lifecycle value/,
-			);
-			expect(providerCalls).toBe(4);
-		});
-
-		it("should preserve middleware context writes when a later commit fails", () => {
-			// Arrange
-			const firstContext: ResolveContext = new Map();
-			const rejectingContext: ResolveContext = new Map();
-			const setRejectingContext = rejectingContext.set.bind(rejectingContext);
-			rejectingContext.set = (registration, instance) => {
-				setRejectingContext(registration, instance);
-				throw new Error("context rejected lifecycle value");
-			};
-			const middlewareInstance = new ServiceA();
-			useMiddleware({
-				name: "writeBeforeLifecycleCommitMiddleware",
-				executor: (params, next) => {
-					next({ ...params, resolveContext: firstContext });
-					firstContext.set(params.registration, middlewareInstance);
 					return next({ ...params, resolveContext: rejectingContext });
 				},
 			});
@@ -2540,8 +2538,31 @@ describe("SPEC 4.6: Middleware System", () => {
 			expect(() => container.resolve(IServiceA)).toThrow(
 				/context rejected lifecycle value/,
 			);
-			expect([...firstContext.values()]).toEqual([middlewareInstance]);
-			expect(rejectingContext.size).toBe(0);
+			expect(firstContext.size).toBe(1);
+			expect(rejectingContext.size).toBe(1);
+		});
+
+		it("should preserve middleware context writes when middleware fails", () => {
+			// Arrange
+			const context: ResolveContext = new Map();
+			const middlewareInstance = new ServiceA();
+			useMiddleware({
+				name: "writeBeforeLifecycleCommitMiddleware",
+				executor: (params, next) => {
+					next({ ...params, resolveContext: context });
+					context.set(params.registration, middlewareInstance);
+					throw new Error("middleware failed");
+				},
+			});
+			container.register(IServiceA, {
+				useFactory: () => new ServiceA(),
+				lifecycle: LifecycleEnum.resolution,
+			});
+
+			// Act & Assert
+			expect(() => container.resolve(IServiceA)).toThrow("middleware failed");
+			expect(context.size).toBe(1);
+			expect([...context.values()][0]).toBe(middlewareInstance);
 		});
 
 		it("should type next as one registration during multiple resolution", () => {
@@ -2801,14 +2822,18 @@ describe("SPEC 4.6: Middleware System", () => {
 			expect(providerCalls).toBe(0);
 		});
 
-		it("should not commit a new singleton provider when middleware fails", () => {
+		it.each([
+			LifecycleEnum.singleton,
+			LifecycleEnum.resolution,
+		])("should not commit a new %s provider when middleware fails", (lifecycle) => {
 			// Arrange
+			const context: ResolveContext = new Map();
 			let providerCalls = 0;
 			let shouldThrow = true;
 			useMiddleware({
-				name: "failingSingletonMiddleware",
+				name: "failingLifecycleMiddleware",
 				executor: (params, next) => {
-					const instance = next(params);
+					const instance = next({ ...params, resolveContext: context });
 					if (shouldThrow) {
 						throw new Error("middleware failed");
 					}
@@ -2820,13 +2845,16 @@ describe("SPEC 4.6: Middleware System", () => {
 					providerCalls++;
 					return new ServiceA();
 				},
-				lifecycle: LifecycleEnum.singleton,
+				lifecycle,
 			});
 
 			// Act & Assert
 			expect(() => container.resolve(IServiceA)).toThrow("middleware failed");
+			expect(context.size).toBe(0);
 			shouldThrow = false;
-			expect(container.resolve(IServiceA)).toBeInstanceOf(ServiceA);
+			const instance = container.resolve(IServiceA);
+			expect(instance).toBeInstanceOf(ServiceA);
+			expect(container.resolve(IServiceA)).toBe(instance);
 			expect(providerCalls).toBe(2);
 		});
 

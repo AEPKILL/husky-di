@@ -463,10 +463,12 @@ resolution provider value **MUST** be reused only by calls that carry the same
 `ResolveContext`; different contexts **MUST** receive independent values.
 
 Lifecycle values produced through `next()` **MUST NOT** be committed to their
-singleton or resolution cache until the middleware chain completes. If a
-middleware or staged cache commit fails, cache changes made by that attempt
-**MUST** be rolled back without discarding context changes the middleware made
-before the commit began.
+singleton or resolution cache until the middleware chain completes successfully.
+If middleware throws, staged values **MUST** be discarded without changing
+existing cache entries or context changes made by the middleware itself.
+Errors from custom `ResolveContext` cache operations **MUST** propagate to the
+caller; cache writes are not transactional and completed writes are not rolled
+back if a later write throws.
 
 **M5. Middleware Cleanup**
 

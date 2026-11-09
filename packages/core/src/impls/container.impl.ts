@@ -425,150 +425,56 @@ export class ContainerImpl implements IContainer {
 	private _resolveInternal<T, O extends ResolveOptions<T>>(
 		params: ResolveMiddlewareParams<T, O>,
 	): T | Ref<T> {
-		const singletonStageKey = Symbol();
-		type StagedLifecycleKey = ResolveContext | typeof singletonStageKey;
-		const stagedLifecycleInstances = new Map<
-			IRegistration<unknown>,
-			Map<StagedLifecycleKey, StagedLifecycleInstance>
-		>();
+		const pendingSingletons = new Map<IRegistration<unknown>, unknown>();
+		const pendingResolutions = new Map<ResolveContext, ResolveContext>();
 		const instance = middlewareManager.execute(params, (lifecycleParams) => {
-			const lifecycleRegistration =
-				lifecycleParams.registration as IRegistration<unknown>;
-			const lifecycleKey =
-				lifecycleRegistration.lifecycle === LifecycleEnum.singleton
-					? singletonStageKey
-					: lifecycleRegistration.lifecycle === LifecycleEnum.resolution
-						? lifecycleParams.resolveContext
-						: undefined;
-			const stagedInstance = lifecycleKey
-				? stagedLifecycleInstances.get(lifecycleRegistration)?.get(lifecycleKey)
-				: undefined;
-			if (stagedInstance) {
-				return stagedInstance.value;
-			}
-
-			let stagedLifecycleInstance: StagedLifecycleInstance | undefined;
-			const lifecycleInstance = this._resolveLifecycleInstance(
-				lifecycleParams,
-				(stagedInstance) => {
-					stagedLifecycleInstance = stagedInstance;
-				},
-			);
-			if (stagedLifecycleInstance && lifecycleKey) {
-				let instancesByLifecycle = stagedLifecycleInstances.get(
-					lifecycleRegistration,
-				);
-				if (!instancesByLifecycle) {
-					instancesByLifecycle = new Map();
-					stagedLifecycleInstances.set(
-						lifecycleRegistration,
-						instancesByLifecycle,
-					);
+			const { registration, resolveContext } = lifecycleParams;
+			if (registration.lifecycle === LifecycleEnum.singleton) {
+				if (pendingSingletons.has(registration)) {
+					return pendingSingletons.get(registration);
 				}
-				instancesByLifecycle.set(lifecycleKey, stagedLifecycleInstance);
+				if (registration.resolved) {
+					return registration.instance;
+				}
+				const value = this._resolveRegistration(lifecycleParams);
+				pendingSingletons.set(registration, value);
+				return value;
 			}
 
-			return lifecycleInstance;
+			if (registration.lifecycle === LifecycleEnum.resolution) {
+				let pendingInstances = pendingResolutions.get(resolveContext);
+				if (pendingInstances?.has(registration)) {
+					return pendingInstances.get(registration);
+				}
+				if (resolveContext.has(registration)) {
+					return resolveContext.get(registration);
+				}
+				if (!pendingInstances) {
+					pendingInstances = new Map();
+					pendingResolutions.set(resolveContext, pendingInstances);
+				}
+				const value = this._resolveRegistration(lifecycleParams);
+				pendingInstances.set(registration, value);
+				return value;
+			}
+
+			return this._resolveRegistration(lifecycleParams);
 		});
-		const committedLifecycleInstances: StagedLifecycleInstance[] = [];
-		try {
-			for (const instancesByLifecycle of stagedLifecycleInstances.values()) {
-				for (const stagedInstance of instancesByLifecycle.values()) {
-					committedLifecycleInstances.push(stagedInstance);
-					stagedInstance.commit();
-				}
+
+		// Publish provider values only after the middleware chain succeeds.
+		for (const [registration, value] of pendingSingletons) {
+			const internalRegistration =
+				registration as IInternalRegistration<unknown>;
+			internalRegistration._internalSetInstance(value);
+			internalRegistration._internalSetResolved(true);
+		}
+		for (const [resolveContext, pendingInstances] of pendingResolutions) {
+			for (const [registration, value] of pendingInstances) {
+				resolveContext.set(registration, value);
 			}
-		} catch (error: unknown) {
-			for (
-				let index = committedLifecycleInstances.length - 1;
-				index >= 0;
-				index--
-			) {
-				try {
-					committedLifecycleInstances[index].rollback();
-				} catch {
-					// Preserve the commit error when a custom ResolveContext also rejects rollback.
-				}
-			}
-			throw error;
 		}
 
 		return instance as T | Ref<T>;
-	}
-
-	private _resolveLifecycleInstance<T, O extends ResolveOptions<T>>(
-		params: ResolveMiddlewareParams<T, O>,
-		onCreated: (instance: StagedLifecycleInstance) => void,
-	): T | Ref<T> {
-		const { registration, resolveContext } = params;
-
-		// Check singleton cache first
-		const isSingleton = registration.lifecycle === LifecycleEnum.singleton;
-		if (isSingleton) {
-			if (registration.resolved) {
-				return registration.instance as T;
-			}
-		}
-
-		// Check resolution-scoped cache
-		const isResolution = registration.lifecycle === LifecycleEnum.resolution;
-		if (isResolution) {
-			// Resolution-scoped services are reused only within the active resolve tree.
-			if (resolveContext.has(registration)) {
-				return resolveContext.get(registration) as T;
-			}
-		}
-
-		const instance = this._resolveRegistration(params);
-
-		if (isSingleton) {
-			const internalRegistration = registration as IInternalRegistration<T>;
-			let previousInstance: T | undefined;
-			let previousResolved = false;
-			let canRollback = false;
-			onCreated({
-				commit: () => {
-					previousInstance = registration.instance;
-					previousResolved = registration.resolved;
-					canRollback = true;
-					internalRegistration._internalSetInstance(instance);
-					internalRegistration._internalSetResolved(true);
-				},
-				rollback: () => {
-					if (!canRollback) {
-						return;
-					}
-					internalRegistration._internalSetInstance(previousInstance as T);
-					internalRegistration._internalSetResolved(previousResolved);
-				},
-				value: instance,
-			});
-		} else if (isResolution) {
-			let hadPreviousInstance = false;
-			let previousInstance: unknown;
-			let canRollback = false;
-			onCreated({
-				commit: () => {
-					hadPreviousInstance = resolveContext.has(registration);
-					previousInstance = resolveContext.get(registration);
-					canRollback = true;
-					resolveContext.set(registration, instance);
-				},
-				rollback: () => {
-					if (!canRollback) {
-						return;
-					}
-					if (hadPreviousInstance) {
-						resolveContext.set(registration, previousInstance);
-					} else {
-						resolveContext.delete(registration);
-					}
-				},
-				value: instance,
-			});
-		}
-
-		return instance;
 	}
 
 	/**
@@ -869,10 +775,4 @@ export class ContainerImpl implements IContainer {
 	 */
 	static rootContainer: IContainer = new ContainerImpl("Root");
 }
-type StagedLifecycleInstance = {
-	readonly commit: () => void;
-	readonly rollback: () => void;
-	readonly value: unknown;
-};
-
 const assertNotDisposed = createAssertNotDisposed("Container");
