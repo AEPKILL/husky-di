@@ -1,5 +1,19 @@
 # @husky-di/core
 
+## 1.4.2
+
+### Patch Changes
+
+- Fix alias resolution to expand all target contributions during multiple resolution,
+  preserving registration order, repeated values, and array-valued services. Apply
+  optional and recursive lookup options to alias targets, use the outer default
+  only when no contributions remain, and preserve these semantics for module imports.
+
+  Redirect aliases before middleware and lifecycle handling so only target providers
+  enter the middleware pipeline. Keep lifecycle values isolated by resolve context,
+  discard staged values when middleware throws, and propagate custom context cache
+  errors without rolling back completed writes.
+
 ## 1.4.1
 
 ### Patch Changes

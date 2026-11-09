@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.1
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @husky-di/core@1.4.2
+
 ## 1.0.0
 
 ### Major Changes

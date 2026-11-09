@@ -1,5 +1,12 @@
 # @husky-di/decorator
 
+## 1.4.2
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @husky-di/core@1.4.2
+
 ## 1.4.1
 
 ### Patch Changes
