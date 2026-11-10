@@ -2,26 +2,20 @@
  * Utility functions for working with resolve records.
  *
  * @overview
- * Provides helper functions for managing resolution records, including
- * getting, setting, and manipulating resolve record data. These utilities
- * are used for tracking resolution paths, detecting circular dependencies,
- * and generating error messages.
+ * Formats and compares diagnostic resolution record data for readable
+ * resolution paths, circular dependency detection, and error messages.
  *
  * @author AEPKILL
  * @created 2025-07-30 00:43:57 00:25:55
  */
 
 import { ResolveRecordTypeEnum } from "@/enums/resolve-record-type.enum";
-import { ResolveRecordImpl } from "@/impls/resolve-record.impl";
-import type { IContainer } from "@/interfaces/container.interface";
 import type {
-	IInternalResolveRecord,
 	MessageResolveRecordData,
 	ResolveRecordData,
 	RootResolveRecordData,
 	ServiceIdentifierResolveRecordData,
 } from "@/interfaces/resolve-record.interface";
-import { resolveRecordRef } from "@/shared/instances";
 import { getServiceIdentifierName } from "./service-identifier.util";
 
 /**
@@ -34,50 +28,6 @@ export interface GetResolveRecordMessageOptions {
 	paths: Array<ResolveRecordData<unknown>>;
 	/** Optional cycle node if a circular dependency was detected */
 	cycleNode?: ResolveRecordData<unknown> | undefined;
-}
-
-/**
- * Gets the active resolution record without creating one.
- *
- * @returns The active resolution record, if one exists
- */
-export function getResolveRecord(): IInternalResolveRecord | undefined {
-	return resolveRecordRef.current;
-}
-
-/**
- * Gets the current resolution record, creating one if it doesn't exist.
- *
- * @param container - The container to use for creating a new resolution record if needed
- * @returns The current or newly created resolution record
- */
-export function getEnsureResolveRecord(
-	container: IContainer,
-): IInternalResolveRecord {
-	if (!resolveRecordRef.current) {
-		resolveRecordRef.current = new ResolveRecordImpl(container);
-	}
-	return resolveRecordRef.current;
-}
-
-/**
- * Resets the current resolution record.
- *
- * @remarks
- * Clears the resolution record reference, typically called after
- * a resolution completes or fails.
- */
-export function resetResolveRecord(): void {
-	resolveRecordRef.current = undefined;
-}
-
-/**
- * Sets the current resolution record.
- *
- * @param resolveRecord - The resolution record to set as current
- */
-export function setResolveRecord(resolveRecord: IInternalResolveRecord): void {
-	resolveRecordRef.current = resolveRecord;
 }
 
 /**

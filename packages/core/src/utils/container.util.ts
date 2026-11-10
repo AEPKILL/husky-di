@@ -21,7 +21,7 @@ import {
 	type ResolveInstance,
 	type ResolveOptions,
 } from "@/interfaces/container.interface";
-import { resolveRecordRef } from "@/shared/instances";
+import { resolutionScope } from "@/shared/instances";
 import type { ResolveHelperOptions } from "@/types/resolve-helper-options.type";
 import type { ServiceIdentifier } from "@/types/service-identifier.type";
 import { assertValidResolveOptions } from "@/utils/resolve-options.util";
@@ -62,7 +62,7 @@ export function resolve<T, Options extends ResolveHelperOptions<T>>(
 	serviceIdentifier: ServiceIdentifier<T>,
 	options?: Options,
 ): ResolveInstance<T, Options> {
-	const resolveRecord = resolveRecordRef.current;
+	const resolveRecord = resolutionScope.current;
 
 	if (!resolveRecord) {
 		throw new CoreException(

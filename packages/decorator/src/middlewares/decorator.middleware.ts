@@ -6,6 +6,7 @@
 /** biome-ignore-all lint/suspicious/noExplicitAny: need to use any to avoid type errors */
 
 import {
+	CodedException,
 	type CreateClassRegistrationOptions,
 	RegistrationTypeEnum,
 	ResolveException,
@@ -46,13 +47,28 @@ export const decoratorMiddleware: ResolveMiddleware<any, any> = {
 		const parameters = parametersMetadata.map((metadata, index) => {
 			const { serviceIdentifier, ...options } = metadata;
 			resolveRecord._internalStashCurrent();
-			resolveRecord.addRecordNode({
-				type: ResolveRecordTypeEnum.message,
-				message: `Resolve parameter #${index} of constructor "${provider.name}"`,
-			});
-			const instance = resolve(serviceIdentifier, options);
-			resolveRecord._internalRestoreCurrent();
-			return instance;
+			try {
+				resolveRecord.addRecordNode({
+					type: ResolveRecordTypeEnum.message,
+					message: `Resolve parameter #${index} of constructor "${provider.name}"`,
+				});
+				return resolve(serviceIdentifier, options);
+			} catch (error: unknown) {
+				if (ResolveException.isResolveException(error)) {
+					throw error;
+				}
+				if (CodedException.isCodedException(error)) {
+					throw new ResolveException(
+						error.code,
+						error.detail,
+						resolveRecord,
+						error,
+					);
+				}
+				throw error;
+			} finally {
+				resolveRecord._internalRestoreCurrent();
+			}
 		});
 
 		return new provider(...parameters);

@@ -33,6 +33,7 @@ import {
 	LifecycleEnum,
 	mergeRegistrationPlans,
 	middleware,
+	type Ref,
 	type RegistrationPlan,
 	ResolveContainerScopeEnum,
 	type ResolveContext,
@@ -890,6 +891,80 @@ describe("SPEC 4.2: Service Resolution", () => {
 
 	describe("S5: Reference Resolution", () => {
 		for (const referenceType of ["ref", "dynamic"] as const) {
+			it(`should restore a different resolution chain after ${referenceType}.current fails`, () => {
+				const origin = createContainer("DeferredOrigin");
+				const IScoped = createServiceIdentifier<object>("ICrossChainScoped");
+				const IDeferred = createServiceIdentifier<object>(
+					"ICrossChainDeferred",
+				);
+				const ICaptured = createServiceIdentifier<{
+					instance: object;
+					deferred: Ref<object>;
+				}>("ICapturedResolution");
+				const IConsumer = createServiceIdentifier<object>("IRefConsumer");
+				let attempts = 0;
+
+				origin.register(IScoped, {
+					useFactory: () => ({}),
+					lifecycle: LifecycleEnum.resolution,
+				});
+				childContainer.register(IScoped, {
+					useFactory: () => ({}),
+					lifecycle: LifecycleEnum.resolution,
+				});
+				origin.register(IDeferred, {
+					useFactory: () => {
+						expect(resolve(IContainer)).toBe(origin);
+						expect(
+							resolve(IContainer, { scope: ResolveContainerScopeEnum.origin }),
+						).toBe(origin);
+						if (++attempts === 1) {
+							throw new Error("Deferred provider failed");
+						}
+						return resolve(IScoped);
+					},
+				});
+				origin.register(ICaptured, {
+					useFactory: () => ({
+						instance: resolve(IScoped),
+						deferred:
+							referenceType === "ref"
+								? resolve(IDeferred, { ref: true })
+								: resolve(IDeferred, { dynamic: true }),
+					}),
+				});
+
+				try {
+					const captured = origin.resolve(ICaptured);
+					childContainer.register(IConsumer, {
+						useFactory: () => {
+							const instance = resolve(IScoped);
+							expect(() => captured.deferred.current).toThrow(
+								"Deferred provider failed",
+							);
+							expect(resolve(IContainer)).toBe(childContainer);
+							expect(
+								resolve(IContainer, {
+									scope: ResolveContainerScopeEnum.origin,
+								}),
+							).toBe(childContainer);
+							expect(resolve(IScoped)).toBe(instance);
+							expect(captured.deferred.current).toBe(captured.instance);
+							expect(resolve(IScoped)).toBe(instance);
+							return instance;
+						},
+					});
+
+					expect(childContainer.resolve(IConsumer)).not.toBe(captured.instance);
+					expect(attempts).toBe(2);
+					expect(() => resolve(IContainer)).toThrow(
+						/E_RESOLVE_CONTEXT_UNAVAILABLE/,
+					);
+				} finally {
+					origin.dispose();
+				}
+			});
+
 			it(`should restore an active resolution after reading ${referenceType}.current`, () => {
 				// Arrange
 				const IScoped = createServiceIdentifier<ServiceA>(

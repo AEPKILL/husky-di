@@ -10,24 +10,18 @@
  * @created 2025-07-30 00:43:57 23:01:46
  */
 
+import { createResolutionScope } from "@/factories/resolution-scope.factory";
 import { MiddlewareManagerImpl } from "@/impls/middleware-manager.impl";
 import type {
 	ResolveMiddlewareParams,
 	ResolveOptions,
 } from "@/interfaces/container.interface";
 import type { IMiddlewareManager } from "@/interfaces/middleware.interface";
-import type { IInternalResolveRecord } from "@/interfaces/resolve-record.interface";
-import type { MutableRef } from "@/types/ref.type";
 
 /**
- * Mutable reference to the current resolution record.
- *
- * @remarks
- * This reference is set during service resolution and allows the `resolve()`
- * utility function to access the current resolution context without
- * explicitly passing it as a parameter.
+ * Owns the active resolution chain for this loaded package module instance.
  */
-export const resolveRecordRef: MutableRef<IInternalResolveRecord> = {};
+export const resolutionScope = createResolutionScope();
 
 /**
  * Module-instance middleware manager for resolution middleware.

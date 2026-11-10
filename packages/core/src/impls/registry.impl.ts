@@ -1,133 +1,97 @@
 /**
- * Registry implementation for managing service registrations.
- *
- * @overview
- * Implements the IRegistry interface to store and manage service registrations
- * in a dependency injection container. Supports multiple registrations per
- * service identifier, allowing for scenarios where multiple implementations
- * of the same service are registered.
- *
+ * @overview Owns registration creation, ordered storage, exact cleanup, and plan rollback.
  * @author AEPKILL
  * @created 2025-07-29 22:25:24 21:03:11
  */
 
-import type { IRegistration } from "@/interfaces/registration.interface";
-import type { IRegistry } from "@/interfaces/registry.interface";
+import type { Cleanup } from "@/interfaces/disposable.interface";
+import type {
+	CreateRegistrationOptions,
+	IRegistration,
+} from "@/interfaces/registration.interface";
+import type {
+	IRegistry,
+	RegistrationFactory,
+} from "@/interfaces/registry.interface";
+import type { RegistrationPlan } from "@/types/registration-plan.type";
 import type { ServiceIdentifier } from "@/types/service-identifier.type";
+import { assertValidServiceIdentifier } from "@/utils/registration.util";
 
-/**
- * Registry implementation class.
- *
- * @remarks
- * Manages service registrations using a Map structure where each service
- * identifier can have multiple registrations. The get() method returns the
- * most recently registered service (last in the array).
- */
 export class RegistryImpl implements IRegistry {
-	/**
-	 * Map storing service registrations.
-	 * Key: ServiceIdentifier, Value: Array of IRegistration
-	 */
 	private readonly _registrationMap = new Map<
 		ServiceIdentifier<unknown>,
 		Array<IRegistration<unknown>>
 	>();
 
-	/**
-	 * Gets the most recent registration for a service identifier.
-	 *
-	 * @typeParam T - The service type
-	 * @param serviceIdentifier - The service identifier to look up
-	 * @returns The most recent registration, or undefined if not found
-	 */
-	get<T>(
+	constructor(private readonly _createRegistration: RegistrationFactory) {}
+
+	register<T>(
 		serviceIdentifier: ServiceIdentifier<T>,
-	): IRegistration<T> | undefined {
-		const registrations = this.getAll(serviceIdentifier);
-
-		return registrations[registrations.length - 1] as IRegistration<T>;
+		options: CreateRegistrationOptions<T>,
+	): Cleanup {
+		assertValidServiceIdentifier(serviceIdentifier);
+		const registration = this._createRegistration(serviceIdentifier, options);
+		const registrations = [
+			...(this._registrationMap.get(serviceIdentifier) ?? []),
+			registration,
+		];
+		this._registrationMap.set(serviceIdentifier, registrations);
+		return () => this._removeRegistration(registration);
 	}
 
-	/**
-	 * Gets all registrations for a service identifier.
-	 *
-	 * @typeParam T - The service type
-	 * @param serviceIdentifier - The service identifier to look up
-	 * @returns An array of all registrations for the identifier
-	 */
-	getAll<T>(serviceIdentifier: ServiceIdentifier<T>): Array<IRegistration<T>> {
-		return (this._registrationMap.get(serviceIdentifier) ?? []) as Array<
-			IRegistration<T>
-		>;
+	applyRegistrationPlan(
+		plan: RegistrationPlan,
+		register: IRegistry["register"],
+	): Cleanup {
+		const cleanups: Cleanup[] = [];
+		const cleanupPlan = () => {
+			for (const cleanup of cleanups.splice(0).reverse()) {
+				cleanup();
+			}
+		};
+
+		try {
+			for (const { serviceIdentifier, registration } of plan.registrations) {
+				// Retain the container's disposal guards and public register overrides.
+				cleanups.push(register(serviceIdentifier, registration));
+			}
+		} catch (error) {
+			cleanupPlan();
+			throw error;
+		}
+		return cleanupPlan;
 	}
 
-	/**
-	 * Checks if a service identifier has any registrations.
-	 *
-	 * @typeParam T - The service type
-	 * @param serviceIdentifier - The service identifier to check
-	 * @returns True if the identifier has registrations, false otherwise
-	 */
+	getAll<T>(
+		serviceIdentifier: ServiceIdentifier<T>,
+	): ReadonlyArray<IRegistration<T>> {
+		return (this._registrationMap.get(serviceIdentifier) ??
+			[]) as ReadonlyArray<IRegistration<T>>;
+	}
+
 	has<T>(serviceIdentifier: ServiceIdentifier<T>): boolean {
 		return this._registrationMap.has(serviceIdentifier);
 	}
 
-	/**
-	 * Adds a registration for a service identifier.
-	 *
-	 * @typeParam T - The service type
-	 * @param serviceIdentifier - The service identifier to register
-	 * @param registration - The registration to add
-	 */
-	set<T>(
-		serviceIdentifier: ServiceIdentifier<T>,
-		registration: IRegistration<T>,
-	): void {
-		const registrations = [
-			...(this._registrationMap.get(serviceIdentifier) || []),
-			registration,
-		];
-		this._registrationMap.set(serviceIdentifier, registrations);
-	}
-
-	/**
-	 * Sets all registrations for a service identifier, replacing existing ones.
-	 *
-	 * @typeParam T - The service type
-	 * @param serviceIdentifier - The service identifier to register
-	 * @param registrations - The array of registrations to set
-	 */
-	setAll<T>(
-		serviceIdentifier: ServiceIdentifier<T>,
-		registrations: Array<IRegistration<T>>,
-	): void {
-		this._registrationMap.set(serviceIdentifier, registrations);
-	}
-
-	/**
-	 * Removes all registrations for a service identifier.
-	 *
-	 * @typeParam T - The service type
-	 * @param serviceIdentifier - The service identifier to remove
-	 */
 	remove<T>(serviceIdentifier: ServiceIdentifier<T>): void {
 		this._registrationMap.delete(serviceIdentifier);
 	}
 
-	/**
-	 * Removes a single registration from the registry.
-	 *
-	 * @typeParam T - The service type
-	 * @param registration - The registration to remove
-	 */
-	removeRegistration<T>(registration: IRegistration<T>): void {
+	clear(): void {
+		this._registrationMap.clear();
+	}
+
+	keys(): ServiceIdentifier<unknown>[] {
+		return Array.from(this._registrationMap.keys());
+	}
+
+	private _removeRegistration<T>(registration: IRegistration<T>): void {
 		const registrations = this._registrationMap.get(
 			registration.serviceIdentifier,
 		);
 		if (!registrations) {
 			return;
 		}
-
 		const nextRegistrations = registrations.filter(
 			(currentRegistration) =>
 				currentRegistration !== registration &&
@@ -136,31 +100,13 @@ export class RegistryImpl implements IRegistry {
 		if (nextRegistrations.length === registrations.length) {
 			return;
 		}
-
 		if (nextRegistrations.length === 0) {
 			this._registrationMap.delete(registration.serviceIdentifier);
 			return;
 		}
-
 		this._registrationMap.set(
 			registration.serviceIdentifier,
 			nextRegistrations,
 		);
-	}
-
-	/**
-	 * Clears all registrations from the registry.
-	 */
-	clear(): void {
-		this._registrationMap.clear();
-	}
-
-	/**
-	 * Gets all registered service identifiers.
-	 *
-	 * @returns An array of all service identifiers that have registrations
-	 */
-	keys(): ServiceIdentifier<unknown>[] {
-		return Array.from(this._registrationMap.keys());
 	}
 }

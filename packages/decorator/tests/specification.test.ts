@@ -10,12 +10,15 @@
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 import "reflect-metadata";
 import {
+	CoreErrorCodeEnum,
+	CoreException,
 	createContainer,
 	type IContainer,
 	middleware,
 	type Ref,
 	ResolveContainerScopeEnum,
 	ResolveException,
+	resolve,
 } from "@husky-di/core";
 import { INJECTION_METADATA_KEY } from "../src/constants/metadata-key.const";
 import {
@@ -562,6 +565,79 @@ describe("Decorator Module - Specification Compliance", () => {
 				expect(metadata[0]).toBeUndefined();
 				expect(metadata[1]).toEqual({ serviceIdentifier: DependencyService });
 			});
+		});
+	});
+
+	describe("6.2 Resolution Phase: Failed Branch Recovery", () => {
+		it("should retain the parameter path when dependency resolution fails before entering core resolution", () => {
+			const firstDependency = Symbol("FirstDependency");
+			const secondDependency = Symbol("SecondDependency");
+
+			@injectable()
+			class TwoDependencies {
+				constructor(
+					@inject(firstDependency) public readonly first: object,
+					@inject(secondDependency) public readonly second: object,
+				) {}
+			}
+
+			container.register(firstDependency, {
+				useFactory: () => {
+					container.dispose();
+					return {};
+				},
+			});
+			container.register(secondDependency, { useValue: {} });
+
+			try {
+				container.resolve(TwoDependencies);
+				throw new Error("Expected resolve to throw.");
+			} catch (error) {
+				if (!ResolveException.isResolveException(error)) {
+					throw error;
+				}
+				expect(error.code).toBe(CoreErrorCodeEnum.E_CONTAINER_DISPOSED);
+				expect(error.cause).toBeInstanceOf(CoreException);
+				expect(error.cause).toMatchObject({
+					code: CoreErrorCodeEnum.E_CONTAINER_DISPOSED,
+				});
+				expect(error.message).toContain(
+					'Resolve parameter #1 of constructor "TwoDependencies"',
+				);
+			}
+		});
+
+		it("should allow retry after a handled constructor dependency failure", () => {
+			const dependency = Symbol("RecoverableDependency");
+			const consumer = Symbol("RecoveringConsumer");
+			const value = {};
+			let attempts = 0;
+
+			@injectable()
+			class Injected {
+				constructor(@inject(dependency) public readonly value: object) {}
+			}
+
+			container.register(dependency, {
+				useFactory: () => {
+					if (++attempts === 1) {
+						throw new Error("Recoverable injection failure");
+					}
+					return value;
+				},
+			});
+			container.register(consumer, {
+				useFactory: () => {
+					expect(() => resolve(Injected)).toThrow(
+						"Recoverable injection failure",
+					);
+					expect(resolve(dependency)).toBe(value);
+					return resolve(Injected);
+				},
+			});
+
+			expect(container.resolve<Injected>(consumer).value).toBe(value);
+			expect(attempts).toBe(3);
 		});
 	});
 
