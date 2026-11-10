@@ -30,21 +30,16 @@ export const resolutionScope = createResolutionScope();
  * Middleware registered here applies to service resolutions across containers
  * created by this package module instance.
  */
-export const middlewareManager: ResolveMiddlewareManagerImpl =
-	new MiddlewareManagerImpl();
+export const middlewareManager = new MiddlewareManagerImpl<
+	ResolveMiddlewareParams<unknown, ResolveOptions<unknown>>,
+	// biome-ignore lint/suspicious/noExplicitAny: here is a generic type
+	any
+>();
 
-export const middleware: ResolveMiddlewareManager = {
+export const middleware: IMiddlewareManager<
+	ResolveMiddlewareParams<unknown, ResolveOptions<unknown>>,
+	// biome-ignore lint/suspicious/noExplicitAny: here is a generic type
+	any
+> = {
 	use: (...middlewares) => middlewareManager.use(...middlewares),
 };
-
-type ResolveMiddlewareManager = IMiddlewareManager<
-	ResolveMiddlewareParams<unknown, ResolveOptions<unknown>>,
-	// biome-ignore lint/suspicious/noExplicitAny: here is a generic type
-	any
->;
-
-type ResolveMiddlewareManagerImpl = MiddlewareManagerImpl<
-	ResolveMiddlewareParams<unknown, ResolveOptions<unknown>>,
-	// biome-ignore lint/suspicious/noExplicitAny: here is a generic type
-	any
->;
