@@ -21,14 +21,3 @@ export type Ref<T> = {
 	/** Whether the reference has been resolved (instance created). */
 	readonly resolved: boolean;
 };
-
-/**
- * Mutable reference type.
- * Used internally for managing reference state.
- *
- * @typeParam T - The type of the referenced service
- */
-export type MutableRef<T> = {
-	/** The current service instance (optional). */
-	current?: T | undefined;
-};

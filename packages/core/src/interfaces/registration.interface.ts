@@ -27,16 +27,6 @@ export type CreateRegistrationBaseOptions = {
 };
 
 /**
- * Options passed to factory functions during resolution.
- */
-export type RegistrationResolveOptions = {
-	/** The container performing the resolution */
-	readonly container: IContainer;
-	/** The current resolution context */
-	readonly resolveContext: ResolveContext;
-};
-
-/**
  * Options for class-based registration.
  *
  * @typeParam T - The service type
