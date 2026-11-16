@@ -31,6 +31,7 @@ export interface IResolutionScope {
 		serviceIdentifier: ServiceIdentifier<unknown>,
 		resolveRecord: IInternalResolveRecord,
 		operation: () => T,
+		message?: string,
 	): T;
 
 	/** Captures a chain for later execution without disturbing a surrounding chain. */

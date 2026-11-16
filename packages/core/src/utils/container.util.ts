@@ -90,29 +90,38 @@ export function resolve<T, Options extends ResolveHelperOptions<T>>(
 	// registries with an extra registration just to model that active-container
 	// lookup semantics.
 	if (serviceIdentifier === IContainer) {
-		assertValidResolveOptions(
+		return resolutionScope.withRecord(
+			container,
 			serviceIdentifier,
-			(options ?? {}) as ResolveOptions<T>,
 			resolveRecord,
+			() => {
+				assertValidResolveOptions(
+					serviceIdentifier,
+					(options ?? {}) as ResolveOptions<T>,
+					resolveRecord,
+				);
+
+				const multiple = options?.multiple;
+				const createContainerResult = () =>
+					multiple ? [container] : container;
+
+				if (options?.dynamic) {
+					return new InstanceDynamicRefImpl(
+						createContainerResult,
+					) as ResolveInstance<T, Options>;
+				}
+
+				if (options?.ref) {
+					return new InstanceRefImpl(createContainerResult) as ResolveInstance<
+						T,
+						Options
+					>;
+				}
+
+				return createContainerResult() as ResolveInstance<T, Options>;
+			},
+			options?.message,
 		);
-
-		const multiple = options?.multiple;
-		const createContainerResult = () => (multiple ? [container] : container);
-
-		if (options?.dynamic) {
-			return new InstanceDynamicRefImpl(
-				createContainerResult,
-			) as ResolveInstance<T, Options>;
-		}
-
-		if (options?.ref) {
-			return new InstanceRefImpl(createContainerResult) as ResolveInstance<
-				T,
-				Options
-			>;
-		}
-
-		return createContainerResult() as ResolveInstance<T, Options>;
 	}
 
 	return container.resolve(

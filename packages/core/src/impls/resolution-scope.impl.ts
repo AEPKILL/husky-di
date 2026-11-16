@@ -5,6 +5,7 @@
  */
 
 import { CoreErrorCodeEnum } from "@/enums/core-error-code.enum";
+import { ResolveRecordTypeEnum } from "@/enums/resolve-record-type.enum";
 import { CodedException } from "@/exceptions/coded.exception";
 import { ResolveException } from "@/exceptions/resolve.exception";
 import type { IContainer } from "@/interfaces/container.interface";
@@ -55,9 +56,16 @@ export class ResolutionScopeImpl implements IResolutionScope {
 		serviceIdentifier: ServiceIdentifier<unknown>,
 		resolveRecord: IInternalResolveRecord,
 		operation: () => T,
+		message?: string,
 	): T {
 		resolveRecord._internalStashCurrent();
 		try {
+			if (message) {
+				resolveRecord.addRecordNode({
+					type: ResolveRecordTypeEnum.message,
+					message,
+				});
+			}
 			return operation();
 		} catch (error: unknown) {
 			if (ResolveException.isResolveException(error)) {
@@ -65,7 +73,7 @@ export class ResolutionScopeImpl implements IResolutionScope {
 			}
 			if (CodedException.isCodedException(error)) {
 				throw new ResolveException(
-					error.code as CoreErrorCodeEnum,
+					error.code,
 					error.detail,
 					resolveRecord,
 					error,

@@ -458,6 +458,7 @@ describe("Decorator Module - Specification Compliance", () => {
 			it("should expose E_CONFLICTING_OPTIONS when metadata uses dynamic and ref together", () => {
 				expectDecoratorException(
 					() =>
+						// @ts-expect-error Runtime validation for conflicting reference modes.
 						tagged({
 							serviceIdentifier: "Service",
 							dynamic: true,
@@ -568,8 +569,81 @@ describe("Decorator Module - Specification Compliance", () => {
 		});
 	});
 
+	describe("D1: Parameter Resolution Diagnostics", () => {
+		it.each([
+			"",
+			"Load configuration",
+		])("should retain automatic parameter locations and custom message %j through an alias and parent", (message) => {
+			const firstDependency = Symbol("FirstParameter");
+			const alias = Symbol("ParameterAlias");
+			const missing = Symbol("MissingParameter");
+			@injectable()
+			class AnnotatedConsumer {
+				constructor(
+					@inject(firstDependency, { message: "Successful sibling" })
+					public readonly first: object,
+					@inject(alias, { message }) public readonly second: object,
+				) {}
+			}
+			const parent = createContainer("ParameterParent");
+			const child = createContainer("ParameterChild", parent);
+			parent.register(firstDependency, { useValue: {} });
+			parent.register(alias, { useAlias: missing });
+			try {
+				child.resolve(AnnotatedConsumer, { message: "Resolve consumer" });
+				throw new Error("Expected resolution to throw.");
+			} catch (error) {
+				if (!ResolveException.isResolveException(error)) throw error;
+				const location =
+					'Resolve parameter #1 of constructor "AnnotatedConsumer"';
+				expect(error.message.split(location)).toHaveLength(2);
+				expect(error.message).toContain(
+					message ? `${location}: ${message}` : location,
+				);
+				expect(error.message.indexOf("Resolve consumer")).toBeLessThan(
+					error.message.indexOf(location),
+				);
+				expect(error.message).not.toContain("Successful sibling");
+				expect(error.message).not.toContain("Resolve parameter #0");
+			} finally {
+				child.dispose();
+				parent.dispose();
+			}
+		});
+
+		it.each([
+			"ref",
+			"dynamic",
+		] as const)("should retain tagged messages once when a parameter's %s is read later", (mode) => {
+			const missing = Symbol("DeferredParameter");
+			@injectable()
+			class DeferredConsumer {
+				constructor(
+					@tagged({
+						serviceIdentifier: missing,
+						...(mode === "ref" ? { ref: true } : { dynamic: true }),
+						message: "Deferred configuration",
+					})
+					public readonly dependency: Ref<object>,
+				) {}
+			}
+			const consumer = container.resolve(DeferredConsumer);
+			try {
+				consumer.dependency.current;
+				throw new Error("Expected resolution to throw.");
+			} catch (error) {
+				if (!ResolveException.isResolveException(error)) throw error;
+				expect(error.code).toBe(CoreErrorCodeEnum.E_SERVICE_NOT_FOUND);
+				expect(error.message.match(/Deferred configuration/g)).toHaveLength(1);
+				expect(error.message).toContain(
+					'Resolve parameter #0 of constructor "DeferredConsumer": Deferred configuration',
+				);
+			}
+		});
+	});
+
 	describe("6.2 Resolution Phase: Failed Branch Recovery", () => {
-		it("should retain the parameter path when dependency resolution fails before entering core resolution", () => {
+		it("should retain the parameter path when core dependency preflight fails", () => {
 			const firstDependency = Symbol("FirstDependency");
 			const secondDependency = Symbol("SecondDependency");
 
@@ -601,9 +675,11 @@ describe("Decorator Module - Specification Compliance", () => {
 				expect(error.cause).toMatchObject({
 					code: CoreErrorCodeEnum.E_CONTAINER_DISPOSED,
 				});
+				expect(error.message.match(/Resolve parameter #1/g)).toHaveLength(1);
 				expect(error.message).toContain(
 					'Resolve parameter #1 of constructor "TwoDependencies"',
 				);
+				expect(error.message).not.toContain("Resolve parameter #0");
 			}
 		});
 
@@ -727,6 +803,7 @@ describe("Decorator Module - Specification Compliance", () => {
 			it("should reject dynamic and ref options on the same parameter metadata", () => {
 				expectDecoratorException(
 					() =>
+						// @ts-expect-error Runtime validation for conflicting reference modes.
 						tagged({
 							serviceIdentifier: "Token",
 							dynamic: true,

@@ -25,6 +25,7 @@ The following keywords are to be interpreted as described in [RFC 2119](https://
 ```typescript
 interface InjectionMetadata<T> {
   readonly serviceIdentifier: ServiceIdentifier<T>;
+  readonly message?: string;
   readonly scope?: ResolveContainerScopeEnum;
   readonly dynamic?: boolean;
   readonly ref?: boolean;
@@ -35,6 +36,7 @@ interface InjectionMetadata<T> {
 **Fields:**
 
 - `serviceIdentifier` **(REQUIRED)**: The service identifier to resolve.
+- `message` (OPTIONAL): An explanation appended to the automatic constructor-parameter location in resolution diagnostics.
 - `scope` (OPTIONAL): Which `core.resolve()` container perspective to use for this parameter.
 - `dynamic` (OPTIONAL): When `true`, return a dynamic reference instead of the resolved instance.
 - `ref` (OPTIONAL): When `true`, return a reference wrapper instead of the resolved instance.
@@ -134,6 +136,7 @@ If `@inject()` is applied multiple times to the same parameter, only the last ap
 
 #### 4.2.3 Options Semantics
 
+- **message**: A non-empty explanation **MUST** be appended to the automatic constructor-parameter location, as specified in D1.
 - **scope**: If specified, resolution **MUST** use the matching `core.resolve()` helper scope for this parameter.
 - **dynamic**: If `true`, the resolved value **MUST** be a reference that reflects the current registration state.
 - **ref**: If `true`, the resolved value **MUST** be a reference wrapper object.
@@ -217,6 +220,21 @@ The options `dynamic` and `ref` **MUST NOT** both be `true` simultaneously.
 1. Retrieve consolidated metadata for the class
 2. For each parameter, resolve its dependency using the stored `InjectionMetadata`
 3. Instantiate the class with resolved parameters
+
+**D1. Parameter Resolution Diagnostics**
+
+Each parameter resolution **MUST** use the core resolution message option to
+record `Resolve parameter #{index} of constructor "{name}"`, with a zero-based
+index. A non-empty `message` supplied through `@inject()` or `@tagged()` **MUST**
+be appended as `: {message}` in the same diagnostic step. Empty messages **MUST**
+retain the automatic location without a suffix.
+
+The parameter step **MUST** appear once, including through parent fallback,
+aliases, and deferred references. It **MUST** be captured when dependency
+preflight validation fails, including when an earlier parameter disposes the
+container. Core resolution **MUST** preserve error codes and causes and restore
+the active path before a caller handles a failure or resolves another parameter.
+Successful sibling parameter steps **MUST NOT** appear in a later failure path.
 
 ## 7. Error Conditions
 

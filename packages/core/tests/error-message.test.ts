@@ -1190,7 +1190,7 @@ describe("Error Messages", () => {
 		});
 	});
 
-	describe("CoreException", () => {
+	describe("Direct resolution preflight", () => {
 		it("should expose E_CONTAINER_DISPOSED as the structured code and message prefix", () => {
 			container.dispose();
 
@@ -1198,12 +1198,12 @@ describe("Error Messages", () => {
 				container.resolve("TestService");
 				throw new Error("Expected resolve to throw.");
 			} catch (error) {
-				expect(error).toBeInstanceOf(CoreException);
-				expect(CoreException.isCoreException(error)).toBe(true);
-				expect((error as CoreException).code).toBe(
+				expect(error).toBeInstanceOf(ResolveException);
+				expect((error as ResolveException).cause).toBeInstanceOf(CoreException);
+				expect((error as ResolveException).code).toBe(
 					CoreErrorCodeEnum.E_CONTAINER_DISPOSED,
 				);
-				expect((error as Error).message).toBe(
+				expect((error as Error).message).toContain(
 					"E_CONTAINER_DISPOSED: Container is disposed",
 				);
 			}

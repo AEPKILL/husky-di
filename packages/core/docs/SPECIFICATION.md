@@ -150,6 +150,7 @@ enum LifecycleEnum {
 
 ```typescript
 type ResolveOptions<T> = {
+  message?: string; // Explanation for this resolution entry
   recursive?: boolean; // Whether parent-container fallback is enabled
 } & (
   | { dynamic: true; ref?: false } // Return dynamic reference
@@ -347,7 +348,7 @@ The alias path **MUST** remain in `ResolveRecord` for errors and cycle detection
 - _Error Code:_ `E_SERVICE_NOT_FOUND`
 
 **S7. Provider Failure Reporting**  
-If a provider throws while a service is being resolved, the container **MUST** wrap the failure in a `ResolveException` while preserving the active `ResolveRecord` path.
+If a provider throws while a service is being resolved, the container **MUST** report the failure as a `ResolveException` while preserving the active `ResolveRecord` path, following S11.
 
 The failure detail **MUST** identify the container that owns and executes the
 failing provider, including when the registration comes from an ancestor.
@@ -356,6 +357,9 @@ failing provider, including when the registration comes from an ancestor.
 
 **S8. Resolve Context Availability**  
 The package-level `resolve()` helper **MUST** only be used while a resolution context is active. If no active `ResolveRecord` or current container is available, the implementation **MUST** reject the call.
+
+Outside an active resolution context, the helper **MUST** throw `CoreException`;
+there is no resolution record to annotate.
 
 - _Error Code:_ `E_RESOLVE_CONTEXT_UNAVAILABLE`
 
@@ -381,6 +385,31 @@ When the package-level `resolve()` helper receives `IContainer` as the `ServiceI
   resolution and **MUST** remain readable after the originating container is
   disposed.
 - The selected container for this special case **MUST** still follow `S9` and therefore honor the helper's `scope` option.
+
+**S11. Resolution Diagnostics**
+
+`ResolveOptions<T>.message` and the inherited `ResolveHelperOptions<T>.message`
+**MUST** accept an optional string without changing resolution result inference.
+
+- A non-empty message **MUST** appear once in the diagnostic path at its
+  resolution entry, before that entry's service-resolution steps. Nested
+  messages **MUST** retain outer-to-inner order. An empty message adds no step.
+- Parent fallback, alias forwarding, and deferred reference access **MUST NOT**
+  add the same entry message again. Deferred access **MUST** retain the original
+  annotated path and resolution context.
+- Synchronous failures from `container.resolve()`, including disposed-container,
+  invalid-identifier, and invalid-options validation, **MUST** be reported as
+  `ResolveException`. An existing `ResolveException` **MUST** be rethrown by
+  identity. Other `CodedException` failures **MUST** retain their code and
+  original detail in the diagnostic, with the original error as `cause`.
+  Other thrown values **MUST** use `E_RESOLUTION_FAILED`, identify the failing
+  service and active container, and retain the thrown value as `cause`.
+- Error diagnostics **MUST** capture the failing path before the resolution
+  entry restores its caller's path. Both successful and failed entries **MUST**
+  restore that path; handled failures follow C4.
+- Synthetic `resolve(IContainer, options)` **MUST** apply the same message,
+  validation-error, and path-restoration rules without performing a registered
+  service lookup. Its reference behavior remains as specified in S10.
 
 ### 4.3 Lifecycle Management
 

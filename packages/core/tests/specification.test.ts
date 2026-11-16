@@ -22,6 +22,7 @@ import {
 } from "vitest";
 import {
 	CoreErrorCodeEnum,
+	CoreException,
 	type CreateServiceIdentifierOptions,
 	createContainer,
 	createRegistrationPlan,
@@ -38,6 +39,7 @@ import {
 	ResolveContainerScopeEnum,
 	type ResolveContext,
 	ResolveException,
+	type ResolveHelperOptions,
 	type ResolveMiddleware,
 	type ResolveOptions,
 	resolve,
@@ -45,6 +47,18 @@ import {
 	type ServiceIdentifierInstance,
 } from "../src/index";
 import { clearContainer, clearMiddleware, useMiddleware } from "./test.utils";
+
+function captureResolveException(operation: () => unknown): ResolveException {
+	try {
+		operation();
+	} catch (error) {
+		if (!ResolveException.isResolveException(error)) {
+			throw error;
+		}
+		return error;
+	}
+	throw new Error("Expected resolution to throw.");
+}
 
 // ============================================================================
 // Test Service Classes and Identifiers
@@ -929,19 +943,33 @@ describe("SPEC 4.2: Service Resolution", () => {
 						instance: resolve(IScoped),
 						deferred:
 							referenceType === "ref"
-								? resolve(IDeferred, { ref: true })
-								: resolve(IDeferred, { dynamic: true }),
+								? resolve(IDeferred, {
+										ref: true,
+										message: "Captured dependency",
+									})
+								: resolve(IDeferred, {
+										dynamic: true,
+										message: "Captured dependency",
+									}),
 					}),
 				});
 
 				try {
-					const captured = origin.resolve(ICaptured);
+					const captured = origin.resolve(ICaptured, {
+						message: "Captured origin",
+					});
 					childContainer.register(IConsumer, {
 						useFactory: () => {
 							const instance = resolve(IScoped);
-							expect(() => captured.deferred.current).toThrow(
-								"Deferred provider failed",
+							const error = captureResolveException(
+								() => captured.deferred.current,
 							);
+							expect(error.message).toContain("Deferred provider failed");
+							expect(error.message.match(/Captured origin/g)).toHaveLength(1);
+							expect(error.message.match(/Captured dependency/g)).toHaveLength(
+								1,
+							);
+							expect(error.message).not.toContain("Surrounding consumer");
 							expect(resolve(IContainer)).toBe(childContainer);
 							expect(
 								resolve(IContainer, {
@@ -955,7 +983,11 @@ describe("SPEC 4.2: Service Resolution", () => {
 						},
 					});
 
-					expect(childContainer.resolve(IConsumer)).not.toBe(captured.instance);
+					expect(
+						childContainer.resolve(IConsumer, {
+							message: "Surrounding consumer",
+						}),
+					).not.toBe(captured.instance);
 					expect(attempts).toBe(2);
 					expect(() => resolve(IContainer)).toThrow(
 						/E_RESOLVE_CONTEXT_UNAVAILABLE/,
@@ -963,6 +995,40 @@ describe("SPEC 4.2: Service Resolution", () => {
 				} finally {
 					origin.dispose();
 				}
+			});
+
+			it(`should retain annotations and restore the caller after disposed ${referenceType} access`, () => {
+				const origin = createContainer("DisposedReferenceOrigin");
+				const deferred =
+					referenceType === "ref"
+						? origin.resolve(IServiceA, {
+								ref: true,
+								message: "Deferred preflight",
+							})
+						: origin.resolve(IServiceA, {
+								dynamic: true,
+								message: "Deferred preflight",
+							});
+				origin.dispose();
+				childContainer.register("DeferredPreflightConsumer", {
+					useFactory: () => {
+						const error = captureResolveException(() => deferred.current);
+						expect(error.code).toBe(CoreErrorCodeEnum.E_CONTAINER_DISPOSED);
+						expect(error.cause).toBeInstanceOf(CoreException);
+						expect(error.message.match(/Deferred preflight/g)).toHaveLength(1);
+						expect(error.message).toContain(origin.displayName);
+						expect(resolve(IContainer)).toBe(childContainer);
+						return resolve(IUnregisteredService, {
+							message: "After deferred failure",
+						});
+					},
+				});
+				const error = captureResolveException(() =>
+					childContainer.resolve("DeferredPreflightConsumer"),
+				);
+				expect(error.message).toContain("After deferred failure");
+				expect(error.message).not.toContain("Deferred preflight");
+				expect(error.message).not.toContain(origin.displayName);
 			});
 
 			it(`should restore an active resolution after reading ${referenceType}.current`, () => {
@@ -1635,6 +1701,213 @@ describe("SPEC 4.2: Service Resolution", () => {
 		});
 	});
 
+	describe("S11: Resolution Diagnostics", () => {
+		it("should preserve result inference with messages in container and helper options", () => {
+			const options = {
+				message: "Load service",
+			} satisfies ResolveOptions<ServiceA>;
+			const helperOptions = {
+				...options,
+				scope: ResolveContainerScopeEnum.origin,
+			} satisfies ResolveHelperOptions<ServiceA>;
+			childContainer.register(IServiceA, { useValue: new ServiceA() });
+			expectTypeOf(
+				childContainer.resolve(IServiceA, options),
+			).toEqualTypeOf<ServiceA>();
+			expectTypeOf(
+				childContainer.resolve(IServiceA, { ...options, optional: true }),
+			).toEqualTypeOf<ServiceA | undefined>();
+			expectTypeOf(
+				childContainer.resolve(IServiceA, {
+					...options,
+					multiple: true,
+					dynamic: true,
+				}),
+			).toEqualTypeOf<Ref<ServiceA[]>>();
+			childContainer.register("TypedHelper", {
+				useFactory: () => {
+					expectTypeOf(
+						resolve(IServiceA, helperOptions),
+					).toEqualTypeOf<ServiceA>();
+					expectTypeOf(
+						resolve(IServiceA, { ...helperOptions, ref: true }),
+					).toEqualTypeOf<Ref<ServiceA>>();
+					return resolve(IServiceA, helperOptions);
+				},
+			});
+			expect(childContainer.resolve("TypedHelper")).toBeInstanceOf(ServiceA);
+		});
+
+		it("should annotate once across aliases and parent forwarding in outer-to-inner order", () => {
+			parentContainer.register(IServiceA, {
+				useFactory: () => {
+					resolve(IUnregisteredService, { message: "Load missing dependency" });
+					return new ServiceA();
+				},
+			});
+			childContainer.register(IAliasTarget, { useAlias: IServiceA });
+			const error = captureResolveException(() =>
+				childContainer.resolve(IAliasTarget, {
+					message: "Load aliased service",
+				}),
+			);
+			expect(error.message.match(/Load aliased service/g)).toHaveLength(1);
+			expect(error.message.match(/Load missing dependency/g)).toHaveLength(1);
+			expect(error.message.indexOf("Load aliased service")).toBeLessThan(
+				error.message.indexOf("Load missing dependency"),
+			);
+			expect(error.message).toContain(childContainer.displayName);
+			expect(error.message).toContain(parentContainer.displayName);
+			expect(error.message).toContain(
+				'Resolving alias "IAliasTarget" as "IServiceA"',
+			);
+		});
+
+		it.each([
+			ResolveContainerScopeEnum.current,
+			ResolveContainerScopeEnum.origin,
+		])("should preserve %s container attribution for an annotated helper call", (scope) => {
+			const cause = new Error("Scoped dependency failed");
+			for (const container of [parentContainer, childContainer]) {
+				container.register(IServiceA, {
+					useFactory: () => {
+						throw cause;
+					},
+				});
+			}
+			parentContainer.register("ScopedConsumer", {
+				useFactory: () =>
+					resolve(IServiceA, { scope, message: "Load scoped dependency" }),
+			});
+			const error = captureResolveException(() =>
+				childContainer.resolve("ScopedConsumer"),
+			);
+			const owner =
+				scope === ResolveContainerScopeEnum.origin
+					? childContainer
+					: parentContainer;
+			expect(error.code).toBe(CoreErrorCodeEnum.E_RESOLUTION_FAILED);
+			expect(error.cause).toBe(cause);
+			expect(error.detail.split("\n")[0]).toContain(
+				`in "${owner.displayName}"`,
+			);
+			expect(error.message.match(/Load scoped dependency/g)).toHaveLength(1);
+		});
+
+		it("should preserve coded failures and rethrow an existing ResolveException by identity", () => {
+			const cause = new CoreException(
+				CoreErrorCodeEnum.E_INVALID_PROVIDER,
+				"Rejected by provider",
+			);
+			childContainer.register(IServiceA, {
+				useFactory: () => {
+					throw cause;
+				},
+			});
+			const error = captureResolveException(() =>
+				childContainer.resolve(IServiceA, { message: "Load coded service" }),
+			);
+			expect(error.code).toBe(cause.code);
+			expect(error.detail.split("\n")[0]).toBe(cause.detail);
+			expect(error.cause).toBe(cause);
+			expect(error.message.match(/Load coded service/g)).toHaveLength(1);
+			childContainer.register(IServiceB, {
+				useFactory: () => {
+					throw error;
+				},
+			});
+			expect(
+				captureResolveException(() =>
+					childContainer.resolve(IServiceB, { message: "Outer rethrow" }),
+				),
+			).toBe(error);
+		});
+
+		it("should normalize direct preflight failures with the caller message and original cause", () => {
+			expect(
+				captureResolveException(() =>
+					childContainer.resolve(IUnregisteredService, { message: "" }),
+				).message,
+			).toBe(
+				captureResolveException(() =>
+					childContainer.resolve(IUnregisteredService),
+				).message,
+			);
+			const invalid = captureResolveException(() => {
+				// @ts-expect-error Runtime validation for an invalid identifier.
+				childContainer.resolve(undefined, {
+					message: "Invalid identifier attempt",
+				});
+			});
+			expect(invalid.code).toBe(CoreErrorCodeEnum.E_INVALID_SERVICE_IDENTIFIER);
+			expect(invalid.cause).toBeInstanceOf(CoreException);
+			expect(invalid.message).toContain("Invalid identifier attempt");
+			const options = captureResolveException(() => {
+				// @ts-expect-error Runtime validation for conflicting reference modes.
+				childContainer.resolve(IServiceA, {
+					ref: true,
+					dynamic: true,
+					message: "Invalid options attempt",
+				});
+			});
+			expect(options.code).toBe(CoreErrorCodeEnum.E_INVALID_OPTIONS);
+			expect(options.message).toContain("Invalid options attempt");
+			expect(options.message).toContain(childContainer.displayName);
+			expect(options.message).not.toContain("Invalid identifier attempt");
+			childContainer.dispose();
+			const disposed = captureResolveException(() =>
+				childContainer.resolve(IServiceA, {
+					message: "Disposed container attempt",
+				}),
+			);
+			expect(disposed.code).toBe(CoreErrorCodeEnum.E_CONTAINER_DISPOSED);
+			expect(disposed.cause).toBeInstanceOf(CoreException);
+			expect(disposed.cause).toMatchObject({ detail: "Container is disposed" });
+			expect(
+				disposed.message.match(/Disposed container attempt/g),
+			).toHaveLength(1);
+			expect(() => resolve(IServiceA, { message: "No active scope" })).toThrow(
+				CoreException,
+			);
+		});
+
+		it("should annotate synthetic container validation and restore handled and successful helper entries", () => {
+			parentContainer.register("SyntheticConsumer", {
+				useFactory: () => {
+					const error = captureResolveException(() => {
+						// @ts-expect-error Runtime validation for conflicting reference modes.
+						resolve(IContainer, {
+							ref: true,
+							dynamic: true,
+							message: "Invalid synthetic options",
+						});
+					});
+					expect(error.code).toBe(CoreErrorCodeEnum.E_INVALID_OPTIONS);
+					expect(
+						error.message.match(/Invalid synthetic options/g),
+					).toHaveLength(1);
+					expect(
+						resolve(IContainer, { message: "Successful current lookup" }),
+					).toBe(parentContainer);
+					expect(
+						resolve(IContainer, {
+							scope: ResolveContainerScopeEnum.origin,
+							message: "Successful origin lookup",
+						}),
+					).toBe(childContainer);
+					return resolve(IUnregisteredService, { message: "Later failure" });
+				},
+			});
+			const error = captureResolveException(() =>
+				childContainer.resolve("SyntheticConsumer"),
+			);
+			expect(error.message.match(/Later failure/g)).toHaveLength(1);
+			expect(error.message).not.toContain("Invalid synthetic options");
+			expect(error.message).not.toContain("Successful current lookup");
+			expect(error.message).not.toContain("Successful origin lookup");
+		});
+	});
+
 	describe("S8: Resolve Context Availability", () => {
 		it("should reject package-level resolve() outside an active resolution context", () => {
 			expect(() => {
@@ -1816,8 +2089,14 @@ describe("SPEC 4.2: Service Resolution", () => {
 			parentContainer.register(IProbe, {
 				useFactory: () =>
 					[
-						resolve(IContainer, { ref: true }),
-						resolve(IContainer, { dynamic: true }),
+						resolve(IContainer, {
+							ref: true,
+							message: "Captured synthetic ref",
+						}),
+						resolve(IContainer, {
+							dynamic: true,
+							message: "Captured synthetic dynamic",
+						}),
 					] as const,
 			});
 			const [staticRef, dynamicRef] = childContainer.resolve(IProbe);

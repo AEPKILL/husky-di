@@ -58,6 +58,9 @@ import { createServiceIdentifier } from "@/utils/service-identifier.util";
  * ```
  */
 export type ResolveOptions<T> = {
+	/** Explanation recorded once at this resolution entry for error diagnostics. */
+	message?: string;
+
 	/**
 	 * Whether to continue searching ancestor containers when the current
 	 * container has no matching registration.

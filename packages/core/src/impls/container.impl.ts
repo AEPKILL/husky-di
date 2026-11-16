@@ -158,24 +158,22 @@ export class ContainerImpl implements IContainer {
 		serviceIdentifier: ServiceIdentifier<T>,
 		options: O | undefined,
 	): ResolveInstance<T, O> {
-		assertNotDisposed(this);
-		assertValidServiceIdentifier(serviceIdentifier);
-
-		const resolveOptions = options || ({} as ResolveOptions<T>);
-		const { dynamic, ref, multiple } = resolveOptions;
+		const message = options?.message;
+		const resolveOptions = message
+			? { ...options }
+			: options || ({} as ResolveOptions<T>);
+		if (message) {
+			delete resolveOptions.message;
+		}
 		return resolutionScope.run(this, (resolveRecord, resolveContext) => {
-			assertValidResolveOptions(
-				serviceIdentifier,
-				resolveOptions,
-				resolveRecord,
-			);
-
-			const registrations = this._registry.getAll(serviceIdentifier);
 			return resolutionScope.withRecord(
 				this,
 				serviceIdentifier,
 				resolveRecord,
 				() => {
+					assertNotDisposed(this);
+					assertValidServiceIdentifier(serviceIdentifier);
+
 					// Record the resolution attempt for debugging and error reporting
 					resolveRecord.addRecordNode({
 						type: ResolveRecordTypeEnum.serviceIdentifier,
@@ -183,6 +181,13 @@ export class ContainerImpl implements IContainer {
 						serviceIdentifier,
 						container: this,
 					});
+					assertValidResolveOptions(
+						serviceIdentifier,
+						resolveOptions,
+						resolveRecord,
+					);
+					const { dynamic, ref, multiple } = resolveOptions;
+					const registrations = this._registry.getAll(serviceIdentifier);
 
 					if (ref) {
 						resolveRecord.addRecordNode({
@@ -303,6 +308,7 @@ export class ContainerImpl implements IContainer {
 						shouldUseDefault ? resolveOptions.defaultValue : instances
 					) as ResolveInstance<T, O>;
 				},
+				message,
 			);
 		}) as ResolveInstance<T, O>;
 	}
