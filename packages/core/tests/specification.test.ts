@@ -952,6 +952,69 @@ describe("SPEC 4.2: Service Resolution", () => {
 		});
 
 		for (const referenceType of ["ref", "dynamic"] as const) {
+			it(`should defer provider middleware and registration selection for ${referenceType}`, () => {
+				const identifier = createServiceIdentifier<number>(
+					"ILateReferenceValue",
+				);
+				const originalProvider = vi.fn(() => 1);
+				const replacementProvider = vi.fn(() => 2);
+				const removeOriginal = childContainer.register(identifier, {
+					useFactory: originalProvider,
+				});
+				const middlewareCalls: ServiceIdentifier<unknown>[] = [];
+				useMiddleware({
+					name: "ReferenceObservation",
+					executor: (params, next) => {
+						middlewareCalls.push(params.serviceIdentifier);
+						return next(params);
+					},
+				});
+				const reference =
+					referenceType === "ref"
+						? childContainer.resolve(identifier, { ref: true })
+						: childContainer.resolve(identifier, { dynamic: true });
+
+				expect(reference.resolved).toBe(false);
+				expect(originalProvider).not.toHaveBeenCalled();
+				expect(middlewareCalls).toEqual([]);
+				removeOriginal();
+				const removeReplacement = childContainer.register(identifier, {
+					useFactory: replacementProvider,
+				});
+				expect(reference.current).toBe(2);
+				expect(reference.resolved).toBe(true);
+				expect(originalProvider).not.toHaveBeenCalled();
+				expect(replacementProvider).toHaveBeenCalledTimes(1);
+				expect(middlewareCalls).toEqual([identifier]);
+
+				removeReplacement();
+				childContainer.register(identifier, { useValue: 3 });
+				expect(reference.current).toBe(referenceType === "ref" ? 2 : 3);
+				expect(middlewareCalls).toHaveLength(referenceType === "ref" ? 1 : 2);
+			});
+
+			it(`should allow missing ${referenceType} creation and retry after registration`, () => {
+				const identifier = createServiceIdentifier<number>(
+					"IMissingReferenceValue",
+				);
+				const reference =
+					referenceType === "ref"
+						? childContainer.resolve(identifier, {
+								ref: true,
+								message: "Deferred value",
+							})
+						: childContainer.resolve(identifier, {
+								dynamic: true,
+								message: "Deferred value",
+							});
+
+				const error = captureResolveException(() => reference.current);
+				expect(error.code).toBe(CoreErrorCodeEnum.E_SERVICE_NOT_FOUND);
+				expect(error.message.match(/Deferred value/g)).toHaveLength(1);
+				childContainer.register(identifier, { useValue: 42 });
+				expect(reference.current).toBe(42);
+			});
+
 			it(`should restore a different resolution chain after ${referenceType}.current fails`, () => {
 				const origin = createContainer("DeferredOrigin");
 				const IScoped = createServiceIdentifier<object>("ICrossChainScoped");

@@ -187,7 +187,6 @@ export class ContainerImpl implements IContainer {
 						resolveRecord,
 					);
 					const { dynamic, ref, multiple } = resolveOptions;
-					const registrations = this._registry.getAll(serviceIdentifier);
 
 					if (ref) {
 						resolveRecord.addRecordNode({
@@ -217,6 +216,7 @@ export class ContainerImpl implements IContainer {
 						);
 					}
 
+					const registrations = this._registry.getAll(serviceIdentifier);
 					const cycleNodeInfo = resolveRecord.getCycleNodeInfo();
 					if (cycleNodeInfo) {
 						throw new ResolveException(
