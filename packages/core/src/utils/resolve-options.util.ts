@@ -29,10 +29,10 @@ export function assertValidResolveOptions<T>(
 	resolveRecord: IInternalResolveRecord,
 ): void {
 	const { defaultValue, dynamic, ref, multiple, optional } = resolveOptions;
-	const identifierName = getServiceIdentifierName(serviceIdentifier);
 	const hasDefaultValue = defaultValue !== undefined;
 
 	if (dynamic && ref) {
+		const identifierName = getServiceIdentifierName(serviceIdentifier);
 		throw new ResolveException(
 			CoreErrorCodeEnum.E_INVALID_OPTIONS,
 			`Cannot use both "dynamic" and "ref" options simultaneously for service identifier "${identifierName}". These options are mutually exclusive. Please choose either "dynamic" or "ref", but not both.`,
@@ -41,6 +41,7 @@ export function assertValidResolveOptions<T>(
 	}
 
 	if (hasDefaultValue && optional !== true) {
+		const identifierName = getServiceIdentifierName(serviceIdentifier);
 		throw new ResolveException(
 			CoreErrorCodeEnum.E_INVALID_OPTIONS,
 			`Cannot specify "defaultValue" without setting "optional" to true for service identifier "${identifierName}".`,
@@ -52,6 +53,7 @@ export function assertValidResolveOptions<T>(
 	const hasInvalidMultipleDefault =
 		hasDefaultValue && multiple && !Array.isArray(defaultValue);
 	if (hasInvalidMultipleDefault) {
+		const identifierName = getServiceIdentifierName(serviceIdentifier);
 		throw new ResolveException(
 			CoreErrorCodeEnum.E_INVALID_OPTIONS,
 			`When "multiple" is true, "defaultValue" must be an array for service identifier "${identifierName}".`,

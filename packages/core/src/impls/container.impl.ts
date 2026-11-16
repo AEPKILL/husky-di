@@ -235,11 +235,13 @@ export class ContainerImpl implements IContainer {
 						);
 					}
 
-					const selectedRegistrations = multiple
-						? registrations
-						: [registrations[registrations.length - 1]];
-					const instances: T[] = [];
-					for (const [index, registration] of selectedRegistrations.entries()) {
+					const instances: T[] | undefined = multiple ? [] : undefined;
+					for (
+						let index = multiple ? 0 : registrations.length - 1;
+						index < registrations.length;
+						index += 1
+					) {
+						const registration = registrations[index];
 						const result = resolutionScope.withRecord(
 							this,
 							serviceIdentifier,
@@ -288,7 +290,10 @@ export class ContainerImpl implements IContainer {
 								});
 							},
 						);
-						if (multiple && registration.type === RegistrationTypeEnum.alias) {
+						if (!instances) {
+							return result as ResolveInstance<T, O>;
+						}
+						if (registration.type === RegistrationTypeEnum.alias) {
 							for (const instance of result as T[]) {
 								instances.push(instance);
 							}
@@ -297,11 +302,8 @@ export class ContainerImpl implements IContainer {
 						}
 					}
 
-					if (!multiple) {
-						return instances[0] as ResolveInstance<T, O>;
-					}
 					const shouldUseDefault =
-						instances.length === 0 &&
+						instances?.length === 0 &&
 						resolveOptions.optional &&
 						resolveOptions.defaultValue !== undefined;
 					return (
@@ -425,24 +427,25 @@ export class ContainerImpl implements IContainer {
 	private _resolveInternal<T, O extends ResolveOptions<T>>(
 		params: ResolveMiddlewareParams<T, O>,
 	): T | Ref<T> {
-		const pendingSingletons = new Map<IRegistration<unknown>, unknown>();
-		const pendingResolutions = new Map<ResolveContext, ResolveContext>();
+		let pendingSingletons: Map<IRegistration<unknown>, unknown> | undefined;
+		let pendingResolutions: Map<ResolveContext, ResolveContext> | undefined;
 		const instance = middlewareManager.execute(params, (lifecycleParams) => {
 			const { registration, resolveContext } = lifecycleParams;
 			if (registration.lifecycle === LifecycleEnum.singleton) {
-				if (pendingSingletons.has(registration)) {
+				if (pendingSingletons?.has(registration)) {
 					return pendingSingletons.get(registration);
 				}
 				if (registration.resolved) {
 					return registration.instance;
 				}
 				const value = this._resolveRegistration(lifecycleParams);
+				pendingSingletons ??= new Map();
 				pendingSingletons.set(registration, value);
 				return value;
 			}
 
 			if (registration.lifecycle === LifecycleEnum.resolution) {
-				let pendingInstances = pendingResolutions.get(resolveContext);
+				let pendingInstances = pendingResolutions?.get(resolveContext);
 				if (pendingInstances?.has(registration)) {
 					return pendingInstances.get(registration);
 				}
@@ -451,6 +454,7 @@ export class ContainerImpl implements IContainer {
 				}
 				if (!pendingInstances) {
 					pendingInstances = new Map();
+					pendingResolutions ??= new Map();
 					pendingResolutions.set(resolveContext, pendingInstances);
 				}
 				const value = this._resolveRegistration(lifecycleParams);
@@ -462,15 +466,19 @@ export class ContainerImpl implements IContainer {
 		});
 
 		// Publish provider values only after the middleware chain succeeds.
-		for (const [registration, value] of pendingSingletons) {
-			const internalRegistration =
-				registration as IInternalRegistration<unknown>;
-			internalRegistration._internalSetInstance(value);
-			internalRegistration._internalSetResolved(true);
+		if (pendingSingletons) {
+			for (const [registration, value] of pendingSingletons) {
+				const internalRegistration =
+					registration as IInternalRegistration<unknown>;
+				internalRegistration._internalSetInstance(value);
+				internalRegistration._internalSetResolved(true);
+			}
 		}
-		for (const [resolveContext, pendingInstances] of pendingResolutions) {
-			for (const [registration, value] of pendingInstances) {
-				resolveContext.set(registration, value);
+		if (pendingResolutions) {
+			for (const [resolveContext, pendingInstances] of pendingResolutions) {
+				for (const [registration, value] of pendingInstances) {
+					resolveContext.set(registration, value);
+				}
 			}
 		}
 

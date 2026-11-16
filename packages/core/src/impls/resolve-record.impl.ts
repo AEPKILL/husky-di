@@ -19,11 +19,10 @@ import type {
 	ResolveRecordTreeNode,
 } from "@/interfaces/resolve-record.interface";
 import {
-	isEqualServiceIdentifierResolveRecord,
 	isResolveRootRecord,
 	isResolveServiceIdentifierRecord,
 } from "@/utils/resolve-record.util";
-import { createResolveRecordId, incrementalIdFactory } from "@/utils/uuid.util";
+import { createResolveRecordId } from "@/utils/uuid.util";
 
 /**
  * Resolution record implementation class.
@@ -58,7 +57,7 @@ export class ResolveRecordImpl implements IInternalResolveRecord {
 	private _current: ResolveRecordTreeNode<unknown>;
 	private _currentStack: Array<ResolveRecordTreeNode<unknown>> = [];
 	private _id: string;
-	private _generateTreeNodeId = incrementalIdFactory("RESOLVE_RECORD_NODE");
+	private _treeNodeId = 0;
 
 	/**
 	 * Creates a new ResolveRecordImpl.
@@ -116,12 +115,18 @@ export class ResolveRecordImpl implements IInternalResolveRecord {
 				break;
 			}
 
-			const isEqual = isEqualServiceIdentifierResolveRecord(
-				tempRecordNode.value,
-				lastRecordNode.value,
-			);
+			// Both nodes are already narrowed on this frequently traversed path.
+			const ancestor = tempRecordNode.value;
+			const current = lastRecordNode.value;
+			const containerIsEqual = ancestor.container === current.container;
+			const identifierIsEqual =
+				ancestor.serviceIdentifier === current.serviceIdentifier;
+			const isNotRef =
+				!ancestor.resolveOptions?.ref && !current.resolveOptions?.ref;
+			const isNotDynamic =
+				!ancestor.resolveOptions?.dynamic && !current.resolveOptions?.dynamic;
 
-			if (isEqual) {
+			if (containerIsEqual && identifierIsEqual && isNotRef && isNotDynamic) {
 				return {
 					cycleNode: tempRecordNode,
 				};
@@ -211,5 +216,13 @@ export class ResolveRecordImpl implements IInternalResolveRecord {
 			throw new Error("No current to restore");
 		}
 		this._current = current;
+	}
+
+	private _generateTreeNodeId(): string {
+		this._treeNodeId++;
+		if (this._treeNodeId > Number.MAX_SAFE_INTEGER) {
+			this._treeNodeId = 0;
+		}
+		return `RESOLVE_RECORD_NODE-${this._treeNodeId}`;
 	}
 }

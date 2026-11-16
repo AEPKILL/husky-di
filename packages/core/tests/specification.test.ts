@@ -904,6 +904,53 @@ describe("SPEC 4.2: Service Resolution", () => {
 	});
 
 	describe("S5: Reference Resolution", () => {
+		it("should restore contexts when deferred chains nest in the same container", () => {
+			const IScoped = createServiceIdentifier<object>("INestedDeferredScoped");
+			const IDeferred = createServiceIdentifier<readonly [object, object]>(
+				"INestedDeferredPair",
+			);
+			const ICaptured = createServiceIdentifier<{
+				instance: object;
+				deferred: Ref<readonly [object, object]>;
+			}>("INestedDeferredCapture");
+			let readInner: (() => void) | undefined;
+			childContainer.register(IScoped, {
+				useFactory: () => ({}),
+				lifecycle: LifecycleEnum.resolution,
+			});
+			childContainer.register(IDeferred, {
+				useFactory: () => {
+					const before = resolve(IScoped);
+					readInner?.();
+					return [before, resolve(IScoped)] satisfies readonly [object, object];
+				},
+			});
+			childContainer.register(ICaptured, {
+				useFactory: () => ({
+					instance: resolve(IScoped),
+					deferred: resolve(IDeferred, { dynamic: true }),
+				}),
+			});
+
+			const outer = childContainer.resolve(ICaptured);
+			const inner = childContainer.resolve(ICaptured);
+			readInner = () => {
+				readInner = undefined;
+				const pair = inner.deferred.current;
+				expect(pair[0]).toBe(inner.instance);
+				expect(pair[1]).toBe(inner.instance);
+			};
+
+			const pair = outer.deferred.current;
+			expect(pair[0]).toBe(outer.instance);
+			expect(pair[1]).toBe(outer.instance);
+			expect(inner.instance).not.toBe(outer.instance);
+			expect(childContainer.resolve(IScoped)).not.toBe(outer.instance);
+			expect(() => resolve(IContainer)).toThrow(
+				/E_RESOLVE_CONTEXT_UNAVAILABLE/,
+			);
+		});
+
 		for (const referenceType of ["ref", "dynamic"] as const) {
 			it(`should restore a different resolution chain after ${referenceType}.current fails`, () => {
 				const origin = createContainer("DeferredOrigin");

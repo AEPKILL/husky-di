@@ -24,10 +24,7 @@ export class ResolutionScopeImpl implements IResolutionScope {
 	}
 
 	private _current: IInternalResolveRecord | undefined;
-	private readonly _contexts = new WeakMap<
-		IInternalResolveRecord,
-		ResolveContext
-	>();
+	private _currentContext: ResolveContext | undefined;
 
 	constructor(private readonly _createResolveRecord: ResolveRecordFactory) {}
 
@@ -40,13 +37,15 @@ export class ResolutionScopeImpl implements IResolutionScope {
 	): T {
 		const ownsRecord = !this._current;
 		const record = this._current ?? this._createResolveRecord(container);
+		const context = this._currentContext ?? new Map();
 		this._current = record;
+		this._currentContext = context;
 		try {
-			return operation(record, this._ensureContext(record));
+			return operation(record, context);
 		} finally {
 			if (ownsRecord) {
-				this._contexts.delete(record);
 				this._current = undefined;
+				this._currentContext = undefined;
 			}
 		}
 	}
@@ -68,24 +67,11 @@ export class ResolutionScopeImpl implements IResolutionScope {
 			}
 			return operation();
 		} catch (error: unknown) {
-			if (ResolveException.isResolveException(error)) {
-				throw error;
-			}
-			if (CodedException.isCodedException(error)) {
-				throw new ResolveException(
-					error.code,
-					error.detail,
-					resolveRecord,
-					error,
-				);
-			}
-
-			const currentContainer = resolveRecord.getCurrentContainer() ?? container;
-			throw new ResolveException(
-				CoreErrorCodeEnum.E_RESOLUTION_FAILED,
-				`Failed to resolve service identifier "${getServiceIdentifierName(serviceIdentifier)}" in "${currentContainer.displayName}": ${error instanceof Error ? error.message : String(error)}`,
-				resolveRecord,
+			return this._throwResolveException(
 				error,
+				container,
+				serviceIdentifier,
+				resolveRecord,
 			);
 		} finally {
 			resolveRecord._internalRestoreCurrent();
@@ -94,36 +80,50 @@ export class ResolutionScopeImpl implements IResolutionScope {
 
 	defer<T>(resolveRecord: IInternalResolveRecord, operation: () => T): () => T {
 		const current = resolveRecord.current;
-		const context = this._ensureContext(resolveRecord);
+		// References capture their record while its resolution chain is active.
+		const context = this._currentContext ?? new Map();
 		return () => {
 			const previousRecord = this._current;
 			const previousCurrent = resolveRecord.current;
-			const previousContext = this._contexts.get(resolveRecord);
+			const previousContext = this._currentContext;
 			try {
-				this._contexts.set(resolveRecord, context);
+				this._currentContext = context;
 				this._current = resolveRecord;
 				resolveRecord._internalSetCurrent(current);
 				return operation();
 			} finally {
 				resolveRecord._internalSetCurrent(previousCurrent);
-				if (previousContext) {
-					this._contexts.set(resolveRecord, previousContext);
-				} else {
-					this._contexts.delete(resolveRecord);
-				}
+				this._currentContext = previousContext;
 				this._current = previousRecord;
 			}
 		};
 	}
 
-	private _ensureContext(
+	// Keep exception construction out of the frequently inlined record scope.
+	private _throwResolveException(
+		error: unknown,
+		container: IContainer,
+		serviceIdentifier: ServiceIdentifier<unknown>,
 		resolveRecord: IInternalResolveRecord,
-	): ResolveContext {
-		let context = this._contexts.get(resolveRecord);
-		if (!context) {
-			context = new Map();
-			this._contexts.set(resolveRecord, context);
+	): never {
+		if (ResolveException.isResolveException(error)) {
+			throw error;
 		}
-		return context;
+		if (CodedException.isCodedException(error)) {
+			throw new ResolveException(
+				error.code,
+				error.detail,
+				resolveRecord,
+				error,
+			);
+		}
+
+		const currentContainer = resolveRecord.getCurrentContainer() ?? container;
+		throw new ResolveException(
+			CoreErrorCodeEnum.E_RESOLUTION_FAILED,
+			`Failed to resolve service identifier "${getServiceIdentifierName(serviceIdentifier)}" in "${currentContainer.displayName}": ${error instanceof Error ? error.message : String(error)}`,
+			resolveRecord,
+			error,
+		);
 	}
 }

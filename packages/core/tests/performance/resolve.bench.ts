@@ -1,8 +1,8 @@
 /**
  * @overview Local benchmarks for core resolve throughput across common scenarios.
  *
- * Each benchmark sample performs 1,000,000 resolve operations so the reported
- * mean time maps directly to a fixed local comparison batch.
+ * Samples perform 100,000 entry resolves, or 10,000 for the longer graphs.
+ * Each label states its batch size; nested resolutions add work to that batch.
  *
  * @author AEPKILL
  * @created 2026-06-25 17:18:34 15:58:49
@@ -23,12 +23,12 @@ type BenchValue = {
 	readonly value: number;
 };
 
-const RESOLVE_BATCH_SIZE = 1_000_00;
+const RESOLVE_BATCH_SIZE = 100_000;
 
 const BENCH_OPTIONS = {
-	iterations: 3,
+	iterations: 20,
 	time: 1,
-	warmupIterations: 1,
+	warmupIterations: 5,
 	warmupTime: 1,
 };
 
@@ -130,13 +130,17 @@ function consume(value: number): void {
 	_sink ^= value;
 }
 
-function runResolveBatch(resolveValue: BenchResolver): void {
-	for (let index = 0; index < RESOLVE_BATCH_SIZE; index += 1) {
+function runResolveBatch(
+	resolveValue: BenchResolver,
+	batchSize = RESOLVE_BATCH_SIZE,
+): void {
+	for (let index = 0; index < batchSize; index += 1) {
 		consume(resolveValue());
 	}
 }
 
-function createUseValueResolver(): BenchResolver {
+function createUseValueResolver(message?: string): BenchResolver {
+	const options = message ? { message } : undefined;
 	const container = createContainer("UseValueBenchContainer");
 	container.register(IUseValueService, {
 		useValue: {
@@ -144,7 +148,9 @@ function createUseValueResolver(): BenchResolver {
 		},
 	});
 
-	return () => container.resolve(IUseValueService).value;
+	return options
+		? () => container.resolve(IUseValueService, options).value
+		: () => container.resolve(IUseValueService).value;
 }
 
 function createTransientResolver(): BenchResolver {
@@ -179,7 +185,8 @@ function createFactoryResolver(): BenchResolver {
 	return () => container.resolve(IFactoryService).value;
 }
 
-function createAliasResolver(): BenchResolver {
+function createAliasResolver(message?: string): BenchResolver {
+	const options = message ? { message } : undefined;
 	const container = createContainer("AliasBenchContainer");
 	container.register(IAliasTargetService, {
 		useValue: {
@@ -190,12 +197,17 @@ function createAliasResolver(): BenchResolver {
 		useAlias: IAliasTargetService,
 	});
 
-	return () => container.resolve(IAliasService).value;
+	return options
+		? () => container.resolve(IAliasService, options).value
+		: () => container.resolve(IAliasService).value;
 }
 
-function createParentChildResolver(): BenchResolver {
+function createParentChildResolver(depth = 1): BenchResolver {
 	const parent = createContainer("ParentBenchContainer");
-	const child = createContainer("ChildBenchContainer", parent);
+	let child = parent;
+	for (let index = 0; index < depth; index += 1) {
+		child = createContainer(`ChildBenchContainer-${index}`, child);
+	}
 
 	parent.register(IParentValueService, {
 		useValue: {
@@ -291,6 +303,45 @@ function createDepthFiveResolver(): BenchResolver {
 	return () => container.resolve(IDepthFiveRootService).value;
 }
 
+function createLongChainResolver(depth: number): BenchResolver {
+	const container = createContainer("LongChainBenchContainer");
+	let identifier = createServiceIdentifier<BenchValue>("ChainLeaf");
+	container.register(identifier, { useValue: { value: 1 } });
+	for (let index = 1; index < depth; index += 1) {
+		const dependency = identifier;
+		identifier = createServiceIdentifier<BenchValue>(`Chain-${index}`);
+		container.register(identifier, {
+			useFactory: () => ({ value: resolve(dependency).value + 1 }),
+		});
+	}
+	return () => container.resolve(identifier).value;
+}
+
+function createResolutionReuseResolver(): BenchResolver {
+	const container = createContainer("ResolutionReuseBenchContainer");
+	container.register(IFactoryService, {
+		useFactory: () => ({ value: 1 }),
+		lifecycle: LifecycleEnum.resolution,
+	});
+	container.register(IUseValueService, {
+		useFactory: () => ({
+			value:
+				resolve(IFactoryService).value +
+				resolve(IFactoryService).value +
+				resolve(IFactoryService).value,
+		}),
+	});
+	return () => container.resolve(IUseValueService).value;
+}
+
+function createMultipleResolver(): BenchResolver {
+	const container = createContainer("MultipleBenchContainer");
+	for (let index = 0; index < 3; index += 1) {
+		container.register(IUseValueService, { useValue: { value: index } });
+	}
+	return () => container.resolve(IUseValueService, { multiple: true }).length;
+}
+
 describe("resolve throughput: provider and topology scenarios", () => {
 	const useValueResolver = createUseValueResolver();
 	const transientResolver = createTransientResolver();
@@ -300,32 +351,32 @@ describe("resolve throughput: provider and topology scenarios", () => {
 	const parentChildResolver = createParentChildResolver();
 
 	bench(
-		"useValue local (1,000,000 resolves)",
+		"useValue local (100,000 resolves)",
 		() => runResolveBatch(useValueResolver),
 		BENCH_OPTIONS,
 	);
 	bench(
-		"useClass transient (1,000,000 resolves)",
+		"useClass transient (100,000 resolves)",
 		() => runResolveBatch(transientResolver),
 		BENCH_OPTIONS,
 	);
 	bench(
-		"useClass singleton (1,000,000 resolves)",
+		"useClass singleton (100,000 resolves)",
 		() => runResolveBatch(singletonResolver),
 		BENCH_OPTIONS,
 	);
 	bench(
-		"useFactory transient (1,000,000 resolves)",
+		"useFactory transient (100,000 resolves)",
 		() => runResolveBatch(factoryResolver),
 		BENCH_OPTIONS,
 	);
 	bench(
-		"useAlias local (1,000,000 resolves)",
+		"useAlias local (100,000 resolves)",
 		() => runResolveBatch(aliasResolver),
 		BENCH_OPTIONS,
 	);
 	bench(
-		"child resolve parent (1,000,000 resolves)",
+		"child resolve parent (100,000 resolves)",
 		() => runResolveBatch(parentChildResolver),
 		BENCH_OPTIONS,
 	);
@@ -335,17 +386,17 @@ describe("resolve throughput: middleware overhead", () => {
 	const middlewareResolver = createMiddlewareResolver();
 
 	bench(
-		"0 middleware (1,000,000 resolves)",
+		"0 middleware (100,000 resolves)",
 		() => runMiddlewareResolveBatch(middlewareResolver, 0),
 		BENCH_OPTIONS,
 	);
 	bench(
-		"1 middleware (1,000,000 resolves)",
+		"1 middleware (100,000 resolves)",
 		() => runMiddlewareResolveBatch(middlewareResolver, 1),
 		BENCH_OPTIONS,
 	);
 	bench(
-		"3 middleware (1,000,000 resolves)",
+		"3 middleware (100,000 resolves)",
 		() => runMiddlewareResolveBatch(middlewareResolver, 3),
 		BENCH_OPTIONS,
 	);
@@ -357,18 +408,68 @@ describe("resolve throughput: dependency depth", () => {
 	const depthFiveResolver = createDepthFiveResolver();
 
 	bench(
-		"depth 1 transient graph (1,000,000 resolves)",
+		"depth 1 transient graph (100,000 resolves)",
 		() => runResolveBatch(depthOneResolver),
 		BENCH_OPTIONS,
 	);
 	bench(
-		"depth 3 transient graph (1,000,000 resolves)",
+		"depth 3 transient graph (100,000 resolves)",
 		() => runResolveBatch(depthThreeResolver),
 		BENCH_OPTIONS,
 	);
 	bench(
-		"depth 5 transient graph (1,000,000 resolves)",
+		"depth 5 transient graph (100,000 resolves)",
 		() => runResolveBatch(depthFiveResolver),
+		BENCH_OPTIONS,
+	);
+});
+
+describe("resolve throughput: annotated entries", () => {
+	const valueResolver = createUseValueResolver("Load value");
+	const aliasResolver = createAliasResolver("Load aliased value");
+
+	bench(
+		"useValue with message (100,000 resolves)",
+		() => runResolveBatch(valueResolver),
+		BENCH_OPTIONS,
+	);
+	bench(
+		"useAlias with message (100,000 resolves)",
+		() => runResolveBatch(aliasResolver),
+		BENCH_OPTIONS,
+	);
+});
+
+describe("resolve throughput: lifecycle and extended topology", () => {
+	const resolutionResolver = createResolutionReuseResolver();
+	const singletonResolver = createSingletonResolver();
+	const multipleResolver = createMultipleResolver();
+	const parentResolver = createParentChildResolver(10);
+	const chainResolver = createLongChainResolver(20);
+
+	bench(
+		"resolution lifecycle reused 3 times (100,000 resolves)",
+		() => runResolveBatch(resolutionResolver),
+		BENCH_OPTIONS,
+	);
+	bench(
+		"singleton with 1 middleware (100,000 resolves)",
+		() => runMiddlewareResolveBatch(singletonResolver, 1),
+		BENCH_OPTIONS,
+	);
+	bench(
+		"multiple 3 values (100,000 resolves)",
+		() => runResolveBatch(multipleResolver),
+		BENCH_OPTIONS,
+	);
+	bench(
+		"parent depth 10 (10,000 resolves)",
+		() => runResolveBatch(parentResolver, 10_000),
+		BENCH_OPTIONS,
+	);
+	bench(
+		"factory depth 20 (10,000 resolves)",
+		() => runResolveBatch(chainResolver, 10_000),
 		BENCH_OPTIONS,
 	);
 });
