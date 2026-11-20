@@ -4,7 +4,6 @@
  * @author AEPKILL
  * @created 2025-07-29 22:50:54 22:30:35
  */
-/** biome-ignore-all lint/suspicious/noExplicitAny: Required for flexible middleware and registration system */
 
 import { CoreErrorCodeEnum } from "@/enums/core-error-code.enum";
 import { LifecycleEnum } from "@/enums/lifecycle.enum";
@@ -34,7 +33,6 @@ import type {
 	IInternalRegistration,
 	IRegistration,
 } from "@/interfaces/registration.interface";
-import type { IRegistry } from "@/interfaces/registry.interface";
 import type { IInternalResolveRecord } from "@/interfaces/resolve-record.interface";
 import { middlewareManager, resolutionScope } from "@/shared/instances";
 import type { Constructor } from "@/types/constructor.type";
@@ -55,7 +53,6 @@ import { createContainerId } from "@/utils/uuid.util";
  * for dependency injection. It supports multiple lifecycle strategies (singleton, transient, resolution),
  * middleware chains for custom resolution logic, and hierarchical container relationships.
  *
- * @extends DisposableRegistryImpl - Provides automatic cleanup of resources
  * @implements IContainer - Public container contract
  */
 export class ContainerImpl implements IContainer {
@@ -65,7 +62,7 @@ export class ContainerImpl implements IContainer {
 	/**
 	 * Unique identifier for this container instance
 	 */
-	public readonly id: string;
+	public readonly id = createContainerId();
 
 	/**
 	 * Human-readable name of the container
@@ -95,30 +92,18 @@ export class ContainerImpl implements IContainer {
 	/**
 	 * Registry storing all service registrations
 	 */
-	private readonly _registry: IRegistry;
-
-	/**
-	 * Parent container for cascading service resolution
-	 */
-	private readonly _parent?: IContainer | undefined;
-
-	/**
-	 * Container name for identification and debugging
-	 */
-	private readonly _name: string;
+	private readonly _registry = createRegistry();
 
 	/**
 	 * Creates a new dependency injection container
 	 *
-	 * @param name - Human-readable name for the container, used for debugging and error messages
-	 * @param parent - Optional parent container for hierarchical service resolution
+	 * @param _name - Human-readable name for the container, used for debugging and error messages
+	 * @param _parent - Optional parent container for hierarchical service resolution
 	 */
-	constructor(name: string = "AnonymousContainer", parent?: IContainer) {
-		this.id = createContainerId();
-		this._name = name;
-		this._registry = createRegistry();
-		this._parent = parent;
-
+	constructor(
+		private readonly _name = "AnonymousContainer",
+		private readonly _parent?: IContainer,
+	) {
 		this._disposableRegistry.addCleanup(() => {
 			middlewareManager.notifyContainerDispose(this);
 		});
@@ -188,31 +173,12 @@ export class ContainerImpl implements IContainer {
 					);
 					const { dynamic, ref, multiple } = resolveOptions;
 
-					if (ref) {
-						resolveRecord.addRecordNode({
-							type: ResolveRecordTypeEnum.message,
-							message: `Service Identifier "${getServiceIdentifierName(serviceIdentifier)}" is resolved as a ref, wait for use.`,
-						});
+					if (ref || dynamic) {
 						return this._createRefInstance(
 							serviceIdentifier,
 							resolveOptions,
 							resolveRecord,
-							InstanceRefImpl,
-							"ref",
-						);
-					}
-
-					if (dynamic) {
-						resolveRecord.addRecordNode({
-							type: ResolveRecordTypeEnum.message,
-							message: `Service Identifier "${getServiceIdentifierName(serviceIdentifier)}" is resolved as a dynamic ref, wait for use.`,
-						});
-						return this._createRefInstance(
-							serviceIdentifier,
-							resolveOptions,
-							resolveRecord,
-							InstanceDynamicRefImpl,
-							"dynamic",
+							ref ? "ref" : "dynamic",
 						);
 					}
 
@@ -367,17 +333,13 @@ export class ContainerImpl implements IContainer {
 		assertNotDisposed(this);
 		assertValidServiceIdentifier(serviceIdentifier);
 
-		const { recursive = false } = options || {};
-
-		if (this._registry.has(serviceIdentifier)) {
-			return true;
-		}
-
-		if (recursive && this._parent) {
-			return this._parent.isRegistered(serviceIdentifier, options);
-		}
-
-		return false;
+		const recursive = options?.recursive;
+		return (
+			this._registry.has(serviceIdentifier) ||
+			Boolean(
+				recursive && this._parent?.isRegistered(serviceIdentifier, options),
+			)
+		);
 	}
 
 	/**
@@ -561,7 +523,6 @@ export class ContainerImpl implements IContainer {
 	 * @param serviceIdentifier - The service identifier to wrap in a reference
 	 * @param resolveOptions - Resolution options to use when the reference is accessed
 	 * @param resolveRecord - The current resolve record for tracking
-	 * @param RefClass - The reference class constructor (InstanceRefImpl or InstanceDynamicRefImpl)
 	 * @param refType - The type of reference being created ("ref" or "dynamic")
 	 * @returns A reference instance that will resolve the service when accessed
 	 */
@@ -569,9 +530,14 @@ export class ContainerImpl implements IContainer {
 		serviceIdentifier: ServiceIdentifier<T>,
 		resolveOptions: O,
 		resolveRecord: IInternalResolveRecord,
-		RefClass: typeof InstanceRefImpl | typeof InstanceDynamicRefImpl,
 		refType: "ref" | "dynamic",
 	): ResolveInstance<T, O> {
+		const isDynamic = refType === "dynamic";
+		const RefClass = isDynamic ? InstanceDynamicRefImpl : InstanceRefImpl;
+		resolveRecord.addRecordNode({
+			type: ResolveRecordTypeEnum.message,
+			message: `Service Identifier "${getServiceIdentifierName(serviceIdentifier)}" is resolved as a ${isDynamic ? "dynamic ref" : "ref"}, wait for use.`,
+		});
 		return new RefClass(
 			resolutionScope.defer(
 				resolveRecord,
