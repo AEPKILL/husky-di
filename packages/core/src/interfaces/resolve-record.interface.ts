@@ -169,19 +169,11 @@ export interface IResolveRecord extends IUnique {
 }
 
 /**
- * Internal resolution record interface with additional internal methods.
- *
- * @remarks
- * Extends IResolveRecord with internal methods for managing the current node
- * stack. These methods are used internally by the container implementation
- * to manage resolution state and should not be called by external code.
+ * Allows the resolution scope to restore the current node.
  *
  * @internal
  */
 export interface IInternalResolveRecord extends IResolveRecord {
-	/** Internal stack for managing current node state */
-	readonly _internalCurrentStack: Array<ResolveRecordTreeNode<unknown>>;
-
 	/**
 	 * Sets the current node.
 	 *
@@ -189,18 +181,4 @@ export interface IInternalResolveRecord extends IResolveRecord {
 	 * @param node - The node to set as current
 	 */
 	_internalSetCurrent(node: ResolveRecordTreeNode<unknown>): void;
-
-	/**
-	 * Stashes the current node on the stack.
-	 *
-	 * @internal
-	 */
-	_internalStashCurrent(): void;
-
-	/**
-	 * Restores the current node from the stack.
-	 *
-	 * @internal
-	 */
-	_internalRestoreCurrent(): void;
 }

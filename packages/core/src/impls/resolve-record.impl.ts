@@ -48,14 +48,8 @@ export class ResolveRecordImpl implements IInternalResolveRecord {
 		return this._id;
 	}
 
-	/** Gets the internal current node stack. */
-	get _internalCurrentStack() {
-		return this._currentStack;
-	}
-
 	private _root: ResolveRecordTreeNode<unknown>;
 	private _current: ResolveRecordTreeNode<unknown>;
-	private _currentStack: Array<ResolveRecordTreeNode<unknown>> = [];
 	private _id: string;
 	private _treeNodeId = 0;
 
@@ -193,29 +187,6 @@ export class ResolveRecordImpl implements IInternalResolveRecord {
 	 */
 	_internalSetCurrent(node: ResolveRecordTreeNode<unknown>) {
 		this._current = node;
-	}
-
-	/**
-	 * Stashes the current node on the stack (internal method).
-	 *
-	 * @internal
-	 */
-	_internalStashCurrent() {
-		this._currentStack.push(this._current);
-	}
-
-	/**
-	 * Restores the current node from the stack (internal method).
-	 *
-	 * @internal
-	 * @throws {Error} If there is no node to restore
-	 */
-	_internalRestoreCurrent() {
-		const current = this._currentStack.pop();
-		if (!current) {
-			throw new Error("No current to restore");
-		}
-		this._current = current;
 	}
 
 	private _generateTreeNodeId(): string {

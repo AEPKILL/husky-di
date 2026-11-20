@@ -57,7 +57,7 @@ export class ResolutionScopeImpl implements IResolutionScope {
 		operation: () => T,
 		message?: string,
 	): T {
-		resolveRecord._internalStashCurrent();
+		const previousCurrent = resolveRecord.current;
 		try {
 			if (message) {
 				resolveRecord.addRecordNode({
@@ -74,7 +74,7 @@ export class ResolutionScopeImpl implements IResolutionScope {
 				resolveRecord,
 			);
 		} finally {
-			resolveRecord._internalRestoreCurrent();
+			resolveRecord._internalSetCurrent(previousCurrent);
 		}
 	}
 
