@@ -8,7 +8,7 @@ export abstract class CodedException<TCode extends string> extends Error {
 	readonly code: TCode;
 	readonly detail: string;
 
-	/** Internal marker to identify CoreException instances across frames. */
+	/** Internal marker to identify CodedException instances across frames. */
 	private __isCodedException__ = true;
 
 	constructor(code: TCode, detail: string) {
@@ -17,8 +17,10 @@ export abstract class CodedException<TCode extends string> extends Error {
 		this.detail = detail;
 	}
 
+	// biome-ignore lint/suspicious/noExplicitAny: Preserve the public guard's existing error-code type.
 	static isCodedException(error: unknown): error is CodedException<any> {
 		return (
+			// biome-ignore lint/suspicious/noExplicitAny: The marker is shared by exceptions of every code type.
 			(error as unknown as CodedException<any>)?.__isCodedException__ === true
 		);
 	}
